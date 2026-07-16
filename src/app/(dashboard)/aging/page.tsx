@@ -1,3 +1,4 @@
+import { Receipt, AlertTriangle, Flame } from "lucide-react";
 import { getAgingReceivables } from "@/lib/queries/aging";
 import { getBranches } from "@/lib/queries/branches";
 import { FilterBar } from "@/components/dashboard/filter-bar";
@@ -26,9 +27,9 @@ export default async function AgingPage({
       <FilterBar branches={branches} showDateRange={false} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Total Piutang Outstanding" value={formatRupiah(totalOutstanding)} />
-        <KpiCard label="Sudah Jatuh Tempo" value={formatRupiah(totalOverdue)} tone="negative" />
-        <KpiCard label=">90 Hari (Kritis)" value={formatRupiah(totalCritical)} tone="negative" />
+        <KpiCard label="Total Piutang Outstanding" value={formatRupiah(totalOutstanding)} icon={Receipt} />
+        <KpiCard label="Sudah Jatuh Tempo" value={formatRupiah(totalOverdue)} icon={AlertTriangle} tone="warning" />
+        <KpiCard label=">90 Hari (Kritis)" value={formatRupiah(totalCritical)} icon={Flame} tone="negative" />
       </div>
 
       <AgingTable rows={rows} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,7 +20,50 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatDate, formatRupiah } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { AgingRow } from "@/lib/queries/aging";
+
+type SortKey = "CustomerName" | "DueDate" | "Outstanding" | "DaysOverdue";
+
+function SortableHead({
+  label,
+  sortKey,
+  active,
+  direction,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  active: boolean;
+  direction: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 hover:text-foreground",
+          active ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
+        {label}
+        {active ? (
+          direction === "asc" ? (
+            <ArrowUp className="size-3" />
+          ) : (
+            <ArrowDown className="size-3" />
+          )
+        ) : (
+          <ArrowUpDown className="size-3 opacity-40" />
+        )}
+      </button>
+    </TableHead>
+  );
+}
 
 const BUCKET_TONE: Record<string, string> = {
   "Belum Jatuh Tempo": "bg-muted text-muted-foreground",
@@ -32,14 +76,33 @@ const BUCKET_TONE: Record<string, string> = {
 export function AgingTable({ rows }: { rows: AgingRow[] }) {
   const [search, setSearch] = useState("");
   const [partnerType, setPartnerType] = useState("all");
+  const [sortKey, setSortKey] = useState<SortKey>("DaysOverdue");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
 
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
+    const result = rows.filter((r) => {
       if (partnerType !== "all" && r.PartnerType !== partnerType) return false;
       if (search && !r.CustomerName?.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [rows, search, partnerType]);
+
+    const dir = sortDir === "asc" ? 1 : -1;
+    result.sort((a, b) => {
+      if (sortKey === "CustomerName") return dir * (a.CustomerName ?? "").localeCompare(b.CustomerName ?? "");
+      if (sortKey === "DueDate") return dir * (new Date(a.DueDate).getTime() - new Date(b.DueDate).getTime());
+      return dir * (a[sortKey] - b[sortKey]);
+    });
+    return result;
+  }, [rows, search, partnerType, sortKey, sortDir]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -68,15 +131,15 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Pelanggan</TableHead>
+              <SortableHead label="Pelanggan" sortKey="CustomerName" active={sortKey === "CustomerName"} direction={sortDir} onSort={handleSort} />
               <TableHead>Tipe</TableHead>
               <TableHead>Wilayah</TableHead>
               <TableHead>Kecamatan</TableHead>
               <TableHead>Kontak</TableHead>
               <TableHead>No. Invoice</TableHead>
-              <TableHead>Jatuh Tempo</TableHead>
-              <TableHead className="text-right">Outstanding</TableHead>
-              <TableHead>Aging</TableHead>
+              <SortableHead label="Jatuh Tempo" sortKey="DueDate" active={sortKey === "DueDate"} direction={sortDir} onSort={handleSort} />
+              <SortableHead label="Outstanding" sortKey="Outstanding" active={sortKey === "Outstanding"} direction={sortDir} onSort={handleSort} className="text-right" />
+              <SortableHead label="Aging" sortKey="DaysOverdue" active={sortKey === "DaysOverdue"} direction={sortDir} onSort={handleSort} />
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -1,3 +1,4 @@
+import { Wallet, TrendingUp, Landmark, PiggyBank } from "lucide-react";
 import { getPnL, getBEP } from "@/lib/queries/pnl";
 import { getBranches } from "@/lib/queries/branches";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -31,16 +32,18 @@ export default async function PnLPage({
       <FilterBar branches={branches} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Pendapatan" value={formatRupiah(pnl.Pendapatan)} />
-        <KpiCard label="Laba Kotor" value={formatRupiah(pnl.LabaKotor)} />
+        <KpiCard label="Pendapatan" value={formatRupiah(pnl.Pendapatan)} icon={Wallet} />
+        <KpiCard label="Laba Kotor" value={formatRupiah(pnl.LabaKotor)} icon={TrendingUp} />
         <KpiCard
           label="Laba Operasional"
           value={formatRupiah(pnl.LabaOperasional)}
+          icon={Landmark}
           tone={pnl.LabaOperasional >= 0 ? "positive" : "negative"}
         />
         <KpiCard
           label="Laba Bersih"
           value={formatRupiah(pnl.LabaBersih)}
+          icon={PiggyBank}
           tone={pnl.LabaBersih >= 0 ? "positive" : "negative"}
         />
       </div>

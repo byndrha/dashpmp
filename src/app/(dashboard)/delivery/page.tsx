@@ -1,3 +1,4 @@
+import { Truck, PackageOpen } from "lucide-react";
 import { getOpenDeliveries } from "@/lib/queries/delivery";
 import { getBranches } from "@/lib/queries/branches";
 import { FilterBar } from "@/components/dashboard/filter-bar";
@@ -31,8 +32,8 @@ export default async function DeliveryPage({
       <FilterBar branches={branches} showDateRange={false} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <KpiCard label="Delivery Order Terbuka" value={uniqueOrders.toLocaleString("id-ID")} />
-        <KpiCard label="Total Sisa Belum Dikirim" value={totalSisa.toLocaleString("id-ID")} />
+        <KpiCard label="Delivery Order Terbuka" value={uniqueOrders.toLocaleString("id-ID")} icon={Truck} />
+        <KpiCard label="Total Sisa Belum Dikirim" value={totalSisa.toLocaleString("id-ID")} icon={PackageOpen} tone="warning" />
       </div>
 
       <p className="text-xs text-muted-foreground">

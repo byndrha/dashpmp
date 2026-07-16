@@ -8,7 +8,13 @@ export interface PieDatum {
   value: number;
 }
 
-const COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#0891b2"];
+const COLORS = [
+  "var(--chart-2)",
+  "var(--chart-5)",
+  "var(--chart-1)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+];
 
 export function SimplePieChart({ data }: { data: PieDatum[] }) {
   return (
@@ -19,8 +25,17 @@ export function SimplePieChart({ data }: { data: PieDatum[] }) {
             <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(value) => formatRupiah(Number(value))} />
-        <Legend />
+        <Tooltip
+          formatter={(value) => formatRupiah(Number(value))}
+          contentStyle={{
+            background: "var(--popover)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            color: "var(--popover-foreground)",
+            fontSize: 12,
+          }}
+        />
+        <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
       </PieChart>
     </ResponsiveContainer>
   );

@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-data);
+  --font-heading: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -27,6 +27,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -48,73 +51,87 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+  "Glacier" theme — grounded in the subject: an ice-block factory group
+  running a cold chain across six East Java branches. Deep meltwater-night
+  surfaces, a glacier-teal primary (ice), and a thaw-amber accent (heat /
+  cost / risk — electricity is this business's single biggest expense,
+  literally the thing that melts the margin). One theme only, dark by
+  default — this is an internal ops tool read all day, not a marketing site.
+*/
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: oklch(0.16 0.025 240);
+  --foreground: oklch(0.94 0.02 200);
+  --card: oklch(0.205 0.03 240);
+  --card-foreground: oklch(0.94 0.02 200);
+  --popover: oklch(0.205 0.03 240);
+  --popover-foreground: oklch(0.94 0.02 200);
+  --primary: oklch(0.8 0.14 175);
+  --primary-foreground: oklch(0.18 0.04 200);
+  --secondary: oklch(0.26 0.03 235);
+  --secondary-foreground: oklch(0.94 0.02 200);
+  --muted: oklch(0.26 0.03 235);
+  --muted-foreground: oklch(0.68 0.045 215);
+  --accent: oklch(0.3 0.035 230);
+  --accent-foreground: oklch(0.94 0.02 200);
+  --warning: oklch(0.75 0.15 55);
+  --warning-foreground: oklch(0.18 0.02 60);
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.97 0.02 25);
+  --border: oklch(0.32 0.03 230 / 60%);
+  --input: oklch(0.28 0.03 230 / 70%);
+  --ring: oklch(0.8 0.14 175);
+  --chart-1: oklch(0.8 0.14 175);
+  --chart-2: oklch(0.75 0.15 55);
+  --chart-3: oklch(0.72 0.11 230);
+  --chart-4: oklch(0.72 0.13 305);
+  --chart-5: oklch(0.68 0.19 25);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.135 0.025 240);
+  --sidebar-foreground: oklch(0.94 0.02 200);
+  --sidebar-primary: oklch(0.8 0.14 175);
+  --sidebar-primary-foreground: oklch(0.18 0.04 200);
+  --sidebar-accent: oklch(0.24 0.03 235);
+  --sidebar-accent-foreground: oklch(0.94 0.02 200);
+  --sidebar-border: oklch(0.28 0.03 230 / 60%);
+  --sidebar-ring: oklch(0.8 0.14 175);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.16 0.025 240);
+  --foreground: oklch(0.94 0.02 200);
+  --card: oklch(0.205 0.03 240);
+  --card-foreground: oklch(0.94 0.02 200);
+  --popover: oklch(0.205 0.03 240);
+  --popover-foreground: oklch(0.94 0.02 200);
+  --primary: oklch(0.8 0.14 175);
+  --primary-foreground: oklch(0.18 0.04 200);
+  --secondary: oklch(0.26 0.03 235);
+  --secondary-foreground: oklch(0.94 0.02 200);
+  --muted: oklch(0.26 0.03 235);
+  --muted-foreground: oklch(0.68 0.045 215);
+  --accent: oklch(0.3 0.035 230);
+  --accent-foreground: oklch(0.94 0.02 200);
+  --warning: oklch(0.75 0.15 55);
+  --warning-foreground: oklch(0.18 0.02 60);
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.97 0.02 25);
+  --border: oklch(0.32 0.03 230 / 60%);
+  --input: oklch(0.28 0.03 230 / 70%);
+  --ring: oklch(0.8 0.14 175);
+  --chart-1: oklch(0.8 0.14 175);
+  --chart-2: oklch(0.75 0.15 55);
+  --chart-3: oklch(0.72 0.11 230);
+  --chart-4: oklch(0.72 0.13 305);
+  --chart-5: oklch(0.68 0.19 25);
+  --sidebar: oklch(0.135 0.025 240);
+  --sidebar-foreground: oklch(0.94 0.02 200);
+  --sidebar-primary: oklch(0.8 0.14 175);
+  --sidebar-primary-foreground: oklch(0.18 0.04 200);
+  --sidebar-accent: oklch(0.24 0.03 235);
+  --sidebar-accent-foreground: oklch(0.94 0.02 200);
+  --sidebar-border: oklch(0.28 0.03 230 / 60%);
+  --sidebar-ring: oklch(0.8 0.14 175);
 }
 
 @layer base {
@@ -126,5 +143,25 @@
   }
   html {
     @apply font-sans;
+  }
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .font-data {
+    font-family: var(--font-data);
+  }
+  /* Signature texture: a faceted, low-opacity ice-crystal lattice. Used once,
+     on the login screen — the one page every user sees before anything else. */
+  .crystal-field {
+    background-image:
+      linear-gradient(135deg, oklch(0.8 0.14 175 / 7%) 1px, transparent 1px),
+      linear-gradient(45deg, oklch(0.8 0.14 175 / 5%) 1px, transparent 1px);
+    background-size: 64px 64px;
   }
 }

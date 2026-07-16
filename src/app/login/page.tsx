@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { IceMark } from "@/components/dashboard/ice-mark";
 
 function LoginForm() {
   const router = useRouter();
@@ -41,10 +42,11 @@ function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm border-border/60 shadow-2xl shadow-black/40 backdrop-blur">
       <CardHeader>
-        <CardTitle>Dashboard PMP Ponorogo</CardTitle>
-        <CardDescription>Masuk dengan akun yang terdaftar.</CardDescription>
+        <IceMark className="size-9 text-primary mb-1" />
+        <CardTitle className="font-display text-xl">Dashboard PMP Ponorogo</CardTitle>
+        <CardDescription>Masuk dengan akun yang terdaftar untuk melihat data operasional.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -81,7 +83,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex flex-1 items-center justify-center p-4">
+    <div className="crystal-field flex flex-1 items-center justify-center bg-background p-4">
       <Suspense>
         <LoginForm />
       </Suspense>

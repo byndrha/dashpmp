@@ -1,3 +1,4 @@
+import { Zap, Percent, Hash } from "lucide-react";
 import { getElectricityCosts } from "@/lib/queries/electricity";
 import { getDailySales } from "@/lib/queries/sales";
 import { getBranches } from "@/lib/queries/branches";
@@ -36,9 +37,9 @@ export default async function ElectricityPage({
       <FilterBar branches={branches} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Total Biaya Listrik" value={formatRupiah(totalCost)} tone="negative" />
-        <KpiCard label="% dari Pendapatan" value={formatPercent(pctOfRevenue)} />
-        <KpiCard label="Jumlah Transaksi" value={entries.length.toLocaleString("id-ID")} />
+        <KpiCard label="Total Biaya Listrik" value={formatRupiah(totalCost)} icon={Zap} tone="warning" />
+        <KpiCard label="% dari Pendapatan" value={formatPercent(pctOfRevenue)} icon={Percent} tone={pctOfRevenue > 0.25 ? "negative" : "default"} />
+        <KpiCard label="Jumlah Transaksi" value={entries.length.toLocaleString("id-ID")} icon={Hash} />
       </div>
 
       <div className="rounded-lg border overflow-x-auto">

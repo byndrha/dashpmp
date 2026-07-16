@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  LayoutGrid,
   LineChart,
   Receipt,
   ShoppingCart,
   Zap,
   Truck,
-  Snowflake,
 } from "lucide-react";
 import {
   Sidebar,
@@ -21,8 +21,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { IceMark } from "@/components/dashboard/ice-mark";
 
 const NAV_ITEMS = [
+  { href: "/", label: "Beranda", icon: LayoutGrid, exact: true },
   { href: "/pnl", label: "P&L & BEP", icon: LineChart },
   { href: "/aging", label: "Aging Piutang", icon: Receipt },
   { href: "/sales", label: "Penjualan", icon: ShoppingCart },
@@ -36,11 +38,12 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <Snowflake className="size-5 text-primary shrink-0" />
-          <span className="font-semibold truncate group-data-[collapsible=icon]:hidden">
-            PMP Ponorogo
-          </span>
+        <div className="flex items-center gap-2 px-2 py-2">
+          <IceMark className="size-6 text-primary shrink-0" />
+          <div className="truncate group-data-[collapsible=icon]:hidden">
+            <p className="font-display font-semibold leading-tight">PMP Ponorogo</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">Maesa Group</p>
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -52,7 +55,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     render={<Link href={item.href} />}
-                    isActive={pathname.startsWith(item.href)}
+                    isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
                     tooltip={item.label}
                   >
                     <item.icon />

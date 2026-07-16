@@ -1,3 +1,4 @@
+import { Wallet, Receipt, Calculator } from "lucide-react";
 import { getDailySales } from "@/lib/queries/sales";
 import { getBranches } from "@/lib/queries/branches";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -40,11 +41,12 @@ export default async function SalesPage({
       <FilterBar branches={branches} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Total Penjualan Bersih" value={formatRupiah(totalNet)} />
-        <KpiCard label="Jumlah Invoice" value={totalInvoices.toLocaleString("id-ID")} />
+        <KpiCard label="Total Penjualan Bersih" value={formatRupiah(totalNet)} icon={Wallet} tone="positive" />
+        <KpiCard label="Jumlah Invoice" value={totalInvoices.toLocaleString("id-ID")} icon={Receipt} />
         <KpiCard
           label="Rata-rata / Invoice"
           value={formatRupiah(totalInvoices ? totalNet / totalInvoices : 0)}
+          icon={Calculator}
         />
       </div>
 
