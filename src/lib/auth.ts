@@ -20,19 +20,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const password = credentials?.password as string | undefined;
         if (!username || !password) return null;
 
-        // NOTE: assumes User.UserName is the login identifier — could not verify
-        // against the live schema at scaffold time (DB unreachable). Adjust the
-        // column name here if MKEsindo's actual login field differs.
         const pool = await getPool();
         const result = await pool
           .request()
-          .input("username", sql.NVarChar, username)
+          .input("username", sql.VarChar(128), username)
           .query(`
-            SELECT u.UserID, u.UserName, u.Name,
+            SELECT u.UserID, u.Username, u.Firstname, u.Lastname,
                    da.PasswordHash, da.IsActive, da.FailedLoginCount, da.LockedUntil
             FROM [User] u
             JOIN DashboardAuth da ON da.UserID = u.UserID
-            WHERE u.UserName = @username
+            WHERE u.Username = @username AND ISNULL(u.IsDeleted, 0) = 0
           `);
 
         const row = result.recordset[0];
@@ -54,7 +51,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           await pool
             .request()
-            .input("userId", sql.Int, row.UserID)
+            .input("userId", sql.VarChar(16), row.UserID)
             .input("failedCount", sql.Int, newFailedCount)
             .input("lockedUntil", sql.DateTime, lockedUntil)
             .query(`
@@ -67,8 +64,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         await pool
           .request()
-          .input("userId", sql.Int, row.UserID)
-          .input("ip", sql.NVarChar, ip)
+          .input("userId", sql.VarChar(16), row.UserID)
+          .input("ip", sql.VarChar(64), ip)
           .query(`
             UPDATE DashboardAuth
             SET FailedLoginCount = 0, LockedUntil = NULL,
@@ -76,7 +73,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             WHERE UserID = @userId
           `);
 
-        return { id: String(row.UserID), name: row.Name, username: row.UserName };
+        const name = [row.Firstname, row.Lastname].filter(Boolean).join(" ") || row.Username;
+        return { id: String(row.UserID), name, username: row.Username };
       },
     }),
   ],

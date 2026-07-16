@@ -21,13 +21,18 @@ async function main() {
   const pool = await getPool();
 
   const pending = await pool.request().query(`
-    SELECT u.UserID, u.UserName, u.Name
+    SELECT u.UserID, u.Username, u.Firstname, u.Lastname
     FROM [User] u
     LEFT JOIN DashboardAuth da ON da.UserID = u.UserID
-    WHERE da.UserID IS NULL
+    WHERE da.UserID IS NULL AND ISNULL(u.IsDeleted, 0) = 0
   `);
 
-  const users = pending.recordset as { UserID: number; UserName: string; Name: string }[];
+  const users = pending.recordset as {
+    UserID: string;
+    Username: string;
+    Firstname: string | null;
+    Lastname: string | null;
+  }[];
 
   if (users.length === 0) {
     console.log("Semua user sudah punya baris DashboardAuth. Tidak ada yang di-seed.");
@@ -39,18 +44,19 @@ async function main() {
   for (const user of users) {
     const password = generatePassword();
     const passwordHash = await bcrypt.hash(password, 12);
+    const name = [user.Firstname, user.Lastname].filter(Boolean).join(" ") || user.Username;
 
     await pool
       .request()
-      .input("userId", sql.Int, user.UserID)
-      .input("passwordHash", sql.NVarChar, passwordHash)
+      .input("userId", sql.VarChar(16), user.UserID)
+      .input("passwordHash", sql.VarChar(255), passwordHash)
       .query(`
         INSERT INTO DashboardAuth (UserID, PasswordHash, IsActive, FailedLoginCount)
         VALUES (@userId, @passwordHash, 1, 0)
       `);
 
-    results.push({ username: user.UserName, name: user.Name, password });
-    console.log(`Seeded: ${user.UserName}`);
+    results.push({ username: user.Username, name, password });
+    console.log(`Seeded: ${user.Username}`);
   }
 
   const outDir = path.join(__dirname, "..", "scratchpad");
