@@ -19,7 +19,7 @@ export default async function DeliveryPage({
   searchParams: Promise<{ branch?: string }>;
 }) {
   const params = await searchParams;
-  const branchId = params.branch ? Number(params.branch) : undefined;
+  const branchId = params.branch || undefined;
 
   const [rows, branches] = await Promise.all([getOpenDeliveries(branchId), getBranches()]);
 

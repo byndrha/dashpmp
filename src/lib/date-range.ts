@@ -15,6 +15,6 @@ export function resolveFilter(searchParams: DashboardSearchParams): DateRangeFil
   return {
     startDate: searchParams.from ?? formatISO(defaultStart, { representation: "date" }),
     endDate: searchParams.to ?? formatISO(defaultEnd, { representation: "date" }),
-    branchId: searchParams.branch ? Number(searchParams.branch) : undefined,
+    branchId: searchParams.branch || undefined,
   };
 }

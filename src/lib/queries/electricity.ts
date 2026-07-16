@@ -5,7 +5,7 @@ const ELECTRICITY_ACCOUNT_ID = "0166"; // AccountNo 6105 "Listrik", verified aga
 
 export interface ElectricityEntry {
   TransDate: string;
-  BranchID: number;
+  BranchID: string;
   BranchName: string;
   VoucherNo: string;
   Debit: number;
@@ -20,7 +20,7 @@ export async function getElectricityCosts(filter: DateRangeFilter): Promise<Elec
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
 
-  if (filter.branchId) request.input("branchId", sql.Int, filter.branchId);
+  if (filter.branchId) request.input("branchId", sql.VarChar(16), filter.branchId);
 
   const result = await request.query(`
     SELECT

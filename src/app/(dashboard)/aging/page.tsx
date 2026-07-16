@@ -11,7 +11,7 @@ export default async function AgingPage({
   searchParams: Promise<{ branch?: string }>;
 }) {
   const params = await searchParams;
-  const branchId = params.branch ? Number(params.branch) : undefined;
+  const branchId = params.branch || undefined;
 
   const [rows, branches] = await Promise.all([getAgingReceivables(branchId), getBranches()]);
 

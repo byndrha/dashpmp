@@ -2,7 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import type { DateRangeFilter } from "@/types/dashboard";
 
 export interface DailySales {
-  BranchID: number;
+  BranchID: string;
   BranchName: string;
   SalesDate: string;
   InvoiceCount: number;
@@ -19,7 +19,7 @@ export async function getDailySales(filter: DateRangeFilter): Promise<DailySales
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
 
-  if (filter.branchId) request.input("branchId", sql.Int, filter.branchId);
+  if (filter.branchId) request.input("branchId", sql.VarChar(16), filter.branchId);
 
   const result = await request.query(`
     SELECT
@@ -42,5 +42,12 @@ export async function getDailySales(filter: DateRangeFilter): Promise<DailySales
     ORDER BY SalesDate DESC, BranchName
   `);
 
-  return result.recordset;
+  // mssql returns SQL `DATE` columns as JS Date objects, not strings — normalize
+  // to an ISO date string so downstream code (sorting, grouping by key, display
+  // formatting) can treat SalesDate as the plain string the type declares.
+  return result.recordset.map((row) => ({
+    ...row,
+    SalesDate:
+      row.SalesDate instanceof Date ? row.SalesDate.toISOString().slice(0, 10) : row.SalesDate,
+  }));
 }

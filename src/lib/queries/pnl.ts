@@ -29,7 +29,7 @@ export async function getPnL(filter: DateRangeFilter): Promise<PnLSummary> {
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
 
-  if (filter.branchId) request.input("branchId", sql.Int, filter.branchId);
+  if (filter.branchId) request.input("branchId", sql.VarChar(16), filter.branchId);
 
   const result = await request.query(`
     SELECT
@@ -90,7 +90,7 @@ export async function getBEP(filter: DateRangeFilter): Promise<BEPSummary> {
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
 
-  if (filter.branchId) request.input("branchId", sql.Int, filter.branchId);
+  if (filter.branchId) request.input("branchId", sql.VarChar(16), filter.branchId);
 
   const result = await request.query(`
     SELECT

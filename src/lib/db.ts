@@ -10,6 +10,8 @@ const config: sql.config = {
     encrypt: process.env.DB_ENCRYPT !== "false",
     trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === "true",
   },
+  connectionTimeout: 10000,
+  requestTimeout: 20000,
   pool: {
     max: 10,
     min: 0,
@@ -23,7 +25,14 @@ declare global {
 
 export function getPool(): Promise<sql.ConnectionPool> {
   if (!global._mssqlPool) {
-    global._mssqlPool = new sql.ConnectionPool(config).connect();
+    global._mssqlPool = new sql.ConnectionPool(config).connect().catch((err) => {
+      // Don't cache a failed connection attempt — otherwise every request for
+      // the rest of the process's lifetime reuses the same rejected promise
+      // and never retries, even after the underlying issue (bad creds,
+      // network blip) is fixed.
+      global._mssqlPool = undefined;
+      throw err;
+    });
   }
   return global._mssqlPool;
 }

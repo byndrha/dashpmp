@@ -1,7 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 
 export interface OpenDelivery {
-  DeliveryOrderID: number;
+  DeliveryOrderID: string;
   VoucherNo: string;
   TransDate: string;
   DueDate: string;
@@ -10,17 +10,17 @@ export interface OpenDelivery {
   VehicleNo: string;
   IsClosed: boolean;
   IsInvoiced: boolean;
-  ItemID: number;
+  ItemID: string;
   ItemName: string;
   Qty: number;
   Delivered: number;
   SisaBelumDikirim: number;
 }
 
-export async function getOpenDeliveries(branchId?: number): Promise<OpenDelivery[]> {
+export async function getOpenDeliveries(branchId?: string): Promise<OpenDelivery[]> {
   const pool = await getPool();
   const request = pool.request();
-  if (branchId) request.input("branchId", sql.Int, branchId);
+  if (branchId) request.input("branchId", sql.VarChar(16), branchId);
 
   // NOTE: DeliveryOrderDetail.Outstanding is NOT reliable (verified against
   // live data — inconsistent with Qty-Delivered, even on closed orders).
@@ -48,7 +48,7 @@ export async function getOpenDeliveries(branchId?: number): Promise<OpenDelivery
     WHERE do.IsDeleted = 0
       AND do.IsClosed = 0
       ${branchId ? "AND do.BranchID = @branchId" : ""}
-    ORDER BY do.TransDate ASC
+    ORDER BY do.TransDate DESC
   `);
 
   return result.recordset;
