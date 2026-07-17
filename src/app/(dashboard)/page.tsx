@@ -7,6 +7,7 @@ import { getOpenDeliveries } from "@/lib/queries/delivery";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { WilayahPulse } from "@/components/dashboard/wilayah-pulse";
 import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
+import { GreetingHeader } from "@/components/dashboard/greeting-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatRupiah } from "@/lib/format";
 
@@ -17,14 +18,6 @@ const MODULE_LINKS = [
   { href: "/electricity", label: "Biaya Listrik", desc: "Biaya listrik vs pendapatan", icon: Zap },
   { href: "/delivery", label: "Pengiriman", desc: "Delivery order terbuka", icon: Truck },
 ];
-
-function greeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 11) return "Selamat pagi";
-  if (hour < 15) return "Selamat siang";
-  if (hour < 19) return "Selamat sore";
-  return "Selamat malam";
-}
 
 export default async function BerandaPage() {
   const session = await auth();
@@ -44,14 +37,7 @@ export default async function BerandaPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="font-display text-2xl font-semibold">
-          {greeting()}{name ? `, ${name}` : ""}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {new Intl.DateTimeFormat("id-ID", { dateStyle: "full" }).format(new Date())}
-        </p>
-      </div>
+      <GreetingHeader name={name} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Penjualan Hari Ini" value={formatRupiah(todayNetSales)} icon={Wallet} tone="positive" />

@@ -1,15 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Target, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Target, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,11 +14,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Pagination } from "@/components/dashboard/pagination";
 import { formatRupiah, formatDate, formatQty, formatDays, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CollectionPriorityRow } from "@/lib/queries/collection-priority";
 import type { PiutangStatus } from "@/lib/queries/aging";
 import { saveCollectionTargetAction, removeCollectionTargetAction } from "@/app/(dashboard)/aging/actions";
+
+const PAGE_SIZE = 9;
 
 const STATUS_BADGE: Record<PiutangStatus, string> = {
   Sehat: "bg-primary/15 text-primary",
@@ -51,24 +46,105 @@ function TrenIcon({ tren }: { tren: CollectionPriorityRow["Tren"] }) {
   return <Minus className="size-3.5 text-muted-foreground" />;
 }
 
+function PriorityCard({ row, onEdit }: { row: CollectionPriorityRow; onEdit: (row: CollectionPriorityRow) => void }) {
+  const prog = progress(row);
+  const rat = ratio(row);
+
+  return (
+    <Card className="py-3">
+      <CardContent className="flex flex-col gap-2 px-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate font-medium">{row.CustomerName}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {row.PartnerType} &middot; {row.Wilayah}
+              {row.Kecamatan ? ` · ${row.Kecamatan}` : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className={cn("rounded px-2 py-0.5 text-[11px] font-medium", STATUS_BADGE[row.Status])}>
+              {row.Status}
+            </span>
+            <Button variant="ghost" size="icon" className="size-7" onClick={() => onEdit(row)}>
+              <Target className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 border-t pt-2 text-xs sm:grid-cols-4">
+          <div>
+            <p className="text-muted-foreground">Piutang Awal</p>
+            <p className="tabular-nums font-medium">{formatRupiah(row.PiutangAwal)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Piutang Berjalan</p>
+            <p className="tabular-nums font-medium text-warning">{formatRupiah(row.PiutangBerjalan)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Rasio</p>
+            <p className="tabular-nums font-medium">{rat != null ? formatPercentPoints(rat) : "-"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Omzet</p>
+            <p className="tabular-nums font-medium">{formatRupiah(row.Omzet)}</p>
+          </div>
+        </div>
+
+        {row.TargetAmount != null && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              Target {formatRupiah(row.TargetAmount)}
+              {row.TargetDate ? ` · ${formatDate(row.TargetDate)}` : ""}
+            </span>
+            {prog != null && (
+              <div className="flex flex-1 items-center gap-1.5">
+                <div className="h-1.5 flex-1 rounded-full bg-secondary">
+                  <div className="h-1.5 rounded-full bg-primary" style={{ width: `${prog}%` }} />
+                </div>
+                <span className="tabular-nums text-muted-foreground">{prog.toFixed(0)}%</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
+          <span>Rata² Pesan {formatQty(row.AvgQtyPerOrderDay)}</span>
+          <span>Terakhir Pesan {row.TerakhirPesan ? formatDate(row.TerakhirPesan) : "-"}</span>
+          <span>Terakhir Bayar {row.TerakhirBayar ? formatDate(row.TerakhirBayar) : "-"}</span>
+          <span>Rotasi {formatDays(row.Rotasi)}</span>
+          <span className="inline-flex items-center gap-1">
+            Tren <TrenIcon tren={row.Tren} />
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[] }) {
-  const [showAll, setShowAll] = useState(false);
   const [editing, setEditing] = useState<CollectionPriorityRow | null>(null);
   const [pending, startTransition] = useTransition();
+  const [page, setPage] = useState(1);
 
-  const { headline, rest } = useMemo(() => {
+  const headline = useMemo(() => {
     const targeted = rows.filter((r) => r.IsTarget);
     const others = rows
       .filter((r) => !r.IsTarget && (r.Status === "Kritis" || r.Status === "Perhatian"))
       .slice(0, 5);
-    const headlineIds = new Set([...targeted, ...others].map((r) => r.BusinessPartnerID));
-    return {
-      headline: [...targeted, ...others].sort((a, b) => b.PiutangBerjalan - a.PiutangBerjalan),
-      rest: rows.filter((r) => !headlineIds.has(r.BusinessPartnerID)),
-    };
+    return [...targeted, ...others].sort((a, b) => b.PiutangBerjalan - a.PiutangBerjalan);
   }, [rows]);
 
-  const visibleRows = showAll ? [...headline, ...rest] : headline;
+  const headlineIds = useMemo(() => new Set(headline.map((r) => r.BusinessPartnerID)), [headline]);
+  const rest = useMemo(() => rows.filter((r) => !headlineIds.has(r.BusinessPartnerID)), [rows, headlineIds]);
+
+  const [prevRows, setPrevRows] = useState(rows);
+  if (rows !== prevRows) {
+    setPrevRows(rows);
+    setPage(1);
+  }
+
+  const pageCount = Math.max(1, Math.ceil(rest.length / PAGE_SIZE));
+  const pageRows = rest.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleSubmit(formData: FormData) {
     if (!editing) return;
@@ -103,124 +179,28 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
           Target dari manajemen, ditambah mitra dengan piutang terbesar berstatus Perhatian/Kritis.
         </CardDescription>
       </CardHeader>
-      <CardContent className="px-0">
-        <div className="overflow-x-auto px-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mitra</TableHead>
-                <TableHead className="text-right">Piutang Awal</TableHead>
-                <TableHead className="text-right">Piutang Berjalan</TableHead>
-                <TableHead>Target Pelunasan</TableHead>
-                <TableHead>Progres</TableHead>
-                <TableHead className="text-right">Rata² Pesan</TableHead>
-                <TableHead>Terakhir Pesan</TableHead>
-                <TableHead>Terakhir Bayar</TableHead>
-                <TableHead className="text-right">Rasio</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Tren</TableHead>
-                <TableHead className="text-right">Rotasi</TableHead>
-                <TableHead className="text-right">Omzet</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibleRows.map((r) => {
-                const prog = progress(r);
-                const rat = ratio(r);
-                return (
-                  <TableRow key={r.BusinessPartnerID}>
-                    <TableCell>
-                      <p className="font-medium">{r.CustomerName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {r.PartnerType} &middot; {r.Wilayah}
-                        {r.Kecamatan ? ` · ${r.Kecamatan}` : ""}
-                      </p>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatRupiah(r.PiutangAwal)}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {formatRupiah(r.PiutangBerjalan)}
-                    </TableCell>
-                    <TableCell>
-                      {r.TargetAmount != null ? (
-                        <>
-                          <p className="tabular-nums">{formatRupiah(r.TargetAmount)}</p>
-                          {r.TargetDate && (
-                            <p className="text-xs text-muted-foreground">{formatDate(r.TargetDate)}</p>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {prog != null ? (
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-1.5 w-16 rounded-full bg-secondary">
-                            <div
-                              className="h-1.5 rounded-full bg-primary"
-                              style={{ width: `${prog}%` }}
-                            />
-                          </div>
-                          <span className="text-xs tabular-nums text-muted-foreground">{prog.toFixed(0)}%</span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {formatQty(r.AvgQtyPerOrderDay)}
-                    </TableCell>
-                    <TableCell className="text-xs">{r.TerakhirPesan ? formatDate(r.TerakhirPesan) : "-"}</TableCell>
-                    <TableCell className="text-xs">{r.TerakhirBayar ? formatDate(r.TerakhirBayar) : "-"}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {rat != null ? formatPercentPoints(rat) : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <span className={cn("rounded px-2 py-0.5 text-xs font-medium", STATUS_BADGE[r.Status])}>
-                        {r.Status}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <TrenIcon tren={r.Tren} />
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {formatDays(r.Rotasi)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatRupiah(r.Omzet)}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditing(r)}>
-                        <Target className="size-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {visibleRows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
-                    Tidak ada piutang yang perlu diprioritaskan.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          {headline.map((r) => (
+            <PriorityCard key={r.BusinessPartnerID} row={r} onEdit={setEditing} />
+          ))}
+          {headline.length === 0 && (
+            <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
+              Tidak ada piutang yang perlu diprioritaskan.
+            </p>
+          )}
         </div>
 
         {rest.length > 0 && (
-          <div className="mt-3 flex justify-center px-6">
-            <Button variant="outline" size="sm" onClick={() => setShowAll((v) => !v)}>
-              {showAll ? (
-                <>
-                  Sembunyikan <ChevronUp className="size-3.5" />
-                </>
-              ) : (
-                <>
-                  Tampilkan {rest.length} mitra lainnya <ChevronDown className="size-3.5" />
-                </>
-              )}
-            </Button>
-          </div>
+          <>
+            <p className="text-xs font-medium text-muted-foreground">Mitra lainnya dengan piutang berjalan</p>
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              {pageRows.map((r) => (
+                <PriorityCard key={r.BusinessPartnerID} row={r} onEdit={setEditing} />
+              ))}
+            </div>
+            <Pagination page={page} pageCount={pageCount} onChange={setPage} />
+          </>
         )}
       </CardContent>
 

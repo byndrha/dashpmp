@@ -1,4 +1,5 @@
-import { getPool } from "@/lib/db";
+import { getPool, sql } from "@/lib/db";
+import { getBusinessDate } from "@/lib/business-date";
 
 export interface RecentInvoice {
   SalesInvoiceID: string;
@@ -35,9 +36,16 @@ export interface TodayWilayahPulse {
   InvoiceCount: number;
 }
 
+// "Today" follows the business date (WIB, rolls over at 14:00) rather than
+// the calendar date, so this matches whatever date staff are actively
+// entering orders/deliveries against — see src/lib/business-date.ts.
 export async function getTodayWilayahPulse(limit = 6): Promise<TodayWilayahPulse[]> {
   const pool = await getPool();
-  const result = await pool.request().query(`
+  const businessDate = getBusinessDate();
+  const result = await pool
+    .request()
+    .input("businessDate", sql.Date, businessDate)
+    .query(`
     SELECT TOP ${limit}
         ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
         SUM(si.Netto) AS NetSales,
@@ -46,8 +54,8 @@ export async function getTodayWilayahPulse(limit = 6): Promise<TodayWilayahPulse
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = si.BusinessPartnerID
     WHERE si.IsDeleted = 0
       AND ISNULL(si.IsPerforma, 0) = 0
-      AND si.TransDate >= CAST(GETDATE() AS DATE)
-      AND si.TransDate <  DATEADD(DAY, 1, CAST(GETDATE() AS DATE))
+      AND si.TransDate >= @businessDate
+      AND si.TransDate <  DATEADD(DAY, 1, @businessDate)
     GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui')
     ORDER BY NetSales DESC
   `);

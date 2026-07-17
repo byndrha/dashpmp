@@ -1,5 +1,6 @@
-import { getPool } from "@/lib/db";
+import { getPool, sql } from "@/lib/db";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
+import { getBusinessDate } from "@/lib/business-date";
 import type { PartnerType } from "@/types/dashboard";
 import type { PiutangStatus } from "@/lib/queries/aging";
 
@@ -19,7 +20,11 @@ export interface TodayReceivablePayment {
 
 export async function getTodayReceivablePayments(): Promise<TodayReceivablePayment[]> {
   const pool = await getPool();
-  const result = await pool.request().query(`
+  const businessDate = getBusinessDate();
+  const result = await pool
+    .request()
+    .input("businessDate", sql.Date, businessDate)
+    .query(`
     WITH InvoiceBalance AS (
         SELECT si.SalesInvoiceID, si.BusinessPartnerID, si.DueDate,
                (cb.Netto - cb.Paid - cb.Deposit - cb.OtherPayment) AS Outstanding
@@ -68,8 +73,8 @@ export async function getTodayReceivablePayments(): Promise<TodayReceivablePayme
     LEFT JOIN MitraBalance mb ON mb.BusinessPartnerID = sp.BusinessPartnerID
     LEFT JOIN OrderStats os ON os.BusinessPartnerID = sp.BusinessPartnerID
     WHERE sp.IsDeleted = 0
-      AND sp.TransDate >= CAST(GETDATE() AS DATE)
-      AND sp.TransDate <  DATEADD(DAY, 1, CAST(GETDATE() AS DATE))
+      AND sp.TransDate >= @businessDate
+      AND sp.TransDate <  DATEADD(DAY, 1, @businessDate)
     ORDER BY sp.TransDate DESC
   `);
 
