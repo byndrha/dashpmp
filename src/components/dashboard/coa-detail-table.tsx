@@ -25,14 +25,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
+import { COA_KATEGORI_LABEL } from "@/lib/coa-labels";
 import { saveCOABudgetAction } from "@/app/(dashboard)/pnl/actions";
 
 const KATEGORI_ORDER: COAKategori[] = [
   "Pendapatan",
   "HPP",
-  "Beban Operasional",
-  "Pendapatan/Beban Lain",
-  "Adjustment/Pajak",
+  "BiayaTetap",
+  "BebanOperasional",
+  "PenghasilanLainnya",
+  "Adjustment",
 ];
 
 export function COADetailTable({
@@ -66,7 +68,7 @@ export function COADetailTable({
       {grouped.map((g) => (
         <Card key={g.kategori}>
           <CardHeader>
-            <CardTitle className="font-display text-base">{g.kategori}</CardTitle>
+            <CardTitle className="font-display text-base">{COA_KATEGORI_LABEL[g.kategori]}</CardTitle>
             <CardDescription>Rincian akun (APBP vs realisasi periode berjalan).</CardDescription>
           </CardHeader>
           <CardContent className="px-0">

@@ -21,6 +21,7 @@ export default async function PnLPage({
 
   const compositionData = [
     { name: "HPP", value: pnl.HPP },
+    { name: "Biaya Tetap", value: pnl.BiayaTetap },
     { name: "Beban Operasional", value: pnl.BebanOperasional },
     { name: "Laba Bersih", value: Math.max(pnl.LabaBersih, 0) },
   ].filter((d) => d.value > 0);
@@ -56,10 +57,11 @@ export default async function PnLPage({
             <Row label="Pendapatan" value={pnl.Pendapatan} />
             <Row label="HPP" value={-pnl.HPP} />
             <Row label="Laba Kotor" value={pnl.LabaKotor} bold />
+            <Row label="Biaya Tetap" value={-pnl.BiayaTetap} />
             <Row label="Beban Operasional" value={-pnl.BebanOperasional} />
             <Row label="Laba Operasional" value={pnl.LabaOperasional} bold />
-            <Row label="Pendapatan/Beban Lain-lain" value={pnl.LainLain} />
-            <Row label="Adjustment/Pajak" value={-pnl.AdjustmentPajak} />
+            <Row label="Penghasilan Lainnya" value={pnl.PenghasilanLainnya} />
+            <Row label="Adjustment" value={-pnl.Adjustment} />
             <Row label="Laba Bersih" value={pnl.LabaBersih} bold />
           </CardContent>
         </Card>

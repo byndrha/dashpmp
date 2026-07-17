@@ -1,16 +1,23 @@
 import { getDaysInMonth } from "date-fns";
 import { getPool, sql } from "@/lib/db";
+import { PNL_KATEGORI_CASE } from "@/lib/queries/pnl";
 import type { DateRangeFilter } from "@/types/dashboard";
 
-export type COAKategori = "Pendapatan" | "HPP" | "Beban Operasional" | "Pendapatan/Beban Lain" | "Adjustment/Pajak";
+export type COAKategori =
+  | "Pendapatan"
+  | "HPP"
+  | "BiayaTetap"
+  | "BebanOperasional"
+  | "PenghasilanLainnya"
+  | "Adjustment";
 
-const KATEGORI_BY_PREFIX: Record<string, COAKategori> = {
-  "4": "Pendapatan",
-  "5": "HPP",
-  "6": "Beban Operasional",
-  "7": "Pendapatan/Beban Lain",
-  "8": "Adjustment/Pajak",
-};
+// Credit-normal categories (revenue/income) vs debit-normal (cost) —
+// mirrors the sign convention in getPnL.
+const CREDIT_NORMAL: COAKategori[] = ["Pendapatan", "PenghasilanLainnya"];
+
+function realisasiSign(kategori: COAKategori, debit: number, credit: number): number {
+  return CREDIT_NORMAL.includes(kategori) ? credit - debit : debit - credit;
+}
 
 export interface COADetailRow {
   ChartOfAccountID: string;
@@ -22,13 +29,6 @@ export interface COADetailRow {
   BudgetAmount: number | null;
   BudgetPercent: number | null;
   ProyeksiAkhirBulan: number;
-}
-
-function realisasiSign(prefix: string, debit: number, credit: number): number {
-  // 4 = Pendapatan (credit-normal), 7 = Pendapatan/Beban Lain (net credit-normal),
-  // 5/6/8 = HPP/Beban/Adjustment (debit-normal).
-  if (prefix === "4" || prefix === "7") return credit - debit;
-  return debit - credit;
 }
 
 export async function getCOADetail(filter: DateRangeFilter): Promise<COADetailRow[]> {
@@ -48,7 +48,7 @@ export async function getCOADetail(filter: DateRangeFilter): Promise<COADetailRo
         coa.ChartOfAccountID,
         coa.AccountNo,
         coa.Description AS AccountName,
-        LEFT(coa.AccountNo, 1) AS Prefix,
+        ${PNL_KATEGORI_CASE} AS Kategori,
         ISNULL(SUM(gl.Debit), 0)  AS TotalDebit,
         ISNULL(SUM(gl.Credit), 0) AS TotalCredit,
         b.Amount AS BudgetAmount
@@ -73,7 +73,7 @@ export async function getCOADetail(filter: DateRangeFilter): Promise<COADetailRo
     ChartOfAccountID: string;
     AccountNo: string;
     AccountName: string;
-    Prefix: string;
+    Kategori: COAKategori;
     TotalDebit: number;
     TotalCredit: number;
     BudgetAmount: number | null;
@@ -81,8 +81,7 @@ export async function getCOADetail(filter: DateRangeFilter): Promise<COADetailRo
 
   const withRealisasi = rows.map((r) => ({
     ...r,
-    Kategori: KATEGORI_BY_PREFIX[r.Prefix],
-    Realisasi: realisasiSign(r.Prefix, r.TotalDebit, r.TotalCredit),
+    Realisasi: realisasiSign(r.Kategori, r.TotalDebit, r.TotalCredit),
   }));
 
   const totalByKategori = new Map<COAKategori, number>();
