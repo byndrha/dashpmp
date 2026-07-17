@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Truck, User, Package } from "lucide-react";
+import { Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import type { SalesOrderCard, DeliveryCard } from "@/lib/queries/sales-cards";
 import { getDeliveryCardsAction } from "@/app/(dashboard)/sales/actions";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
+const badgeBase = "h-5 px-1.5 text-[10px] font-medium leading-none whitespace-nowrap";
 
 function QtyLabel({ qty10, qty5 }: { qty10: number; qty5: number }) {
   return (
@@ -25,39 +26,27 @@ function QtyLabel({ qty10, qty5 }: { qty10: number; qty5: number }) {
 
 function DeliveryRow({ delivery }: { delivery: DeliveryCard }) {
   return (
-    <div className="flex flex-col gap-1.5 border-t py-2.5 first:border-t-0">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">
-            {formatDate(delivery.TransDate)} {formatTime(delivery.TransDate)}
-          </p>
-          <p className="font-data text-xs text-muted-foreground">{delivery.VoucherNo}</p>
-          <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <User className="size-3" /> {delivery.Driver || "-"}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Truck className="size-3" /> {delivery.VehicleNo || "-"}
-            </span>
-          </p>
-        </div>
-        <QtyLabel qty10={delivery.Qty10KG} qty5={delivery.Qty5KG} />
-      </div>
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-2">
+      <span className="text-xs text-muted-foreground">
+        {formatDate(delivery.TransDate)} {formatTime(delivery.TransDate)}
+      </span>
       <div className="flex flex-wrap items-center gap-1.5">
         {delivery.BillingStatus === "SudahDitagih" ? (
-          <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
-            Sudah Ditagih {delivery.SIVoucherNo}
+          <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
+            Tertagih {delivery.SIVoucherNo}
           </Badge>
         ) : (
-          <Badge variant="secondary">Belum Ditagih</Badge>
+          <Badge className={cn(badgeBase, "bg-destructive/15 text-destructive hover:bg-destructive/15")}>
+            Belum Ditagih
+          </Badge>
         )}
         {delivery.PaymentStatus === "Lunas" && (
-          <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
+          <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
             Lunas {delivery.SPVoucherNo}
           </Badge>
         )}
         {delivery.PaymentStatus === "BelumLunas" && (
-          <Badge variant="outline" className="text-warning border-warning/40">
+          <Badge variant="outline" className={cn(badgeBase, "text-warning border-warning/40")}>
             Belum Lunas
           </Badge>
         )}
@@ -100,15 +89,15 @@ function SalesOrderTransactionCard({
           </div>
         </div>
 
-        <div>
+        <div className="border-t divide-y divide-border">
           {loading && (
-            <div className="flex flex-col gap-1 border-t pt-2">
+            <div className="flex flex-col gap-1 py-2">
               <Skeleton className="h-4 w-2/3" />
               <Skeleton className="h-4 w-1/3" />
             </div>
           )}
           {!loading && (deliveries?.length ?? 0) === 0 && (
-            <p className="border-t pt-2 text-xs text-muted-foreground">Belum ada pengiriman.</p>
+            <p className="py-2 text-xs text-muted-foreground">Belum ada pengiriman.</p>
           )}
           {deliveries?.map((d) => <DeliveryRow key={d.DeliveryOrderID} delivery={d} />)}
         </div>
@@ -164,7 +153,7 @@ export function SalesTransactionCards({ orders }: { orders: SalesOrderCard[] }) 
         Menampilkan {pageOrders.length} dari {orders.length} pesanan (SO), diikuti tiap pengiriman (DO) dan status
         penagihan/pelunasan.
       </p>
-      <div className={cn("grid grid-cols-1 gap-3", orders.length > 0 && "lg:grid-cols-2")}>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {pageOrders.map((so) => (
           <SalesOrderTransactionCard
             key={so.SalesOrderID}

@@ -7,12 +7,6 @@ import type { DateRangeFilter, PartnerType } from "@/types/dashboard";
 // "Es Tube Afiliasi") is 10KG — verified against live item names.
 const KEMASAN_5KG = (col: string) => `CASE WHEN ${col} LIKE '%5 KG%' THEN 1 ELSE 0 END`;
 
-/** Strips the "MKE/SI/" or "MKE/SP/" prefix, per the transaction-card reference design. */
-export function shortenVoucher(voucherNo: string | null, prefix: string): string | null {
-  if (!voucherNo) return null;
-  return voucherNo.startsWith(prefix) ? voucherNo.slice(prefix.length) : voucherNo;
-}
-
 export interface SalesOrderCard {
   SalesOrderID: string;
   VoucherNo: string;
@@ -135,9 +129,9 @@ export async function getDeliveryCardsForOrders(salesOrderIds: string[]): Promis
       Qty10KG: row.Qty10KG,
       Qty5KG: row.Qty5KG,
       BillingStatus: hasInvoice ? "SudahDitagih" : "BelumDitagih",
-      SIVoucherNo: shortenVoucher(row.SIVoucherNo, "MKE/SI/"),
+      SIVoucherNo: row.SIVoucherNo,
       PaymentStatus: hasInvoice ? (isPaid ? "Lunas" : "BelumLunas") : null,
-      SPVoucherNo: isPaid ? shortenVoucher(row.SPVoucherNo, "MKE/SP/") : null,
+      SPVoucherNo: isPaid ? row.SPVoucherNo : null,
     };
   });
 }
