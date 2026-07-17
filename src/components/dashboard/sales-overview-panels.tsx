@@ -34,9 +34,19 @@ export function SalesOverviewPanels({ overview }: { overview: SalesOverview }) {
         <Card className="py-4">
           <CardContent className="flex flex-col gap-2 px-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Penjualan Hari Ini</p>
-            <p className="font-display text-2xl font-semibold tabular-nums text-primary">
-              {formatRupiah(today.NetSales)}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-display text-2xl font-semibold tabular-nums text-primary">
+                {formatRupiah(today.NetSales)}
+              </p>
+              <span
+                title="Harga rata-rata"
+                aria-label="Harga rata-rata"
+                className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+              >
+                <Coins className="size-3" />
+                {formatRupiahAvg(today.AvgPrice)}
+              </span>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               <DocChip icon={ShoppingCart} label="SO" value={today.SOCount} />
               <DocChip icon={Truck} label="DO" value={today.DOCount} />
@@ -45,9 +55,6 @@ export function SalesOverviewPanels({ overview }: { overview: SalesOverview }) {
             <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
               <QtyChip label="10KG" value={today.Qty10KG} />
               <QtyChip label="5KG" value={today.Qty5KG} />
-              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                <Coins className="size-3" /> Harga rata-rata {formatRupiahAvg(today.AvgPrice)}
-              </span>
             </div>
           </CardContent>
         </Card>

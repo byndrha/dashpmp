@@ -54,13 +54,17 @@ export interface SalesTrendPoint {
   TransDate: string;
   NetSales: number;
   SOCount: number;
+  SOQty: number;
   DOCount: number;
+  DOQty: number;
   SICount: number;
+  SIQty: number;
 }
 
-// Per-day document counts for the trend chart. Deliberately not filtered by
-// Wilayah — SO/DO don't carry BusinessPartner-derived Wilayah as cleanly as
-// SalesInvoice does, and the trend is meant to read as one overall pulse.
+// Per-day document counts AND quantities (kantong) for the trend chart.
+// Deliberately not filtered by Wilayah — SO/DO don't carry
+// BusinessPartner-derived Wilayah as cleanly as SalesInvoice does, and the
+// trend is meant to read as one overall pulse.
 export async function getSalesTrend(filter: DateRangeFilter): Promise<SalesTrendPoint[]> {
   const pool = await getPool();
   const result = await pool
@@ -84,11 +88,21 @@ export async function getSalesTrend(filter: DateRangeFilter): Promise<SalesTrend
                     AND CAST(si.TransDate AS DATE) = d.TransDate), 0) AS NetSales,
           (SELECT COUNT(*) FROM SalesOrder so
              WHERE so.IsDeleted = 0 AND CAST(so.TransDate AS DATE) = d.TransDate) AS SOCount,
+          ISNULL((SELECT SUM(sod.Qty) FROM SalesOrder so
+                  JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
+                  WHERE so.IsDeleted = 0 AND CAST(so.TransDate AS DATE) = d.TransDate), 0) AS SOQty,
           (SELECT COUNT(*) FROM DeliveryOrder do_
              WHERE do_.IsDeleted = 0 AND CAST(do_.TransDate AS DATE) = d.TransDate) AS DOCount,
+          ISNULL((SELECT SUM(dod.Qty) FROM DeliveryOrder do_
+                  JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+                  WHERE do_.IsDeleted = 0 AND CAST(do_.TransDate AS DATE) = d.TransDate), 0) AS DOQty,
           (SELECT COUNT(*) FROM SalesInvoice si
              WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
-               AND CAST(si.TransDate AS DATE) = d.TransDate) AS SICount
+               AND CAST(si.TransDate AS DATE) = d.TransDate) AS SICount,
+          ISNULL((SELECT SUM(sid.Qty) FROM SalesInvoice si
+                  JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
+                  WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+                    AND CAST(si.TransDate AS DATE) = d.TransDate), 0) AS SIQty
       FROM Days d
       ORDER BY d.TransDate ASC
     `);

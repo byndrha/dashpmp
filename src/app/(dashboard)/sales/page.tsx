@@ -40,7 +40,10 @@ export default async function SalesPage({
       <Card>
         <CardHeader>
           <CardTitle className="font-display">Tren Penjualan Harian</CardTitle>
-          <CardDescription>Nominal penjualan (batang) serta jumlah dokumen SO/DO/SI (garis).</CardDescription>
+          <CardDescription>
+            Nominal penjualan (batang) serta jumlah dokumen SO/DO/SI (garis) — arahkan kursor ke titik
+            untuk detail qty per dokumen.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <SalesTrendChart data={trend} />
