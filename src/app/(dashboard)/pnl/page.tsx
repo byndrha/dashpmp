@@ -1,9 +1,11 @@
 import { Wallet, TrendingUp, Landmark, PiggyBank } from "lucide-react";
 import { getPnL, getBEP } from "@/lib/queries/pnl";
+import { getCOADetail } from "@/lib/queries/keuangan-detail";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { SimplePieChart } from "@/components/charts/simple-pie-chart";
+import { COADetailTable } from "@/components/dashboard/coa-detail-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercent } from "@/lib/format";
 
@@ -14,7 +16,8 @@ export default async function PnLPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [pnl, bep] = await Promise.all([getPnL(filter), getBEP(filter)]);
+  const [pnl, bep, coaDetail] = await Promise.all([getPnL(filter), getBEP(filter), getCOADetail(filter)]);
+  const periodStart = new Date(filter.startDate);
 
   const compositionData = [
     { name: "HPP", value: pnl.HPP },
@@ -69,6 +72,17 @@ export default async function PnLPage({
             <SimplePieChart data={compositionData} />
           </CardContent>
         </Card>
+      </div>
+
+      <div>
+        <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
+          Detail per Akun (COA) &mdash; APBP vs Realisasi
+        </h2>
+        <COADetailTable
+          rows={coaDetail}
+          year={periodStart.getUTCFullYear()}
+          month={periodStart.getUTCMonth() + 1}
+        />
       </div>
 
       <Card>
