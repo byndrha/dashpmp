@@ -1,10 +1,10 @@
-import { Wallet, Receipt, Calculator } from "lucide-react";
-import { getDailySales } from "@/lib/queries/sales";
+import { getDailySales, getSalesTrend } from "@/lib/queries/sales";
+import { getSalesOverview } from "@/lib/queries/sales-overview";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
-import { KpiCard } from "@/components/dashboard/kpi-card";
-import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
+import { SalesOverviewPanels } from "@/components/dashboard/sales-overview-panels";
+import { SalesTrendChart } from "@/components/charts/sales-trend-chart";
 import {
   Table,
   TableBody,
@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { formatDate, formatRupiah } from "@/lib/format";
 
 export default async function SalesPage({
@@ -23,40 +23,27 @@ export default async function SalesPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [rows, wilayahList] = await Promise.all([getDailySales(filter), getWilayahList()]);
-
-  const totalNet = rows.reduce((sum, r) => sum + r.NetSales, 0);
-  const totalInvoices = rows.reduce((sum, r) => sum + r.InvoiceCount, 0);
-
-  const byDate = new Map<string, number>();
-  for (const r of rows) {
-    byDate.set(r.SalesDate, (byDate.get(r.SalesDate) ?? 0) + r.NetSales);
-  }
-  const trendData = Array.from(byDate.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, value]) => ({ name: formatDate(date), value }));
+  const [rows, trend, overview, wilayahList] = await Promise.all([
+    getDailySales(filter),
+    getSalesTrend(filter),
+    getSalesOverview(),
+    getWilayahList(),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-xl font-semibold">Penjualan</h1>
       <FilterBar wilayahList={wilayahList} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Total Penjualan Bersih" value={formatRupiah(totalNet)} icon={Wallet} tone="positive" />
-        <KpiCard label="Jumlah Invoice" value={totalInvoices.toLocaleString("id-ID")} icon={Receipt} />
-        <KpiCard
-          label="Rata-rata / Invoice"
-          value={formatRupiah(totalInvoices ? totalNet / totalInvoices : 0)}
-          icon={Calculator}
-        />
-      </div>
+      <SalesOverviewPanels overview={overview} />
 
       <Card>
         <CardHeader>
-          <CardTitle>Tren Penjualan Harian</CardTitle>
+          <CardTitle className="font-display">Tren Penjualan Harian</CardTitle>
+          <CardDescription>Nominal penjualan (batang) serta jumlah dokumen SO/DO/SI (garis).</CardDescription>
         </CardHeader>
         <CardContent>
-          <SimpleBarChart data={trendData} />
+          <SalesTrendChart data={trend} />
         </CardContent>
       </Card>
 
