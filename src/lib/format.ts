@@ -12,6 +12,21 @@ export function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+/** For values already expressed 0-100 (not a 0-1 fraction). */
+export function formatPercentPoints(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+export function formatQty(value: number | null): string {
+  if (value === null || Number.isNaN(value)) return "-";
+  return `±${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}`;
+}
+
+export function formatDays(value: number | null): string {
+  if (value === null || value === undefined) return "-";
+  return `${value} hari`;
+}
+
 export function formatDate(value: string | Date): string {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(value));
 }

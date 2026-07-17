@@ -35,7 +35,7 @@ export interface AgingRow {
 //   Kontak     <- MobileNo
 //   TakeAway   <- SalesmanID = '0127'
 //   Gender = Female -> Retail, Gender = Male -> Agen
-const PARTNER_TYPE_CASE = `
+export const PARTNER_TYPE_CASE = `
   CASE
     WHEN bp.SalesmanID = '0127' THEN 'TakeAway'
     WHEN bp.Gender = 'Female' THEN 'Retail'
