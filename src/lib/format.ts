@@ -22,6 +22,10 @@ export function formatQty(value: number | null): string {
   return `±${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}`;
 }
 
+export function formatRupiahAvg(value: number): string {
+  return `±${formatRupiah(value)}`;
+}
+
 export function formatDays(value: number | null): string {
   if (value === null || value === undefined) return "-";
   return `${value} hari`;

@@ -1,6 +1,6 @@
 import { TrendingUp, TrendingDown, Minus, ShoppingCart, Truck, Receipt, Wallet, Package, Coins, Users } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatRupiah, formatPercentPoints } from "@/lib/format";
+import { formatRupiah, formatRupiahAvg, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesOverview } from "@/lib/queries/sales-overview";
 
@@ -9,6 +9,15 @@ function DocChip({ icon: Icon, label, value }: { icon: typeof ShoppingCart; labe
     <span className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
       <Icon className="size-3" />
       {label} {value.toLocaleString("id-ID")}
+    </span>
+  );
+}
+
+function QtyChip({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+      <Package className="size-3" />
+      {label} {value.toLocaleString("id-ID")} kantong
     </span>
   );
 }
@@ -32,6 +41,13 @@ export function SalesOverviewPanels({ overview }: { overview: SalesOverview }) {
               <DocChip icon={ShoppingCart} label="SO" value={today.SOCount} />
               <DocChip icon={Truck} label="DO" value={today.DOCount} />
               <DocChip icon={Receipt} label="SI" value={today.SICount} />
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
+              <QtyChip label="10KG" value={today.Qty10KG} />
+              <QtyChip label="5KG" value={today.Qty5KG} />
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Coins className="size-3" /> Harga rata-rata {formatRupiahAvg(today.AvgPrice)}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -88,8 +104,12 @@ export function SalesOverviewPanels({ overview }: { overview: SalesOverview }) {
                 <Package className="size-3.5" /> Total Qty
               </div>
               <p className="font-display text-xl font-semibold tabular-nums">
-                {ytd.TotalQty.toLocaleString("id-ID")}
+                {(ytd.Qty10KG + ytd.Qty5KG).toLocaleString("id-ID")}
               </p>
+              <div className="flex flex-wrap gap-1.5">
+                <QtyChip label="10KG" value={ytd.Qty10KG} />
+                <QtyChip label="5KG" value={ytd.Qty5KG} />
+              </div>
             </CardContent>
           </Card>
           <Card className="py-4">
