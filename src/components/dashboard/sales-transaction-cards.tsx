@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Package } from "lucide-react";
+import { Package, Truck, User, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,33 +24,64 @@ function QtyLabel({ qty10, qty5 }: { qty10: number; qty5: number }) {
   );
 }
 
+function StatusBadges({ delivery }: { delivery: DeliveryCard }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {delivery.BillingStatus === "SudahDitagih" ? (
+        <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
+          Tertagih {delivery.SIVoucherNo}
+        </Badge>
+      ) : (
+        <Badge className={cn(badgeBase, "bg-destructive/15 text-destructive hover:bg-destructive/15")}>
+          Belum Ditagih
+        </Badge>
+      )}
+      {delivery.PaymentStatus === "Lunas" && (
+        <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
+          Lunas {delivery.SPVoucherNo}
+        </Badge>
+      )}
+      {delivery.PaymentStatus === "BelumLunas" && (
+        <Badge variant="outline" className={cn(badgeBase, "text-warning border-warning/40")}>
+          Belum Lunas
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 function DeliveryRow({ delivery }: { delivery: DeliveryCard }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-2">
       <span className="text-xs text-muted-foreground">
         {formatDate(delivery.TransDate)} {formatTime(delivery.TransDate)}
       </span>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {delivery.BillingStatus === "SudahDitagih" ? (
-          <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
-            Tertagih {delivery.SIVoucherNo}
-          </Badge>
-        ) : (
-          <Badge className={cn(badgeBase, "bg-destructive/15 text-destructive hover:bg-destructive/15")}>
-            Belum Ditagih
-          </Badge>
-        )}
-        {delivery.PaymentStatus === "Lunas" && (
-          <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
-            Lunas {delivery.SPVoucherNo}
-          </Badge>
-        )}
-        {delivery.PaymentStatus === "BelumLunas" && (
-          <Badge variant="outline" className={cn(badgeBase, "text-warning border-warning/40")}>
-            Belum Lunas
-          </Badge>
-        )}
+      <StatusBadges delivery={delivery} />
+    </div>
+  );
+}
+
+function DeliveryRowDetailed({ delivery }: { delivery: DeliveryCard }) {
+  return (
+    <div className="flex flex-col gap-1.5 py-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">
+            {formatDate(delivery.TransDate)} {formatTime(delivery.TransDate)}
+          </p>
+          <p className="font-data text-xs text-muted-foreground">{delivery.VoucherNo}</p>
+          <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <User className="size-3" /> {delivery.Driver || "-"}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Truck className="size-3" /> {delivery.VehicleNo || "-"}
+            </span>
+          </p>
+        </div>
+        <QtyLabel qty10={delivery.Qty10KG} qty5={delivery.Qty5KG} />
       </div>
+      <StatusBadges delivery={delivery} />
     </div>
   );
 }
@@ -64,8 +95,22 @@ function SalesOrderTransactionCard({
   deliveries: DeliveryCard[] | undefined;
   loading: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <Card className="py-4">
+    <Card
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      onClick={() => setExpanded((v) => !v)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setExpanded((v) => !v);
+        }
+      }}
+      className="py-4 cursor-pointer transition-colors hover:border-primary/40"
+    >
       <CardContent className="flex flex-col gap-2 px-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
@@ -80,12 +125,20 @@ function SalesOrderTransactionCard({
             </p>
             <p className="font-data text-xs text-muted-foreground">{so.VoucherNo}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">
-              {so.Wilayah}
-              {so.Kecamatan ? ` | ${so.Kecamatan}` : ""}
-            </p>
-            <QtyLabel qty10={so.Qty10KG} qty5={so.Qty5KG} />
+          <div className="flex items-start gap-2">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">
+                {so.Wilayah}
+                {so.Kecamatan ? ` | ${so.Kecamatan}` : ""}
+              </p>
+              <QtyLabel qty10={so.Qty10KG} qty5={so.Qty5KG} />
+            </div>
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                expanded && "rotate-180"
+              )}
+            />
           </div>
         </div>
 
@@ -99,7 +152,8 @@ function SalesOrderTransactionCard({
           {!loading && (deliveries?.length ?? 0) === 0 && (
             <p className="py-2 text-xs text-muted-foreground">Belum ada pengiriman.</p>
           )}
-          {deliveries?.map((d) => <DeliveryRow key={d.DeliveryOrderID} delivery={d} />)}
+          {!expanded && deliveries?.map((d) => <DeliveryRow key={d.DeliveryOrderID} delivery={d} />)}
+          {expanded && deliveries?.map((d) => <DeliveryRowDetailed key={d.DeliveryOrderID} delivery={d} />)}
         </div>
       </CardContent>
     </Card>
