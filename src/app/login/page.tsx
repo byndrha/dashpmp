@@ -45,7 +45,7 @@ function LoginForm() {
     <Card className="w-full max-w-sm border-border/60 shadow-2xl shadow-black/40 backdrop-blur">
       <CardHeader>
         <IceMark className="size-9 text-primary mb-1" />
-        <CardTitle className="font-display text-xl">Dashboard PMP Ponorogo</CardTitle>
+        <CardTitle className="font-display text-xl">Dashboard PMP Group</CardTitle>
         <CardDescription>Masuk dengan akun yang terdaftar untuk melihat data operasional.</CardDescription>
       </CardHeader>
       <CardContent>

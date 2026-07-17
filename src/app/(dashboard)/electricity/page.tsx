@@ -1,7 +1,6 @@
 import { Zap, Percent, Hash } from "lucide-react";
 import { getElectricityCosts } from "@/lib/queries/electricity";
 import { getDailySales } from "@/lib/queries/sales";
-import { getBranches } from "@/lib/queries/branches";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -22,11 +21,7 @@ export default async function ElectricityPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [entries, sales, branches] = await Promise.all([
-    getElectricityCosts(filter),
-    getDailySales(filter),
-    getBranches(),
-  ]);
+  const [entries, sales] = await Promise.all([getElectricityCosts(filter), getDailySales(filter)]);
 
   const totalCost = entries.reduce((sum, e) => sum + e.Debit - e.Credit, 0);
   const totalRevenue = sales.reduce((sum, s) => sum + s.NetSales, 0);
@@ -34,7 +29,8 @@ export default async function ElectricityPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <FilterBar branches={branches} />
+      <h1 className="font-display text-xl font-semibold">Biaya Listrik</h1>
+      <FilterBar />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard label="Total Biaya Listrik" value={formatRupiah(totalCost)} icon={Zap} tone="warning" />
@@ -47,7 +43,6 @@ export default async function ElectricityPage({
           <TableHeader>
             <TableRow>
               <TableHead>Tanggal</TableHead>
-              <TableHead>Cabang</TableHead>
               <TableHead>No. Voucher</TableHead>
               <TableHead>Memo</TableHead>
               <TableHead className="text-right">Jumlah</TableHead>
@@ -57,7 +52,6 @@ export default async function ElectricityPage({
             {entries.map((e, i) => (
               <TableRow key={`${e.VoucherNo}-${i}`}>
                 <TableCell>{formatDate(e.TransDate)}</TableCell>
-                <TableCell>{e.BranchName}</TableCell>
                 <TableCell>{e.VoucherNo}</TableCell>
                 <TableCell className="text-muted-foreground">{e.Memo ?? "-"}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatRupiah(e.Debit - e.Credit)}</TableCell>
@@ -65,7 +59,7 @@ export default async function ElectricityPage({
             ))}
             {entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                   Tidak ada data pada periode ini.
                 </TableCell>
               </TableRow>

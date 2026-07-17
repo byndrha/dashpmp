@@ -1,19 +1,19 @@
 import Link from "next/link";
 import { Wallet, Receipt, Truck, LineChart, Zap, ShoppingCart, ArrowRight } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { getRecentInvoices, getTodayBranchPulse } from "@/lib/queries/activity";
+import { getRecentInvoices, getTodayWilayahPulse } from "@/lib/queries/activity";
 import { getAgingReceivables } from "@/lib/queries/aging";
 import { getOpenDeliveries } from "@/lib/queries/delivery";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { BranchPulse } from "@/components/dashboard/branch-pulse";
+import { WilayahPulse } from "@/components/dashboard/wilayah-pulse";
 import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatRupiah } from "@/lib/format";
 
 const MODULE_LINKS = [
-  { href: "/pnl", label: "P&L & BEP", desc: "Laba rugi dan titik impas", icon: LineChart },
-  { href: "/aging", label: "Aging Piutang", desc: "Umur piutang per pelanggan", icon: Receipt },
-  { href: "/sales", label: "Penjualan", desc: "Penjualan harian per cabang", icon: ShoppingCart },
+  { href: "/pnl", label: "Keuangan", desc: "Laba rugi dan titik impas", icon: LineChart },
+  { href: "/aging", label: "Piutang", desc: "Umur piutang per mitra", icon: Receipt },
+  { href: "/sales", label: "Penjualan", desc: "Penjualan harian per wilayah", icon: ShoppingCart },
   { href: "/electricity", label: "Biaya Listrik", desc: "Biaya listrik vs pendapatan", icon: Zap },
   { href: "/delivery", label: "Pengiriman", desc: "Delivery order terbuka", icon: Truck },
 ];
@@ -28,15 +28,15 @@ function greeting(): string {
 
 export default async function BerandaPage() {
   const session = await auth();
-  const [recentInvoices, branchPulse, aging, deliveries] = await Promise.all([
+  const [recentInvoices, wilayahPulse, aging, deliveries] = await Promise.all([
     getRecentInvoices(15),
-    getTodayBranchPulse(),
+    getTodayWilayahPulse(),
     getAgingReceivables(),
     getOpenDeliveries(),
   ]);
 
-  const todayNetSales = branchPulse.reduce((sum, b) => sum + b.NetSales, 0);
-  const todayInvoices = branchPulse.reduce((sum, b) => sum + b.InvoiceCount, 0);
+  const todayNetSales = wilayahPulse.reduce((sum, w) => sum + w.NetSales, 0);
+  const todayInvoices = wilayahPulse.reduce((sum, w) => sum + w.InvoiceCount, 0);
   const totalOutstanding = aging.reduce((sum, r) => sum + r.Outstanding, 0);
   const openDeliveryOrders = new Set(deliveries.map((d) => d.DeliveryOrderID)).size;
 
@@ -61,8 +61,8 @@ export default async function BerandaPage() {
       </div>
 
       <div>
-        <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">Pulsa Cabang &mdash; Hari Ini</h2>
-        <BranchPulse branches={branchPulse} />
+        <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">Pulsa Wilayah &mdash; Hari Ini</h2>
+        <WilayahPulse wilayah={wilayahPulse} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">

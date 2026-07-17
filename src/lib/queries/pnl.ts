@@ -29,8 +29,6 @@ export async function getPnL(filter: DateRangeFilter): Promise<PnLSummary> {
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
 
-  if (filter.branchId) request.input("branchId", sql.VarChar(16), filter.branchId);
-
   const result = await request.query(`
     SELECT
         LEFT(coa.AccountNo,1) AS Prefix,
@@ -40,7 +38,6 @@ export async function getPnL(filter: DateRangeFilter): Promise<PnLSummary> {
     JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
     WHERE gl.TransDate >= @startDate
       AND gl.TransDate <  @endDate
-      ${filter.branchId ? "AND gl.BranchID = @branchId" : ""}
       AND LEFT(coa.AccountNo,1) IN ('4','5','6','7','8')
     GROUP BY LEFT(coa.AccountNo,1)
   `);
@@ -90,8 +87,6 @@ export async function getBEP(filter: DateRangeFilter): Promise<BEPSummary> {
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
 
-  if (filter.branchId) request.input("branchId", sql.VarChar(16), filter.branchId);
-
   const result = await request.query(`
     SELECT
         CASE
@@ -105,7 +100,6 @@ export async function getBEP(filter: DateRangeFilter): Promise<BEPSummary> {
     JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
     WHERE gl.TransDate >= @startDate
       AND gl.TransDate <  @endDate
-      ${filter.branchId ? "AND gl.BranchID = @branchId" : ""}
       AND (
             LEFT(coa.AccountNo,1) IN ('4','5')
             OR (LEFT(coa.AccountNo,1) = '6' AND coa.CostBehavior IS NOT NULL)

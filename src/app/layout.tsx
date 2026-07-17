@@ -23,8 +23,8 @@ const data = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dashboard PMP Ponorogo",
-  description: "Dashboard operasional Pabrik Es Maesa Group Ponorogo",
+  title: "Dashboard PMP Group",
+  description: "Dashboard operasional PT Mitra Kelola Esindo (Ponorogo)",
 };
 
 export default function RootLayout({

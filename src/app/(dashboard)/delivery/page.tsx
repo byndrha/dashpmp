@@ -1,6 +1,6 @@
 import { Truck, PackageOpen } from "lucide-react";
 import { getOpenDeliveries } from "@/lib/queries/delivery";
-import { getBranches } from "@/lib/queries/branches";
+import { getWilayahList } from "@/lib/queries/wilayah";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Badge } from "@/components/ui/badge";
@@ -17,19 +17,20 @@ import { formatDate } from "@/lib/format";
 export default async function DeliveryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ branch?: string }>;
+  searchParams: Promise<{ wilayah?: string }>;
 }) {
   const params = await searchParams;
-  const branchId = params.branch || undefined;
+  const wilayah = params.wilayah || undefined;
 
-  const [rows, branches] = await Promise.all([getOpenDeliveries(branchId), getBranches()]);
+  const [rows, wilayahList] = await Promise.all([getOpenDeliveries(wilayah), getWilayahList()]);
 
   const totalSisa = rows.reduce((sum, r) => sum + r.SisaBelumDikirim, 0);
   const uniqueOrders = new Set(rows.map((r) => r.DeliveryOrderID)).size;
 
   return (
     <div className="flex flex-col gap-4">
-      <FilterBar branches={branches} showDateRange={false} />
+      <h1 className="font-display text-xl font-semibold">Pengiriman</h1>
+      <FilterBar wilayahList={wilayahList} showDateRange={false} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <KpiCard label="Delivery Order Terbuka" value={uniqueOrders.toLocaleString("id-ID")} icon={Truck} />
@@ -48,8 +49,8 @@ export default async function DeliveryPage({
               <TableHead>No. Voucher</TableHead>
               <TableHead>Tanggal</TableHead>
               <TableHead>Jatuh Tempo</TableHead>
-              <TableHead>Cabang</TableHead>
-              <TableHead>Pelanggan</TableHead>
+              <TableHead>Wilayah</TableHead>
+              <TableHead>Mitra</TableHead>
               <TableHead>Kendaraan</TableHead>
               <TableHead>Item</TableHead>
               <TableHead className="text-right">Qty</TableHead>
@@ -64,7 +65,7 @@ export default async function DeliveryPage({
                 <TableCell className="font-medium">{r.VoucherNo}</TableCell>
                 <TableCell>{formatDate(r.TransDate)}</TableCell>
                 <TableCell>{formatDate(r.DueDate)}</TableCell>
-                <TableCell>{r.BranchName}</TableCell>
+                <TableCell>{r.Wilayah}</TableCell>
                 <TableCell>{r.CustomerName}</TableCell>
                 <TableCell>{r.VehicleNo ?? "-"}</TableCell>
                 <TableCell>{r.ItemName}</TableCell>

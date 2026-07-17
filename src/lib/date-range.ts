@@ -4,7 +4,7 @@ import type { DateRangeFilter } from "@/types/dashboard";
 export interface DashboardSearchParams {
   from?: string;
   to?: string;
-  branch?: string;
+  wilayah?: string;
 }
 
 export function resolveFilter(searchParams: DashboardSearchParams): DateRangeFilter {
@@ -15,6 +15,6 @@ export function resolveFilter(searchParams: DashboardSearchParams): DateRangeFil
   return {
     startDate: searchParams.from ?? formatISO(defaultStart, { representation: "date" }),
     endDate: searchParams.to ?? formatISO(defaultEnd, { representation: "date" }),
-    branchId: searchParams.branch || undefined,
+    wilayah: searchParams.wilayah || undefined,
   };
 }

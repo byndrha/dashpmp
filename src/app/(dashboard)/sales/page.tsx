@@ -1,6 +1,6 @@
 import { Wallet, Receipt, Calculator } from "lucide-react";
 import { getDailySales } from "@/lib/queries/sales";
-import { getBranches } from "@/lib/queries/branches";
+import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -23,7 +23,7 @@ export default async function SalesPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [rows, branches] = await Promise.all([getDailySales(filter), getBranches()]);
+  const [rows, wilayahList] = await Promise.all([getDailySales(filter), getWilayahList()]);
 
   const totalNet = rows.reduce((sum, r) => sum + r.NetSales, 0);
   const totalInvoices = rows.reduce((sum, r) => sum + r.InvoiceCount, 0);
@@ -38,7 +38,8 @@ export default async function SalesPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <FilterBar branches={branches} />
+      <h1 className="font-display text-xl font-semibold">Penjualan</h1>
+      <FilterBar wilayahList={wilayahList} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard label="Total Penjualan Bersih" value={formatRupiah(totalNet)} icon={Wallet} tone="positive" />
@@ -64,7 +65,7 @@ export default async function SalesPage({
           <TableHeader>
             <TableRow>
               <TableHead>Tanggal</TableHead>
-              <TableHead>Cabang</TableHead>
+              <TableHead>Wilayah</TableHead>
               <TableHead className="text-right">Jml Invoice</TableHead>
               <TableHead className="text-right">Bruto</TableHead>
               <TableHead className="text-right">Diskon</TableHead>
@@ -74,9 +75,9 @@ export default async function SalesPage({
           </TableHeader>
           <TableBody>
             {rows.map((r) => (
-              <TableRow key={`${r.BranchID}-${r.SalesDate}`}>
+              <TableRow key={`${r.Wilayah}-${r.SalesDate}`}>
                 <TableCell>{formatDate(r.SalesDate)}</TableCell>
-                <TableCell>{r.BranchName}</TableCell>
+                <TableCell>{r.Wilayah}</TableCell>
                 <TableCell className="text-right tabular-nums">{r.InvoiceCount}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatRupiah(r.GrossAmount)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatRupiah(r.TotalDiscount)}</TableCell>

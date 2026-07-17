@@ -1,6 +1,5 @@
 import { Wallet, TrendingUp, Landmark, PiggyBank } from "lucide-react";
 import { getPnL, getBEP } from "@/lib/queries/pnl";
-import { getBranches } from "@/lib/queries/branches";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -15,11 +14,7 @@ export default async function PnLPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [pnl, bep, branches] = await Promise.all([
-    getPnL(filter),
-    getBEP(filter),
-    getBranches(),
-  ]);
+  const [pnl, bep] = await Promise.all([getPnL(filter), getBEP(filter)]);
 
   const compositionData = [
     { name: "HPP", value: pnl.HPP },
@@ -29,7 +24,8 @@ export default async function PnLPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <FilterBar branches={branches} />
+      <h1 className="font-display text-xl font-semibold">Keuangan</h1>
+      <FilterBar />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Pendapatan" value={formatRupiah(pnl.Pendapatan)} icon={Wallet} />

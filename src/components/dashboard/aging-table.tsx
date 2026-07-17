@@ -108,7 +108,7 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-3">
         <Input
-          placeholder="Cari nama pelanggan..."
+          placeholder="Cari nama mitra..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-64"
@@ -131,12 +131,13 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableHead label="Pelanggan" sortKey="CustomerName" active={sortKey === "CustomerName"} direction={sortDir} onSort={handleSort} />
+              <SortableHead label="Mitra" sortKey="CustomerName" active={sortKey === "CustomerName"} direction={sortDir} onSort={handleSort} />
               <TableHead>Tipe</TableHead>
               <TableHead>Wilayah</TableHead>
-              <TableHead>Kecamatan</TableHead>
+              <TableHead className="max-w-[110px]">Kecamatan</TableHead>
               <TableHead>Kontak</TableHead>
               <TableHead>No. Invoice</TableHead>
+              <TableHead>Tanggal Terbit</TableHead>
               <SortableHead label="Jatuh Tempo" sortKey="DueDate" active={sortKey === "DueDate"} direction={sortDir} onSort={handleSort} />
               <SortableHead label="Outstanding" sortKey="Outstanding" active={sortKey === "Outstanding"} direction={sortDir} onSort={handleSort} className="text-right" />
               <SortableHead label="Aging" sortKey="DaysOverdue" active={sortKey === "DaysOverdue"} direction={sortDir} onSort={handleSort} />
@@ -150,9 +151,12 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
                   <Badge variant="outline">{r.PartnerType}</Badge>
                 </TableCell>
                 <TableCell>{r.Wilayah ?? "-"}</TableCell>
-                <TableCell>{r.Kecamatan ?? "-"}</TableCell>
+                <TableCell className="max-w-[110px] truncate" title={r.Kecamatan ?? undefined}>
+                  {r.Kecamatan ?? "-"}
+                </TableCell>
                 <TableCell>{r.Kontak ?? "-"}</TableCell>
                 <TableCell>{r.VoucherNo}</TableCell>
+                <TableCell>{formatDate(r.TransDate)}</TableCell>
                 <TableCell>{formatDate(r.DueDate)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatRupiah(r.Outstanding)}</TableCell>
                 <TableCell>
@@ -164,7 +168,7 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                   Tidak ada data.
                 </TableCell>
               </TableRow>

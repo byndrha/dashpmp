@@ -7,7 +7,7 @@ export function RecentActivityFeed({ invoices }: { invoices: RecentInvoice[] }) 
     <Card>
       <CardHeader>
         <CardTitle className="font-display">Transaksi Terbaru</CardTitle>
-        <CardDescription>Invoice penjualan terbaru, real-time dari seluruh cabang.</CardDescription>
+        <CardDescription>Invoice penjualan terbaru, real-time dari seluruh wilayah.</CardDescription>
       </CardHeader>
       <CardContent>
         {invoices.length === 0 ? (
@@ -20,9 +20,9 @@ export function RecentActivityFeed({ invoices }: { invoices: RecentInvoice[] }) 
                 <span className="relative z-10 mt-1.5 size-[15px] shrink-0 rotate-45 rounded-[3px] border-2 border-primary bg-background" />
                 <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{inv.CustomerName ?? "Pelanggan Umum"}</p>
+                    <p className="truncate text-sm font-medium">{inv.CustomerName ?? "Mitra Umum"}</p>
                     <p className="truncate font-data text-xs text-muted-foreground">
-                      {inv.BranchName} &middot; {formatTime(inv.TransDate)} &middot;{" "}
+                      {inv.Wilayah} &middot; {formatTime(inv.TransDate)} &middot;{" "}
                       {formatRelativeTime(inv.TransDate)}
                     </p>
                   </div>

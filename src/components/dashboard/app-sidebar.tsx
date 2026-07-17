@@ -22,11 +22,13 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { IceMark } from "@/components/dashboard/ice-mark";
+import { PTSwitcher } from "@/components/dashboard/pt-switcher";
+import { Badge } from "@/components/ui/badge";
 
 const NAV_ITEMS = [
   { href: "/", label: "Beranda", icon: LayoutGrid, exact: true },
-  { href: "/pnl", label: "P&L & BEP", icon: LineChart },
-  { href: "/aging", label: "Aging Piutang", icon: Receipt },
+  { href: "/pnl", label: "Keuangan", icon: LineChart },
+  { href: "/aging", label: "Piutang", icon: Receipt },
   { href: "/sales", label: "Penjualan", icon: ShoppingCart },
   { href: "/electricity", label: "Biaya Listrik", icon: Zap },
   { href: "/delivery", label: "Pengiriman", icon: Truck },
@@ -37,13 +39,18 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader>
+      <SidebarHeader className="gap-2">
         <div className="flex items-center gap-2 px-2 py-2">
           <IceMark className="size-6 text-primary shrink-0" />
-          <div className="truncate group-data-[collapsible=icon]:hidden">
-            <p className="font-display font-semibold leading-tight">PMP Ponorogo</p>
-            <p className="text-[11px] text-muted-foreground leading-tight">Maesa Group</p>
+          <div className="flex min-w-0 items-center gap-1.5 truncate group-data-[collapsible=icon]:hidden">
+            <p className="font-display font-semibold leading-tight">PMP Group</p>
+            <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
+              Ponorogo
+            </Badge>
           </div>
+        </div>
+        <div className="px-2 group-data-[collapsible=icon]:px-0">
+          <PTSwitcher />
         </div>
       </SidebarHeader>
       <SidebarContent>

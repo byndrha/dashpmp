@@ -12,13 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Branch } from "@/types/dashboard";
 
 export function FilterBar({
-  branches,
+  wilayahList,
   showDateRange = true,
 }: {
-  branches: Branch[];
+  wilayahList?: string[];
   showDateRange?: boolean;
 }) {
   const router = useRouter();
@@ -27,13 +26,13 @@ export function FilterBar({
 
   const [from, setFrom] = useState(searchParams.get("from") ?? "");
   const [to, setTo] = useState(searchParams.get("to") ?? "");
-  const [branch, setBranch] = useState(searchParams.get("branch") ?? "all");
+  const [wilayah, setWilayah] = useState(searchParams.get("wilayah") ?? "all");
 
   function applyFilter() {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    if (branch !== "all") params.set("branch", branch);
+    if (wilayah !== "all") params.set("wilayah", wilayah);
     router.push(`${pathname}?${params.toString()}`);
   }
 
@@ -55,22 +54,24 @@ export function FilterBar({
           </div>
         </>
       )}
-      <div className="flex flex-col gap-1.5">
-        <Label className="text-xs text-muted-foreground">Cabang</Label>
-        <Select value={branch} onValueChange={(value) => setBranch(value ?? "all")}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Semua Cabang" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Cabang</SelectItem>
-            {branches.map((b) => (
-              <SelectItem key={b.BranchID} value={String(b.BranchID)}>
-                {b.BranchName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {wilayahList && (
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">Wilayah</Label>
+          <Select value={wilayah} onValueChange={(value) => setWilayah(value ?? "all")}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Semua Wilayah" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Wilayah</SelectItem>
+              {wilayahList.map((w) => (
+                <SelectItem key={w} value={w}>
+                  {w}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <Button onClick={applyFilter}>Terapkan</Button>
     </div>
   );

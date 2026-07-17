@@ -2,8 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import type { DateRangeFilter } from "@/types/dashboard";
 
 export interface DailySales {
-  BranchID: string;
-  BranchName: string;
+  Wilayah: string;
   SalesDate: string;
   InvoiceCount: number;
   GrossAmount: number;
@@ -19,12 +18,11 @@ export async function getDailySales(filter: DateRangeFilter): Promise<DailySales
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
 
-  if (filter.branchId) request.input("branchId", sql.VarChar(16), filter.branchId);
+  if (filter.wilayah) request.input("wilayah", sql.VarChar(128), filter.wilayah);
 
   const result = await request.query(`
     SELECT
-        si.BranchID,
-        b.Name AS BranchName,
+        ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
         CAST(si.TransDate AS DATE) AS SalesDate,
         COUNT(DISTINCT si.SalesInvoiceID) AS InvoiceCount,
         SUM(si.Amount)     AS GrossAmount,
@@ -32,14 +30,14 @@ export async function getDailySales(filter: DateRangeFilter): Promise<DailySales
         SUM(si.TaxValue)   AS TotalTax,
         SUM(si.Netto)      AS NetSales
     FROM SalesInvoice si
-    LEFT JOIN Branch b ON b.BranchID = si.BranchID
+    LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = si.BusinessPartnerID
     WHERE si.IsDeleted = 0
       AND ISNULL(si.IsPerforma, 0) = 0
       AND si.TransDate >= @startDate
       AND si.TransDate <  @endDate
-      ${filter.branchId ? "AND si.BranchID = @branchId" : ""}
-    GROUP BY si.BranchID, b.Name, CAST(si.TransDate AS DATE)
-    ORDER BY SalesDate DESC, BranchName
+      ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
+    GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui'), CAST(si.TransDate AS DATE)
+    ORDER BY SalesDate DESC, Wilayah
   `);
 
   // mssql returns SQL `DATE` columns as JS Date objects, not strings — normalize

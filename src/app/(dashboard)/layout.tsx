@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <div className="flex items-center gap-2">
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-5" />
-            <span className="font-medium">Dashboard PMP Ponorogo</span>
+            <span className="font-medium">Dashboard PMP Group</span>
           </div>
           <UserMenu name={session?.user?.name ?? session?.user?.username ?? "User"} />
         </header>
