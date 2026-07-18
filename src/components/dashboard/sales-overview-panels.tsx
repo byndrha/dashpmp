@@ -67,17 +67,21 @@ export function SalesOverviewPanels({
 
         <Card className="py-4">
           <CardContent className="flex flex-wrap items-start justify-between gap-3 px-4">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <Package className="size-3.5" /> Total Qty
+            <div className="flex flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Package className="size-3.5" /> Total Qty
+                </span>
+                <span className="font-display text-lg font-semibold tabular-nums">
+                  {(ytd.Qty10KG + ytd.Qty5KG).toLocaleString("id-ID")}
+                </span>
               </div>
-              <p className="font-display text-xl font-semibold tabular-nums">
-                {(ytd.Qty10KG + ytd.Qty5KG).toLocaleString("id-ID")}
-              </p>
-              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <Wallet className="size-3.5" /> Pembayaran
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Wallet className="size-3.5" /> Pembayaran
+                </span>
+                <span className="font-display text-sm font-semibold tabular-nums">{formatRupiah(ytd.TotalPayment)}</span>
               </div>
-              <p className="font-display text-sm font-semibold tabular-nums">{formatRupiah(ytd.TotalPayment)}</p>
             </div>
             <div className="flex flex-col items-end gap-1.5 border-l border-border pl-3">
               <QtyChip label="10KG" value={ytd.Qty10KG} />
