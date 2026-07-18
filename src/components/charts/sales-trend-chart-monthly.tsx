@@ -12,8 +12,13 @@ import {
   YAxis,
 } from "recharts";
 import { formatRupiah } from "@/lib/format";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useNarrowContainer } from "@/hooks/use-narrow-container";
 import type { SalesTrendMonthPoint } from "@/lib/queries/sales";
+
+// Below this rendered width (not viewport width — see useNarrowContainer),
+// the desktop dual-axis layout has no room left for its own X-axis tick
+// labels, let alone the legend.
+const NARROW_THRESHOLD = 560;
 
 interface ChartDatum {
   name: string;
@@ -94,7 +99,7 @@ function seriesElements(chartData: ChartDatum[], skipLabelStep: number) {
 }
 
 export function SalesTrendChartMonthly({ data }: { data: SalesTrendMonthPoint[] }) {
-  const isMobile = useIsMobile();
+  const [containerRef, narrow] = useNarrowContainer<HTMLDivElement>(NARROW_THRESHOLD);
 
   const chartData: ChartDatum[] = data.map((d) => {
     const monthDate = new Date(`${d.Month}-01`);
@@ -111,12 +116,12 @@ export function SalesTrendChartMonthly({ data }: { data: SalesTrendMonthPoint[] 
     };
   });
 
-  if (isMobile) {
+  if (narrow) {
     const perMonthWidth = 56;
-    const mobileWidth = Math.max(chartData.length * perMonthWidth, 320);
+    const narrowWidth = Math.max(chartData.length * perMonthWidth, 320);
 
     return (
-      <div className="flex flex-col gap-1.5">
+      <div ref={containerRef} className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
           <StaticLegendSwatch color="var(--chart-1)" label="Netto" />
           <StaticLegendSwatch color="var(--chart-3)" label="SO" />
@@ -124,7 +129,7 @@ export function SalesTrendChartMonthly({ data }: { data: SalesTrendMonthPoint[] 
           <StaticLegendSwatch color="var(--chart-4)" label="SI" />
         </div>
         <div className="-mx-2 overflow-x-auto px-2">
-          <div style={{ width: mobileWidth }}>
+          <div style={{ width: narrowWidth }}>
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={chartData} margin={{ top: 20, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
@@ -149,22 +154,24 @@ export function SalesTrendChartMonthly({ data }: { data: SalesTrendMonthPoint[] 
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <ComposedChart data={chartData} margin={{ top: 20, right: 8, left: 8, bottom: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
-        <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-        <YAxis
-          yAxisId="nominal"
-          tick={{ fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(v) => new Intl.NumberFormat("id-ID", { notation: "compact" }).format(v)}
-        />
-        <YAxis yAxisId="docs" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-        <Tooltip content={<TrendTooltip />} />
-        <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
-        {seriesElements(chartData, 1)}
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div ref={containerRef}>
+      <ResponsiveContainer width="100%" height={300}>
+        <ComposedChart data={chartData} margin={{ top: 20, right: 8, left: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+          <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+          <YAxis
+            yAxisId="nominal"
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => new Intl.NumberFormat("id-ID", { notation: "compact" }).format(v)}
+          />
+          <YAxis yAxisId="docs" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+          <Tooltip content={<TrendTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
+          {seriesElements(chartData, 1)}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

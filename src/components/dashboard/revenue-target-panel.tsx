@@ -56,7 +56,7 @@ function StatTile({
   label: string;
   nominal: React.ReactNode;
   qty?: React.ReactNode;
-  tone?: "default" | "primary";
+  tone?: "default" | "primary" | "destructive";
 }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-card/50 p-3">
@@ -67,7 +67,9 @@ function StatTile({
       <p
         className={cn(
           "font-display text-lg font-semibold tabular-nums",
-          tone === "primary" ? "text-primary" : "text-foreground"
+          tone === "primary" && "text-primary",
+          tone === "destructive" && "text-destructive",
+          tone === "default" && "text-foreground"
         )}
       >
         {nominal}
@@ -91,9 +93,15 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
   }
 
   const hasTarget = target.TargetNominalMonthly != null;
+  // `target.TargetNominalToDate` used as a truthy gate would also treat an
+  // explicitly-set 0 target (a real, submittable value in the "Set Target"
+  // dialog below) as "no target data" and hide the bar instead of showing
+  // 0% — check for null/undefined instead of truthiness.
   const progressPct =
-    hasTarget && target.TargetNominalToDate
-      ? Math.min(150, (target.RealisasiNominalToDate / target.TargetNominalToDate) * 100)
+    hasTarget && target.TargetNominalToDate != null
+      ? target.TargetNominalToDate
+        ? Math.min(150, (target.RealisasiNominalToDate / target.TargetNominalToDate) * 100)
+        : 0
       : null;
 
   return (
@@ -144,7 +152,13 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {/* Container query (not sm:) — this panel sits on the same page as
+            the overview grid, which switched to @container-based
+            breakpoints because a viewport breakpoint can't see that the
+            sidebar's collapsed/expanded state changes actual content width
+            at a fixed viewport size. A `sm:` breakpoint here would squeeze
+            these 4 tiles at the same widths that grid was fixed to avoid. */}
+        <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
           <StatTile
             icon={Wallet}
             label="Target Bulanan"
@@ -166,7 +180,7 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
                 : "-"
             }
             qty={target.GrowthQtyPercent != null ? formatPercentPoints(Math.abs(target.GrowthQtyPercent)) : undefined}
-            tone={target.GrowthQty != null && target.GrowthQty >= 0 ? "primary" : "default"}
+            tone={target.GrowthQty == null ? "default" : target.GrowthQty >= 0 ? "primary" : "destructive"}
           />
           <StatTile
             icon={Rocket}

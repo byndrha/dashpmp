@@ -12,8 +12,13 @@ import {
   YAxis,
 } from "recharts";
 import { formatDate, formatRupiah } from "@/lib/format";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useNarrowContainer } from "@/hooks/use-narrow-container";
 import type { SalesTrendPoint } from "@/lib/queries/sales";
+
+// Below this rendered width (not viewport width — see useNarrowContainer),
+// the desktop dual-axis layout has no room left for its own X-axis tick
+// labels, let alone the legend.
+const NARROW_THRESHOLD = 560;
 
 interface ChartDatum {
   name: string;
@@ -28,7 +33,11 @@ interface ChartDatum {
 }
 
 const DO_LINE_COLOR = "oklch(0.62 0.2 35)";
-const mobileDateFormatter = new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "2-digit" });
+// TransDate is a "YYYY-MM-DD" string, which parses as UTC midnight — format
+// with an explicit UTC timeZone so a host running behind UTC doesn't shift
+// the displayed date back a day (same bug class as the SQL DATE-parameter
+// issue documented in sales-overview.ts, just on the formatting side).
+const mobileDateFormatter = new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
 
 function StaticLegendSwatch({ color, label }: { color: string; label: string }) {
   return (
@@ -98,7 +107,7 @@ function seriesElements(chartData: ChartDatum[], skipLabelStep: number) {
 }
 
 export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
-  const isMobile = useIsMobile();
+  const [containerRef, narrow] = useNarrowContainer<HTMLDivElement>(NARROW_THRESHOLD);
 
   const chartData: ChartDatum[] = data.map((d) => ({
     name: formatDate(d.TransDate),
@@ -112,18 +121,18 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
     SIQty: d.SIQty,
   }));
 
-  if (isMobile) {
-    // Squeezing every day into the viewport is what produced the
+  if (narrow) {
+    // Squeezing every day into the available width is what produced the
     // overlapping labels and dead side-margins in the first place — a
     // fixed per-day width in a horizontally scrollable strip keeps each
     // day readable and lets the axes stay compact instead of both being
     // stretched to fill unused width.
     const perDayWidth = 46;
-    const mobileWidth = Math.max(chartData.length * perDayWidth, 320);
+    const narrowWidth = Math.max(chartData.length * perDayWidth, 320);
     const labelStep = 2;
 
     return (
-      <div className="flex flex-col gap-1.5">
+      <div ref={containerRef} className="flex flex-col gap-1.5">
         {/* Rendered outside the scroll strip below — recharts' <Legend>
             inherits the chart's full scrollable width and centers itself
             within it, which put it off-screen until scrolled all the way
@@ -135,7 +144,7 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
           <StaticLegendSwatch color="var(--chart-4)" label="SI" />
         </div>
         <div className="-mx-2 overflow-x-auto px-2">
-          <div style={{ width: mobileWidth }}>
+          <div style={{ width: narrowWidth }}>
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={chartData} margin={{ top: 20, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
@@ -166,22 +175,24 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <ComposedChart data={chartData} margin={{ top: 20, right: 8, left: 8, bottom: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
-        <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-        <YAxis
-          yAxisId="nominal"
-          tick={{ fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(v) => new Intl.NumberFormat("id-ID", { notation: "compact" }).format(v)}
-        />
-        <YAxis yAxisId="docs" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-        <Tooltip content={<TrendTooltip />} />
-        <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
-        {seriesElements(chartData, 1)}
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div ref={containerRef}>
+      <ResponsiveContainer width="100%" height={300}>
+        <ComposedChart data={chartData} margin={{ top: 20, right: 8, left: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+          <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+          <YAxis
+            yAxisId="nominal"
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => new Intl.NumberFormat("id-ID", { notation: "compact" }).format(v)}
+          />
+          <YAxis yAxisId="docs" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+          <Tooltip content={<TrendTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
+          {seriesElements(chartData, 1)}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

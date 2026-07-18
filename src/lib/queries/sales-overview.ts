@@ -1,4 +1,3 @@
-import { getDaysInMonth } from "date-fns";
 import { getPool, sql } from "@/lib/db";
 import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 
@@ -82,11 +81,23 @@ function qtyByKemasan(rows: { Kemasan: string; Qty: number }[]): KemasanQty {
 // render and the prev/next day navigation on that same card.
 export async function getSalesForDay(date: Date): Promise<SalesToday> {
   const pool = await getPool();
-  // Same calendar day-of-month, one month back. Built with plain UTC
-  // arithmetic (not date-fns' subMonths) to stay consistent with the rest of
-  // this file's date handling — see monthBoundary()'s comment in
+  // Same calendar day-of-month, one month back — clamped to the last day of
+  // the target month when it doesn't have that many days. Built with plain
+  // UTC arithmetic (not date-fns' subMonths) to stay consistent with the
+  // rest of this file's date handling — see monthBoundary()'s comment in
   // business-date.ts for why local-time Date construction is unsafe here.
-  const lastMonthDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 1, date.getUTCDate()));
+  //
+  // Without the clamp, Date.UTC() silently overflows into the *next* month
+  // for any day past the target month's length: e.g. for Jul 31, month-1 is
+  // June (30 days), so Date.UTC(year, 5, 31) normalizes to Jul 1 — "last
+  // month" would resolve to a day in the current month, not June 30, and
+  // the growth badge would compare today's revenue against the wrong day's.
+  const targetYear = date.getUTCFullYear();
+  const targetMonthIndex = date.getUTCMonth() - 1;
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonthIndex + 1, 0)).getUTCDate();
+  const lastMonthDay = new Date(
+    Date.UTC(targetYear, targetMonthIndex, Math.min(date.getUTCDate(), daysInTargetMonth))
+  );
 
   const [dayResult, doQtyResult, siQtyResult, lastMonthResult] = await Promise.all([
     pool
@@ -325,7 +336,12 @@ export async function getSalesOverview(): Promise<SalesOverview> {
   // month (total / days in that month), mirroring how ThisMonth/LastMonth
   // are already treated as partial-vs-full elsewhere in this file.
   const currentDay = businessToday.getUTCDate();
-  const daysInLastMonth = getDaysInMonth(lastMonthStart);
+  // Day 0 of thisMonthStart's month === the last day of lastMonthStart's
+  // month. Plain UTC arithmetic, not date-fns' getDaysInMonth() — that reads
+  // the Date's *local* year/month, which is unsafe on a host running behind
+  // UTC (see monthBoundary()'s comment in business-date.ts for the same
+  // class of bug this file has already hit with SQL DATE parameters).
+  const daysInLastMonth = new Date(Date.UTC(thisMonthStart.getUTCFullYear(), thisMonthStart.getUTCMonth(), 0)).getUTCDate();
   const avgKantongThisMonth = currentDay ? qty.ThisMonthQty / currentDay : 0;
   const avgKantongLastMonth = daysInLastMonth ? qty.LastMonthQty / daysInLastMonth : 0;
 
