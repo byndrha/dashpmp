@@ -1,0 +1,103 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { addDays, subDays, format, parseISO } from "date-fns";
+import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Coins } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { DocChip, QtyChip } from "@/components/dashboard/sales-chips";
+import { formatRupiah, formatRupiahAvg } from "@/lib/format";
+import type { SalesToday } from "@/lib/queries/sales-overview";
+import { getSalesForDayAction } from "@/app/(dashboard)/sales/actions";
+
+function toISO(date: Date): string {
+  return format(date, "yyyy-MM-dd");
+}
+
+export function SalesTodayPanel({
+  initialData,
+  initialDateISO,
+  businessTodayISO,
+}: {
+  initialData: SalesToday;
+  initialDateISO: string;
+  businessTodayISO: string;
+}) {
+  const [dateISO, setDateISO] = useState(initialDateISO);
+  const [data, setData] = useState(initialData);
+  const [pending, startTransition] = useTransition();
+
+  const isToday = dateISO === businessTodayISO;
+  const canGoNext = dateISO < businessTodayISO;
+
+  function navigate(nextDateISO: string) {
+    setDateISO(nextDateISO);
+    startTransition(async () => {
+      const result = await getSalesForDayAction(nextDateISO);
+      setData(result);
+    });
+  }
+
+  return (
+    <Card className="py-4">
+      <CardContent className="flex flex-col gap-2 px-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Penjualan {isToday ? "Hari Ini" : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {format(parseISO(dateISO), "EEEE, d MMM yyyy")}
+              {isToday && " (hari ini)"}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-7"
+              disabled={pending}
+              onClick={() => navigate(toISO(subDays(parseISO(dateISO), 1)))}
+            >
+              <ChevronLeft className="size-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-7"
+              disabled={pending || !canGoNext}
+              onClick={() => canGoNext && navigate(toISO(addDays(parseISO(dateISO), 1)))}
+            >
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-display text-2xl font-semibold tabular-nums text-primary">
+              {formatRupiah(data.NetSales)}
+            </p>
+            <span
+              title="Harga rata-rata"
+              aria-label="Harga rata-rata"
+              className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+            >
+              <Coins className="size-3" />
+              {formatRupiahAvg(data.AvgPrice)}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <DocChip icon={ShoppingCart} label="SO" value={data.SOCount} />
+            <DocChip icon={Truck} label="DO" value={data.DOCount} />
+            <DocChip icon={Receipt} label="SI" value={data.SICount} />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+            <QtyChip label="10KG" value={data.Qty10KG} />
+            <QtyChip label="5KG" value={data.Qty5KG} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

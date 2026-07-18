@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Target, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Target, TrendingUp, TrendingDown, Minus, CalendarDays, Wallet, Gauge, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,14 +45,34 @@ function GrowthBadge({ value, percent }: { value: number | null; percent: number
   );
 }
 
-function Row({ label, nominal, qty }: { label: string; nominal: React.ReactNode; qty: React.ReactNode }) {
+function StatTile({
+  icon: Icon,
+  label,
+  nominal,
+  qty,
+  tone = "default",
+}: {
+  icon: typeof Target;
+  label: string;
+  nominal: React.ReactNode;
+  qty?: React.ReactNode;
+  tone?: "default" | "primary";
+}) {
   return (
-    <div className="flex items-center justify-between gap-2 py-1.5 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-3 text-right">
-        <span className="tabular-nums font-medium">{nominal}</span>
-        <span className="tabular-nums text-xs text-muted-foreground">{qty}</span>
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-card/50 p-3">
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Icon className="size-3.5" />
+        {label}
       </div>
+      <p
+        className={cn(
+          "font-display text-lg font-semibold tabular-nums",
+          tone === "primary" ? "text-primary" : "text-foreground"
+        )}
+      >
+        {nominal}
+      </p>
+      {qty && <p className="text-xs text-muted-foreground">{qty}</p>}
     </div>
   );
 }
@@ -71,6 +91,10 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
   }
 
   const hasTarget = target.TargetNominalMonthly != null;
+  const progressPct =
+    hasTarget && target.TargetNominalToDate
+      ? Math.min(150, (target.RealisasiNominalToDate / target.TargetNominalToDate) * 100)
+      : null;
 
   return (
     <Card>
@@ -86,56 +110,72 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
           Set Target
         </Button>
       </CardHeader>
-      <CardContent className="flex flex-col divide-y divide-border">
-        <div className="flex items-center justify-between pb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          <span>Metrik</span>
-          <div className="flex items-center gap-3">
-            <span>Nominal</span>
-            <span>Qty</span>
-          </div>
-        </div>
-        <Row
-          label="Target Bulanan"
-          nominal={hasTarget ? formatRupiah(target.TargetNominalMonthly!) : "-"}
-          qty={hasTarget ? formatQtyPlain(target.TargetQtyMonthly) : "-"}
-        />
-        <Row
-          label="Target / Hari"
-          nominal={hasTarget ? formatRupiah(target.TargetNominalDaily!) : "-"}
-          qty={hasTarget ? formatQtyPlain(target.TargetQtyDaily) : "-"}
-        />
-        <Row
-          label={`Target s.d. Hari ke-${target.CurrentDay}`}
-          nominal={hasTarget ? formatRupiah(target.TargetNominalToDate!) : "-"}
-          qty={hasTarget ? formatQtyPlain(target.TargetQtyToDate) : "-"}
-        />
-        <Row
-          label={`Realisasi s.d. Hari ke-${target.CurrentDay}`}
-          nominal={formatRupiah(target.RealisasiNominalToDate)}
-          qty={formatQtyPlain(target.RealisasiQtyToDate)}
-        />
-        <div className="flex items-center justify-between py-1.5 text-sm">
-          <span className="text-muted-foreground">Growth (Realisasi &minus; Target)</span>
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="tabular-nums font-medium">
-                {target.GrowthNominal != null ? formatRupiah(target.GrowthNominal) : "-"}
-              </span>
+      <CardContent className="flex flex-col gap-3">
+        {/* Hero: progress s.d. hari ini */}
+        <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Realisasi vs Target s.d. Hari ke-{target.CurrentDay}
+              </p>
+              <p className="font-display text-2xl font-semibold tabular-nums text-primary">
+                {formatRupiah(target.RealisasiNominalToDate)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                dari target {hasTarget ? formatRupiah(target.TargetNominalToDate!) : "-"} &middot;{" "}
+                {formatQtyPlain(target.RealisasiQtyToDate)}
+                {hasTarget && ` dari ${formatQtyPlain(target.TargetQtyToDate)}`}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
               <GrowthBadge value={target.GrowthNominal} percent={target.GrowthNominalPercent} />
-            </div>
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="tabular-nums text-xs text-muted-foreground">
-                {target.GrowthQty != null ? target.GrowthQty.toLocaleString("id-ID", { maximumFractionDigits: 0 }) : "-"}
+              <span className="text-xs text-muted-foreground">
+                {target.GrowthNominal != null ? formatRupiah(target.GrowthNominal) : "-"} growth
               </span>
-              <GrowthBadge value={target.GrowthQty} percent={target.GrowthQtyPercent} />
             </div>
           </div>
+          {progressPct != null && (
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary">
+              <div
+                className={cn("h-2 rounded-full", progressPct >= 100 ? "bg-primary" : "bg-warning")}
+                style={{ width: `${Math.min(100, progressPct)}%` }}
+              />
+            </div>
+          )}
         </div>
-        <Row
-          label="Target Revenue Besok"
-          nominal={target.TargetNominalBesok != null ? formatRupiah(target.TargetNominalBesok) : "-"}
-          qty={formatQtyPlain(target.TargetQtyBesok)}
-        />
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile
+            icon={Wallet}
+            label="Target Bulanan"
+            nominal={hasTarget ? formatRupiah(target.TargetNominalMonthly!) : "-"}
+            qty={hasTarget ? formatQtyPlain(target.TargetQtyMonthly) : undefined}
+          />
+          <StatTile
+            icon={CalendarDays}
+            label="Target / Hari"
+            nominal={hasTarget ? formatRupiah(target.TargetNominalDaily!) : "-"}
+            qty={hasTarget ? formatQtyPlain(target.TargetQtyDaily) : undefined}
+          />
+          <StatTile
+            icon={Gauge}
+            label="Growth Qty"
+            nominal={
+              target.GrowthQty != null
+                ? `${target.GrowthQty > 0 ? "+" : ""}${target.GrowthQty.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`
+                : "-"
+            }
+            qty={target.GrowthQtyPercent != null ? formatPercentPoints(Math.abs(target.GrowthQtyPercent)) : undefined}
+            tone={target.GrowthQty != null && target.GrowthQty >= 0 ? "primary" : "default"}
+          />
+          <StatTile
+            icon={Rocket}
+            label="Target Revenue Besok"
+            nominal={target.TargetNominalBesok != null ? formatRupiah(target.TargetNominalBesok) : "-"}
+            qty={formatQtyPlain(target.TargetQtyBesok)}
+            tone="primary"
+          />
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>

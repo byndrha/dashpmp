@@ -1,29 +1,19 @@
 import { TrendingUp, TrendingDown, Minus, ShoppingCart, Truck, Receipt, Wallet, Package, Coins, Users } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatRupiah, formatRupiahAvg, formatPercentPoints } from "@/lib/format";
+import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { DocChip, QtyChip } from "@/components/dashboard/sales-chips";
+import { SalesTodayPanel } from "@/components/dashboard/sales-today-panel";
 import type { SalesOverview } from "@/lib/queries/sales-overview";
 
-function DocChip({ icon: Icon, label, value }: { icon: typeof ShoppingCart; label: string; value: number }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
-      <Icon className="size-3" />
-      {label} {value.toLocaleString("id-ID")}
-    </span>
-  );
-}
-
-function QtyChip({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
-      <Package className="size-3" />
-      {label} {value.toLocaleString("id-ID")} kantong
-    </span>
-  );
-}
-
-export function SalesOverviewPanels({ overview }: { overview: SalesOverview }) {
-  const { today, monthComparison, ytd } = overview;
+export function SalesOverviewPanels({
+  overview,
+  businessTodayISO,
+}: {
+  overview: SalesOverview;
+  businessTodayISO: string;
+}) {
+  const { monthComparison, ytd } = overview;
   const pct = monthComparison.PctChange;
   const trendUp = pct != null && pct > 0;
   const trendDown = pct != null && pct < 0;
@@ -31,33 +21,11 @@ export function SalesOverviewPanels({ overview }: { overview: SalesOverview }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Card className="py-4">
-          <CardContent className="flex flex-col gap-2 px-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Penjualan Hari Ini</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-display text-2xl font-semibold tabular-nums text-primary">
-                {formatRupiah(today.NetSales)}
-              </p>
-              <span
-                title="Harga rata-rata"
-                aria-label="Harga rata-rata"
-                className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-              >
-                <Coins className="size-3" />
-                {formatRupiahAvg(today.AvgPrice)}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <DocChip icon={ShoppingCart} label="SO" value={today.SOCount} />
-              <DocChip icon={Truck} label="DO" value={today.DOCount} />
-              <DocChip icon={Receipt} label="SI" value={today.SICount} />
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
-              <QtyChip label="10KG" value={today.Qty10KG} />
-              <QtyChip label="5KG" value={today.Qty5KG} />
-            </div>
-          </CardContent>
-        </Card>
+        <SalesTodayPanel
+          initialData={overview.today}
+          initialDateISO={businessTodayISO}
+          businessTodayISO={businessTodayISO}
+        />
 
         <Card className="py-4">
           <CardContent className="flex flex-col gap-2 px-4">

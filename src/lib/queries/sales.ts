@@ -93,7 +93,13 @@ export async function getSalesTrend(filter: DateRangeFilter): Promise<SalesTrend
                   WHERE so.IsDeleted = 0 AND CAST(so.TransDate AS DATE) = d.TransDate), 0) AS SOQty,
           (SELECT COUNT(*) FROM DeliveryOrder do_
              WHERE do_.IsDeleted = 0 AND CAST(do_.TransDate AS DATE) = d.TransDate) AS DOCount,
-          ISNULL((SELECT SUM(dod.Qty) FROM DeliveryOrder do_
+          -- DeliveryOrderDetail.Qty is the qty on the *original order line*,
+          -- which can be much larger than any single delivery when an order
+          -- is fulfilled across several DOs (verified against live data —
+          -- summing Qty inflated a day's total by ~5x). Delivered is the
+          -- actual quantity moved on this specific DO, same column already
+          -- used for "Sisa Belum Dikirim" in the Pengiriman module.
+          ISNULL((SELECT SUM(dod.Delivered) FROM DeliveryOrder do_
                   JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
                   WHERE do_.IsDeleted = 0 AND CAST(do_.TransDate AS DATE) = d.TransDate), 0) AS DOQty,
           (SELECT COUNT(*) FROM SalesInvoice si

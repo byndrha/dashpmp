@@ -3,6 +3,7 @@ import { getSalesOverview } from "@/lib/queries/sales-overview";
 import { getSalesOrderCards } from "@/lib/queries/sales-cards";
 import { getRevenueTarget } from "@/lib/queries/revenue-target";
 import { getWilayahList } from "@/lib/queries/wilayah";
+import { getBusinessDateISO } from "@/lib/business-date";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { SalesOverviewPanels } from "@/components/dashboard/sales-overview-panels";
@@ -25,13 +26,14 @@ export default async function SalesPage({
     getWilayahList(),
     getRevenueTarget(),
   ]);
+  const businessTodayISO = getBusinessDateISO();
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-xl font-semibold">Penjualan</h1>
       <FilterBar wilayahList={wilayahList} />
 
-      <SalesOverviewPanels overview={overview} />
+      <SalesOverviewPanels overview={overview} businessTodayISO={businessTodayISO} />
 
       <RevenueTargetPanel target={revenueTarget} />
 

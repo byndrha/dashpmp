@@ -4,9 +4,14 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { getDeliveryCardsForOrders, type DeliveryCard } from "@/lib/queries/sales-cards";
 import { setMonthlyTarget } from "@/lib/queries/revenue-target";
+import { getSalesForDay, type SalesToday } from "@/lib/queries/sales-overview";
 
 export async function getDeliveryCardsAction(salesOrderIds: string[]): Promise<DeliveryCard[]> {
   return getDeliveryCardsForOrders(salesOrderIds);
+}
+
+export async function getSalesForDayAction(dateISO: string): Promise<SalesToday> {
+  return getSalesForDay(new Date(dateISO));
 }
 
 export async function saveMonthlyTargetAction(input: {
