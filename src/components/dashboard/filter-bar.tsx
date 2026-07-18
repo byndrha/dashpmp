@@ -59,10 +59,10 @@ export function FilterBar({
           <Label className="text-xs text-muted-foreground">Wilayah</Label>
           <Select value={wilayah} onValueChange={(value) => setWilayah(value ?? "all")}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Semua Wilayah" />
+              <SelectValue placeholder="Semua">{(v: string) => (v === "all" ? "Semua" : v)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Wilayah</SelectItem>
+              <SelectItem value="all">Semua</SelectItem>
               {wilayahList.map((w) => (
                 <SelectItem key={w} value={w}>
                   {w}

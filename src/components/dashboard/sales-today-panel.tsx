@@ -2,16 +2,45 @@
 
 import { useState, useTransition } from "react";
 import { addDays, subDays, format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Coins } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Coins, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DocChip, QtyChip } from "@/components/dashboard/sales-chips";
-import { formatRupiah, formatRupiahAvg } from "@/lib/format";
+import { formatRupiah, formatRupiahAvg, formatPercentPoints } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { SalesToday } from "@/lib/queries/sales-overview";
 import { getSalesForDayAction } from "@/app/(dashboard)/sales/actions";
 
 function toISO(date: Date): string {
   return format(date, "yyyy-MM-dd");
+}
+
+function GrowthBadge({ percent, delta }: { percent: number | null; delta: number }) {
+  if (percent == null) return null;
+  const up = percent > 0;
+  const down = percent < 0;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        className={cn(
+          "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs font-medium",
+          up && "bg-primary/15 text-primary",
+          down && "bg-destructive/15 text-destructive",
+          !up && !down && "bg-secondary text-muted-foreground"
+        )}
+      >
+        {up && <TrendingUp className="size-3" />}
+        {down && <TrendingDown className="size-3" />}
+        {!up && !down && <Minus className="size-3" />}
+        {formatPercentPoints(Math.abs(percent))}
+      </TooltipTrigger>
+      <TooltipContent>
+        {delta >= 0 ? "+" : ""}
+        {formatRupiah(delta)} vs tanggal sama bulan lalu
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function SalesTodayPanel({
@@ -43,9 +72,12 @@ export function SalesTodayPanel({
       <CardContent className="flex flex-col gap-2 px-4">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Penjualan {isToday ? "Hari Ini" : ""}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Penjualan {isToday ? "Hari Ini" : ""}
+              </p>
+              <GrowthBadge percent={data.GrowthPercent} delta={data.NetSales - data.LastMonthNetSales} />
+            </div>
             <p className="text-xs text-muted-foreground">
               {format(parseISO(dateISO), "EEEE, d MMM yyyy")}
               {isToday && " (hari ini)"}
@@ -74,10 +106,13 @@ export function SalesTodayPanel({
         </div>
 
         <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-display text-2xl font-semibold tabular-nums text-primary">
-              {formatRupiah(data.NetSales)}
-            </p>
+          <p className="font-display text-2xl font-semibold tabular-nums text-primary">
+            {formatRupiah(data.NetSales)}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <DocChip icon={ShoppingCart} label="SO" value={data.SOCount} />
+            <DocChip icon={Truck} label="DO" value={data.DOCount} />
+            <DocChip icon={Receipt} label="SI" value={data.SICount} />
             <span
               title="Harga rata-rata"
               aria-label="Harga rata-rata"
@@ -87,14 +122,9 @@ export function SalesTodayPanel({
               {formatRupiahAvg(data.AvgPrice)}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <DocChip icon={ShoppingCart} label="SO" value={data.SOCount} />
-            <DocChip icon={Truck} label="DO" value={data.DOCount} />
-            <DocChip icon={Receipt} label="SI" value={data.SICount} />
-          </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
-            <QtyChip label="10KG" value={data.Qty10KG} />
-            <QtyChip label="5KG" value={data.Qty5KG} />
+            <QtyChip label="10KG" value={data.Qty10KG} suffix="Terkirim" />
+            <QtyChip label="5KG" value={data.Qty5KG} suffix="Terkirim" />
           </div>
         </div>
       </CardContent>

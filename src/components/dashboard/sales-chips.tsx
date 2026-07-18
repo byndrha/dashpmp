@@ -9,11 +9,11 @@ export function DocChip({ icon: Icon, label, value }: { icon: LucideIcon; label:
   );
 }
 
-export function QtyChip({ label, value }: { label: string; value: number }) {
+export function QtyChip({ label, value, suffix }: { label: string; value: number; suffix?: string }) {
   return (
     <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
       <Package className="size-3" />
-      {label} {value.toLocaleString("id-ID")} kantong
+      {label} {value.toLocaleString("id-ID")} kantong{suffix ? ` ${suffix}` : ""}
     </span>
   );
 }

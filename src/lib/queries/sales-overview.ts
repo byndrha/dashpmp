@@ -19,12 +19,21 @@ export interface SalesToday extends KemasanQty {
   DOCount: number;
   SICount: number;
   AvgPrice: number;
+  LastMonthNetSales: number;
+  GrowthPercent: number | null;
 }
 
-export interface SalesMonthComparison {
-  ThisMonth: number;
-  LastMonth: number;
-  PctChange: number | null;
+export interface SalesPeriodStat {
+  NetSales: number;
+  DOQty: number;
+}
+
+export interface SalesComparison {
+  previousLabel: string;
+  current: SalesPeriodStat;
+  previous: SalesPeriodStat;
+  NominalPctChange: number | null;
+  QtyPctChange: number | null;
 }
 
 export interface SalesYTD extends KemasanQty {
@@ -39,7 +48,7 @@ export interface SalesYTD extends KemasanQty {
 
 export interface SalesOverview {
   today: SalesToday;
-  monthComparison: SalesMonthComparison;
+  comparisons: SalesComparison[];
   ytd: SalesYTD;
 }
 
@@ -54,7 +63,8 @@ function qtyByKemasan(rows: { Kemasan: string; Qty: number }[]): KemasanQty {
 // render and the prev/next day navigation on that same card.
 export async function getSalesForDay(date: Date): Promise<SalesToday> {
   const pool = await getPool();
-  const [dayResult, dayQtyResult] = await Promise.all([
+  const lastMonthDay = subMonths(date, 1);
+  const [dayResult, dayQtyResult, lastMonthResult] = await Promise.all([
     pool
       .request()
       .input("day", sql.Date, date)
@@ -84,18 +94,41 @@ export async function getSalesForDay(date: Date): Promise<SalesToday> {
           AND si.TransDate >= @day AND si.TransDate < DATEADD(DAY, 1, @day)
         GROUP BY ${KEMASAN_CASE}
       `),
+    // Same calendar date one month back, for the day-over-day-last-month growth badge.
+    pool
+      .request()
+      .input("day", sql.Date, lastMonthDay)
+      .query(`
+        SELECT ISNULL(SUM(Netto), 0) AS NetSales FROM SalesInvoice
+          WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
+            AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)
+      `),
   ]);
 
-  const day = dayResult.recordset[0] as Omit<SalesToday, "AvgPrice" | "Qty10KG" | "Qty5KG">;
+  const day = dayResult.recordset[0] as Omit<
+    SalesToday,
+    "AvgPrice" | "Qty10KG" | "Qty5KG" | "LastMonthNetSales" | "GrowthPercent"
+  >;
   const kemasan = qtyByKemasan(dayQtyResult.recordset);
   const totalQty = kemasan.Qty10KG + kemasan.Qty5KG;
+  const lastMonthNetSales = lastMonthResult.recordset[0].NetSales as number;
 
   return {
     ...day,
     ...kemasan,
     AvgPrice: totalQty ? day.NetSales / totalQty : 0,
+    LastMonthNetSales: lastMonthNetSales,
+    GrowthPercent: lastMonthNetSales
+      ? ((day.NetSales - lastMonthNetSales) / lastMonthNetSales) * 100
+      : null,
   };
 }
+
+function pctChange(current: number, previous: number): number | null {
+  return previous ? ((current - previous) / previous) * 100 : null;
+}
+
+const monthYearFormatter = new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric" });
 
 export async function getSalesOverview(): Promise<SalesOverview> {
   const pool = await getPool();
@@ -103,21 +136,52 @@ export async function getSalesOverview(): Promise<SalesOverview> {
   const businessToday = getBusinessDate(now);
   const thisMonthStart = startOfMonth(now);
   const lastMonthStart = startOfMonth(subMonths(now, 1));
+  const lastYearMonthStart = startOfMonth(subMonths(now, 12));
+  const lastYearMonthEnd = startOfMonth(subMonths(now, 11));
+  const twoYearsAgoMonthStart = startOfMonth(subMonths(now, 24));
+  const twoYearsAgoMonthEnd = startOfMonth(subMonths(now, 23));
   const yearStart = startOfYear(now);
 
-  const [today, monthResult, ytdResult, ytdQtyResult] = await Promise.all([
+  const [today, netResult, qtyResult, ytdResult, ytdQtyResult] = await Promise.all([
     getSalesForDay(businessToday),
     pool
       .request()
       .input("thisMonthStart", sql.Date, thisMonthStart)
       .input("lastMonthStart", sql.Date, lastMonthStart)
+      .input("lastYearMonthStart", sql.Date, lastYearMonthStart)
+      .input("lastYearMonthEnd", sql.Date, lastYearMonthEnd)
+      .input("twoYearsAgoMonthStart", sql.Date, twoYearsAgoMonthStart)
+      .input("twoYearsAgoMonthEnd", sql.Date, twoYearsAgoMonthEnd)
       .query(`
         SELECT
-            ISNULL(SUM(CASE WHEN TransDate >= @thisMonthStart THEN Netto ELSE 0 END), 0) AS ThisMonth,
-            ISNULL(SUM(CASE WHEN TransDate >= @lastMonthStart AND TransDate < @thisMonthStart THEN Netto ELSE 0 END), 0) AS LastMonth
+            ISNULL(SUM(CASE WHEN TransDate >= @thisMonthStart THEN Netto ELSE 0 END), 0) AS ThisMonthNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @lastMonthStart AND TransDate < @thisMonthStart THEN Netto ELSE 0 END), 0) AS LastMonthNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @lastYearMonthStart AND TransDate < @lastYearMonthEnd THEN Netto ELSE 0 END), 0) AS LastYearMonthNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @twoYearsAgoMonthStart AND TransDate < @twoYearsAgoMonthEnd THEN Netto ELSE 0 END), 0) AS TwoYearsAgoMonthNet
         FROM SalesInvoice
         WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
-          AND TransDate >= @lastMonthStart
+          AND TransDate >= @twoYearsAgoMonthStart
+      `),
+    // DOQty uses DeliveryOrderDetail.Delivered, not .Qty (the original-order-line
+    // quantity) — see getSalesTrend() in sales.ts for why .Qty inflates totals.
+    pool
+      .request()
+      .input("thisMonthStart", sql.Date, thisMonthStart)
+      .input("lastMonthStart", sql.Date, lastMonthStart)
+      .input("lastYearMonthStart", sql.Date, lastYearMonthStart)
+      .input("lastYearMonthEnd", sql.Date, lastYearMonthEnd)
+      .input("twoYearsAgoMonthStart", sql.Date, twoYearsAgoMonthStart)
+      .input("twoYearsAgoMonthEnd", sql.Date, twoYearsAgoMonthEnd)
+      .query(`
+        SELECT
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @thisMonthStart THEN dod.Delivered ELSE 0 END), 0) AS ThisMonthQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @lastMonthStart AND do_.TransDate < @thisMonthStart THEN dod.Delivered ELSE 0 END), 0) AS LastMonthQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @lastYearMonthStart AND do_.TransDate < @lastYearMonthEnd THEN dod.Delivered ELSE 0 END), 0) AS LastYearMonthQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @twoYearsAgoMonthStart AND do_.TransDate < @twoYearsAgoMonthEnd THEN dod.Delivered ELSE 0 END), 0) AS TwoYearsAgoMonthQty
+        FROM DeliveryOrder do_
+        JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= @twoYearsAgoMonthStart
       `),
     pool
       .request()
@@ -150,18 +214,44 @@ export async function getSalesOverview(): Promise<SalesOverview> {
       `),
   ]);
 
-  const month = monthResult.recordset[0] as { ThisMonth: number; LastMonth: number };
+  const net = netResult.recordset[0] as {
+    ThisMonthNet: number;
+    LastMonthNet: number;
+    LastYearMonthNet: number;
+    TwoYearsAgoMonthNet: number;
+  };
+  const qty = qtyResult.recordset[0] as {
+    ThisMonthQty: number;
+    LastMonthQty: number;
+    LastYearMonthQty: number;
+    TwoYearsAgoMonthQty: number;
+  };
   const ytdRow = ytdResult.recordset[0] as Omit<SalesYTD, "AvgPrice" | "Qty10KG" | "Qty5KG">;
   const ytdKemasan = qtyByKemasan(ytdQtyResult.recordset);
   const ytdTotalQty = ytdKemasan.Qty10KG + ytdKemasan.Qty5KG;
 
+  const thisMonth: SalesPeriodStat = { NetSales: net.ThisMonthNet, DOQty: qty.ThisMonthQty };
+  const buildComparison = (previousLabel: string, previous: SalesPeriodStat): SalesComparison => ({
+    previousLabel,
+    current: thisMonth,
+    previous,
+    NominalPctChange: pctChange(thisMonth.NetSales, previous.NetSales),
+    QtyPctChange: pctChange(thisMonth.DOQty, previous.DOQty),
+  });
+
   return {
     today,
-    monthComparison: {
-      ThisMonth: month.ThisMonth,
-      LastMonth: month.LastMonth,
-      PctChange: month.LastMonth ? ((month.ThisMonth - month.LastMonth) / month.LastMonth) * 100 : null,
-    },
+    comparisons: [
+      buildComparison("Bulan Lalu", { NetSales: net.LastMonthNet, DOQty: qty.LastMonthQty }),
+      buildComparison(monthYearFormatter.format(lastYearMonthStart), {
+        NetSales: net.LastYearMonthNet,
+        DOQty: qty.LastYearMonthQty,
+      }),
+      buildComparison(monthYearFormatter.format(twoYearsAgoMonthStart), {
+        NetSales: net.TwoYearsAgoMonthNet,
+        DOQty: qty.TwoYearsAgoMonthQty,
+      }),
+    ],
     ytd: {
       ...ytdRow,
       ...ytdKemasan,

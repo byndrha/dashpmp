@@ -30,8 +30,10 @@ export default async function SalesPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-xl font-semibold">Penjualan</h1>
-      <FilterBar wilayahList={wilayahList} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-xl font-semibold">Penjualan</h1>
+        <FilterBar wilayahList={wilayahList} />
+      </div>
 
       <SalesOverviewPanels overview={overview} businessTodayISO={businessTodayISO} />
 
