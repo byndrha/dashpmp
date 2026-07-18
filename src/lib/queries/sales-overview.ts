@@ -1,3 +1,4 @@
+import { getDaysInMonth } from "date-fns";
 import { getPool, sql } from "@/lib/db";
 import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 
@@ -51,9 +52,22 @@ export interface SalesYTD extends KemasanQty {
   UniqueMitraOrdering: number;
 }
 
+export interface SalesAverages {
+  AvgKantongPerHariThisMonth: number;
+  AvgKantongPerHariLastMonth: number;
+  AvgKantongPerHariPctChange: number | null;
+  AvgHarga10KGThisMonth: number;
+  AvgHarga10KGLastMonth: number;
+  AvgHarga10KGPctChange: number | null;
+  AvgHarga5KGThisMonth: number;
+  AvgHarga5KGLastMonth: number;
+  AvgHarga5KGPctChange: number | null;
+}
+
 export interface SalesOverview {
   today: SalesToday;
   comparisons: SalesComparison[];
+  averages: SalesAverages;
   ytd: SalesYTD;
 }
 
@@ -184,7 +198,7 @@ export async function getSalesOverview(): Promise<SalesOverview> {
   const twoYearsAgoMonthEnd = monthBoundary(businessToday, -23);
   const yearStart = new Date(Date.UTC(businessToday.getUTCFullYear(), 0, 1));
 
-  const [today, netResult, qtyResult, ytdResult, ytdQtyResult] = await Promise.all([
+  const [today, netResult, qtyResult, priceResult, ytdResult, ytdQtyResult] = await Promise.all([
     getSalesForDay(businessToday),
     pool
       .request()
@@ -224,6 +238,28 @@ export async function getSalesOverview(): Promise<SalesOverview> {
         JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
         WHERE do_.IsDeleted = 0
           AND do_.TransDate >= @twoYearsAgoMonthStart
+      `),
+    // Average selling price per kantong, split by kemasan — sid.Amount is
+    // the per-line revenue field that actually rolls up to SalesInvoice.Netto
+    // (verified live: SUM(sid.Amount) over a period matched
+    // SUM(SalesInvoice.Netto) exactly; sid.Netto does not — it's some other,
+    // much smaller figure, not a per-line revenue rollup).
+    pool
+      .request()
+      .input("thisMonthStart", sql.Date, thisMonthStart)
+      .input("lastMonthStart", sql.Date, lastMonthStart)
+      .query(`
+        SELECT
+            ${kemasanCase("sid.Name")} AS Kemasan,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @thisMonthStart THEN sid.Amount ELSE 0 END), 0) AS ThisMonthAmount,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @thisMonthStart THEN sid.Qty ELSE 0 END), 0) AS ThisMonthQty,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @lastMonthStart AND si.TransDate < @thisMonthStart THEN sid.Amount ELSE 0 END), 0) AS LastMonthAmount,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @lastMonthStart AND si.TransDate < @thisMonthStart THEN sid.Qty ELSE 0 END), 0) AS LastMonthQty
+        FROM SalesInvoiceDetail sid
+        JOIN SalesInvoice si ON si.SalesInvoiceID = sid.SalesInvoiceID
+        WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+          AND si.TransDate >= @lastMonthStart
+        GROUP BY ${kemasanCase("sid.Name")}
       `),
     pool
       .request()
@@ -270,6 +306,41 @@ export async function getSalesOverview(): Promise<SalesOverview> {
     LastYearMonthQty: number;
     TwoYearsAgoMonthQty: number;
   };
+  const priceRows = priceResult.recordset as {
+    Kemasan: string;
+    ThisMonthAmount: number;
+    ThisMonthQty: number;
+    LastMonthAmount: number;
+    LastMonthQty: number;
+  }[];
+  const price10KG = priceRows.find((r) => r.Kemasan === "10KG");
+  const price5KG = priceRows.find((r) => r.Kemasan === "5KG");
+  const avgHarga10ThisMonth = price10KG?.ThisMonthQty ? price10KG.ThisMonthAmount / price10KG.ThisMonthQty : 0;
+  const avgHarga10LastMonth = price10KG?.LastMonthQty ? price10KG.LastMonthAmount / price10KG.LastMonthQty : 0;
+  const avgHarga5ThisMonth = price5KG?.ThisMonthQty ? price5KG.ThisMonthAmount / price5KG.ThisMonthQty : 0;
+  const avgHarga5LastMonth = price5KG?.LastMonthQty ? price5KG.LastMonthAmount / price5KG.LastMonthQty : 0;
+
+  // "Rata-rata kantong terkirim" = average DO qty per day — this-month is
+  // month-to-date (total so far / days elapsed), last-month is the full
+  // month (total / days in that month), mirroring how ThisMonth/LastMonth
+  // are already treated as partial-vs-full elsewhere in this file.
+  const currentDay = businessToday.getUTCDate();
+  const daysInLastMonth = getDaysInMonth(lastMonthStart);
+  const avgKantongThisMonth = currentDay ? qty.ThisMonthQty / currentDay : 0;
+  const avgKantongLastMonth = daysInLastMonth ? qty.LastMonthQty / daysInLastMonth : 0;
+
+  const averages: SalesAverages = {
+    AvgKantongPerHariThisMonth: avgKantongThisMonth,
+    AvgKantongPerHariLastMonth: avgKantongLastMonth,
+    AvgKantongPerHariPctChange: pctChange(avgKantongThisMonth, avgKantongLastMonth),
+    AvgHarga10KGThisMonth: avgHarga10ThisMonth,
+    AvgHarga10KGLastMonth: avgHarga10LastMonth,
+    AvgHarga10KGPctChange: pctChange(avgHarga10ThisMonth, avgHarga10LastMonth),
+    AvgHarga5KGThisMonth: avgHarga5ThisMonth,
+    AvgHarga5KGLastMonth: avgHarga5LastMonth,
+    AvgHarga5KGPctChange: pctChange(avgHarga5ThisMonth, avgHarga5LastMonth),
+  };
+
   const ytdRow = ytdResult.recordset[0] as Omit<SalesYTD, "AvgPrice" | "Qty10KG" | "Qty5KG">;
   const ytdKemasan = qtyByKemasan(ytdQtyResult.recordset);
   const ytdTotalQty = ytdKemasan.Qty10KG + ytdKemasan.Qty5KG;
@@ -296,6 +367,7 @@ export async function getSalesOverview(): Promise<SalesOverview> {
         DOQty: qty.TwoYearsAgoMonthQty,
       }),
     ],
+    averages,
     ytd: {
       ...ytdRow,
       ...ytdKemasan,

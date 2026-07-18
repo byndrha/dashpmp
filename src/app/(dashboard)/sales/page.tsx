@@ -1,4 +1,4 @@
-import { getSalesTrend } from "@/lib/queries/sales";
+import { getSalesTrend, getSalesTrendMonthly } from "@/lib/queries/sales";
 import { getSalesOverview } from "@/lib/queries/sales-overview";
 import { getSalesOrderCards } from "@/lib/queries/sales-cards";
 import { getRevenueTarget } from "@/lib/queries/revenue-target";
@@ -9,6 +9,7 @@ import { FilterBar } from "@/components/dashboard/filter-bar";
 import { SalesOverviewPanels } from "@/components/dashboard/sales-overview-panels";
 import { RevenueTargetPanel } from "@/components/dashboard/revenue-target-panel";
 import { SalesTrendChart } from "@/components/charts/sales-trend-chart";
+import { SalesTrendChartMonthly } from "@/components/charts/sales-trend-chart-monthly";
 import { SalesTransactionCards } from "@/components/dashboard/sales-transaction-cards";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -19,8 +20,9 @@ export default async function SalesPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [trend, overview, orders, wilayahList, revenueTarget] = await Promise.all([
+  const [trend, trendMonthly, overview, orders, wilayahList, revenueTarget] = await Promise.all([
     getSalesTrend(filter),
+    getSalesTrendMonthly(),
     getSalesOverview(),
     getSalesOrderCards(filter),
     getWilayahList(),
@@ -49,6 +51,18 @@ export default async function SalesPage({
         </CardHeader>
         <CardContent>
           <SalesTrendChart data={trend} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display">Tren Penjualan Bulanan</CardTitle>
+          <CardDescription>
+            12 bulan terakhir — bulan berjalan hingga bulan yang sama tahun lalu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SalesTrendChartMonthly data={trendMonthly} />
         </CardContent>
       </Card>
 

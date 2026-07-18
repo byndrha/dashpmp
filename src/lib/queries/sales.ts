@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import type { DateRangeFilter } from "@/types/dashboard";
 
 export interface DailySales {
@@ -117,4 +118,70 @@ export async function getSalesTrend(filter: DateRangeFilter): Promise<SalesTrend
     ...row,
     TransDate: row.TransDate instanceof Date ? row.TransDate.toISOString().slice(0, 10) : row.TransDate,
   }));
+}
+
+export interface SalesTrendMonthPoint {
+  Month: string; // "YYYY-MM"
+  NetSales: number;
+  SOCount: number;
+  SOQty: number;
+  DOCount: number;
+  DOQty: number;
+  SICount: number;
+  SIQty: number;
+}
+
+// Same per-period shape as getSalesTrend(), aggregated by month instead of
+// by day, for the last 12 months (11 months ago through the current
+// business month, i.e. this month back to the same month last year).
+// Built as 12 UNION ALL'd blocks (one per month) rather than a calendar
+// table — month boundaries come from monthBoundary()'s UTC-safe arithmetic
+// (see sales-overview.ts for why raw date-fns/local-time boundaries are
+// unsafe once sent to SQL Server as DATE params).
+export async function getSalesTrendMonthly(): Promise<SalesTrendMonthPoint[]> {
+  const pool = await getPool();
+  const businessToday = getBusinessDate();
+  const request = pool.request();
+  const blocks: string[] = [];
+
+  for (let i = 11; i >= 0; i--) {
+    const monthStart = monthBoundary(businessToday, -i);
+    const monthEnd = monthBoundary(businessToday, -i + 1);
+    request.input(`start${i}`, sql.Date, monthStart);
+    request.input(`end${i}`, sql.Date, monthEnd);
+    blocks.push(`
+      SELECT
+          @start${i} AS MonthStart,
+          ISNULL((SELECT SUM(si.Netto) FROM SalesInvoice si
+                  WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+                    AND si.TransDate >= @start${i} AND si.TransDate < @end${i}), 0) AS NetSales,
+          (SELECT COUNT(*) FROM SalesOrder so
+             WHERE so.IsDeleted = 0 AND so.TransDate >= @start${i} AND so.TransDate < @end${i}) AS SOCount,
+          ISNULL((SELECT SUM(sod.Qty) FROM SalesOrder so
+                  JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
+                  WHERE so.IsDeleted = 0 AND so.TransDate >= @start${i} AND so.TransDate < @end${i}), 0) AS SOQty,
+          (SELECT COUNT(*) FROM DeliveryOrder do_
+             WHERE do_.IsDeleted = 0 AND do_.TransDate >= @start${i} AND do_.TransDate < @end${i}) AS DOCount,
+          ISNULL((SELECT SUM(dod.Delivered) FROM DeliveryOrder do_
+                  JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+                  WHERE do_.IsDeleted = 0 AND do_.TransDate >= @start${i} AND do_.TransDate < @end${i}), 0) AS DOQty,
+          (SELECT COUNT(*) FROM SalesInvoice si
+             WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+               AND si.TransDate >= @start${i} AND si.TransDate < @end${i}) AS SICount,
+          ISNULL((SELECT SUM(sid.Qty) FROM SalesInvoice si
+                  JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
+                  WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+                    AND si.TransDate >= @start${i} AND si.TransDate < @end${i}), 0) AS SIQty
+    `);
+  }
+
+  const result = await request.query(`${blocks.join(" UNION ALL ")} ORDER BY MonthStart ASC`);
+
+  return result.recordset.map((row) => {
+    const monthStart = row.MonthStart as Date;
+    return {
+      ...row,
+      Month: `${monthStart.getUTCFullYear()}-${String(monthStart.getUTCMonth() + 1).padStart(2, "0")}`,
+    };
+  });
 }

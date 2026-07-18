@@ -11,9 +11,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatDate, formatRupiah } from "@/lib/format";
+import { formatRupiah } from "@/lib/format";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { SalesTrendPoint } from "@/lib/queries/sales";
+import type { SalesTrendMonthPoint } from "@/lib/queries/sales";
 
 interface ChartDatum {
   name: string;
@@ -28,7 +28,12 @@ interface ChartDatum {
 }
 
 const DO_LINE_COLOR = "oklch(0.62 0.2 35)";
-const mobileDateFormatter = new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "2-digit" });
+// Month strings ("YYYY-MM") parse as UTC midnight — format with an explicit
+// UTC timeZone so a host running in a positive-UTC-offset timezone doesn't
+// silently shift the displayed month back by one, same class of bug as the
+// SQL DATE-parameter issue documented in sales-overview.ts.
+const monthFormatter = new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric", timeZone: "UTC" });
+const mobileMonthFormatter = new Intl.DateTimeFormat("id-ID", { month: "short", year: "2-digit", timeZone: "UTC" });
 
 function StaticLegendSwatch({ color, label }: { color: string; label: string }) {
   return (
@@ -56,11 +61,10 @@ function TrendTooltip({ active, payload }: { active?: boolean; payload?: { paylo
   );
 }
 
-// Bar + Line series are identical between the desktop and mobile chart
-// bodies — only the axes/margins around them differ — so they're built once
-// here as plain elements (not a wrapper component: recharts inspects each
-// child's type directly, so a custom component in between would break it)
-// and spread into whichever <ComposedChart> is rendering.
+// Identical Bar + Line series to SalesTrendChart's — kept as a local copy
+// rather than a shared import since recharts inspects each child's type
+// directly (a wrapper component in between breaks that), and the two charts'
+// data keys line up exactly.
 function seriesElements(chartData: ChartDatum[], skipLabelStep: number) {
   return [
     <Bar key="netto" yAxisId="nominal" dataKey="Netto" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />,
@@ -70,17 +74,9 @@ function seriesElements(chartData: ChartDatum[], skipLabelStep: number) {
       yAxisId="docs"
       type="monotone"
       dataKey="DO"
-      // Dedicated color, deliberately not --chart-2: at similar lightness to
-      // the Netto bar's --chart-1 (both ~0.75-0.8), the DO line all but
-      // disappeared against the bars. This is darker and more saturated for
-      // contrast against the light teal fill.
       stroke={DO_LINE_COLOR}
       strokeWidth={3}
       dot={false}
-      // Always-on qty label for DO specifically (not just on hover) — the
-      // other series stay hover-only via the tooltip. On mobile, only every
-      // `skipLabelStep`-th point gets a label so they don't collide in the
-      // narrower per-point width.
       label={(props: { x?: string | number; y?: string | number; index?: number }) => {
         const { x, y, index } = props;
         if (x == null || y == null || index == null) return <g />;
@@ -97,37 +93,30 @@ function seriesElements(chartData: ChartDatum[], skipLabelStep: number) {
   ];
 }
 
-export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
+export function SalesTrendChartMonthly({ data }: { data: SalesTrendMonthPoint[] }) {
   const isMobile = useIsMobile();
 
-  const chartData: ChartDatum[] = data.map((d) => ({
-    name: formatDate(d.TransDate),
-    mobileName: mobileDateFormatter.format(new Date(d.TransDate)),
-    Netto: d.NetSales,
-    SO: d.SOCount,
-    SOQty: d.SOQty,
-    DO: d.DOCount,
-    DOQty: d.DOQty,
-    SI: d.SICount,
-    SIQty: d.SIQty,
-  }));
+  const chartData: ChartDatum[] = data.map((d) => {
+    const monthDate = new Date(`${d.Month}-01`);
+    return {
+      name: monthFormatter.format(monthDate),
+      mobileName: mobileMonthFormatter.format(monthDate),
+      Netto: d.NetSales,
+      SO: d.SOCount,
+      SOQty: d.SOQty,
+      DO: d.DOCount,
+      DOQty: d.DOQty,
+      SI: d.SICount,
+      SIQty: d.SIQty,
+    };
+  });
 
   if (isMobile) {
-    // Squeezing every day into the viewport is what produced the
-    // overlapping labels and dead side-margins in the first place — a
-    // fixed per-day width in a horizontally scrollable strip keeps each
-    // day readable and lets the axes stay compact instead of both being
-    // stretched to fill unused width.
-    const perDayWidth = 46;
-    const mobileWidth = Math.max(chartData.length * perDayWidth, 320);
-    const labelStep = 2;
+    const perMonthWidth = 56;
+    const mobileWidth = Math.max(chartData.length * perMonthWidth, 320);
 
     return (
       <div className="flex flex-col gap-1.5">
-        {/* Rendered outside the scroll strip below — recharts' <Legend>
-            inherits the chart's full scrollable width and centers itself
-            within it, which put it off-screen until scrolled all the way
-            right on mobile. */}
         <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
           <StaticLegendSwatch color="var(--chart-1)" label="Netto" />
           <StaticLegendSwatch color="var(--chart-3)" label="SO" />
@@ -139,13 +128,7 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={chartData} margin={{ top: 20, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
-                <XAxis
-                  dataKey="mobileName"
-                  tick={{ fontSize: 9 }}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={0}
-                />
+                <XAxis dataKey="mobileName" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} interval={0} />
                 <YAxis
                   yAxisId="nominal"
                   tick={{ fontSize: 9 }}
@@ -156,7 +139,7 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
                 />
                 <YAxis yAxisId="docs" orientation="right" hide />
                 <Tooltip content={<TrendTooltip />} />
-                {seriesElements(chartData, labelStep)}
+                {seriesElements(chartData, 1)}
               </ComposedChart>
             </ResponsiveContainer>
           </div>

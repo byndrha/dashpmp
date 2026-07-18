@@ -14,7 +14,7 @@ export function SalesOverviewPanels({
   overview: SalesOverview;
   businessTodayISO: string;
 }) {
-  const { comparisons, ytd } = overview;
+  const { comparisons, averages, ytd } = overview;
 
   return (
     // Container-query breakpoints (@2xl/@4xl), not viewport ones (sm/lg):
@@ -29,7 +29,7 @@ export function SalesOverviewPanels({
         businessTodayISO={businessTodayISO}
       />
 
-      <SalesComparisonPanel comparisons={comparisons} />
+      <SalesComparisonPanel comparisons={comparisons} averages={averages} />
 
       {/* Below @4xl, this wrapper is `contents` — it disappears from layout
           so Nominal Penjualan and Total Qty behave as independent grid

@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown, Minus, Truck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { SalesComparison } from "@/lib/queries/sales-overview";
+import type { SalesAverages, SalesComparison } from "@/lib/queries/sales-overview";
 
 // Shorter than formatRupiah() — needed so a value + trend pill still fit on
 // one line inside this panel's narrow columns at the 3-up desktop layout.
@@ -41,7 +41,25 @@ function TrendPill({ percent }: { percent: number | null }) {
 // Hari Ini" panel's kantong-terkirim pill), then each comparison as a single
 // line: value and its trend pill share one row instead of stacking, so the
 // panel stays short instead of growing tall.
-export function SalesComparisonPanel({ comparisons }: { comparisons: SalesComparison[] }) {
+function AverageRow({ label, value, percent }: { label: string; value: string; percent: number | null }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs text-foreground">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <span className="whitespace-nowrap text-[11px] text-muted-foreground">{value}</span>
+        <TrendPill percent={percent} />
+      </div>
+    </div>
+  );
+}
+
+export function SalesComparisonPanel({
+  comparisons,
+  averages,
+}: {
+  comparisons: SalesComparison[];
+  averages: SalesAverages;
+}) {
   const current = comparisons[0]?.current;
 
   return (
@@ -93,6 +111,27 @@ export function SalesComparisonPanel({ comparisons }: { comparisons: SalesCompar
               </Fragment>
             ))}
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5 border-t pt-3">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Rata-rata Bulan Ini vs Bulan Lalu
+          </p>
+          <AverageRow
+            label="Kantong Terkirim / Hari"
+            value={Math.round(averages.AvgKantongPerHariThisMonth).toLocaleString("id-ID")}
+            percent={averages.AvgKantongPerHariPctChange}
+          />
+          <AverageRow
+            label="Harga Jual 10KG"
+            value={formatRupiah(averages.AvgHarga10KGThisMonth)}
+            percent={averages.AvgHarga10KGPctChange}
+          />
+          <AverageRow
+            label="Harga Jual 5KG"
+            value={formatRupiah(averages.AvgHarga5KGThisMonth)}
+            percent={averages.AvgHarga5KGPctChange}
+          />
         </div>
       </CardContent>
     </Card>
