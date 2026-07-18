@@ -19,7 +19,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
           <UserMenu name={session?.user?.name ?? session?.user?.username ?? "User"} />
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
+        {/* Named so children can opt into container queries (`@lg:`, `@5xl:`,
+            etc.) keyed to the actual content width — which shrinks/grows
+            with the sidebar's collapsed/expanded state — instead of the
+            raw viewport width. A grid that looks fine at 2 columns on a
+            tablet with the sidebar collapsed can be too cramped at the same
+            viewport width with the sidebar expanded; container queries see
+            that difference, `sm:`/`lg:` viewport breakpoints don't. */}
+        <main className="@container/dashboard-main flex flex-1 flex-col gap-4 p-4">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

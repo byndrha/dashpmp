@@ -17,7 +17,12 @@ export function SalesOverviewPanels({
   const { comparisons, ytd } = overview;
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    // Container-query breakpoints (@2xl/@4xl), not viewport ones (sm/lg):
+    // the sidebar can be collapsed or expanded at the same viewport width,
+    // which changes how much room this grid actually has without changing
+    // the viewport — sm:/lg: can't see that, @-variants (keyed to the
+    // @container on the dashboard <main>) do.
+    <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @4xl:grid-cols-3">
       <SalesTodayPanel
         initialData={overview.today}
         initialDateISO={businessTodayISO}
@@ -26,13 +31,14 @@ export function SalesOverviewPanels({
 
       <SalesComparisonPanel comparisons={comparisons} />
 
-      {/* Below lg, this wrapper is `contents` — it disappears from layout so
-          Nominal Penjualan and Total Qty behave as independent grid items
-          and land in a clean 1-up or 2-up flow with the other two cards. At
-          lg the wrapper becomes a flex column, nesting both into a single
-          3rd grid cell so the 3-up desktop row lands exactly on 3 items —
-          no dangling row with two empty columns beside a lone card. */}
-      <div className="contents lg:flex lg:flex-col lg:gap-3">
+      {/* Below @4xl, this wrapper is `contents` — it disappears from layout
+          so Nominal Penjualan and Total Qty behave as independent grid
+          items and land in a clean 1-up or 2-up flow with the other two
+          cards. At @4xl the wrapper becomes a flex column, nesting both
+          into a single 3rd grid cell so the 3-up row lands exactly on 3
+          items — no dangling row with two empty columns beside a lone
+          card. */}
+      <div className="contents @4xl:flex @4xl:flex-col @4xl:gap-3">
         <h2 className="col-span-full font-display text-sm font-semibold text-muted-foreground">Tahun Berjalan</h2>
 
         <Card className="py-4">
