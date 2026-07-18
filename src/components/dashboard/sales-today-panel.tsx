@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { addDays, subDays, format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Coins, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Coins, Package, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -106,9 +106,20 @@ export function SalesTodayPanel({
         </div>
 
         <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
-          <p className="font-display text-2xl font-semibold tabular-nums text-primary">
-            {formatRupiah(data.NetSales)}
-          </p>
+          <div className="flex items-end justify-between gap-3">
+            <p className="font-display text-2xl font-semibold tabular-nums text-primary">
+              {formatRupiah(data.NetSales)}
+            </p>
+            <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5">
+              <Package className="size-4 text-primary" />
+              <div className="flex flex-col leading-tight">
+                <span className="font-display text-sm font-semibold tabular-nums text-primary">
+                  {(data.Qty10KG + data.Qty5KG).toLocaleString("id-ID")}
+                </span>
+                <span className="text-[10px] whitespace-nowrap text-muted-foreground">kantong terkirim</span>
+              </div>
+            </div>
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <DocChip icon={ShoppingCart} label="SO" value={data.SOCount} />
             <DocChip icon={Truck} label="DO" value={data.DOCount} />
