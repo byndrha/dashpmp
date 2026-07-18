@@ -10,4 +10,5 @@ export const COA_KATEGORI_LABEL: Record<COAKategori, string> = {
   BebanOperasional: "Beban Operasional",
   PenghasilanLainnya: "Penghasilan Lainnya",
   Adjustment: "Adjustment",
+  BebanLainnya: "Beban Lainnya",
 };

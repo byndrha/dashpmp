@@ -1,13 +1,15 @@
 import { Wallet, TrendingUp, Landmark, PiggyBank } from "lucide-react";
 import { getPnL, getBEP } from "@/lib/queries/pnl";
 import { getCOADetail } from "@/lib/queries/keuangan-detail";
+import { getBalanceSheetDetail } from "@/lib/queries/balance-sheet";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { SimplePieChart } from "@/components/charts/simple-pie-chart";
 import { COADetailTable } from "@/components/dashboard/coa-detail-table";
+import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatRupiah, formatPercent } from "@/lib/format";
+import { formatRupiah, formatPercent, formatDate } from "@/lib/format";
 
 export default async function PnLPage({
   searchParams,
@@ -16,8 +18,24 @@ export default async function PnLPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [pnl, bep, coaDetail] = await Promise.all([getPnL(filter), getBEP(filter), getCOADetail(filter)]);
+  const [pnl, bep, coaDetail, balanceSheet] = await Promise.all([
+    getPnL(filter),
+    getBEP(filter),
+    getCOADetail(filter),
+    getBalanceSheetDetail(filter),
+  ]);
   const periodStart = new Date(filter.startDate);
+  // filter.endDate is an exclusive boundary (start of the day *after* the
+  // selected period) — the balance sheet's actual "as of" cutoff is the day
+  // before that. Plain UTC arithmetic, not date-fns' subDays: filter.endDate
+  // is a "YYYY-MM-DD" string, which parses as UTC midnight, and date-fns
+  // reads local getters — unsafe on a host running behind UTC (see
+  // monthBoundary()'s comment in business-date.ts for the same class of bug
+  // this project has already hit elsewhere).
+  const endDateUTC = new Date(filter.endDate);
+  const balanceSheetCutoff = new Date(
+    Date.UTC(endDateUTC.getUTCFullYear(), endDateUTC.getUTCMonth(), endDateUTC.getUTCDate() - 1)
+  );
 
   const compositionData = [
     { name: "HPP", value: pnl.HPP },
@@ -62,6 +80,7 @@ export default async function PnLPage({
             <Row label="Laba Operasional" value={pnl.LabaOperasional} bold />
             <Row label="Penghasilan Lainnya" value={pnl.PenghasilanLainnya} />
             <Row label="Adjustment" value={-pnl.Adjustment} />
+            <Row label="Beban Lainnya" value={-pnl.BebanLainnya} />
             <Row label="Laba Bersih" value={pnl.LabaBersih} bold />
           </CardContent>
         </Card>
@@ -76,27 +95,46 @@ export default async function PnLPage({
         </Card>
       </div>
 
-      <div>
-        <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
-          Detail per Akun (COA) &mdash; APBP vs Realisasi
-        </h2>
-        <COADetailTable
-          rows={coaDetail}
-          year={periodStart.getUTCFullYear()}
-          month={periodStart.getUTCMonth() + 1}
-        />
+      {/* Container query, not lg: — this page lives under the same
+          @container/dashboard-main as Penjualan, so the split should react
+          to actual content width (sidebar collapsed/expanded), not the raw
+          viewport. col-span-3/2 of 5 gives the requested ~60%/40% split. */}
+      <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-5">
+        <div className="@4xl:col-span-3">
+          <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
+            Detail per Akun (COA) &mdash; APBP vs Realisasi
+          </h2>
+          <COADetailTable
+            rows={coaDetail}
+            year={periodStart.getUTCFullYear()}
+            month={periodStart.getUTCMonth() + 1}
+          />
+        </div>
+        <div className="@4xl:col-span-2">
+          <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
+            Detail Balance Sheet &mdash; per {formatDate(balanceSheetCutoff)}
+          </h2>
+          <BalanceSheetTable rows={balanceSheet} />
+        </div>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Break-Even Point (BEP)</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 text-sm">
-          <Stat label="Revenue" value={formatRupiah(bep.Revenue)} />
-          <Stat label="Biaya Variabel" value={formatRupiah(bep.VariableCost)} />
-          <Stat label="Biaya Tetap" value={formatRupiah(bep.FixedCost)} />
-          <Stat label="Margin Kontribusi" value={formatPercent(bep.MarginKontribusiPct)} />
-          <Stat label="BEP / Bulan" value={formatRupiah(bep.BEPPerBulan)} />
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+            <Stat label="Revenue" value={formatRupiah(bep.Revenue)} />
+            <Stat label="Biaya Variabel" value={formatRupiah(bep.VariableCost)} />
+            <Stat label="Biaya Tetap" value={formatRupiah(bep.FixedCost)} />
+            <Stat label="Margin Kontribusi" value={formatPercent(bep.MarginKontribusiPct)} />
+            <Stat label="BEP / Bulan" value={formatRupiah(bep.BEPPerBulan)} />
+          </div>
+          <div className="rounded-lg border border-border bg-card/50 p-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Rumus Perhitungan BEP:</p>
+            <p className="mt-1 font-data">Margin Kontribusi = 1 &minus; (Biaya Variabel &divide; Revenue)</p>
+            <p className="font-data">BEP per Bulan = Biaya Tetap &divide; Margin Kontribusi</p>
+          </div>
         </CardContent>
       </Card>
 

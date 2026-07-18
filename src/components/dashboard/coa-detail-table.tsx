@@ -21,7 +21,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
@@ -35,6 +35,7 @@ const KATEGORI_ORDER: COAKategori[] = [
   "BebanOperasional",
   "PenghasilanLainnya",
   "Adjustment",
+  "BebanLainnya",
 ];
 
 export function COADetailTable({
@@ -64,57 +65,59 @@ export function COADetailTable({
   })).filter((g) => g.rows.length > 0);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {grouped.map((g) => (
-        <Card key={g.kategori}>
+        <Card key={g.kategori} size="sm">
           <CardHeader>
-            <CardTitle className="font-display text-base">{COA_KATEGORI_LABEL[g.kategori]}</CardTitle>
-            <CardDescription>Rincian akun (APBP vs realisasi periode berjalan).</CardDescription>
+            <CardTitle className="font-display text-sm">
+              {COA_KATEGORI_LABEL[g.kategori]}{" "}
+              <span className="font-normal text-muted-foreground">({g.rows.length} akun)</span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <div className="overflow-x-auto px-6">
+            <div className="overflow-x-auto px-3">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Akun</TableHead>
-                    <TableHead className="text-right">APBP</TableHead>
-                    <TableHead className="text-right">Realisasi</TableHead>
-                    <TableHead className="text-right">% Kategori</TableHead>
-                    <TableHead className="text-right">% Anggaran</TableHead>
-                    <TableHead className="text-right">Proyeksi Akhir Bulan</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="h-7 px-1.5 text-[10px]">Akun</TableHead>
+                    <TableHead className="h-7 px-1.5 text-right text-[10px]">APBP</TableHead>
+                    <TableHead className="h-7 px-1.5 text-right text-[10px]">Realisasi</TableHead>
+                    <TableHead className="h-7 px-1.5 text-right text-[10px]">%Kat</TableHead>
+                    <TableHead className="h-7 px-1.5 text-right text-[10px]">%Ang</TableHead>
+                    <TableHead className="h-7 px-1.5 text-right text-[10px]">Proyeksi</TableHead>
+                    <TableHead className="h-7 w-6 px-1"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {g.rows.map((r) => (
                     <TableRow key={r.ChartOfAccountID}>
-                      <TableCell>
-                        <p className="font-medium">{r.AccountName}</p>
-                        <p className="font-data text-xs text-muted-foreground">{r.AccountNo}</p>
+                      <TableCell className="px-1.5 py-1.5">
+                        <p className="text-xs font-medium leading-tight">{r.AccountName}</p>
+                        <p className="font-data text-[10px] leading-tight text-muted-foreground">{r.AccountNo}</p>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
                         {r.BudgetAmount != null ? formatRupiah(r.BudgetAmount) : "-"}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums font-medium">
+                      <TableCell className="px-1.5 py-1.5 text-right text-xs font-medium tabular-nums">
                         {formatRupiah(r.Realisasi)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
                         {formatPercentPoints(r.RealisasiPercent)}
                       </TableCell>
                       <TableCell
                         className={cn(
-                          "text-right tabular-nums",
+                          "px-1.5 py-1.5 text-right text-xs tabular-nums",
                           r.BudgetPercent != null && r.BudgetPercent > 100 && "text-destructive"
                         )}
                       >
                         {r.BudgetPercent != null ? formatPercentPoints(r.BudgetPercent) : "-"}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
                         {formatRupiah(r.ProyeksiAkhirBulan)}
                       </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditing(r)}>
-                          <PiggyBank className="size-3.5" />
+                      <TableCell className="px-1 py-1.5">
+                        <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditing(r)}>
+                          <PiggyBank className="size-3" />
                         </Button>
                       </TableCell>
                     </TableRow>

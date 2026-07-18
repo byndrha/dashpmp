@@ -16,21 +16,24 @@ export interface PnLSummary {
   LabaOperasional: number;
   PenghasilanLainnya: number;
   Adjustment: number;
+  BebanLainnya: number;
   LabaBersih: number;
 }
 
 // Category classification uses AccountNo prefix (standard Indonesian COA
-// convention, verified against data) with two carve-outs the business asked
-// for on top of the plain prefix split:
+// convention, verified against data) with carve-outs the business asked for
+// on top of the plain prefix split:
 //   - 630x ("Beban Pajak" — PPh21/23/25/29, PBB, etc.) is tax, not an
-//     operating expense, so it's pulled out of prefix 6 and grouped with
-//     prefix 8 into "Adjustment".
+//     operating expense, so it's pulled out of prefix 6 into "Adjustment".
 //   - 6101* (Gaji dan Upah), 6103 (Sewa), 6115 (Air), and 640x (Beban
 //     Penyusutan/depreciation) are fixed costs, split out of prefix 6 into
 //     their own "Biaya Tetap" line rather than lumped into "Beban
 //     Operasional". This is a P&L presentation choice only — it does not
 //     touch ChartOfAccount.CostBehavior, which is a separate classification
 //     used by the BEP calculation below.
+//   - Prefix 8 (and every account under it) is its own "Beban Lainnya" line,
+//     kept separate from the 630x tax accounts in "Adjustment" even though
+//     both used to be lumped together.
 export const PNL_KATEGORI_CASE = `
   CASE
       WHEN LEFT(coa.AccountNo,1) = '4' THEN 'Pendapatan'
@@ -40,7 +43,7 @@ export const PNL_KATEGORI_CASE = `
       WHEN coa.AccountNo LIKE '630%' THEN 'Adjustment'
       WHEN LEFT(coa.AccountNo,1) = '6' THEN 'BebanOperasional'
       WHEN LEFT(coa.AccountNo,1) = '7' THEN 'PenghasilanLainnya'
-      WHEN LEFT(coa.AccountNo,1) = '8' THEN 'Adjustment'
+      WHEN LEFT(coa.AccountNo,1) = '8' THEN 'BebanLainnya'
   END
 `;
 
@@ -75,7 +78,8 @@ export async function getPnL(filter: DateRangeFilter): Promise<PnLSummary> {
   const labaOperasional = labaKotor - biayaTetap - bebanOperasional;
   const penghasilanLainnya = byKategori("PenghasilanLainnya").TotalCredit - byKategori("PenghasilanLainnya").TotalDebit;
   const adjustment = byKategori("Adjustment").TotalDebit - byKategori("Adjustment").TotalCredit;
-  const labaBersih = labaOperasional + penghasilanLainnya - adjustment;
+  const bebanLainnya = byKategori("BebanLainnya").TotalDebit - byKategori("BebanLainnya").TotalCredit;
+  const labaBersih = labaOperasional + penghasilanLainnya - adjustment - bebanLainnya;
 
   return {
     Pendapatan: pendapatan,
@@ -86,6 +90,7 @@ export async function getPnL(filter: DateRangeFilter): Promise<PnLSummary> {
     LabaOperasional: labaOperasional,
     PenghasilanLainnya: penghasilanLainnya,
     Adjustment: adjustment,
+    BebanLainnya: bebanLainnya,
     LabaBersih: labaBersih,
   };
 }

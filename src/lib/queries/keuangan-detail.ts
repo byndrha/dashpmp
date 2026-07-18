@@ -9,7 +9,8 @@ export type COAKategori =
   | "BiayaTetap"
   | "BebanOperasional"
   | "PenghasilanLainnya"
-  | "Adjustment";
+  | "Adjustment"
+  | "BebanLainnya";
 
 // Credit-normal categories (revenue/income) vs debit-normal (cost) —
 // mirrors the sign convention in getPnL.
