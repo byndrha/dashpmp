@@ -1,5 +1,5 @@
-import { startOfMonth, subMonths } from "date-fns";
 import { getPool, sql } from "@/lib/db";
+import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
 import type { PartnerType } from "@/types/dashboard";
 import type { PiutangStatus } from "@/lib/queries/aging";
@@ -27,9 +27,15 @@ export interface CollectionPriorityRow {
 
 export async function getCollectionPriority(): Promise<CollectionPriorityRow[]> {
   const pool = await getPool();
-  const now = new Date();
-  const thisMonthStart = startOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
+  // Built with monthBoundary()'s plain UTC arithmetic, not date-fns'
+  // startOfMonth/subMonths on a raw `new Date()` — those construct *local*
+  // midnight, and once sent to SQL Server as a `DATE` parameter (which mssql
+  // serializes via UTC components), a host running in a positive-UTC-offset
+  // timezone silently shifts the boundary back one calendar day. Same bug
+  // already found and fixed in sales-overview.ts / revenue-target.ts.
+  const businessToday = getBusinessDate();
+  const thisMonthStart = monthBoundary(businessToday);
+  const lastMonthStart = monthBoundary(businessToday, -1);
 
   const result = await pool
     .request()
