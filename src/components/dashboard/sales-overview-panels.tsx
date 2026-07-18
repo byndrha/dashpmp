@@ -26,11 +26,14 @@ export function SalesOverviewPanels({
 
       <SalesComparisonPanel comparisons={comparisons} />
 
-      {/* Nominal Penjualan + Total Qty stack in one column so the 3-up
-          desktop row lands exactly on 3 items — no dangling row with two
-          empty columns beside a lone card. */}
-      <div className="flex flex-col gap-3">
-        <h2 className="font-display text-sm font-semibold text-muted-foreground">Tahun Berjalan</h2>
+      {/* Below lg, this wrapper is `contents` — it disappears from layout so
+          Nominal Penjualan and Total Qty behave as independent grid items
+          and land in a clean 1-up or 2-up flow with the other two cards. At
+          lg the wrapper becomes a flex column, nesting both into a single
+          3rd grid cell so the 3-up desktop row lands exactly on 3 items —
+          no dangling row with two empty columns beside a lone card. */}
+      <div className="contents lg:flex lg:flex-col lg:gap-3">
+        <h2 className="col-span-full font-display text-sm font-semibold text-muted-foreground">Tahun Berjalan</h2>
 
         <Card className="py-4">
           <CardContent className="flex flex-wrap items-start justify-between gap-3 px-4">
