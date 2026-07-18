@@ -1,6 +1,6 @@
-import { getDaysInMonth, startOfMonth } from "date-fns";
+import { getDaysInMonth } from "date-fns";
 import { getPool, sql } from "@/lib/db";
-import { getBusinessDate } from "@/lib/business-date";
+import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 
 export interface RevenueTarget {
   Year: number;
@@ -35,7 +35,7 @@ export async function getRevenueTarget(): Promise<RevenueTarget> {
   const currentDay = businessToday.getUTCDate();
   const daysInMonth = getDaysInMonth(businessToday);
   const remainingDays = daysInMonth - currentDay;
-  const monthStart = startOfMonth(businessToday);
+  const monthStart = monthBoundary(businessToday);
 
   const [targetResult, realisasiResult] = await Promise.all([
     pool

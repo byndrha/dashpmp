@@ -70,13 +70,17 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
         <Tooltip content={<TrendTooltip />} />
         <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
         <Bar yAxisId="nominal" dataKey="Netto" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
-        <Line yAxisId="docs" type="monotone" dataKey="SO" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
+        <Line yAxisId="docs" type="monotone" dataKey="SO" stroke="var(--chart-3)" strokeWidth={3} dot={false} />
         <Line
           yAxisId="docs"
           type="monotone"
           dataKey="DO"
-          stroke="var(--chart-2)"
-          strokeWidth={2}
+          // Dedicated color, deliberately not --chart-2: at similar lightness
+          // to the Netto bar's --chart-1 (both ~0.75-0.8), the DO line all
+          // but disappeared against the bars. This is darker and more
+          // saturated for contrast against the light teal fill.
+          stroke="oklch(0.62 0.2 35)"
+          strokeWidth={3}
           dot={false}
           // Always-on qty label for DO specifically (not just on hover) —
           // the other series stay hover-only via the tooltip.
@@ -85,13 +89,13 @@ export function SalesTrendChart({ data }: { data: SalesTrendPoint[] }) {
             if (x == null || y == null || index == null) return <g />;
             const qty = chartData[index]?.DOQty ?? 0;
             return (
-              <text x={Number(x)} y={Number(y) - 8} textAnchor="middle" fontSize={9} fill="var(--chart-2)">
+              <text x={Number(x)} y={Number(y) - 8} textAnchor="middle" fontSize={9} fill="oklch(0.62 0.2 35)">
                 {qty.toLocaleString("id-ID")}
               </text>
             );
           }}
         />
-        <Line yAxisId="docs" type="monotone" dataKey="SI" stroke="var(--chart-4)" strokeWidth={2} dot={false} />
+        <Line yAxisId="docs" type="monotone" dataKey="SI" stroke="var(--chart-4)" strokeWidth={3} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   );

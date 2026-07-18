@@ -44,3 +44,21 @@ export function getBusinessDate(now: Date = new Date()): Date {
 export function getBusinessDateISO(now: Date = new Date()): string {
   return getBusinessDate(now).toISOString().slice(0, 10);
 }
+
+/**
+ * UTC-midnight boundary for the 1st of the month `monthsOffset` months from
+ * the WIB business month containing `wibDate` (itself expected to already be
+ * a UTC-midnight Date representing a WIB calendar date, e.g. from
+ * getBusinessDate()).
+ *
+ * Deliberately built with plain Date.UTC() arithmetic instead of date-fns'
+ * startOfMonth/subMonths: those construct *local* midnight, and when that
+ * Date is later sent to SQL Server as a `DATE` parameter (which mssql
+ * serializes via UTC components), a host process running in a
+ * positive-UTC-offset timezone silently shifts the boundary back one
+ * calendar day — verified against live data, a "this month" query leaked in
+ * the entirety of the previous day's revenue this way.
+ */
+export function monthBoundary(wibDate: Date, monthsOffset = 0): Date {
+  return new Date(Date.UTC(wibDate.getUTCFullYear(), wibDate.getUTCMonth() + monthsOffset, 1));
+}

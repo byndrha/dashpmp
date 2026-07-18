@@ -1,12 +1,15 @@
-import { startOfMonth, startOfYear, subMonths } from "date-fns";
 import { getPool, sql } from "@/lib/db";
-import { getBusinessDate } from "@/lib/business-date";
+import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 
-// Kemasan classification verified against live item names in
-// SalesInvoiceDetail: "Es Tube Jual 5 KG" / "Es Tube Bonus 5 KG" / "Es Tube
-// 5 KG" are the only 5KG-labeled items; everything else ("Es Tube", "Es Tube
-// Jual", "Es Tube Bonus", "Es Contoh", "Es Tube Afiliasi") is 10KG.
-const KEMASAN_CASE = `CASE WHEN sid.Name LIKE '%5 KG%' THEN '5KG' ELSE '10KG' END`;
+// Kemasan classification verified against live item names in both
+// SalesInvoiceDetail.Name and DeliveryOrderDetail.Name: "Es Tube Jual 5 KG" /
+// "Es Tube Bonus 5 KG" / "Es Tube 5 KG" are the only 5KG-labeled items;
+// everything else ("Es Tube", "Es Tube Jual", "Es Tube Bonus", "Es Contoh",
+// "Es Tube Afiliasi") is 10KG.
+function kemasanCase(column: string): string {
+  return `CASE WHEN ${column} LIKE '%5 KG%' THEN '5KG' ELSE '10KG' END`;
+}
+const KEMASAN_CASE = kemasanCase("sid.Name");
 
 export interface KemasanQty {
   Qty10KG: number;
@@ -63,8 +66,13 @@ function qtyByKemasan(rows: { Kemasan: string; Qty: number }[]): KemasanQty {
 // render and the prev/next day navigation on that same card.
 export async function getSalesForDay(date: Date): Promise<SalesToday> {
   const pool = await getPool();
-  const lastMonthDay = subMonths(date, 1);
-  const [dayResult, dayQtyResult, lastMonthResult] = await Promise.all([
+  // Same calendar day-of-month, one month back. Built with plain UTC
+  // arithmetic (not date-fns' subMonths) to stay consistent with the rest of
+  // this file's date handling — see monthBoundary()'s comment in
+  // business-date.ts for why local-time Date construction is unsafe here.
+  const lastMonthDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 1, date.getUTCDate()));
+
+  const [dayResult, doQtyResult, siQtyResult, lastMonthResult] = await Promise.all([
     pool
       .request()
       .input("day", sql.Date, date)
@@ -83,16 +91,33 @@ export async function getSalesForDay(date: Date): Promise<SalesToday> {
               WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
                 AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)) AS SICount
       `),
+    // "Kantong Terkirim" must reflect what actually left the warehouse (DO),
+    // not what was invoiced (SI) — those can differ on any given day.
+    // Uses DeliveryOrderDetail.Delivered, not .Qty (the original-order-line
+    // quantity) — see getSalesTrend() in sales.ts for why .Qty inflates totals.
     pool
       .request()
       .input("day", sql.Date, date)
       .query(`
-        SELECT ${KEMASAN_CASE} AS Kemasan, SUM(sid.Qty) AS Qty
+        SELECT ${kemasanCase("dod.Name")} AS Kemasan, SUM(dod.Delivered) AS Qty
+        FROM DeliveryOrderDetail dod
+        JOIN DeliveryOrder do_ ON do_.DeliveryOrderID = dod.DeliveryOrderID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= @day AND do_.TransDate < DATEADD(DAY, 1, @day)
+        GROUP BY ${kemasanCase("dod.Name")}
+      `),
+    // Invoiced qty, kept separate from the DO-delivered qty above — Harga
+    // rata-rata is revenue per kantong *invoiced*, so its denominator must
+    // match the NetSales numerator's source (SI), not the delivered qty.
+    pool
+      .request()
+      .input("day", sql.Date, date)
+      .query(`
+        SELECT ISNULL(SUM(sid.Qty), 0) AS Qty
         FROM SalesInvoiceDetail sid
         JOIN SalesInvoice si ON si.SalesInvoiceID = sid.SalesInvoiceID
         WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
           AND si.TransDate >= @day AND si.TransDate < DATEADD(DAY, 1, @day)
-        GROUP BY ${KEMASAN_CASE}
       `),
     // Same calendar date one month back, for the day-over-day-last-month growth badge.
     pool
@@ -109,14 +134,14 @@ export async function getSalesForDay(date: Date): Promise<SalesToday> {
     SalesToday,
     "AvgPrice" | "Qty10KG" | "Qty5KG" | "LastMonthNetSales" | "GrowthPercent"
   >;
-  const kemasan = qtyByKemasan(dayQtyResult.recordset);
-  const totalQty = kemasan.Qty10KG + kemasan.Qty5KG;
+  const doKemasan = qtyByKemasan(doQtyResult.recordset);
+  const siQty = siQtyResult.recordset[0].Qty as number;
   const lastMonthNetSales = lastMonthResult.recordset[0].NetSales as number;
 
   return {
     ...day,
-    ...kemasan,
-    AvgPrice: totalQty ? day.NetSales / totalQty : 0,
+    ...doKemasan,
+    AvgPrice: siQty ? day.NetSales / siQty : 0,
     LastMonthNetSales: lastMonthNetSales,
     GrowthPercent: lastMonthNetSales
       ? ((day.NetSales - lastMonthNetSales) / lastMonthNetSales) * 100
@@ -128,19 +153,26 @@ function pctChange(current: number, previous: number): number | null {
   return previous ? ((current - previous) / previous) * 100 : null;
 }
 
-const monthYearFormatter = new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric" });
+const monthYearFormatter = new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
 
 export async function getSalesOverview(): Promise<SalesOverview> {
   const pool = await getPool();
-  const now = new Date();
-  const businessToday = getBusinessDate(now);
-  const thisMonthStart = startOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const lastYearMonthStart = startOfMonth(subMonths(now, 12));
-  const lastYearMonthEnd = startOfMonth(subMonths(now, 11));
-  const twoYearsAgoMonthStart = startOfMonth(subMonths(now, 24));
-  const twoYearsAgoMonthEnd = startOfMonth(subMonths(now, 23));
-  const yearStart = startOfYear(now);
+  const businessToday = getBusinessDate();
+  // All month/year boundaries below are built with monthBoundary()'s plain
+  // UTC arithmetic, anchored on the WIB business date — NOT date-fns'
+  // startOfMonth/subMonths/startOfYear on a raw `new Date()`. Those construct
+  // *local* midnight, and once sent to SQL Server as a `DATE` parameter
+  // (which mssql serializes via UTC components), a host running in a
+  // positive-UTC-offset timezone silently shifts the boundary back one
+  // calendar day — verified live: "this month" was leaking in the entirety
+  // of the previous day's revenue this way.
+  const thisMonthStart = monthBoundary(businessToday);
+  const lastMonthStart = monthBoundary(businessToday, -1);
+  const lastYearMonthStart = monthBoundary(businessToday, -12);
+  const lastYearMonthEnd = monthBoundary(businessToday, -11);
+  const twoYearsAgoMonthStart = monthBoundary(businessToday, -24);
+  const twoYearsAgoMonthEnd = monthBoundary(businessToday, -23);
+  const yearStart = new Date(Date.UTC(businessToday.getUTCFullYear(), 0, 1));
 
   const [today, netResult, qtyResult, ytdResult, ytdQtyResult] = await Promise.all([
     getSalesForDay(businessToday),
