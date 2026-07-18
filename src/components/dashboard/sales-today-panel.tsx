@@ -106,7 +106,7 @@ export function SalesTodayPanel({
         </div>
 
         <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <p className="font-display text-2xl font-semibold tabular-nums text-primary">
               {formatRupiah(data.NetSales)}
             </p>
@@ -120,19 +120,20 @@ export function SalesTodayPanel({
               </div>
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-            <div className="grid grid-cols-2 gap-1.5">
+          {/* Horizontal-scroll safety net: the auto-sized columns don't
+              wrap, so at narrower card widths (e.g. the tablet 2-up layout)
+              this scrolls instead of spilling past the card edge. */}
+          <div className="-mx-1 mt-2 overflow-x-auto px-1">
+            <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-1.5">
               <DocChip icon={ShoppingCart} label="SO" value={data.SOCount} />
               <DocChip icon={Truck} label="DO" value={data.DOCount} />
-              <DocChip icon={Receipt} label="SI" value={data.SICount} />
-              <DocChip icon={Wallet} label="SP" value={data.SPCount} />
-            </div>
-            <div className="flex flex-col items-end gap-1.5">
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+              <span className="inline-flex items-center justify-self-end gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
                 <Package className="size-3" />
                 {data.Qty10KG.toLocaleString("id-ID")} Kantong 10KG Terkirim
               </span>
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+              <DocChip icon={Receipt} label="SI" value={data.SICount} />
+              <DocChip icon={Wallet} label="SP" value={data.SPCount} />
+              <span className="inline-flex items-center justify-self-end gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
                 <Package className="size-3" />
                 {data.Qty5KG.toLocaleString("id-ID")} Kantong 5KG Terkirim
               </span>

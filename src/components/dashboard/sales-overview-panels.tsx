@@ -36,34 +36,36 @@ export function SalesOverviewPanels({
         <h2 className="col-span-full font-display text-sm font-semibold text-muted-foreground">Tahun Berjalan</h2>
 
         <Card className="py-4">
-          <CardContent className="flex flex-wrap items-start justify-between gap-3 px-4">
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nominal Penjualan</p>
-              <p className="font-display text-xl font-semibold tabular-nums text-primary">{formatRupiah(ytd.NetSales)}</p>
-              <div className="flex flex-wrap gap-1.5">
-                <DocChip icon={ShoppingCart} label="SO" value={ytd.SOCount} />
-                <DocChip icon={Truck} label="DO" value={ytd.DOCount} />
-                <DocChip icon={Receipt} label="SI" value={ytd.SICount} />
-                <DocChip icon={Wallet} label="SP" value={ytd.SPCount} />
+          <CardContent className="flex flex-col gap-2 px-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nominal Penjualan</p>
+                <Tooltip>
+                  <TooltipTrigger className="flex items-center gap-1.5">
+                    <Coins className="size-4 text-muted-foreground" />
+                    <span className="font-display text-sm font-semibold tabular-nums">{formatRupiah(ytd.AvgPrice)}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>Harga Rata-rata</TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="font-display text-xl font-semibold tabular-nums text-primary">{formatRupiah(ytd.NetSales)}</p>
+                <Tooltip>
+                  <TooltipTrigger className="flex items-center gap-1.5">
+                    <Users className="size-4 text-muted-foreground" />
+                    <span className="font-display text-sm font-semibold tabular-nums">
+                      {ytd.UniqueMitraOrdering.toLocaleString("id-ID")} mitra
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Mitra Memesan</TooltipContent>
+                </Tooltip>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-2.5 border-l border-border pl-4">
-              <Tooltip>
-                <TooltipTrigger className="flex items-center gap-2">
-                  <Coins className="size-4 text-muted-foreground" />
-                  <span className="font-display text-base font-semibold tabular-nums">{formatRupiah(ytd.AvgPrice)}</span>
-                </TooltipTrigger>
-                <TooltipContent>Harga Rata-rata</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger className="flex items-center gap-2">
-                  <Users className="size-4 text-muted-foreground" />
-                  <span className="font-display text-base font-semibold tabular-nums">
-                    {ytd.UniqueMitraOrdering.toLocaleString("id-ID")} mitra
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Mitra Memesan</TooltipContent>
-              </Tooltip>
+            <div className="flex flex-wrap gap-1.5">
+              <DocChip icon={ShoppingCart} label="SO" value={ytd.SOCount} />
+              <DocChip icon={Truck} label="DO" value={ytd.DOCount} />
+              <DocChip icon={Receipt} label="SI" value={ytd.SICount} />
+              <DocChip icon={Wallet} label="SP" value={ytd.SPCount} />
             </div>
           </CardContent>
         </Card>
