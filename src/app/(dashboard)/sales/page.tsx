@@ -1,10 +1,12 @@
 import { getSalesTrend } from "@/lib/queries/sales";
 import { getSalesOverview } from "@/lib/queries/sales-overview";
 import { getSalesOrderCards } from "@/lib/queries/sales-cards";
+import { getRevenueTarget } from "@/lib/queries/revenue-target";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { SalesOverviewPanels } from "@/components/dashboard/sales-overview-panels";
+import { RevenueTargetPanel } from "@/components/dashboard/revenue-target-panel";
 import { SalesTrendChart } from "@/components/charts/sales-trend-chart";
 import { SalesTransactionCards } from "@/components/dashboard/sales-transaction-cards";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,11 +18,12 @@ export default async function SalesPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [trend, overview, orders, wilayahList] = await Promise.all([
+  const [trend, overview, orders, wilayahList, revenueTarget] = await Promise.all([
     getSalesTrend(filter),
     getSalesOverview(),
     getSalesOrderCards(filter),
     getWilayahList(),
+    getRevenueTarget(),
   ]);
 
   return (
@@ -29,6 +32,8 @@ export default async function SalesPage({
       <FilterBar wilayahList={wilayahList} />
 
       <SalesOverviewPanels overview={overview} />
+
+      <RevenueTargetPanel target={revenueTarget} />
 
       <Card>
         <CardHeader>
