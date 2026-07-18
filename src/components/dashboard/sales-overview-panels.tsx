@@ -71,14 +71,19 @@ export function SalesOverviewPanels({
                 <p className="font-display text-xl font-semibold tabular-nums">
                   {(ytd.Qty10KG + ytd.Qty5KG).toLocaleString("id-ID")}
                 </p>
-                <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Wallet className="size-3.5" /> Total Pembayaran
+                <div className="flex flex-wrap gap-1.5">
+                  <QtyChip label="10KG" value={ytd.Qty10KG} />
+                  <QtyChip label="5KG" value={ytd.Qty5KG} />
                 </div>
-                <p className="font-display text-sm font-semibold tabular-nums">{formatRupiah(ytd.TotalPayment)}</p>
               </div>
-              <div className="flex flex-col items-end gap-1.5 border-l border-border pl-3">
-                <QtyChip label="10KG" value={ytd.Qty10KG} />
-                <QtyChip label="5KG" value={ytd.Qty5KG} />
+              <div className="flex flex-col items-end gap-2 border-l border-border pl-3">
+                <Tooltip>
+                  <TooltipTrigger className="flex items-center gap-1.5">
+                    <Wallet className="size-3.5 text-muted-foreground" />
+                    <span className="font-display text-sm font-semibold tabular-nums">{formatRupiah(ytd.TotalPayment)}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>Total Pembayaran</TooltipContent>
+                </Tooltip>
               </div>
             </CardContent>
           </Card>
