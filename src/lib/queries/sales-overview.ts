@@ -21,6 +21,7 @@ export interface SalesToday extends KemasanQty {
   SOCount: number;
   DOCount: number;
   SICount: number;
+  SPCount: number;
   AvgPrice: number;
   LastMonthNetSales: number;
   GrowthPercent: number | null;
@@ -44,6 +45,7 @@ export interface SalesYTD extends KemasanQty {
   SOCount: number;
   DOCount: number;
   SICount: number;
+  SPCount: number;
   TotalPayment: number;
   AvgPrice: number;
   UniqueMitraOrdering: number;
@@ -89,7 +91,10 @@ export async function getSalesForDay(date: Date): Promise<SalesToday> {
                 AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)) AS DOCount,
             (SELECT COUNT(*) FROM SalesInvoice
               WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
-                AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)) AS SICount
+                AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)) AS SICount,
+            (SELECT COUNT(*) FROM SalesPayment
+              WHERE IsDeleted = 0
+                AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)) AS SPCount
       `),
     // "Kantong Terkirim" must reflect what actually left the warehouse (DO),
     // not what was invoiced (SI) — those can differ on any given day.
@@ -153,7 +158,12 @@ function pctChange(current: number, previous: number): number | null {
   return previous ? ((current - previous) / previous) * 100 : null;
 }
 
-const monthYearFormatter = new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
+// "YYYY/MM" for the comparison period labels — plain UTC arithmetic to
+// match how these Date objects were built (monthBoundary()), not
+// Intl/date-fns local-time formatting.
+function yearMonthLabel(date: Date): string {
+  return `${date.getUTCFullYear()}/${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 export async function getSalesOverview(): Promise<SalesOverview> {
   const pool = await getPool();
@@ -228,6 +238,8 @@ export async function getSalesOverview(): Promise<SalesOverview> {
               WHERE IsDeleted = 0 AND TransDate >= @yearStart) AS DOCount,
             (SELECT COUNT(*) FROM SalesInvoice
               WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0 AND TransDate >= @yearStart) AS SICount,
+            (SELECT COUNT(*) FROM SalesPayment
+              WHERE IsDeleted = 0 AND TransDate >= @yearStart) AS SPCount,
             (SELECT ISNULL(SUM(Amount), 0) FROM SalesPayment
               WHERE IsDeleted = 0 AND TransDate >= @yearStart) AS TotalPayment,
             (SELECT COUNT(DISTINCT BusinessPartnerID) FROM SalesOrder
@@ -274,12 +286,12 @@ export async function getSalesOverview(): Promise<SalesOverview> {
   return {
     today,
     comparisons: [
-      buildComparison("Bulan Lalu", { NetSales: net.LastMonthNet, DOQty: qty.LastMonthQty }),
-      buildComparison(monthYearFormatter.format(lastYearMonthStart), {
+      buildComparison(yearMonthLabel(lastMonthStart), { NetSales: net.LastMonthNet, DOQty: qty.LastMonthQty }),
+      buildComparison(yearMonthLabel(lastYearMonthStart), {
         NetSales: net.LastYearMonthNet,
         DOQty: qty.LastYearMonthQty,
       }),
-      buildComparison(monthYearFormatter.format(twoYearsAgoMonthStart), {
+      buildComparison(yearMonthLabel(twoYearsAgoMonthStart), {
         NetSales: net.TwoYearsAgoMonthNet,
         DOQty: qty.TwoYearsAgoMonthQty,
       }),

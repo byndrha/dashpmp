@@ -5,6 +5,15 @@ import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesComparison } from "@/lib/queries/sales-overview";
 
+// Shorter than formatRupiah() — needed so a value + trend pill still fit on
+// one line inside this panel's narrow columns at the 3-up desktop layout.
+const compactRupiahFormatter = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
 function TrendPill({ percent }: { percent: number | null }) {
   if (percent == null) return <span className="text-[10px] text-muted-foreground">-</span>;
   const up = percent > 0;
@@ -40,22 +49,22 @@ export function SalesComparisonPanel({ comparisons }: { comparisons: SalesCompar
       <CardContent className="flex flex-col gap-3 px-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bulan Ini</p>
-          <div className="flex items-end justify-between gap-3">
-            <p className="font-display text-2xl font-semibold tabular-nums">{formatRupiah(current?.NetSales ?? 0)}</p>
-            <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5">
-              <Truck className="size-4 text-primary" />
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <p className="font-display text-xl font-semibold tabular-nums">{formatRupiah(current?.NetSales ?? 0)}</p>
+            <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2 py-1">
+              <Truck className="size-3.5 text-primary" />
               <div className="flex flex-col leading-tight">
-                <span className="font-display text-sm font-semibold tabular-nums text-primary">
+                <span className="font-display text-xs font-semibold tabular-nums text-primary">
                   {(current?.DOQty ?? 0).toLocaleString("id-ID")}
                 </span>
-                <span className="text-[10px] whitespace-nowrap text-muted-foreground">kantong DO</span>
+                <span className="text-[9px] whitespace-nowrap text-muted-foreground">kantong terkirim</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-1.5 border-t pt-3">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Periode</span>
+        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5 border-t pt-3">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Periode</span>
           <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             Nominal
           </span>
@@ -64,15 +73,15 @@ export function SalesComparisonPanel({ comparisons }: { comparisons: SalesCompar
           </span>
           {comparisons.map((c) => (
             <Fragment key={c.previousLabel}>
-              <span className="truncate text-xs text-foreground">vs {c.previousLabel}</span>
-              <div className="flex items-center justify-end gap-1.5">
-                <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                  {formatRupiah(c.previous.NetSales)}
+              <span className="whitespace-nowrap text-xs text-foreground">{c.previousLabel}</span>
+              <div className="flex items-center justify-end gap-1">
+                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                  {compactRupiahFormatter.format(c.previous.NetSales)}
                 </span>
                 <TrendPill percent={c.NominalPctChange} />
               </div>
-              <div className="flex items-center justify-end gap-1.5">
-                <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+              <div className="flex items-center justify-end gap-1">
+                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
                   {c.previous.DOQty.toLocaleString("id-ID")}
                 </span>
                 <TrendPill percent={c.QtyPctChange} />

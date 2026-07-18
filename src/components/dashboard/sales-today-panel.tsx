@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { addDays, subDays, format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Coins, Package, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Wallet, Coins, Package, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DocChip, QtyChip } from "@/components/dashboard/sales-chips";
+import { DocChip } from "@/components/dashboard/sales-chips";
 import { formatRupiah, formatRupiahAvg, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesToday } from "@/lib/queries/sales-overview";
@@ -111,7 +111,7 @@ export function SalesTodayPanel({
               {formatRupiah(data.NetSales)}
             </p>
             <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5">
-              <Package className="size-4 text-primary" />
+              <Truck className="size-4 text-primary" />
               <div className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-semibold tabular-nums text-primary">
                   {(data.Qty10KG + data.Qty5KG).toLocaleString("id-ID")}
@@ -124,6 +124,7 @@ export function SalesTodayPanel({
             <DocChip icon={ShoppingCart} label="SO" value={data.SOCount} />
             <DocChip icon={Truck} label="DO" value={data.DOCount} />
             <DocChip icon={Receipt} label="SI" value={data.SICount} />
+            <DocChip icon={Wallet} label="SP" value={data.SPCount} />
             <span
               title="Harga rata-rata"
               aria-label="Harga rata-rata"
@@ -133,9 +134,15 @@ export function SalesTodayPanel({
               {formatRupiahAvg(data.AvgPrice)}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
-            <QtyChip label="10KG" value={data.Qty10KG} suffix="Terkirim" />
-            <QtyChip label="5KG" value={data.Qty5KG} suffix="Terkirim" />
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5 border-t pt-2">
+            <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+              <Package className="size-3" />
+              {data.Qty10KG.toLocaleString("id-ID")} Kantong 10KG Terkirim
+            </span>
+            <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+              <Package className="size-3" />
+              {data.Qty5KG.toLocaleString("id-ID")} Kantong 5KG Terkirim
+            </span>
           </div>
         </div>
       </CardContent>
