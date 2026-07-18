@@ -70,7 +70,7 @@ export function SalesTodayPanel({
   return (
     <Card className="py-4">
       <CardContent className="flex flex-col gap-2 px-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-1.5">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

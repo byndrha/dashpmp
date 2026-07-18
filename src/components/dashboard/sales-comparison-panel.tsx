@@ -63,31 +63,36 @@ export function SalesComparisonPanel({ comparisons }: { comparisons: SalesCompar
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5 border-t pt-3">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Periode</span>
-          <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Nominal
-          </span>
-          <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            DO Qty
-          </span>
-          {comparisons.map((c) => (
-            <Fragment key={c.previousLabel}>
-              <span className="whitespace-nowrap text-xs text-foreground">{c.previousLabel}</span>
-              <div className="flex items-center justify-end gap-1">
-                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
-                  {compactRupiahFormatter.format(c.previous.NetSales)}
-                </span>
-                <TrendPill percent={c.NominalPctChange} />
-              </div>
-              <div className="flex items-center justify-end gap-1">
-                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
-                  {c.previous.DOQty.toLocaleString("id-ID")}
-                </span>
-                <TrendPill percent={c.QtyPctChange} />
-              </div>
-            </Fragment>
-          ))}
+        {/* Horizontal-scroll safety net: the two "auto" value columns don't
+            wrap, so at very narrow container widths (e.g. the tablet 2-up
+            layout) this scrolls instead of spilling past the card edge. */}
+        <div className="-mx-1 overflow-x-auto border-t px-1 pt-3">
+          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Periode</span>
+            <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Nominal
+            </span>
+            <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              DO Qty
+            </span>
+            {comparisons.map((c) => (
+              <Fragment key={c.previousLabel}>
+                <span className="whitespace-nowrap text-xs text-foreground">{c.previousLabel}</span>
+                <div className="flex items-center justify-end gap-1">
+                  <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                    {compactRupiahFormatter.format(c.previous.NetSales)}
+                  </span>
+                  <TrendPill percent={c.NominalPctChange} />
+                </div>
+                <div className="flex items-center justify-end gap-1">
+                  <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                    {c.previous.DOQty.toLocaleString("id-ID")}
+                  </span>
+                  <TrendPill percent={c.QtyPctChange} />
+                </div>
+              </Fragment>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
