@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Zap,
   Truck,
+  Users,
 } from "lucide-react";
 import {
   Sidebar,
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/sales", label: "Penjualan", icon: ShoppingCart },
   { href: "/electricity", label: "Biaya Listrik", icon: Zap },
   { href: "/delivery", label: "Pengiriman", icon: Truck },
+  { href: "/mitra", label: "Mitra", icon: Users },
 ];
 
 export function AppSidebar() {
