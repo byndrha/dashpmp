@@ -60,6 +60,34 @@ export async function getTermOfPaymentOptions(): Promise<TermOfPaymentOption[]> 
   return result.recordset;
 }
 
+export interface PriceLevelOption {
+  Level: number;
+  Price: number;
+}
+
+// BusinessPartner.PriceLevel (1-8) selects which Item.UnitPriceN column
+// applies to that mitra. There's no dedicated price-level lookup table, so
+// this reads the nominal off "Es Tube Jual" — the main product — which is
+// what these levels actually mean in practice (verified: matches the
+// average transacted price per level in SalesInvoiceDetail).
+export async function getPriceLevelOptions(): Promise<PriceLevelOption[]> {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT TOP 1 UnitPrice1, UnitPrice2, UnitPrice3, UnitPrice4, UnitPrice5, UnitPrice6, UnitPrice7, UnitPrice8
+    FROM Item
+    WHERE Name = 'Es Tube Jual' AND ISNULL(IsDeleted, 0) = 0
+  `);
+  const row = result.recordset[0] as Record<string, number | null> | undefined;
+  if (!row) return [];
+
+  const levels: PriceLevelOption[] = [];
+  for (let level = 1; level <= 8; level++) {
+    const price = row[`UnitPrice${level}`];
+    if (price != null && price > 0) levels.push({ Level: level, Price: price });
+  }
+  return levels;
+}
+
 export interface MitraInput {
   name: string;
   mobileNo: string | null;

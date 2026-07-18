@@ -23,11 +23,30 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
+import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { MitraRow, TermOfPaymentOption, MitraInput } from "@/lib/queries/mitra";
+import type { MitraRow, TermOfPaymentOption, MitraInput, PriceLevelOption } from "@/lib/queries/mitra";
 import { createMitraAction, updateMitraAction, deleteMitraAction } from "@/app/(dashboard)/mitra/actions";
 
 const PAGE_SIZE = 12;
+
+const CAPACITY_BUCKETS = [
+  { value: "all", label: "Semua Kapasitas" },
+  { value: "unset", label: "Belum Diisi" },
+  { value: "0-50", label: "1 - 50 kantong/hari" },
+  { value: "50-100", label: "51 - 100 kantong/hari" },
+  { value: "100-250", label: "101 - 250 kantong/hari" },
+  { value: "250-500", label: "251 - 500 kantong/hari" },
+  { value: "500-999999", label: "> 500 kantong/hari" },
+] as const;
+
+function matchesCapacityBucket(capacity: number | null, bucket: string): boolean {
+  if (bucket === "all") return true;
+  if (bucket === "unset") return capacity == null;
+  if (capacity == null) return false;
+  const [min, max] = bucket.split("-").map(Number);
+  return capacity > min && capacity <= max;
+}
 
 function emptyForm(): MitraInput {
   return {
@@ -63,6 +82,7 @@ function MitraFormDialog({
   initial,
   title,
   termOptions,
+  priceLevels,
   onSubmit,
   pending,
 }: {
@@ -71,9 +91,14 @@ function MitraFormDialog({
   initial: MitraInput;
   title: string;
   termOptions: TermOfPaymentOption[];
+  priceLevels: PriceLevelOption[];
   onSubmit: (input: MitraInput) => void;
   pending: boolean;
 }) {
+  const [gender, setGender] = useState(initial.gender ?? "Male");
+  const [termOfPaymentId, setTermOfPaymentId] = useState(initial.termOfPaymentId ?? "");
+  const [priceLevel, setPriceLevel] = useState(initial.priceLevel != null ? String(initial.priceLevel) : "");
+
   function handleSubmit(formData: FormData) {
     onSubmit({
       name: String(formData.get("name") ?? ""),
@@ -81,15 +106,25 @@ function MitraFormDialog({
       address: String(formData.get("address") ?? "") || null,
       wilayah: String(formData.get("wilayah") ?? "") || null,
       kecamatan: String(formData.get("kecamatan") ?? "") || null,
-      gender: String(formData.get("gender") ?? "Male"),
-      priceLevel: formData.get("priceLevel") ? Number(formData.get("priceLevel")) : null,
-      termOfPaymentId: (formData.get("termOfPaymentId") as string) || null,
+      gender,
+      priceLevel: priceLevel ? Number(priceLevel) : null,
+      termOfPaymentId: termOfPaymentId || null,
       capacity: formData.get("capacity") ? Number(formData.get("capacity")) : null,
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (next) {
+          setGender(initial.gender ?? "Male");
+          setTermOfPaymentId(initial.termOfPaymentId ?? "");
+          setPriceLevel(initial.priceLevel != null ? String(initial.priceLevel) : "");
+        }
+      }}
+    >
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -105,10 +140,10 @@ function MitraFormDialog({
             <Input id="mobileNo" name="mobileNo" defaultValue={initial.mobileNo ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="gender">Tipe Mitra</Label>
-            <Select name="gender" defaultValue={initial.gender ?? "Male"}>
-              <SelectTrigger id="gender" className="w-full">
-                <SelectValue />
+            <Label>Tipe Mitra</Label>
+            <Select value={gender} onValueChange={(v) => setGender(v ?? "Male")}>
+              <SelectTrigger className="w-full">
+                <SelectValue>{(v: string) => (v === "Female" ? "Retail" : "Agen")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Male">Agen</SelectItem>
@@ -129,14 +164,32 @@ function MitraFormDialog({
             <Input id="kecamatan" name="kecamatan" defaultValue={initial.kecamatan ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="priceLevel">Harga (Price Level)</Label>
-            <Input id="priceLevel" name="priceLevel" type="number" defaultValue={initial.priceLevel ?? ""} />
+            <Label>Harga</Label>
+            <Select value={priceLevel} onValueChange={(v) => setPriceLevel(v ?? "")}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Pilih harga">
+                  {(v: string) => {
+                    const p = priceLevels.find((pl) => String(pl.Level) === v);
+                    return p ? `Harga ${formatRupiah(p.Price)}` : "Pilih harga";
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {priceLevels.map((p) => (
+                  <SelectItem key={p.Level} value={String(p.Level)}>
+                    Harga {formatRupiah(p.Price)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="termOfPaymentId">Tenggat Bayar</Label>
-            <Select name="termOfPaymentId" defaultValue={initial.termOfPaymentId ?? undefined}>
-              <SelectTrigger id="termOfPaymentId" className="w-full">
-                <SelectValue placeholder="Pilih tenggat" />
+            <Label>Tenggat Bayar</Label>
+            <Select value={termOfPaymentId} onValueChange={(v) => setTermOfPaymentId(v ?? "")}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Pilih tenggat">
+                  {(v: string) => termOptions.find((t) => t.TermOfPaymentID === v)?.TermOfPaymentName ?? "Pilih tenggat"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {termOptions.map((t) => (
@@ -162,22 +215,55 @@ function MitraFormDialog({
   );
 }
 
-export function MitraList({ mitra, termOptions }: { mitra: MitraRow[]; termOptions: TermOfPaymentOption[] }) {
+const PARTNER_TYPES = ["Agen", "Retail", "TakeAway", "Lainnya"] as const;
+
+export function MitraList({
+  mitra,
+  termOptions,
+  priceLevels,
+}: {
+  mitra: MitraRow[];
+  termOptions: TermOfPaymentOption[];
+  priceLevels: PriceLevelOption[];
+}) {
   const [search, setSearch] = useState("");
+  const [tipe, setTipe] = useState("all");
+  const [wilayah, setWilayah] = useState("all");
+  const [kecamatan, setKecamatan] = useState("all");
+  const [harga, setHarga] = useState("all");
+  const [kapasitas, setKapasitas] = useState("all");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MitraRow | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const filtered = useMemo(() => {
-    if (!search) return mitra;
-    const q = search.toLowerCase();
-    return mitra.filter((m) => m.Name?.toLowerCase().includes(q));
-  }, [mitra, search]);
+  const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
 
-  const [prevSearch, setPrevSearch] = useState(search);
-  if (search !== prevSearch) {
-    setPrevSearch(search);
+  const wilayahOptions = useMemo(
+    () => [...new Set(mitra.map((m) => m.Wilayah).filter((w): w is string => !!w))].sort(),
+    [mitra]
+  );
+  const kecamatanOptions = useMemo(() => {
+    const pool = wilayah === "all" ? mitra : mitra.filter((m) => m.Wilayah === wilayah);
+    return [...new Set(pool.map((m) => m.Kecamatan).filter((k): k is string => !!k))].sort();
+  }, [mitra, wilayah]);
+
+  const filtered = useMemo(() => {
+    return mitra.filter((m) => {
+      if (search && !m.Name?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (tipe !== "all" && m.PartnerType !== tipe) return false;
+      if (wilayah !== "all" && m.Wilayah !== wilayah) return false;
+      if (kecamatan !== "all" && m.Kecamatan !== kecamatan) return false;
+      if (harga !== "all" && String(m.PriceLevel ?? "") !== harga) return false;
+      if (!matchesCapacityBucket(m.Capacity, kapasitas)) return false;
+      return true;
+    });
+  }, [mitra, search, tipe, wilayah, kecamatan, harga, kapasitas]);
+
+  const filterKey = `${search}|${tipe}|${wilayah}|${kecamatan}|${harga}|${kapasitas}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
     setPage(1);
   }
 
@@ -209,12 +295,92 @@ export function MitraList({ mitra, termOptions }: { mitra: MitraRow[]; termOptio
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input
-          placeholder="Cari nama mitra..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-64"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Cari nama mitra..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-56"
+          />
+          <Select value={tipe} onValueChange={(v) => setTipe(v ?? "all")}>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="Tipe Mitra">
+                {(v: string) => (v === "all" ? "Semua Tipe" : v)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Tipe</SelectItem>
+              {PARTNER_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={wilayah} onValueChange={(v) => { setWilayah(v ?? "all"); setKecamatan("all"); }}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Wilayah">
+                {(v: string) => (v === "all" ? "Semua Wilayah" : v)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Wilayah</SelectItem>
+              {wilayahOptions.map((w) => (
+                <SelectItem key={w} value={w}>
+                  {w}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={kecamatan} onValueChange={(v) => setKecamatan(v ?? "all")}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Kecamatan">
+                {(v: string) => (v === "all" ? "Semua Kecamatan" : v)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Kecamatan</SelectItem>
+              {kecamatanOptions.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {k}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={harga} onValueChange={(v) => setHarga(v ?? "all")}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Harga">
+                {(v: string) => {
+                  if (v === "all") return "Semua Harga";
+                  const p = priceLevels.find((pl) => String(pl.Level) === v);
+                  return p ? formatRupiah(p.Price) : "Semua Harga";
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Harga</SelectItem>
+              {priceLevels.map((p) => (
+                <SelectItem key={p.Level} value={String(p.Level)}>
+                  {formatRupiah(p.Price)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={kapasitas} onValueChange={(v) => setKapasitas(v ?? "all")}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Kapasitas">
+                {(v: string) => CAPACITY_BUCKETS.find((b) => b.value === v)?.label ?? "Semua Kapasitas"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {CAPACITY_BUCKETS.map((b) => (
+                <SelectItem key={b.value} value={b.value}>
+                  {b.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Button onClick={() => setCreating(true)}>
           <Plus className="size-4" />
           Tambah Mitra
@@ -260,7 +426,12 @@ export function MitraList({ mitra, termOptions }: { mitra: MitraRow[]; termOptio
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-2 text-xs">
                 <span className="text-muted-foreground">
-                  Harga: <span className="text-foreground">{m.PriceLevel ?? "-"}</span>
+                  Harga:{" "}
+                  <span className="text-foreground">
+                    {m.PriceLevel != null && priceByLevel.has(m.PriceLevel)
+                      ? formatRupiah(priceByLevel.get(m.PriceLevel)!)
+                      : "-"}
+                  </span>
                 </span>
                 <span className="text-muted-foreground">
                   Tenggat: <span className="text-foreground">{m.TermOfPaymentName ?? "-"}</span>
@@ -286,6 +457,7 @@ export function MitraList({ mitra, termOptions }: { mitra: MitraRow[]; termOptio
         initial={emptyForm()}
         title="Tambah Mitra"
         termOptions={termOptions}
+        priceLevels={priceLevels}
         onSubmit={handleCreate}
         pending={pending}
       />
@@ -296,6 +468,7 @@ export function MitraList({ mitra, termOptions }: { mitra: MitraRow[]; termOptio
           initial={rowToForm(editing)}
           title={`Edit Mitra — ${editing.Name}`}
           termOptions={termOptions}
+          priceLevels={priceLevels}
           onSubmit={handleUpdate}
           pending={pending}
         />
