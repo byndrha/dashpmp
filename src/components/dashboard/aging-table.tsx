@@ -159,7 +159,7 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
         Menampilkan {pageRows.length} dari {filtered.length} invoice outstanding.
       </p>
 
-      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @4xl:grid-cols-3">
         {pageRows.map((r) => (
           <Card key={r.SalesInvoiceID} className="py-3">
             <CardContent className="flex flex-col gap-1.5 px-4">
