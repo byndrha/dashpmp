@@ -4,6 +4,7 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
+import { PALETTE_INIT_SCRIPT } from "@/components/palette-provider";
 
 const display = Space_Grotesk({
   variable: "--font-display",
@@ -35,8 +36,12 @@ export default function RootLayout({
   return (
     <html
       lang="id"
-      className={`dark ${display.variable} ${body.variable} ${data.variable} h-full antialiased`}
+      className={`${display.variable} ${body.variable} ${data.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: PALETTE_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>
           <TooltipProvider>
