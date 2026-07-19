@@ -2,12 +2,14 @@ import { Wallet, TrendingUp, Landmark, PiggyBank } from "lucide-react";
 import { getPnL, getBEP } from "@/lib/queries/pnl";
 import { getCOADetail } from "@/lib/queries/keuangan-detail";
 import { getBalanceSheetDetail } from "@/lib/queries/balance-sheet";
+import { getCashFlowDetail } from "@/lib/queries/cash-flow";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { SimplePieChart } from "@/components/charts/simple-pie-chart";
 import { COADetailTable } from "@/components/dashboard/coa-detail-table";
 import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
+import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercent, formatDate } from "@/lib/format";
 
@@ -18,11 +20,12 @@ export default async function PnLPage({
 }) {
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [pnl, bep, coaDetail, balanceSheet] = await Promise.all([
+  const [pnl, bep, coaDetail, balanceSheet, cashFlow] = await Promise.all([
     getPnL(filter),
     getBEP(filter),
     getCOADetail(filter),
     getBalanceSheetDetail(filter),
+    getCashFlowDetail(filter),
   ]);
   const periodStart = new Date(filter.startDate);
   // filter.endDate is an exclusive boundary (start of the day *after* the
@@ -98,17 +101,24 @@ export default async function PnLPage({
       {/* Container query, not lg: — this page lives under the same
           @container/dashboard-main as Penjualan, so the split should react
           to actual content width (sidebar collapsed/expanded), not the raw
-          viewport. col-span-3/2 of 5 gives the requested ~60%/40% split. */}
+          viewport. col-span-3/2 of 5 gives the requested ~60%/40% split. A
+          border-r on the left column (instead of a standalone divider
+          element) doubles as the separator line between the two side-by-side
+          panels, matching how they're actually laid out — vertically, not
+          stacked. */}
       <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-5">
-        <div className="@4xl:col-span-3">
-          <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
-            Detail per Akun (COA) &mdash; APBP vs Realisasi
-          </h2>
-          <COADetailTable
-            rows={coaDetail}
-            year={periodStart.getUTCFullYear()}
-            month={periodStart.getUTCMonth() + 1}
-          />
+        <div className="flex flex-col gap-4 @4xl:col-span-3 @4xl:border-r @4xl:border-border @4xl:pr-4">
+          <div>
+            <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
+              Detail per Akun (COA) &mdash; APBP vs Realisasi
+            </h2>
+            <COADetailTable
+              rows={coaDetail}
+              year={periodStart.getUTCFullYear()}
+              month={periodStart.getUTCMonth() + 1}
+            />
+          </div>
+          <CashFlowPanel data={cashFlow} asOfLabel={formatDate(balanceSheetCutoff)} />
         </div>
         <div className="@4xl:col-span-2">
           <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
@@ -117,6 +127,8 @@ export default async function PnLPage({
           <BalanceSheetTable rows={balanceSheet} />
         </div>
       </div>
+
+      <hr className="border-border" />
 
       <Card>
         <CardHeader>
