@@ -69,6 +69,42 @@ export async function listUsers(): Promise<DashboardUserRow[]> {
   }));
 }
 
+export async function getUserById(userId: number): Promise<DashboardUserRow | null> {
+  const pool = await getPool();
+  const result = await pool.request().input("userId", sql.Int, userId).query(`
+    SELECT du.UserID, du.Nama, du.Username, du.NomorTelepon, du.Email,
+           du.RoleID, r.RoleName, du.IsActive, du.LastLoginAt
+    FROM DashboardUser du
+    JOIN DashboardRole r ON r.RoleID = du.RoleID
+    WHERE du.UserID = @userId
+  `);
+  const r = result.recordset[0] as
+    | {
+        UserID: number;
+        Nama: string;
+        Username: string;
+        NomorTelepon: string | null;
+        Email: string | null;
+        RoleID: number;
+        RoleName: string;
+        IsActive: boolean;
+        LastLoginAt: string | null;
+      }
+    | undefined;
+  if (!r) return null;
+  return {
+    userId: r.UserID,
+    nama: r.Nama,
+    username: r.Username,
+    nomorTelepon: r.NomorTelepon,
+    email: r.Email,
+    roleId: r.RoleID,
+    roleName: r.RoleName,
+    isActive: r.IsActive,
+    lastLoginAt: r.LastLoginAt,
+  };
+}
+
 export async function listRoles(): Promise<DashboardRoleRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
@@ -165,6 +201,52 @@ export async function resetUserPassword(userId: number, newPassword: string): Pr
     .input("passwordHash", sql.VarChar(255), passwordHash).query(`
       UPDATE DashboardUser
       SET PasswordHash = @passwordHash, FailedLoginCount = 0, LockedUntil = NULL, UpdatedAt = GETDATE()
+      WHERE UserID = @userId
+    `);
+}
+
+export async function updateOwnProfile(input: {
+  userId: number;
+  nama: string;
+  nomorTelepon: string | null;
+  email: string | null;
+}): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("userId", sql.Int, input.userId)
+    .input("nama", sql.VarChar(128), input.nama)
+    .input("nomorTelepon", sql.VarChar(32), input.nomorTelepon)
+    .input("email", sql.VarChar(128), input.email).query(`
+      UPDATE DashboardUser
+      SET Nama = @nama, NomorTelepon = @nomorTelepon, Email = @email, UpdatedAt = GETDATE()
+      WHERE UserID = @userId
+    `);
+}
+
+export async function changeOwnPassword(input: {
+  userId: number;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("userId", sql.Int, input.userId)
+    .query(`SELECT PasswordHash FROM DashboardUser WHERE UserID = @userId`);
+  const row = result.recordset[0] as { PasswordHash: string } | undefined;
+  if (!row) throw new Error("Akun tidak ditemukan.");
+
+  const currentOk = await bcrypt.compare(input.currentPassword, row.PasswordHash);
+  if (!currentOk) throw new Error("Password saat ini salah.");
+
+  const passwordHash = await bcrypt.hash(input.newPassword, 12);
+  await pool
+    .request()
+    .input("userId", sql.Int, input.userId)
+    .input("passwordHash", sql.VarChar(255), passwordHash).query(`
+      UPDATE DashboardUser
+      SET PasswordHash = @passwordHash, UpdatedAt = GETDATE()
       WHERE UserID = @userId
     `);
 }

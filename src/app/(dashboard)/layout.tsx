@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { getUserById } from "@/lib/queries/akun";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -6,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const profile = session?.user?.id ? await getUserById(Number(session.user.id)) : null;
 
   return (
     <SidebarProvider>
@@ -17,7 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <Separator orientation="vertical" className="h-5" />
             <span className="font-medium">Dashboard PMP Group</span>
           </div>
-          <UserMenu name={session?.user?.name ?? session?.user?.username ?? "User"} />
+          <UserMenu name={session?.user?.name ?? session?.user?.username ?? "User"} profile={profile} />
         </header>
         {/* Named so children can opt into container queries (`@lg:`, `@5xl:`,
             etc.) keyed to the actual content width — which shrinks/grows
