@@ -1,4 +1,5 @@
 import { Truck, PackageOpen } from "lucide-react";
+import { requireModuleAccess } from "@/lib/require-access";
 import { getOpenDeliveries } from "@/lib/queries/delivery";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { FilterBar } from "@/components/dashboard/filter-bar";
@@ -19,6 +20,7 @@ export default async function DeliveryPage({
 }: {
   searchParams: Promise<{ wilayah?: string }>;
 }) {
+  await requireModuleAccess("delivery");
   const params = await searchParams;
   const wilayah = params.wilayah || undefined;
 

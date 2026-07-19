@@ -1,4 +1,5 @@
 import { Receipt, AlertTriangle, Flame, Wallet, HandCoins, Percent } from "lucide-react";
+import { requireModuleAccess } from "@/lib/require-access";
 import { getAgingReceivables } from "@/lib/queries/aging";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { getPiutangPeriodSummary } from "@/lib/queries/piutang-summary";
@@ -19,6 +20,7 @@ export default async function AgingPage({
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
+  await requireModuleAccess("aging");
   const params = await searchParams;
   const wilayah = params.wilayah || undefined;
   const filter = resolveFilter(params);

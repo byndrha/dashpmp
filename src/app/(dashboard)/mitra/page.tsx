@@ -1,7 +1,9 @@
+import { requireModuleAccess } from "@/lib/require-access";
 import { getMitraList, getTermOfPaymentOptions, getPriceLevelOptions } from "@/lib/queries/mitra";
 import { MitraList } from "@/components/dashboard/mitra-list";
 
 export default async function MitraPage() {
+  await requireModuleAccess("mitra");
   const [mitra, termOptions, priceLevels] = await Promise.all([
     getMitraList(),
     getTermOfPaymentOptions(),

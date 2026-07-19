@@ -1,3 +1,4 @@
+import { requireModuleAccess } from "@/lib/require-access";
 import { getSalesTrend, getSalesTrendMonthly } from "@/lib/queries/sales";
 import { getSalesOverview } from "@/lib/queries/sales-overview";
 import { getSalesOrderCards } from "@/lib/queries/sales-cards";
@@ -18,6 +19,7 @@ export default async function SalesPage({
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
+  await requireModuleAccess("sales");
   const params = await searchParams;
   const filter = resolveFilter(params);
   const [trend, trendMonthly, overview, orders, wilayahList, revenueTarget] = await Promise.all([

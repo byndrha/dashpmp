@@ -10,6 +10,7 @@ import {
   Zap,
   Truck,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -25,19 +26,29 @@ import {
 import { IceMark } from "@/components/dashboard/ice-mark";
 import { PTSwitcher } from "@/components/dashboard/pt-switcher";
 import { Badge } from "@/components/ui/badge";
+import type { ModuleKey, PermissionMap } from "@/lib/permissions";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Beranda", icon: LayoutGrid, exact: true },
-  { href: "/pnl", label: "Keuangan", icon: LineChart },
-  { href: "/aging", label: "Piutang", icon: Receipt },
-  { href: "/sales", label: "Penjualan", icon: ShoppingCart },
-  { href: "/electricity", label: "Biaya Listrik", icon: Zap },
-  { href: "/delivery", label: "Pengiriman", icon: Truck },
-  { href: "/mitra", label: "Mitra", icon: Users },
+const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?: boolean; moduleKey: ModuleKey }[] = [
+  { href: "/", label: "Beranda", icon: LayoutGrid, exact: true, moduleKey: "beranda" },
+  { href: "/pnl", label: "Keuangan", icon: LineChart, moduleKey: "pnl" },
+  { href: "/aging", label: "Piutang", icon: Receipt, moduleKey: "aging" },
+  { href: "/sales", label: "Penjualan", icon: ShoppingCart, moduleKey: "sales" },
+  { href: "/electricity", label: "Biaya Listrik", icon: Zap, moduleKey: "electricity" },
+  { href: "/delivery", label: "Pengiriman", icon: Truck, moduleKey: "delivery" },
+  { href: "/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({
+  permissions,
+  isSuperAdmin,
+}: {
+  permissions: PermissionMap;
+  isSuperAdmin: boolean;
+}) {
   const pathname = usePathname();
+  const visibleItems = isSuperAdmin
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => permissions[item.moduleKey]?.canView);
 
   return (
     <Sidebar collapsible="icon">
@@ -60,7 +71,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Modul</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     render={<Link href={item.href} />}
@@ -75,6 +86,26 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isSuperAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administrasi</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/akun" />}
+                    isActive={pathname.startsWith("/akun")}
+                    tooltip="Akun"
+                  >
+                    <ShieldCheck />
+                    <span>Akun</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
     </Sidebar>
   );

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Wallet, Receipt, Truck, LineChart, Zap, ShoppingCart, ArrowRight } from "lucide-react";
-import { auth } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/require-access";
 import { getRecentInvoices, getTodayWilayahPulse } from "@/lib/queries/activity";
 import { getAgingReceivables } from "@/lib/queries/aging";
 import { getOpenDeliveries } from "@/lib/queries/delivery";
@@ -20,7 +20,7 @@ const MODULE_LINKS = [
 ];
 
 export default async function BerandaPage() {
-  const session = await auth();
+  const session = await requireModuleAccess("beranda");
   const [recentInvoices, wilayahPulse, aging, deliveries] = await Promise.all([
     getRecentInvoices(15),
     getTodayWilayahPulse(),

@@ -1,4 +1,5 @@
 import { Zap, Percent, Hash } from "lucide-react";
+import { requireModuleAccess } from "@/lib/require-access";
 import { getElectricityCosts } from "@/lib/queries/electricity";
 import { getDailySales } from "@/lib/queries/sales";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -19,6 +20,7 @@ export default async function ElectricityPage({
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
+  await requireModuleAccess("electricity");
   const params = await searchParams;
   const filter = resolveFilter(params);
   const [entries, sales] = await Promise.all([getElectricityCosts(filter), getDailySales(filter)]);

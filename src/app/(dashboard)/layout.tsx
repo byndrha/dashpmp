@@ -9,7 +9,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar permissions={session?.user?.permissions ?? {}} isSuperAdmin={session?.user?.isSuperAdmin ?? false} />
       <SidebarInset>
         <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2">
