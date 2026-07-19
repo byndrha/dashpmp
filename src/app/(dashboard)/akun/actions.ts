@@ -5,6 +5,7 @@ import { requireSuperAdmin } from "@/lib/require-access";
 import {
   createUser,
   updateUser,
+  deleteUser,
   resetUserPassword,
   countActiveSuperAdmins,
   listRoles,
@@ -63,5 +64,18 @@ export async function resetUserPasswordAction(userId: number, newPassword: strin
   await requireSuperAdmin();
   if (newPassword.length < 6) throw new Error("Password minimal 6 karakter.");
   await resetUserPassword(userId, newPassword);
+  revalidatePath("/akun");
+}
+
+export async function deleteUserAction(userId: number) {
+  const session = await requireSuperAdmin();
+  if (Number(session.user.id) === userId) {
+    throw new Error("Tidak bisa menghapus akun Anda sendiri yang sedang digunakan untuk login.");
+  }
+  const remaining = await countActiveSuperAdmins(userId);
+  if (remaining === 0) {
+    throw new Error("Tidak bisa menghapus akun ini — minimal harus ada satu Super Administrator aktif.");
+  }
+  await deleteUser(userId);
   revalidatePath("/akun");
 }

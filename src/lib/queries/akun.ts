@@ -169,6 +169,11 @@ export async function resetUserPassword(userId: number, newPassword: string): Pr
     `);
 }
 
+export async function deleteUser(userId: number): Promise<void> {
+  const pool = await getPool();
+  await pool.request().input("userId", sql.Int, userId).query(`DELETE FROM DashboardUser WHERE UserID = @userId`);
+}
+
 export async function createRole(roleName: string): Promise<void> {
   const pool = await getPool();
   await pool.request().input("roleName", sql.VarChar(64), roleName).query(`

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Pencil, KeyRound, Phone, Mail } from "lucide-react";
+import { Plus, Pencil, KeyRound, Trash2, Phone, Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,12 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import type { DashboardUserRow, DashboardRoleRow } from "@/lib/queries/akun";
-import { createUserAction, updateUserAction, resetUserPasswordAction } from "@/app/(dashboard)/akun/actions";
+import {
+  createUserAction,
+  updateUserAction,
+  resetUserPasswordAction,
+  deleteUserAction,
+} from "@/app/(dashboard)/akun/actions";
 
 function CreateUserDialog({
   open,
@@ -295,6 +300,17 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
     });
   }
 
+  function handleDelete(user: DashboardUserRow) {
+    if (!confirm(`Hapus akun "${user.nama}" (@${user.username})? Tindakan ini tidak dapat dibatalkan.`)) return;
+    startTransition(async () => {
+      try {
+        await deleteUserAction(user.userId);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Gagal menghapus akun.");
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -341,6 +357,15 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
                     }}
                   >
                     <KeyRound className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    disabled={pending}
+                    onClick={() => handleDelete(u)}
+                  >
+                    <Trash2 className="size-3.5 text-destructive" />
                   </Button>
                 </div>
               </div>
