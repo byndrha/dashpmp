@@ -3,7 +3,7 @@ import { getPnL, getBEP } from "@/lib/queries/pnl";
 import { getCOADetail } from "@/lib/queries/keuangan-detail";
 import { getBalanceSheetDetail } from "@/lib/queries/balance-sheet";
 import { getCashFlowDetail } from "@/lib/queries/cash-flow";
-import { getCashFlowHarian } from "@/lib/queries/cash-flow-harian";
+import { getCashFlowHarian, getCashFlowHarianHistory } from "@/lib/queries/cash-flow-harian";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { requireModuleAccess } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -14,6 +14,7 @@ import { COADetailTable } from "@/components/dashboard/coa-detail-table";
 import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
 import { CashFlowHarianPanel } from "@/components/dashboard/cash-flow-harian-panel";
+import { CashFlowHarianHistoryPanel } from "@/components/dashboard/cash-flow-harian-history-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercent, formatDate } from "@/lib/format";
 
@@ -26,13 +27,14 @@ export default async function PnLPage({
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();
-  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian] = await Promise.all([
+  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian, cashFlowHarianHistory] = await Promise.all([
     getPnL(filter),
     getBEP(filter),
     getCOADetail(filter),
     getBalanceSheetDetail(filter),
     getCashFlowDetail(filter),
     getCashFlowHarian(cfDate),
+    getCashFlowHarianHistory(),
   ]);
   const periodStart = new Date(filter.startDate);
   // filter.endDate is an exclusive boundary (start of the day *after* the
@@ -128,6 +130,7 @@ export default async function PnLPage({
           <hr className="border-border" />
           <CashFlowPanel data={cashFlow} asOfLabel={formatDate(balanceSheetCutoff)} />
           <CashFlowHarianPanel key={cashFlowHarian.businessDate} data={cashFlowHarian} />
+          <CashFlowHarianHistoryPanel rows={cashFlowHarianHistory} activeDate={cfDate} />
         </div>
         <div className="@4xl:col-span-2">
           <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">

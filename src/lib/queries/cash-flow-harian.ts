@@ -24,6 +24,60 @@ function nextDayISO(dateISO: string): string {
     .slice(0, 10);
 }
 
+export interface CashFlowHarianHistoryRow {
+  businessDate: string;
+  kasDiTangan: number | null;
+  pengeluaranKasDiTangan: number | null;
+  totalPengeluaranKas: number;
+  itemCount: number;
+}
+
+// Only days that actually have a manual entry (a saved daily figure or at
+// least one expense row) — this is a history of what was recorded, not a
+// full calendar. Pendapatan Operasional is deliberately left out of this
+// list: it's a per-day GeneralLedger aggregate, and computing it for every
+// historical row here would mean one query per row instead of one query
+// total; it's already shown when a row is opened in the day editor above.
+export async function getCashFlowHarianHistory(limit = 60): Promise<CashFlowHarianHistoryRow[]> {
+  const pool = await getPool();
+  const result = await pool.request().input("limit", sql.Int, limit).query(`
+    SELECT TOP (@limit)
+        d.BusinessDate,
+        cf.KasDiTangan,
+        cf.PengeluaranKasDiTangan,
+        ISNULL(e.TotalPengeluaran, 0) AS TotalPengeluaranKas,
+        ISNULL(e.ItemCount, 0) AS ItemCount
+    FROM (
+        SELECT BusinessDate FROM DashboardCashFlowDaily
+        UNION
+        SELECT BusinessDate FROM DashboardCashFlowExpense
+    ) d
+    LEFT JOIN DashboardCashFlowDaily cf ON cf.BusinessDate = d.BusinessDate
+    LEFT JOIN (
+        SELECT BusinessDate, SUM(Nominal) AS TotalPengeluaran, COUNT(*) AS ItemCount
+        FROM DashboardCashFlowExpense
+        GROUP BY BusinessDate
+    ) e ON e.BusinessDate = d.BusinessDate
+    ORDER BY d.BusinessDate DESC
+  `);
+
+  return (
+    result.recordset as {
+      BusinessDate: string;
+      KasDiTangan: number | null;
+      PengeluaranKasDiTangan: number | null;
+      TotalPengeluaranKas: number;
+      ItemCount: number;
+    }[]
+  ).map((r) => ({
+    businessDate: new Date(r.BusinessDate).toISOString().slice(0, 10),
+    kasDiTangan: r.KasDiTangan,
+    pengeluaranKasDiTangan: r.PengeluaranKasDiTangan,
+    totalPengeluaranKas: r.TotalPengeluaranKas,
+    itemCount: r.ItemCount,
+  }));
+}
+
 // Same "Pendapatan Operasional" definition as the period Cash Flow panel
 // (getCashFlowDetail in cash-flow.ts) — cash actually received from
 // customers (GeneralLedger.Type = 'SALESPAYMENT' on Kas/Bank accounts) —

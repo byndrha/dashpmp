@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,12 @@ export function CashFlowHarianPanel({ data }: { data: CashFlowHarian }) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("cfDate", newDate);
     router.push(`${pathname}?${params.toString()}`);
+  }
+
+  function shiftDate(deltaDays: number) {
+    const d = new Date(data.businessDate);
+    const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + deltaDays));
+    goToDate(next.toISOString().slice(0, 10));
   }
 
   function handleSaveFigures() {
@@ -69,12 +75,20 @@ export function CashFlowHarianPanel({ data }: { data: CashFlowHarian }) {
     <Card size="sm">
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="font-display text-sm">Cash Flow Harian</CardTitle>
-        <Input
-          type="date"
-          value={date}
-          onChange={(e) => goToDate(e.target.value)}
-          className="h-8 w-40 text-xs"
-        />
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" className="size-8" onClick={() => shiftDate(-1)}>
+            <ChevronLeft className="size-4" />
+          </Button>
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => goToDate(e.target.value)}
+            className="h-8 w-40 text-xs"
+          />
+          <Button variant="outline" size="icon" className="size-8" onClick={() => shiftDate(1)}>
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-xs text-muted-foreground">
