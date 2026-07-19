@@ -5,7 +5,7 @@ import type { DateRangeFilter } from "@/types/dashboard";
 // and 12 (Bank/Deposito) — verified live against ChartOfAccount. IsBank is
 // set inconsistently across these accounts (true on only 2 of the 7 bank
 // accounts), so it isn't a reliable filter; AccountNo prefix is.
-const KAS_BANK_FILTER = `coa.IsChildest = 1 AND LEFT(coa.AccountNo,2) IN ('11','12') AND ISNULL(coa.IsDeleted,0) = 0`;
+export const KAS_BANK_FILTER = `coa.IsChildest = 1 AND LEFT(coa.AccountNo,2) IN ('11','12') AND ISNULL(coa.IsDeleted,0) = 0`;
 // "Kas di Tangan" (physical cash on hand) = 1101 Kas Besar + 1102 Kas Kecil
 // only, excluding Bank — verified live these are the only two accounts
 // under the 1100 "Kas" parent.

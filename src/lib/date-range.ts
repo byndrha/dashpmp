@@ -5,6 +5,7 @@ export interface DashboardSearchParams {
   from?: string;
   to?: string;
   wilayah?: string;
+  cfDate?: string;
 }
 
 export function resolveFilter(searchParams: DashboardSearchParams): DateRangeFilter {
