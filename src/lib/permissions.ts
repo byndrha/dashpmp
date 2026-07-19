@@ -27,6 +27,10 @@ export function fullPermissionMap(): PermissionMap {
   return Object.fromEntries(MODULE_KEYS.map((k) => [k, { canView: true, canEdit: true }])) as PermissionMap;
 }
 
-export function canView(permissions: PermissionMap, moduleKey: ModuleKey): boolean {
-  return permissions[moduleKey]?.canView ?? false;
+// permissions can be undefined for a session whose JWT was issued before
+// this field existed (a user still logged in from before this deploy) —
+// treat that the same as "no access" (redirected to /akses-ditolak, where
+// they can sign out and back in for a fresh token) instead of crashing.
+export function canView(permissions: PermissionMap | undefined, moduleKey: ModuleKey): boolean {
+  return permissions?.[moduleKey]?.canView ?? false;
 }
