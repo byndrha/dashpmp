@@ -11,6 +11,7 @@ import {
   Zap,
   Truck,
   Users,
+  Megaphone,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -38,6 +39,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
   { href: "/electricity", label: "Biaya Listrik", icon: Zap, moduleKey: "electricity" },
   { href: "/delivery", label: "Pengiriman", icon: Truck, moduleKey: "delivery" },
   { href: "/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
+  { href: "/pemasaran", label: "Pemasaran", icon: Megaphone, moduleKey: "pemasaran" },
 ];
 
 export function AppSidebar({
