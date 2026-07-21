@@ -9,9 +9,9 @@ import { Pagination } from "@/components/dashboard/pagination";
 import { formatDate, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesOrderCard, DeliveryCard } from "@/lib/queries/sales-cards";
-import { getDeliveryCardsAction } from "@/app/(dashboard)/sales/actions";
+import { getDeliveryCardsAction } from "@/app/(dashboard)/transaksi/actions";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 6;
 const badgeBase = "h-5 px-1.5 text-[10px] font-medium leading-none whitespace-nowrap";
 
 function QtyLabel({ qty10, qty5 }: { qty10: number; qty5: number }) {

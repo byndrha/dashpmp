@@ -1,7 +1,6 @@
 import { requireModuleAccess } from "@/lib/require-access";
 import { getSalesTrend, getSalesTrendMonthly } from "@/lib/queries/sales";
 import { getSalesOverview } from "@/lib/queries/sales-overview";
-import { getSalesOrderCards } from "@/lib/queries/sales-cards";
 import { getRevenueTarget } from "@/lib/queries/revenue-target";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { getBusinessDateISO } from "@/lib/business-date";
@@ -11,7 +10,6 @@ import { SalesOverviewPanels } from "@/components/dashboard/sales-overview-panel
 import { RevenueTargetPanel } from "@/components/dashboard/revenue-target-panel";
 import { SalesTrendChart } from "@/components/charts/sales-trend-chart";
 import { SalesTrendChartMonthly } from "@/components/charts/sales-trend-chart-monthly";
-import { SalesTransactionCards } from "@/components/dashboard/sales-transaction-cards";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export default async function SalesPage({
@@ -22,11 +20,10 @@ export default async function SalesPage({
   await requireModuleAccess("sales");
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [trend, trendMonthly, overview, orders, wilayahList, revenueTarget] = await Promise.all([
+  const [trend, trendMonthly, overview, wilayahList, revenueTarget] = await Promise.all([
     getSalesTrend(filter),
     getSalesTrendMonthly(),
     getSalesOverview(),
-    getSalesOrderCards(filter),
     getWilayahList(),
     getRevenueTarget(),
   ]);
@@ -67,11 +64,6 @@ export default async function SalesPage({
           <SalesTrendChartMonthly data={trendMonthly} />
         </CardContent>
       </Card>
-
-      <div>
-        <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">Kartu Transaksi</h2>
-        <SalesTransactionCards orders={orders} />
-      </div>
     </div>
   );
 }

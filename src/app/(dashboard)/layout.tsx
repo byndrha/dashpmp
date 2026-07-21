@@ -14,7 +14,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <SidebarProvider>
       <AppSidebar permissions={session?.user?.permissions ?? {}} isSuperAdmin={session?.user?.isSuperAdmin ?? false} />
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
+        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
           <div className="flex items-center gap-2">
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-5" />
