@@ -210,7 +210,7 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
       UPDATE DashboardMitraPengajuan
       SET Status = 'Disetujui', ConvertedBusinessPartnerID = @bpId,
           ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
-      WHERE PengajuanID = @id
+      WHERE PengajuanID = @id AND Status = 'Menunggu'
     `);
 }
 
