@@ -5,7 +5,7 @@ import type { SalesOrderCard } from "@/lib/queries/sales-cards";
 // this and WilayahDeliveryPanel), not owned here.
 export function KartuTransaksiPanel({ orders, collapsed }: { orders: SalesOrderCard[]; collapsed: boolean }) {
   return (
-    <div className="@container sticky top-14 z-30 rounded-lg border bg-card p-3">
+    <div className="@container sticky top-14 z-30 rounded-lg border bg-card p-3 shadow-md">
       <h2 className="font-display text-sm font-semibold text-muted-foreground">Kartu Transaksi</h2>
       {!collapsed && (
         <div className="mt-2">

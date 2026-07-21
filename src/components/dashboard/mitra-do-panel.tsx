@@ -80,7 +80,7 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
     // clipping/scroll-container ancestor for the sticky CardHeader below,
     // which made the header cover the first row of content even at rest
     // (not just while scrolling). Everything else matches Card's own classes.
-    <div className="flex flex-col gap-(--card-spacing) rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)]">
+    <div className="flex flex-col gap-(--card-spacing) rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 shadow-md [--card-spacing:--spacing(4)]">
       {/* Sticky within this div's own bounds (its containing block) — stays
           pinned below the app header while scrolling through the mitra list
           in CardContent, and lets go once this div's bottom comes into view. */}

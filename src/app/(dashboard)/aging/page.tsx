@@ -50,8 +50,10 @@ export default async function AgingPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-xl font-semibold">Piutang</h1>
-      <FilterBar wilayahList={wilayahList} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-xl font-semibold">Piutang</h1>
+        <FilterBar wilayahList={wilayahList} />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard label="Total Piutang Outstanding" value={formatRupiah(totalOutstanding)} icon={Receipt} />

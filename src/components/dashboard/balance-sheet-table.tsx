@@ -35,7 +35,7 @@ export function BalanceSheetTable({ rows }: { rows: BalanceSheetRow[] }) {
         // just to scan totals.
         <details
           key={g.kategori}
-          className="group overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 ring-foreground/10"
+          className="group overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 ring-foreground/10 shadow-md"
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-3 [&::-webkit-details-marker]:hidden">
             <span className="font-display text-sm font-medium">
