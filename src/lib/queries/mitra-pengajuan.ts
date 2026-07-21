@@ -1,5 +1,20 @@
 import { getPool, sql } from "@/lib/db";
 import { getBusinessDate, monthBoundary } from "@/lib/business-date";
+import { createMitra, type MitraInput } from "@/lib/queries/mitra";
+import { setMitraLocation } from "@/lib/queries/mitra-location";
+
+// A plain HTML <input type="datetime-local"> value ("2026-07-25T14:30") has
+// no timezone info. This app's users are all in WIB (UTC+7) — parsing that
+// string with `new Date(...)` directly would interpret it in the SERVER's
+// local timezone instead (commonly UTC on a Coolify container), silently
+// shifting the time by 7 hours. Convert explicitly, the same way every
+// other WIB-sensitive date in this codebase is built (see business-date.ts).
+function parseWibDateTimeLocal(value: string): Date {
+  const [datePart, timePart] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = (timePart ?? "00:00").split(":").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour - 7, minute));
+}
 
 // RoleID values from DashboardRole — already-existing roles in this
 // database, not created by this feature. Marketing (1003) is who submits
@@ -98,4 +113,121 @@ export async function getMarketingKPI(): Promise<MarketingKPIRow[]> {
   return (
     result.recordset as { UserID: string; Nama: string; Kunjungan: number; Konversi: number | null }[]
   ).map((r) => ({ UserID: r.UserID, Nama: r.Nama, Kunjungan: r.Kunjungan, Konversi: r.Konversi ?? 0 }));
+}
+
+export interface PengajuanInput {
+  namaCalon: string;
+  noHP: string | null;
+  waktuPermintaanSampai: string;
+  qtyKantong: number | null;
+  priceLevel: number | null;
+  wilayah: string | null;
+  kecamatan: string | null;
+  alamat: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export async function createPengajuan(input: PengajuanInput, marketingUserId: string): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("marketingUserId", sql.VarChar(16), marketingUserId)
+    .input("namaCalon", sql.VarChar(128), input.namaCalon)
+    .input("noHP", sql.VarChar(50), input.noHP)
+    .input("waktu", sql.DateTime, parseWibDateTimeLocal(input.waktuPermintaanSampai))
+    .input("qty", sql.Decimal(23, 4), input.qtyKantong)
+    .input("priceLevel", sql.Int, input.priceLevel)
+    .input("wilayah", sql.VarChar(128), input.wilayah)
+    .input("kecamatan", sql.VarChar(128), input.kecamatan)
+    .input("alamat", sql.VarChar(1024), input.alamat)
+    .input("lat", sql.Decimal(10, 7), input.latitude)
+    .input("lng", sql.Decimal(10, 7), input.longitude).query(`
+      INSERT INTO DashboardMitraPengajuan
+        (MarketingUserID, NamaCalon, NoHP, WaktuPermintaanSampai, QtyKantong, PriceLevel,
+         Wilayah, Kecamatan, Alamat, Latitude, Longitude, Status, CreatedAt)
+      VALUES
+        (@marketingUserId, @namaCalon, @noHP, @waktu, @qty, @priceLevel,
+         @wilayah, @kecamatan, @alamat, @lat, @lng, 'Menunggu', GETDATE())
+    `);
+}
+
+export async function approvePengajuan(pengajuanId: number, reviewerUserId: string): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.Int, pengajuanId)
+    .query(`SELECT * FROM DashboardMitraPengajuan WHERE PengajuanID = @id AND Status = 'Menunggu'`);
+
+  const row = result.recordset[0] as
+    | {
+        NamaCalon: string;
+        NoHP: string | null;
+        Alamat: string | null;
+        Wilayah: string | null;
+        Kecamatan: string | null;
+        PriceLevel: number | null;
+        Latitude: number | null;
+        Longitude: number | null;
+      }
+    | undefined;
+  if (!row) throw new Error("Pengajuan tidak ditemukan atau sudah diproses");
+
+  // Reuses the exact mitra-creation path the Mitra module's own "Tambah
+  // Mitra" form uses — same Code/BusinessPartnerID generation, same
+  // required-column defaults (see mitra.ts createMitra()), no duplicated
+  // logic. Defaults Tipe Mitra to Retail ("Female") since this KPI is
+  // specifically about retail outlets — correctable afterwards via the
+  // Mitra module if a submission turns out to be an Agen.
+  const mitraInput: MitraInput = {
+    name: row.NamaCalon,
+    mobileNo: row.NoHP,
+    address: row.Alamat,
+    wilayah: row.Wilayah,
+    kecamatan: row.Kecamatan,
+    gender: "Female",
+    priceLevel: row.PriceLevel,
+    termOfPaymentId: null,
+    capacity: null,
+  };
+  const businessPartnerId = await createMitra(mitraInput);
+
+  if (row.Latitude != null && row.Longitude != null) {
+    await setMitraLocation({
+      businessPartnerId,
+      latitude: row.Latitude,
+      longitude: row.Longitude,
+      alamat: row.Alamat,
+      userId: reviewerUserId,
+    });
+  }
+
+  await pool
+    .request()
+    .input("id", sql.Int, pengajuanId)
+    .input("bpId", sql.VarChar(16), businessPartnerId)
+    .input("reviewer", sql.VarChar(16), reviewerUserId).query(`
+      UPDATE DashboardMitraPengajuan
+      SET Status = 'Disetujui', ConvertedBusinessPartnerID = @bpId,
+          ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
+      WHERE PengajuanID = @id
+    `);
+}
+
+export async function rejectPengajuan(
+  pengajuanId: number,
+  reviewerUserId: string,
+  catatan: string | null
+): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.Int, pengajuanId)
+    .input("reviewer", sql.VarChar(16), reviewerUserId)
+    .input("catatan", sql.VarChar(512), catatan).query(`
+      UPDATE DashboardMitraPengajuan
+      SET Status = 'Ditolak', CatatanTolak = @catatan,
+          ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
+      WHERE PengajuanID = @id AND Status = 'Menunggu'
+    `);
 }
