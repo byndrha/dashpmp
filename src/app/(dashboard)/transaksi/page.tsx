@@ -1,10 +1,11 @@
 import { requireModuleAccess } from "@/lib/require-access";
 import { getSalesOrderCards } from "@/lib/queries/sales-cards";
 import { getMitraDOMonthly } from "@/lib/queries/mitra-do";
+import { getWilayahDeliverySummary } from "@/lib/queries/delivery";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
-import { KartuTransaksiPanel } from "@/components/dashboard/kartu-transaksi-panel";
+import { TransaksiPanels } from "@/components/dashboard/transaksi-panels";
 import { MitraDOPanel } from "@/components/dashboard/mitra-do-panel";
 
 export default async function TransaksiPage({
@@ -15,10 +16,11 @@ export default async function TransaksiPage({
   await requireModuleAccess("transaksi");
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [orders, wilayahList, mitraDO] = await Promise.all([
+  const [orders, wilayahList, mitraDO, wilayahDelivery] = await Promise.all([
     getSalesOrderCards(filter),
     getWilayahList(),
     getMitraDOMonthly(),
+    getWilayahDeliverySummary(filter),
   ]);
 
   return (
@@ -28,7 +30,7 @@ export default async function TransaksiPage({
         <FilterBar wilayahList={wilayahList} />
       </div>
 
-      <KartuTransaksiPanel orders={orders} />
+      <TransaksiPanels orders={orders} wilayahDelivery={wilayahDelivery} />
 
       <MitraDOPanel data={mitraDO} />
     </div>

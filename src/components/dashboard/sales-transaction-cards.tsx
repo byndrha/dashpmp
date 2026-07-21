@@ -5,13 +5,14 @@ import { Package, Truck, User, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Pagination } from "@/components/dashboard/pagination";
 import { formatDate, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesOrderCard, DeliveryCard } from "@/lib/queries/sales-cards";
 import { getDeliveryCardsAction } from "@/app/(dashboard)/transaksi/actions";
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 4;
 const badgeBase = "h-5 px-1.5 text-[10px] font-medium leading-none whitespace-nowrap";
 
 function QtyLabel({ qty10, qty5 }: { qty10: number; qty5: number }) {
@@ -25,12 +26,25 @@ function QtyLabel({ qty10, qty5 }: { qty10: number; qty5: number }) {
 }
 
 function StatusBadges({ delivery }: { delivery: DeliveryCard }) {
+  const isLunas = delivery.PaymentStatus === "Lunas";
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {delivery.BillingStatus === "SudahDitagih" ? (
-        <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
-          Tertagih {delivery.SIVoucherNo}
-        </Badge>
+        // Once lunas, the SI voucher code is secondary info — keep the badge
+        // to just "Tertagih" and tuck the code into a tooltip instead of
+        // showing it inline every time.
+        isLunas ? (
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>Tertagih</Badge>
+            </TooltipTrigger>
+            <TooltipContent>{delivery.SIVoucherNo}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Badge className={cn(badgeBase, "bg-primary/15 text-primary hover:bg-primary/15")}>
+            Tertagih {delivery.SIVoucherNo}
+          </Badge>
+        )
       ) : (
         <Badge className={cn(badgeBase, "bg-destructive/15 text-destructive hover:bg-destructive/15")}>
           Belum Ditagih
@@ -54,7 +68,7 @@ function DeliveryRow({ delivery }: { delivery: DeliveryCard }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-2">
       <span className="text-xs text-muted-foreground">
-        {formatDate(delivery.TransDate)} {formatTime(delivery.TransDate)}
+        {formatDate(delivery.TransDate)} · Kirim - {formatTime(delivery.TransDate)}
       </span>
       <StatusBadges delivery={delivery} />
     </div>
@@ -67,7 +81,7 @@ function DeliveryRowDetailed({ delivery }: { delivery: DeliveryCard }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
-            {formatDate(delivery.TransDate)} {formatTime(delivery.TransDate)}
+            {formatDate(delivery.TransDate)} · Kirim - {formatTime(delivery.TransDate)}
           </p>
           <p className="font-data text-xs text-muted-foreground">{delivery.VoucherNo}</p>
           <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
@@ -109,25 +123,28 @@ function SalesOrderTransactionCard({
           setExpanded((v) => !v);
         }
       }}
-      className="py-4 cursor-pointer transition-colors hover:border-primary/40"
+      className="pt-4 pb-2 cursor-pointer transition-colors hover:border-primary/40"
     >
       <CardContent className="flex flex-col gap-2 px-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        {/* Fixed 55:45 grid instead of flex-wrap — a long mitra name used to
+            wrap the whole left block below the right block (Wilayah/Qty),
+            making the card much taller. Now the name truncates instead. */}
+        <div className="grid grid-cols-[55fr_45fr] items-start gap-2">
           <div className="min-w-0">
-            <p className="flex items-center gap-1.5 font-medium">
-              {so.CustomerName}
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+            <p className="flex min-w-0 items-center gap-1.5 font-medium">
+              <span className="min-w-0 truncate">{so.CustomerName}</span>
+              <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
                 {so.PartnerType}
               </Badge>
             </p>
             <p className="text-xs text-muted-foreground">
               {formatDate(so.TransDate)} {formatTime(so.TransDate)}
             </p>
-            <p className="font-data text-xs text-muted-foreground">{so.VoucherNo}</p>
+            <p className="font-data truncate text-xs text-muted-foreground">{so.VoucherNo}</p>
           </div>
-          <div className="flex items-start gap-2">
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">
+          <div className="flex min-w-0 items-start justify-end gap-2">
+            <div className="min-w-0 text-right">
+              <p className="truncate text-xs text-muted-foreground">
                 {so.Wilayah}
                 {so.Kecamatan ? ` | ${so.Kecamatan}` : ""}
               </p>
@@ -207,7 +224,12 @@ export function SalesTransactionCards({ orders }: { orders: SalesOrderCard[] }) 
         Menampilkan {pageOrders.length} dari {orders.length} pesanan (SO), diikuti tiap pengiriman (DO) dan status
         penagihan/pelunasan.
       </p>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {/* @sm here targets this panel's own width (it's wrapped in @container by
+          kartu-transaksi-panel.tsx), not the viewport — the panel now sits in a
+          50/50 column next to Pengiriman per Wilayah, so a viewport-width
+          breakpoint like md:/xl: would try to fit 2-3 cards into half the
+          space it used to have. */}
+      <div className="grid grid-cols-1 gap-3 @sm:grid-cols-2">
         {pageOrders.map((so) => (
           <SalesOrderTransactionCard
             key={so.SalesOrderID}

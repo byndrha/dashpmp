@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Wallet, Receipt, Truck, LineChart, Zap, ShoppingCart, ArrowRight } from "lucide-react";
+import { Wallet, Receipt, Package, LineChart, Zap, ShoppingCart, ArrowRight, Truck } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getRecentInvoices, getTodayWilayahPulse } from "@/lib/queries/activity";
 import { getAgingReceivables } from "@/lib/queries/aging";
-import { getOpenDeliveries } from "@/lib/queries/delivery";
+import { getSalesForDay } from "@/lib/queries/sales-overview";
+import { getBusinessDate } from "@/lib/business-date";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { WilayahPulse } from "@/components/dashboard/wilayah-pulse";
 import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
@@ -21,17 +22,23 @@ const MODULE_LINKS = [
 
 export default async function BerandaPage() {
   const session = await requireModuleAccess("beranda");
-  const [recentInvoices, wilayahPulse, aging, deliveries] = await Promise.all([
+  const [recentInvoices, wilayahPulse, aging, todaySales] = await Promise.all([
     getRecentInvoices(15),
     getTodayWilayahPulse(),
     getAgingReceivables(),
-    getOpenDeliveries(),
+    getSalesForDay(getBusinessDate()),
   ]);
 
-  const todayNetSales = wilayahPulse.reduce((sum, w) => sum + w.NetSales, 0);
-  const todayInvoices = wilayahPulse.reduce((sum, w) => sum + w.InvoiceCount, 0);
+  // Penjualan Hari Ini / Invoice Hari Ini must come from getSalesForDay (the
+  // same unrestricted query the Penjualan module's "Hari Ini" card uses),
+  // NOT from summing wilayahPulse — that's capped to the top 6 wilayah for
+  // the "Pulsa Wilayah" widget below, so summing it silently drops revenue
+  // from every wilayah past the top 6 (verified live: today it undercounted
+  // by the full Wonogiri total).
+  const todayNetSales = todaySales.NetSales;
+  const todayInvoices = todaySales.SICount;
+  const kantongTerkirim = todaySales.Qty10KG + todaySales.Qty5KG;
   const totalOutstanding = aging.reduce((sum, r) => sum + r.Outstanding, 0);
-  const openDeliveryOrders = new Set(deliveries.map((d) => d.DeliveryOrderID)).size;
 
   const name = session?.user?.name ?? session?.user?.username ?? "";
 
@@ -43,7 +50,7 @@ export default async function BerandaPage() {
         <KpiCard label="Penjualan Hari Ini" value={formatRupiah(todayNetSales)} icon={Wallet} tone="positive" />
         <KpiCard label="Invoice Hari Ini" value={todayInvoices.toLocaleString("id-ID")} icon={ShoppingCart} />
         <KpiCard label="Piutang Outstanding" value={formatRupiah(totalOutstanding)} icon={Receipt} tone="warning" />
-        <KpiCard label="Delivery Order Terbuka" value={openDeliveryOrders.toLocaleString("id-ID")} icon={Truck} />
+        <KpiCard label="Kantong Terkirim" value={kantongTerkirim.toLocaleString("id-ID")} icon={Package} />
       </div>
 
       <div>

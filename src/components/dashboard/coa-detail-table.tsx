@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { PiggyBank } from "lucide-react";
+import { ChevronDown, PiggyBank } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -21,7 +21,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
@@ -67,66 +66,70 @@ export function COADetailTable({
   return (
     <div className="flex flex-col gap-3">
       {grouped.map((g) => (
-        <Card key={g.kategori} size="sm">
-          <CardHeader>
-            <CardTitle className="font-display text-sm">
+        // Native <details>/<summary> — collapsed by default, no extra state
+        // needed alongside the edit-dialog state this component already has.
+        <details
+          key={g.kategori}
+          className="group overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 ring-foreground/10"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-3 [&::-webkit-details-marker]:hidden">
+            <span className="font-display text-sm font-medium">
               {COA_KATEGORI_LABEL[g.kategori]}{" "}
               <span className="font-normal text-muted-foreground">({g.rows.length} akun)</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="overflow-x-auto px-3">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="h-7 px-1.5 text-[10px]">Akun</TableHead>
-                    <TableHead className="h-7 px-1.5 text-right text-[10px]">APBP</TableHead>
-                    <TableHead className="h-7 px-1.5 text-right text-[10px]">Realisasi</TableHead>
-                    <TableHead className="h-7 px-1.5 text-right text-[10px]">%Kat</TableHead>
-                    <TableHead className="h-7 px-1.5 text-right text-[10px]">%Ang</TableHead>
-                    <TableHead className="h-7 px-1.5 text-right text-[10px]">Proyeksi</TableHead>
-                    <TableHead className="h-7 w-6 px-1"></TableHead>
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="overflow-x-auto px-3 pb-3">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="h-7 px-1.5 text-[10px]">Akun</TableHead>
+                  <TableHead className="h-7 px-1.5 text-right text-[10px]">APBP</TableHead>
+                  <TableHead className="h-7 px-1.5 text-right text-[10px]">Realisasi</TableHead>
+                  <TableHead className="h-7 px-1.5 text-right text-[10px]">%Kat</TableHead>
+                  <TableHead className="h-7 px-1.5 text-right text-[10px]">%Ang</TableHead>
+                  <TableHead className="h-7 px-1.5 text-right text-[10px]">Proyeksi</TableHead>
+                  <TableHead className="h-7 w-6 px-1"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {g.rows.map((r) => (
+                  <TableRow key={r.ChartOfAccountID}>
+                    <TableCell className="px-1.5 py-1.5">
+                      <p className="text-xs font-medium leading-tight">{r.AccountName}</p>
+                      <p className="font-data text-[10px] leading-tight text-muted-foreground">{r.AccountNo}</p>
+                    </TableCell>
+                    <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                      {r.BudgetAmount != null ? formatRupiah(r.BudgetAmount) : "-"}
+                    </TableCell>
+                    <TableCell className="px-1.5 py-1.5 text-right text-xs font-medium tabular-nums">
+                      {formatRupiah(r.Realisasi)}
+                    </TableCell>
+                    <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                      {formatPercentPoints(r.RealisasiPercent)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "px-1.5 py-1.5 text-right text-xs tabular-nums",
+                        r.BudgetPercent != null && r.BudgetPercent > 100 && "text-destructive"
+                      )}
+                    >
+                      {r.BudgetPercent != null ? formatPercentPoints(r.BudgetPercent) : "-"}
+                    </TableCell>
+                    <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                      {formatRupiah(r.ProyeksiAkhirBulan)}
+                    </TableCell>
+                    <TableCell className="px-1 py-1.5">
+                      <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditing(r)}>
+                        <PiggyBank className="size-3" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {g.rows.map((r) => (
-                    <TableRow key={r.ChartOfAccountID}>
-                      <TableCell className="px-1.5 py-1.5">
-                        <p className="text-xs font-medium leading-tight">{r.AccountName}</p>
-                        <p className="font-data text-[10px] leading-tight text-muted-foreground">{r.AccountNo}</p>
-                      </TableCell>
-                      <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
-                        {r.BudgetAmount != null ? formatRupiah(r.BudgetAmount) : "-"}
-                      </TableCell>
-                      <TableCell className="px-1.5 py-1.5 text-right text-xs font-medium tabular-nums">
-                        {formatRupiah(r.Realisasi)}
-                      </TableCell>
-                      <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
-                        {formatPercentPoints(r.RealisasiPercent)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "px-1.5 py-1.5 text-right text-xs tabular-nums",
-                          r.BudgetPercent != null && r.BudgetPercent > 100 && "text-destructive"
-                        )}
-                      >
-                        {r.BudgetPercent != null ? formatPercentPoints(r.BudgetPercent) : "-"}
-                      </TableCell>
-                      <TableCell className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
-                        {formatRupiah(r.ProyeksiAkhirBulan)}
-                      </TableCell>
-                      <TableCell className="px-1 py-1.5">
-                        <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditing(r)}>
-                          <PiggyBank className="size-3" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </details>
       ))}
 
       {grouped.length === 0 && (

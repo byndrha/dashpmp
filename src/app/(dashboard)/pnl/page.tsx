@@ -9,7 +9,7 @@ import { requireModuleAccess } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { SimplePieChart } from "@/components/charts/simple-pie-chart";
+import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
 import { COADetailTable } from "@/components/dashboard/coa-detail-table";
 import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
@@ -78,59 +78,66 @@ export default async function PnLPage({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Rincian P&amp;L</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <Row label="Pendapatan" value={pnl.Pendapatan} />
-            <Row label="HPP" value={-pnl.HPP} />
-            <Row label="Laba Kotor" value={pnl.LabaKotor} bold />
-            <Row label="Biaya Tetap" value={-pnl.BiayaTetap} />
-            <Row label="Beban Operasional" value={-pnl.BebanOperasional} />
-            <Row label="Laba Operasional" value={pnl.LabaOperasional} bold />
-            <Row label="Penghasilan Lainnya" value={pnl.PenghasilanLainnya} />
-            <Row label="Adjustment" value={-pnl.Adjustment} />
-            <Row label="Beban Lainnya" value={-pnl.BebanLainnya} />
-            <Row label="Laba Bersih" value={pnl.LabaBersih} bold />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Komposisi Biaya vs Laba</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SimplePieChart data={compositionData} />
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Container query, not lg: — this page lives under the same
-          @container/dashboard-main as Penjualan, so the split should react
-          to actual content width (sidebar collapsed/expanded), not the raw
-          viewport. col-span-3/2 of 5 gives the requested ~60%/40% split. A
-          border-r on the left column (instead of a standalone divider
-          element) doubles as the separator line between the two side-by-side
-          panels, matching how they're actually laid out — vertically, not
-          stacked. */}
+          @container/dashboard-main as Penjualan, so the split should react to
+          actual content width (sidebar collapsed/expanded), not the raw
+          viewport. Plain lg: here previously left the two cards stacked
+          (Komposisi Biaya vs Laba rendering below Rincian P&L) whenever the
+          content area was narrower than the viewport, e.g. with the sidebar
+          expanded — same class of bug already fixed below for COA/Balance
+          Sheet. col-span-3/2 of 5 gives the requested 60%/40% split, same
+          ratio as the COA/Balance Sheet row below. */}
       <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-5">
-        <div className="flex flex-col gap-4 @4xl:col-span-3 @4xl:border-r @4xl:border-border @4xl:pr-4">
-          <div>
-            <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
-              Detail per Akun (COA) &mdash; APBP vs Realisasi
-            </h2>
-            <COADetailTable
-              rows={coaDetail}
-              year={periodStart.getUTCFullYear()}
-              month={periodStart.getUTCMonth() + 1}
-            />
-          </div>
-          <hr className="border-border" />
+        <div className="flex flex-col gap-4 @4xl:col-span-3">
           <CashFlowPanel data={cashFlow} asOfLabel={formatDate(balanceSheetCutoff)} />
           <CashFlowHarianPanel key={cashFlowHarian.businessDate} data={cashFlowHarian} />
           <CashFlowHarianHistoryPanel rows={cashFlowHarianHistory} activeDate={cfDate} />
+        </div>
+
+        <div className="flex flex-col gap-4 @4xl:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Rincian P&amp;L</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <Row label="Pendapatan" value={pnl.Pendapatan} />
+              <Row label="HPP" value={-pnl.HPP} />
+              <Row label="Laba Kotor" value={pnl.LabaKotor} bold />
+              <Row label="Biaya Tetap" value={-pnl.BiayaTetap} />
+              <Row label="Beban Operasional" value={-pnl.BebanOperasional} />
+              <Row label="Laba Operasional" value={pnl.LabaOperasional} bold />
+              <Row label="Penghasilan Lainnya" value={pnl.PenghasilanLainnya} />
+              <Row label="Adjustment" value={-pnl.Adjustment} />
+              <Row label="Beban Lainnya" value={-pnl.BebanLainnya} />
+              <Row label="Laba Bersih" value={pnl.LabaBersih} bold />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Komposisi Biaya vs Laba</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SimpleBarChart data={compositionData} height={200} />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Same container-query fix as the row above. col-span-3/2 of 5 gives
+          the requested ~60%/40% split. A border-r on the left column
+          (instead of a standalone divider element) doubles as the separator
+          line between the two side-by-side panels. */}
+      <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-5">
+        <div className="@4xl:col-span-3 @4xl:border-r @4xl:border-border @4xl:pr-4">
+          <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">
+            Detail per Akun (COA) &mdash; APBP vs Realisasi
+          </h2>
+          <COADetailTable
+            rows={coaDetail}
+            year={periodStart.getUTCFullYear()}
+            month={periodStart.getUTCMonth() + 1}
+          />
         </div>
         <div className="@4xl:col-span-2">
           <h2 className="mb-2 font-display text-sm font-semibold text-muted-foreground">

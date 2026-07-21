@@ -1,4 +1,77 @@
 import { getPool, sql } from "@/lib/db";
+import { getBusinessDate } from "@/lib/business-date";
+import type { DateRangeFilter } from "@/types/dashboard";
+
+export interface WilayahDeliverySummary {
+  Wilayah: string;
+  Qty10KG: number;
+  Qty5KG: number;
+  TotalKantong: number;
+  TotalKantongHariIni: number;
+}
+
+const WILAYAH_EXPR = `ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui')`;
+
+// Kantong count here is a plain 10KG+5KG sum (1 bag = 1 kantong regardless of
+// size) — the general "Kantong Terkirim" convention used everywhere else in
+// this app (sales-overview.ts, Beranda). The 5KG-counts-as-half-a-kantong
+// rule in mitra-do.ts is specific to that panel's DO-vs-Capacity-target math,
+// not a general delivery-count convention.
+//
+// TotalKantongHariIni is always "today" (business date), independent of the
+// period `filter` — the panel shows both side by side, and today's number
+// would silently disappear whenever the filter's range doesn't include today.
+export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promise<WilayahDeliverySummary[]> {
+  const pool = await getPool();
+  const businessToday = getBusinessDate();
+
+  const [periodResult, todayResult] = await Promise.all([
+    pool
+      .request()
+      .input("startDate", sql.Date, filter.startDate)
+      .input("endDate", sql.Date, filter.endDate)
+      .query(`
+        SELECT
+            ${WILAYAH_EXPR} AS Wilayah,
+            ISNULL(SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN 0 ELSE dod.Delivered END), 0) AS Qty10KG,
+            ISNULL(SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivered ELSE 0 END), 0) AS Qty5KG
+        FROM DeliveryOrder do_
+        JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= @startDate AND do_.TransDate < @endDate
+        GROUP BY ${WILAYAH_EXPR}
+      `),
+    pool
+      .request()
+      .input("businessDate", sql.Date, businessToday)
+      .query(`
+        SELECT
+            ${WILAYAH_EXPR} AS Wilayah,
+            ISNULL(SUM(dod.Delivered), 0) AS TotalKantongHariIni
+        FROM DeliveryOrder do_
+        JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= @businessDate AND do_.TransDate < DATEADD(DAY, 1, @businessDate)
+        GROUP BY ${WILAYAH_EXPR}
+      `),
+  ]);
+
+  const byWilayah = new Map<string, { Qty10KG: number; Qty5KG: number; TotalKantongHariIni: number }>();
+  for (const r of periodResult.recordset as { Wilayah: string; Qty10KG: number; Qty5KG: number }[]) {
+    byWilayah.set(r.Wilayah, { Qty10KG: r.Qty10KG, Qty5KG: r.Qty5KG, TotalKantongHariIni: 0 });
+  }
+  for (const r of todayResult.recordset as { Wilayah: string; TotalKantongHariIni: number }[]) {
+    const entry = byWilayah.get(r.Wilayah);
+    if (entry) entry.TotalKantongHariIni = r.TotalKantongHariIni;
+    else byWilayah.set(r.Wilayah, { Qty10KG: 0, Qty5KG: 0, TotalKantongHariIni: r.TotalKantongHariIni });
+  }
+
+  return [...byWilayah.entries()]
+    .map(([Wilayah, v]) => ({ Wilayah, ...v, TotalKantong: v.Qty10KG + v.Qty5KG }))
+    .sort((a, b) => b.TotalKantong - a.TotalKantong);
+}
 
 export interface OpenDelivery {
   DeliveryOrderID: string;

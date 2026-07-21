@@ -3,7 +3,6 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -40,37 +39,38 @@ export function FilterBar({
     <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-3">
       {showDateRange && (
         <>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="from" className="text-xs text-muted-foreground">
-              Dari Tanggal
-            </Label>
-            <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="to" className="text-xs text-muted-foreground">
-              Sampai Tanggal
-            </Label>
-            <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
-          </div>
+          <Input
+            id="from"
+            type="date"
+            aria-label="Dari Tanggal"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="w-40"
+          />
+          <Input
+            id="to"
+            type="date"
+            aria-label="Sampai Tanggal"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="w-40"
+          />
         </>
       )}
       {wilayahList && (
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs text-muted-foreground">Wilayah</Label>
-          <Select value={wilayah} onValueChange={(value) => setWilayah(value ?? "all")}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Semua">{(v: string) => (v === "all" ? "Semua" : v)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua</SelectItem>
-              {wilayahList.map((w) => (
-                <SelectItem key={w} value={w}>
-                  {w}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Select value={wilayah} onValueChange={(value) => setWilayah(value ?? "all")}>
+          <SelectTrigger className="w-48" aria-label="Wilayah">
+            <SelectValue placeholder="Semua Wilayah">{(v: string) => (v === "all" ? "Semua Wilayah" : v)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Wilayah</SelectItem>
+            {wilayahList.map((w) => (
+              <SelectItem key={w} value={w}>
+                {w}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
       <Button onClick={applyFilter}>Terapkan</Button>
     </div>
