@@ -219,7 +219,7 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
                 id="targetDate"
                 name="targetDate"
                 type="date"
-                defaultValue={editing?.TargetDate ? editing.TargetDate.slice(0, 10) : ""}
+                defaultValue={editing?.TargetDate ? new Date(editing.TargetDate).toISOString().slice(0, 10) : ""}
               />
             </div>
             <div className="flex flex-col gap-2">

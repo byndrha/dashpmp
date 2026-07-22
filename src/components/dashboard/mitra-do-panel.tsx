@@ -64,17 +64,30 @@ function DayChip({ day, qty, target, isPast }: { day: number; qty: number; targe
 function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
   return (
     <div className="flex flex-col gap-1.5 py-3">
-      {/* Name + Total/%/trend never wrap onto separate lines (no
-          flex-wrap here) — that's what let the right-hand block collapse
-          below the Harga/Target line on narrow mobile widths before. The
-          name truncates instead of pushing the right block down. */}
+      {/* Name, Wilayah/Kecamatan, and Harga/Target all stack tightly in one
+          left column — the right column (Total/%/trend) is the only thing
+          that belongs on the right, so Harga/Target moved off it instead of
+          leaving both sides half-empty. items-start + shrink-0 on the right
+          block keeps it pinned top-right even though the left column is now
+          taller (3 lines instead of 1). */}
       <div className="flex items-start justify-between gap-2">
-        <p className="flex min-w-0 items-center gap-1.5 font-medium">
-          <span className="truncate">{m.Name}</span>
-          <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
-            {m.PartnerType}
-          </Badge>
-        </p>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="flex items-center gap-1.5 font-medium">
+            <span className="truncate">{m.Name}</span>
+            <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+              {m.PartnerType}
+            </Badge>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {m.Wilayah}
+            {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Harga {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"} · Target Harian{" "}
+            {m.TargetHarian != null ? formatQty(m.TargetHarian) : "-"} · Target Bulanan{" "}
+            {m.TargetBulanan != null ? formatQty(m.TargetBulanan) : "-"}
+          </p>
+        </div>
         <div className="shrink-0 text-right">
           <p className="font-semibold tabular-nums">{formatQty(m.TotalQty)} kantong</p>
           <p className="text-xs font-medium text-muted-foreground">
@@ -82,17 +95,6 @@ function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
           </p>
           <TrendIcon direction={getTrend(m.DailyQty, currentDay).direction} />
         </div>
-      </div>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-        <span>
-          {m.Wilayah}
-          {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
-        </span>
-        <span>
-          Harga {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"} · Target Harian{" "}
-          {m.TargetHarian != null ? formatQty(m.TargetHarian) : "-"} · Target Bulanan{" "}
-          {m.TargetBulanan != null ? formatQty(m.TargetBulanan) : "-"}
-        </span>
       </div>
       <div className="flex gap-1 overflow-x-auto pb-1">
         {m.DailyQty.map((qty, i) => (

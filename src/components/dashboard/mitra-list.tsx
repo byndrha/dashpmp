@@ -299,7 +299,13 @@ function MitraFormDialog({
           </div>
           <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
             <Label className="sr-only">Lokasi GPS</Label>
-            <MitraLocationField value={location} onChange={setLocation} onGeocode={handleGeocode} />
+            <MitraLocationField
+              value={location}
+              onChange={setLocation}
+              onGeocode={handleGeocode}
+              wilayah={wilayah}
+              kecamatan={kecamatan}
+            />
           </div>
           <DialogFooter className="col-span-2 sm:col-span-4">
             <Button type="submit" disabled={pending} className="ml-auto">

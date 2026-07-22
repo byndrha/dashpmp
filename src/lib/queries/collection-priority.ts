@@ -13,7 +13,12 @@ export interface CollectionPriorityRow {
   PiutangAwal: number;
   PiutangBerjalan: number;
   TargetAmount: number | null;
-  TargetDate: string | null;
+  // mssql returns a DATETIME column as a real Date instance, which survives
+  // Server->Client Component serialization as a Date (not auto-stringified)
+  // — this is only a string right after a plain JSON round-trip (e.g. a
+  // server action's return value), never straight off this query's
+  // recordset.
+  TargetDate: string | Date | null;
   TargetNote: string | null;
   AvgQtyPerOrderDay: number | null;
   TerakhirPesan: string | null;

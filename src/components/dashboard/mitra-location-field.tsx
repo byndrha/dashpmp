@@ -3,9 +3,11 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { Geolocation } from "@capacitor/geolocation";
-import { Locate, MapPin } from "lucide-react";
+import { Locate, MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 const MitraLocationMap = dynamic(
   () => import("@/components/dashboard/mitra-location-map").then((m) => m.MitraLocationMap),
@@ -42,22 +44,57 @@ export function MitraLocationField({
   value,
   onChange,
   onGeocode,
+  wilayah,
+  kecamatan,
 }: {
   value: MitraLocationValue | null;
   onChange: (value: MitraLocationValue) => void;
   onGeocode?: (suggestion: MitraGeocodeSuggestion) => void;
+  // Used once, on mount, to center the default pin on the mitra's already-
+  // known Wilayah/Kecamatan instead of the generic Pabrik-default position —
+  // only when there's no saved GPS location yet (`value == null`).
+  wilayah?: string | null;
+  kecamatan?: string | null;
 }) {
   const current = value ?? PABRIK_DEFAULT;
   const [recenterKey, setRecenterKey] = useState(0);
   const [locating, setLocating] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+  }, []);
+
+  // One-shot on mount: a mitra with Wilayah/Kecamatan already on file (e.g.
+  // ERP-imported) but no saved GPS pin yet gets its default pin centered on
+  // that address instead of the generic Pabrik position. Doesn't re-run if
+  // the user edits Wilayah/Kecamatan afterwards, or once a real location
+  // exists — this is only about where editing starts.
+  useEffect(() => {
+    if (value != null) return;
+    const query = [kecamatan, wilayah].filter(Boolean).join(", ");
+    if (!query) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(`${query}, Indonesia`)}`);
+        const data = await res.json();
+        if (res.ok && !data.error) {
+          onChange({ latitude: data.latitude, longitude: data.longitude, alamat: data.alamat ?? null });
+          setRecenterKey((k) => k + 1);
+        }
+      } catch {
+        // Keep the Pabrik-default pin if the lookup fails — still a
+        // reasonable starting point, just not address-specific.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function reverseGeocode(lat: number, lng: number) {
@@ -101,6 +138,31 @@ export function MitraLocationField({
     return false;
   }
 
+  // Plain click/Enter handler, not a <form onSubmit> — this field is always
+  // nested inside the mitra form's own <form>, and HTML doesn't allow a
+  // <form> inside a <form> (confirmed live: React logged a hydration error
+  // for exactly that when this was first written as a nested form).
+  async function handleSearch() {
+    const query = searchQuery.trim();
+    if (!query) return;
+    setSearchError(null);
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setSearchError(data.error ?? "Lokasi tidak ditemukan.");
+        return;
+      }
+      onChange({ latitude: data.latitude, longitude: data.longitude, alamat: data.alamat ?? null });
+      setRecenterKey((k) => k + 1);
+    } catch {
+      setSearchError("Gagal mencari lokasi.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
   async function handleUseMyLocation() {
     setGeoError(null);
     setLocating(true);
@@ -119,21 +181,57 @@ export function MitraLocationField({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">Geser pin atau klik peta untuk menentukan lokasi mitra.</p>
-        <Button type="button" variant="outline" size="sm" onClick={handleUseMyLocation} disabled={locating}>
-          <Locate className="size-3.5" />
-          {locating ? "Mencari lokasi..." : "Pakai Lokasi Saya"}
+      <div className="relative">
+        <MitraLocationMap
+          latitude={current.latitude}
+          longitude={current.longitude}
+          onChange={handleMove}
+          recenterKey={recenterKey}
+        />
+        {/* Bottom-left, not top-left — Leaflet's own zoom in/out control sits
+            top-left by default, so this avoids overlapping it. Solid
+            (non-transparent) theme colors, matching every other input/button
+            on this form rather than a floating glass-panel look. */}
+        <div className="absolute bottom-2 left-2 z-1000 flex w-[calc(100%-56px)] max-w-64 gap-1">
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSearch();
+              }
+            }}
+            placeholder="Cari lokasi..."
+            className="h-8 bg-card text-xs shadow-md dark:bg-card"
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="size-8 shrink-0 bg-card shadow-md dark:bg-card"
+            disabled={searching}
+            onClick={handleSearch}
+          >
+            <Search className="size-3.5" />
+          </Button>
+        </div>
+        {/* Bottom-right, icon-only — mirrors the search box's bottom-left
+            placement instead of taking a whole row above the map. */}
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="absolute bottom-2 right-2 z-1000 size-8 bg-card shadow-md dark:bg-card"
+          onClick={handleUseMyLocation}
+          disabled={locating}
+          title="Pakai Lokasi Saya"
+        >
+          <Locate className={cn("size-3.5", locating && "animate-spin")} />
         </Button>
       </div>
 
-      <MitraLocationMap
-        latitude={current.latitude}
-        longitude={current.longitude}
-        onChange={handleMove}
-        recenterKey={recenterKey}
-      />
-
+      {searchError && <p className="text-xs text-destructive">{searchError}</p>}
       {geoError && <p className="text-xs text-destructive">{geoError}</p>}
 
       <div className="flex items-start gap-1.5 rounded-md border border-border bg-card/50 px-2.5 py-2 text-xs">

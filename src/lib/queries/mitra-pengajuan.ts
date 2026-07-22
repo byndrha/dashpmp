@@ -3,7 +3,13 @@ import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { createMitra, type MitraInput } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
+import { createSalesOrderFromPengajuan } from "@/lib/queries/sales-order";
 import { MARKETING_ROLE_ID, APPROVER_ROLE_IDS } from "@/lib/roles";
+
+// More than 10 kantong reads as a reseller buying in bulk (Agen); 10 or
+// fewer as a direct retail outlet (Retail) — see PARTNER_TYPE_CASE in
+// aging.ts for the Gender->PartnerType mapping this feeds into.
+const AGEN_QTY_THRESHOLD = 10;
 
 export { MARKETING_ROLE_ID, APPROVER_ROLE_IDS };
 
@@ -172,7 +178,7 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
       SET Status = 'Diproses'
       OUTPUT inserted.NamaCalon, inserted.NoHP, inserted.Alamat, inserted.Wilayah,
              inserted.Kecamatan, inserted.PriceLevel, inserted.Latitude, inserted.Longitude,
-             inserted.Kapasitas, inserted.Kompetitor
+             inserted.Kapasitas, inserted.Kompetitor, inserted.QtyKantong, inserted.WaktuPermintaanSampai
       WHERE PengajuanID = @id AND Status = 'Menunggu'
     `);
 
@@ -188,6 +194,8 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
         Longitude: number | null;
         Kapasitas: number | null;
         Kompetitor: string | null;
+        QtyKantong: number | null;
+        WaktuPermintaanSampai: Date | null;
       }
     | undefined;
   if (!row) throw new Error("Pengajuan tidak ditemukan atau sudah diproses");
@@ -195,17 +203,14 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
   try {
     // Reuses the exact mitra-creation path the Mitra module's own "Tambah
     // Mitra" form uses — same Code/BusinessPartnerID generation, same
-    // required-column defaults (see mitra.ts createMitra()), no duplicated
-    // logic. Defaults Tipe Mitra to Retail ("Female") since this KPI is
-    // specifically about retail outlets — correctable afterwards via the
-    // Mitra module if a submission turns out to be an Agen.
+    // required-column defaults (see mitra.ts createMitra()).
     const mitraInput: MitraInput = {
       name: row.NamaCalon,
       mobileNo: row.NoHP,
       address: row.Alamat,
       wilayah: row.Wilayah,
       kecamatan: row.Kecamatan,
-      gender: "Female",
+      gender: row.QtyKantong != null && row.QtyKantong > AGEN_QTY_THRESHOLD ? "Male" : "Female",
       priceLevel: row.PriceLevel,
       termOfPaymentId: null,
       capacity: row.Kapasitas,
@@ -224,6 +229,18 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
 
     if (row.Kompetitor != null && row.Kompetitor.trim() !== "") {
       await setMitraCompetitor({ businessPartnerId, kompetitor: row.Kompetitor, userId: reviewerUserId });
+    }
+
+    // A Pengajuan with no captured Qty has nothing to order yet — approving
+    // it still creates the Mitra above, just without a Sales Order.
+    if (row.QtyKantong != null && row.QtyKantong > 0) {
+      await createSalesOrderFromPengajuan({
+        businessPartnerId,
+        address: row.Alamat,
+        qtyKantong: row.QtyKantong,
+        priceLevel: row.PriceLevel,
+        dueDate: row.WaktuPermintaanSampai,
+      });
     }
 
     await pool

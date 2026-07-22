@@ -186,7 +186,13 @@ export function PengajuanFormDialog({
           </div>
           <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
             <Label className="sr-only">Lokasi GPS</Label>
-            <MitraLocationField value={location} onChange={setLocation} onGeocode={handleGeocode} />
+            <MitraLocationField
+              value={location}
+              onChange={setLocation}
+              onGeocode={handleGeocode}
+              wilayah={wilayah}
+              kecamatan={kecamatan}
+            />
             {!location && (
               <p className="text-xs text-destructive">Lokasi GPS wajib diisi — geser pin atau klik peta.</p>
             )}
