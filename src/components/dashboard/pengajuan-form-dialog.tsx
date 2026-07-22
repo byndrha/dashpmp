@@ -26,12 +26,6 @@ import { formatRupiah } from "@/lib/format";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { PengajuanInput } from "@/lib/queries/mitra-pengajuan";
 
-// Same coordinates as PABRIK_ORIGIN in app/api/routing/route.ts — a
-// sensible starting pin, same default the Mitra location field itself uses.
-function emptyLocation(): MitraLocationValue {
-  return { latitude: -7.8462825, longitude: 111.4759937, alamat: null };
-}
-
 export function PengajuanFormDialog({
   open,
   onOpenChange,
@@ -49,7 +43,7 @@ export function PengajuanFormDialog({
   const [kecamatan, setKecamatan] = useState("");
   const [regencyCode, setRegencyCode] = useState<string | null>(null);
   const [address, setAddress] = useState("");
-  const [location, setLocation] = useState<MitraLocationValue>(emptyLocation());
+  const [location, setLocation] = useState<MitraLocationValue | null>(null);
   const [priceLevel, setPriceLevel] = useState("");
 
   // Same pattern as MitraFormDialog (mitra-list.tsx): only clears Kecamatan
@@ -71,11 +65,12 @@ export function PengajuanFormDialog({
     setKecamatan("");
     setRegencyCode(null);
     setAddress("");
-    setLocation(emptyLocation());
+    setLocation(null);
     setPriceLevel("");
   }
 
   function handleSubmit(formData: FormData) {
+    if (!location) return;
     onSubmit({
       namaCalon: String(formData.get("namaCalon") ?? ""),
       noHP: String(formData.get("noHP") ?? "") || null,
@@ -155,9 +150,12 @@ export function PengajuanFormDialog({
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label>Lokasi GPS</Label>
             <MitraLocationField value={location} onChange={setLocation} onGeocode={handleGeocode} />
+            {!location && (
+              <p className="text-xs text-destructive">Lokasi GPS wajib diisi — geser pin atau klik peta.</p>
+            )}
           </div>
           <DialogFooter className="sm:col-span-2">
-            <Button type="submit" disabled={pending} className="ml-auto">
+            <Button type="submit" disabled={pending || !location} className="ml-auto">
               {pending ? "Mengirim..." : "Kirim Pengajuan"}
             </Button>
           </DialogFooter>
