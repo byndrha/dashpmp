@@ -23,14 +23,20 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
   const [newNama, setNewNama] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingNama, setEditingNama] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function handleCreate() {
     const nama = newNama.trim();
     if (!nama) return;
+    setError(null);
     startTransition(async () => {
-      await createArmadaAction(nama);
-      setNewNama("");
+      try {
+        await createArmadaAction(nama);
+        setNewNama("");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menyimpan armada.");
+      }
     });
   }
 
@@ -42,16 +48,25 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
   function handleUpdate() {
     const nama = editingNama.trim();
     if (!nama || editingId == null) return;
+    setError(null);
     startTransition(async () => {
-      await updateArmadaAction(editingId, nama);
-      setEditingId(null);
+      try {
+        await updateArmadaAction(editingId, nama);
+        setEditingId(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menyimpan armada.");
+      }
     });
   }
 
   function handleDelete(row: ArmadaRow) {
     if (!confirm(`Hapus armada "${row.Nama}"?`)) return;
     startTransition(async () => {
-      await deleteArmadaAction(row.ArmadaID);
+      try {
+        await deleteArmadaAction(row.ArmadaID);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Gagal menghapus armada.");
+      }
     });
   }
 
@@ -79,6 +94,7 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
                 <Plus className="size-4" />
               </Button>
             </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
             <div className="flex flex-col divide-y rounded-lg border">
               {armada.map((a) => (
                 <div key={a.ArmadaID} className="flex items-center justify-between gap-2 px-3 py-2">
