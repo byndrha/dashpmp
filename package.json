@@ -15,6 +15,7 @@
     "@capacitor/core": "^8.4.2",
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/ios": "^8.4.2",
+    "@capacitor/status-bar": "^8.0.3",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
