@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { MapPin, Phone, Calendar, Package } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -20,6 +21,7 @@ import { approvePengajuanAction, rejectPengajuanAction } from "@/app/(dashboard)
 
 const STATUS_BADGE: Record<PengajuanRow["Status"], string> = {
   Menunggu: "bg-warning/15 text-warning",
+  Diproses: "bg-muted text-muted-foreground",
   Disetujui: "bg-primary/15 text-primary",
   Ditolak: "bg-destructive/15 text-destructive",
 };
@@ -68,7 +70,11 @@ export function PengajuanList({ rows, canApprove }: { rows: PengajuanRow[]; canA
   function handleApprove(row: PengajuanRow) {
     if (!confirm(`Setujui pengajuan "${row.NamaCalon}"? Mitra baru akan otomatis dibuat.`)) return;
     startTransition(async () => {
-      await approvePengajuanAction(row.PengajuanID);
+      try {
+        await approvePengajuanAction(row.PengajuanID);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Gagal memproses pengajuan");
+      }
     });
   }
 
@@ -76,8 +82,12 @@ export function PengajuanList({ rows, canApprove }: { rows: PengajuanRow[]; canA
     if (!rejecting) return;
     const id = rejecting.PengajuanID;
     startTransition(async () => {
-      await rejectPengajuanAction(id, catatan);
-      setRejecting(null);
+      try {
+        await rejectPengajuanAction(id, catatan);
+        setRejecting(null);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Gagal memproses pengajuan");
+      }
     });
   }
 

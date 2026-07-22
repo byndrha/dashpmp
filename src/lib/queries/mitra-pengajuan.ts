@@ -23,7 +23,7 @@ function parseWibDateTimeLocal(value: string): Date {
 export const MARKETING_ROLE_ID = 1003;
 export const APPROVER_ROLE_IDS = [3, 4];
 
-export type PengajuanStatus = "Menunggu" | "Disetujui" | "Ditolak";
+export type PengajuanStatus = "Menunggu" | "Diproses" | "Disetujui" | "Ditolak";
 
 export interface PengajuanRow {
   PengajuanID: number;
@@ -154,12 +154,23 @@ export async function createPengajuan(input: PengajuanInput, marketingUserId: st
 
 export async function approvePengajuan(pengajuanId: number, reviewerUserId: string): Promise<void> {
   const pool = await getPool();
-  const result = await pool
-    .request()
-    .input("id", sql.Int, pengajuanId)
-    .query(`SELECT * FROM DashboardMitraPengajuan WHERE PengajuanID = @id AND Status = 'Menunggu'`);
 
-  const row = result.recordset[0] as
+  // Atomically claim the row before doing any create-mitra work: an UPDATE
+  // (not a plain SELECT) is the only way to guarantee that, under concurrent
+  // double-click calls for the same pengajuanId, at most one caller can ever
+  // see the row transition out of 'Menunggu'. Losing callers get an empty
+  // OUTPUT and bail out before creating anything.
+  const claimResult = await pool
+    .request()
+    .input("id", sql.Int, pengajuanId).query(`
+      UPDATE DashboardMitraPengajuan
+      SET Status = 'Diproses'
+      OUTPUT inserted.NamaCalon, inserted.NoHP, inserted.Alamat, inserted.Wilayah,
+             inserted.Kecamatan, inserted.PriceLevel, inserted.Latitude, inserted.Longitude
+      WHERE PengajuanID = @id AND Status = 'Menunggu'
+    `);
+
+  const row = claimResult.recordset[0] as
     | {
         NamaCalon: string;
         NoHP: string | null;
@@ -173,45 +184,56 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
     | undefined;
   if (!row) throw new Error("Pengajuan tidak ditemukan atau sudah diproses");
 
-  // Reuses the exact mitra-creation path the Mitra module's own "Tambah
-  // Mitra" form uses — same Code/BusinessPartnerID generation, same
-  // required-column defaults (see mitra.ts createMitra()), no duplicated
-  // logic. Defaults Tipe Mitra to Retail ("Female") since this KPI is
-  // specifically about retail outlets — correctable afterwards via the
-  // Mitra module if a submission turns out to be an Agen.
-  const mitraInput: MitraInput = {
-    name: row.NamaCalon,
-    mobileNo: row.NoHP,
-    address: row.Alamat,
-    wilayah: row.Wilayah,
-    kecamatan: row.Kecamatan,
-    gender: "Female",
-    priceLevel: row.PriceLevel,
-    termOfPaymentId: null,
-    capacity: null,
-  };
-  const businessPartnerId = await createMitra(mitraInput);
+  try {
+    // Reuses the exact mitra-creation path the Mitra module's own "Tambah
+    // Mitra" form uses — same Code/BusinessPartnerID generation, same
+    // required-column defaults (see mitra.ts createMitra()), no duplicated
+    // logic. Defaults Tipe Mitra to Retail ("Female") since this KPI is
+    // specifically about retail outlets — correctable afterwards via the
+    // Mitra module if a submission turns out to be an Agen.
+    const mitraInput: MitraInput = {
+      name: row.NamaCalon,
+      mobileNo: row.NoHP,
+      address: row.Alamat,
+      wilayah: row.Wilayah,
+      kecamatan: row.Kecamatan,
+      gender: "Female",
+      priceLevel: row.PriceLevel,
+      termOfPaymentId: null,
+      capacity: null,
+    };
+    const businessPartnerId = await createMitra(mitraInput);
 
-  if (row.Latitude != null && row.Longitude != null) {
-    await setMitraLocation({
-      businessPartnerId,
-      latitude: row.Latitude,
-      longitude: row.Longitude,
-      alamat: row.Alamat,
-      userId: reviewerUserId,
-    });
+    if (row.Latitude != null && row.Longitude != null) {
+      await setMitraLocation({
+        businessPartnerId,
+        latitude: row.Latitude,
+        longitude: row.Longitude,
+        alamat: row.Alamat,
+        userId: reviewerUserId,
+      });
+    }
+
+    await pool
+      .request()
+      .input("id", sql.Int, pengajuanId)
+      .input("bpId", sql.VarChar(16), businessPartnerId)
+      .input("reviewer", sql.VarChar(16), reviewerUserId).query(`
+        UPDATE DashboardMitraPengajuan
+        SET Status = 'Disetujui', ConvertedBusinessPartnerID = @bpId,
+            ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
+        WHERE PengajuanID = @id AND Status = 'Diproses'
+      `);
+  } catch (err) {
+    // Don't leave the row permanently stuck in 'Diproses' limbo if the
+    // create-mitra/set-location work fails partway through — revert the
+    // claim so the submission can be seen as pending / re-approved.
+    await pool
+      .request()
+      .input("id", sql.Int, pengajuanId)
+      .query(`UPDATE DashboardMitraPengajuan SET Status = 'Menunggu' WHERE PengajuanID = @id AND Status = 'Diproses'`);
+    throw err;
   }
-
-  await pool
-    .request()
-    .input("id", sql.Int, pengajuanId)
-    .input("bpId", sql.VarChar(16), businessPartnerId)
-    .input("reviewer", sql.VarChar(16), reviewerUserId).query(`
-      UPDATE DashboardMitraPengajuan
-      SET Status = 'Disetujui', ConvertedBusinessPartnerID = @bpId,
-          ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
-      WHERE PengajuanID = @id AND Status = 'Menunggu'
-    `);
 }
 
 export async function rejectPengajuan(
