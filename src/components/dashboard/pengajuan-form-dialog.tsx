@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,11 @@ export function PengajuanFormDialog({
   const [address, setAddress] = useState("");
   const [location, setLocation] = useState<MitraLocationValue | null>(null);
   const [priceLevel, setPriceLevel] = useState("");
+  // Tooltip's own uncontrolled hover/focus detection doesn't fire when its
+  // trigger is a Textarea passed via `render` — controlling `open` directly
+  // off the field's focus state sidesteps that and is proven reliable
+  // elsewhere (filter-bar.tsx's same-date warning uses the same approach).
+  const [kompetitorFocused, setKompetitorFocused] = useState(false);
 
   // Same pattern as MitraFormDialog (mitra-list.tsx): only clears Kecamatan
   // when Wilayah actually changes to a different region.
@@ -129,8 +135,8 @@ export function PengajuanFormDialog({
             <Input id="noHP" name="noHP" placeholder="No HP" required />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kapasitas" className="sr-only">Total Kapasitas (kantong/hari)</Label>
-            <Input id="kapasitas" name="kapasitas" type="number" min={0} placeholder="Total Kapasitas (kantong/hari)" />
+            <Label htmlFor="kapasitas" className="sr-only">Kapasitas Harian</Label>
+            <Input id="kapasitas" name="kapasitas" type="number" min={0} placeholder="Kapasitas Harian" />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="qtyKantong" className="sr-only">Qty Permintaan</Label>
@@ -162,12 +168,21 @@ export function PengajuanFormDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="kompetitor" className="sr-only">Daftar Kompetitor</Label>
-            <Textarea
-              id="kompetitor"
-              name="kompetitor"
-              placeholder="Daftar Kompetitor, satu per baris (opsional)"
-              rows={1}
-            />
+            <Tooltip open={kompetitorFocused}>
+              <TooltipTrigger
+                render={
+                  <Textarea
+                    id="kompetitor"
+                    name="kompetitor"
+                    placeholder="Daftar Kompetitor"
+                    rows={1}
+                    onFocus={() => setKompetitorFocused(true)}
+                    onBlur={() => setKompetitorFocused(false)}
+                  />
+                }
+              />
+              <TooltipContent>Pisahkan satu kompetitor dengan koma</TooltipContent>
+            </Tooltip>
           </div>
           <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
             <Label className="sr-only">Lokasi GPS</Label>

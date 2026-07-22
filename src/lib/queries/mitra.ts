@@ -28,6 +28,10 @@ export interface MitraRow {
   // same pattern as DashboardMitraLocation) since BusinessPartner has no
   // matching free-text column and it's not an ERP-owned concept.
   Kompetitor: string | null;
+  // When this mitra joined — populated for ERP-imported mitra, and now also
+  // set on creation by createMitra() below, so "Mitra Terbaru" sorting
+  // (mitra-do-panel.tsx) works for dashboard-created mitra too.
+  JoinDate: string | null;
 }
 
 export async function getMitraList(): Promise<MitraRow[]> {
@@ -50,7 +54,8 @@ export async function getMitraList(): Promise<MitraRow[]> {
         ml.Latitude,
         ml.Longitude,
         ml.Alamat AS GeoAlamat,
-        mc.Kompetitor
+        mc.Kompetitor,
+        bp.JoinDate
     FROM BusinessPartner bp
     LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
     LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
@@ -191,12 +196,12 @@ export async function createMitra(input: MitraInput): Promise<string> {
         (BusinessPartnerID, Code, Name, MobileNo, Address, NPWPName, NPWPAddress, Gender, PriceLevel,
          TermOfPaymentID, Capacity, IsLoan, IsSuspended, IsTax, GroupBusinessPartner,
          AccountPayableID, AccountReceivableID, SalesDiscID, PurchaseDiscID, TaxInID, TaxOutID,
-         [Limit], PurchaseDepositID, SalesDepositID, IsDeleted, ModifiedDate)
+         [Limit], PurchaseDepositID, SalesDepositID, IsDeleted, JoinDate, ModifiedDate)
       VALUES
         (@id, @code, @name, @mobileNo, @address, @wilayah, @kecamatan, @gender, @priceLevel,
          @termOfPaymentId, @capacity, 0, 0, 0, @groupBP,
          @apId, @arId, @salesDiscId, @purchaseDiscId, @taxInId, @taxOutId,
-         0, @purchaseDepositId, @salesDepositId, 0, GETDATE())
+         0, @purchaseDepositId, @salesDepositId, 0, GETDATE(), GETDATE())
     `);
   return id;
 }

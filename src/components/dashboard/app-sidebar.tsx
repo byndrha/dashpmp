@@ -58,7 +58,11 @@ export function AppSidebar({
       <SidebarHeader className="gap-2">
         <div className="flex items-center gap-2 px-2 py-2">
           {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand asset, no next/image usage elsewhere in this codebase */}
-          <img src="/brand/logo-pmp-group.png" alt="PMP Group" className="h-7 w-auto shrink-0" />
+          <img
+            src="/brand/logo-pmp-group.png"
+            alt="PMP Group"
+            className="h-7 w-auto shrink-0 dark:brightness-0 dark:invert"
+          />
           <div className="flex min-w-0 items-center gap-1.5 truncate group-data-[collapsible=icon]:hidden">
             <p className="font-display font-semibold leading-tight">PMP Group</p>
             <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">

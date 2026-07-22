@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Wallet, Receipt, Package, LineChart, Zap, ShoppingCart, ArrowRight, Truck } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getRecentInvoices, getTodayWilayahPulse } from "@/lib/queries/activity";
@@ -11,6 +12,7 @@ import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed"
 import { GreetingHeader } from "@/components/dashboard/greeting-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatRupiah } from "@/lib/format";
+import { MARKETING_ROLE_ID } from "@/lib/roles";
 
 const MODULE_LINKS = [
   { href: "/pnl", label: "Keuangan", desc: "Laba rugi dan titik impas", icon: LineChart },
@@ -22,6 +24,14 @@ const MODULE_LINKS = [
 
 export default async function BerandaPage() {
   const session = await requireModuleAccess("beranda");
+
+  // Marketing always lands on Pemasaran instead of Beranda — whether that's
+  // right after login or from navigating/clicking back to "/" later, since
+  // Beranda's KPIs aren't relevant to their day-to-day work.
+  if (!session.user.isSuperAdmin && session.user.roleId === MARKETING_ROLE_ID) {
+    redirect("/pemasaran");
+  }
+
   const [recentInvoices, wilayahPulse, aging, todaySales] = await Promise.all([
     getRecentInvoices(15),
     getTodayWilayahPulse(),

@@ -38,7 +38,9 @@ export function PiutangPaymentsPanel({
   function goToDate(newDate: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("piutangDate", newDate);
-    router.push(`${pathname}?${params.toString()}`);
+    // scroll:false — this is a same-page date-nav, not a real navigation;
+    // without it Next.js resets scroll to the top on every date change.
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   function shiftDate(deltaDays: number) {

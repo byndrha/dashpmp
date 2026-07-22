@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export function FilterBar({
@@ -30,7 +31,15 @@ export function FilterBar({
   const [wilayah, setWilayah] = useState(searchParams.get("wilayah") ?? "all");
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // "Sampai" is an exclusive upper bound in every query this filter feeds
+  // (TransDate >= @from AND TransDate < @to) — from === to always yields a
+  // zero-row range, not a one-day range, so it's blocked outright rather
+  // than silently returning an empty result the user would mistake for
+  // "no data that day".
+  const sameDate = !!from && !!to && from === to;
+
   function applyFilter() {
+    if (sameDate) return;
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
@@ -60,14 +69,25 @@ export function FilterBar({
               onChange={(e) => setFrom(e.target.value)}
               className="w-40"
             />
-            <Input
-              id="to"
-              type="date"
-              aria-label="Sampai Tanggal"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="w-40"
-            />
+            <Tooltip open={sameDate}>
+              <TooltipTrigger
+                render={
+                  <Input
+                    id="to"
+                    type="date"
+                    aria-label="Sampai Tanggal"
+                    aria-invalid={sameDate}
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                    className={cn("w-40", sameDate && "border-destructive")}
+                  />
+                }
+              />
+              <TooltipContent>
+                Tanggal &quot;Dari&quot; dan &quot;Sampai&quot; tidak boleh sama — tidak akan ada data. Contoh: Dari 1
+                Jul 2026, Sampai 31 Jul 2026.
+              </TooltipContent>
+            </Tooltip>
           </>
         )}
         {wilayahList && (
@@ -85,7 +105,9 @@ export function FilterBar({
             </SelectContent>
           </Select>
         )}
-        <Button onClick={applyFilter}>Terapkan</Button>
+        <Button onClick={applyFilter} disabled={sameDate}>
+          Terapkan
+        </Button>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Users, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ChevronDown, Users, TrendingUp, TrendingDown, Minus, ArrowUpDown } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,13 @@ import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
 
-type SortMode = "terbanyak" | "tren";
+type SortMode = "terbanyak" | "tren" | "terbaru";
+
+const SORT_LABEL: Record<SortMode, string> = {
+  terbanyak: "Pengambilan Terbanyak",
+  tren: "Tren 3 Hari Terakhir",
+  terbaru: "Mitra Terbaru",
+};
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
@@ -57,27 +63,18 @@ function DayChip({ day, qty, target, isPast }: { day: number; qty: number; targe
 
 function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
   return (
-    <div className="flex flex-col gap-2 py-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-1.5 font-medium">
-            {m.Name}
-            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-              {m.PartnerType}
-            </Badge>
-          </p>
-          <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            <span>
-              {m.Wilayah}
-              {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
-            </span>
-            <span>
-              Harga {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"} · Target Harian{" "}
-              {m.TargetHarian != null ? formatQty(m.TargetHarian) : "-"} · Target Bulanan{" "}
-              {m.TargetBulanan != null ? formatQty(m.TargetBulanan) : "-"}
-            </span>
-          </div>
-        </div>
+    <div className="flex flex-col gap-1.5 py-3">
+      {/* Name + Total/%/trend never wrap onto separate lines (no
+          flex-wrap here) — that's what let the right-hand block collapse
+          below the Harga/Target line on narrow mobile widths before. The
+          name truncates instead of pushing the right block down. */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-1.5 font-medium">
+          <span className="truncate">{m.Name}</span>
+          <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+            {m.PartnerType}
+          </Badge>
+        </p>
         <div className="shrink-0 text-right">
           <p className="font-semibold tabular-nums">{formatQty(m.TotalQty)} kantong</p>
           <p className="text-xs font-medium text-muted-foreground">
@@ -85,6 +82,17 @@ function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
           </p>
           <TrendIcon direction={getTrend(m.DailyQty, currentDay).direction} />
         </div>
+      </div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+        <span>
+          {m.Wilayah}
+          {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
+        </span>
+        <span>
+          Harga {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"} · Target Harian{" "}
+          {m.TargetHarian != null ? formatQty(m.TargetHarian) : "-"} · Target Bulanan{" "}
+          {m.TargetBulanan != null ? formatQty(m.TargetBulanan) : "-"}
+        </span>
       </div>
       <div className="flex gap-1 overflow-x-auto pb-1">
         {m.DailyQty.map((qty, i) => (
@@ -95,18 +103,46 @@ function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
   );
 }
 
+// Newest JoinDate first; mitra with no JoinDate on record (older
+// ERP-imported rows this app didn't create) sort last rather than
+// clumping at the top as a false "newest".
+function compareJoinDateDesc(a: MitraDORow, b: MitraDORow): number {
+  if (!a.JoinDate && !b.JoinDate) return 0;
+  if (!a.JoinDate) return 1;
+  if (!b.JoinDate) return -1;
+  return new Date(b.JoinDate).getTime() - new Date(a.JoinDate).getTime();
+}
+
 export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
   const [showAll, setShowAll] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("terbanyak");
+  const [wilayahFilter, setWilayahFilter] = useState("all");
   const { active, inactive, currentDay } = data;
 
-  // "active" already arrives sorted by TotalQty desc (the "Pengambilan
-  // Terbanyak" mode) — only re-sort when the trend mode is picked, so the
-  // default path stays a no-op.
+  const wilayahOptions = useMemo(
+    () => [...new Set([...active, ...inactive].map((m) => m.Wilayah))].sort(),
+    [active, inactive]
+  );
+
+  const filteredActive = useMemo(
+    () => (wilayahFilter === "all" ? active : active.filter((m) => m.Wilayah === wilayahFilter)),
+    [active, wilayahFilter]
+  );
+  const filteredInactive = useMemo(
+    () => (wilayahFilter === "all" ? inactive : inactive.filter((m) => m.Wilayah === wilayahFilter)),
+    [inactive, wilayahFilter]
+  );
+
+  // filteredActive already arrives sorted by TotalQty desc (the
+  // "Pengambilan Terbanyak" mode) — only re-sort for the other modes, so
+  // the default path stays a no-op.
   const sortedActive = useMemo(() => {
-    if (sortMode === "terbanyak") return active;
-    return [...active].sort((a, b) => getTrend(b.DailyQty, currentDay).delta - getTrend(a.DailyQty, currentDay).delta);
-  }, [active, sortMode, currentDay]);
+    if (sortMode === "terbanyak") return filteredActive;
+    if (sortMode === "terbaru") return [...filteredActive].sort(compareJoinDateDesc);
+    return [...filteredActive].sort(
+      (a, b) => getTrend(b.DailyQty, currentDay).delta - getTrend(a.DailyQty, currentDay).delta
+    );
+  }, [filteredActive, sortMode, currentDay]);
 
   return (
     // Plain div standing in for <Card> here, minus `overflow-hidden` — Card
@@ -139,26 +175,39 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <Select value={sortMode} onValueChange={(v) => setSortMode((v as SortMode) ?? "terbanyak")}>
             <SelectTrigger className="w-56" aria-label="Urutkan">
-              <SelectValue>
-                {(v: string) => (v === "tren" ? "Tren 3 Hari Terakhir" : "Pengambilan Terbanyak")}
-              </SelectValue>
+              <ArrowUpDown className="size-3.5 text-muted-foreground" />
+              <SelectValue>{(v: string) => SORT_LABEL[v as SortMode] ?? SORT_LABEL.terbanyak}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="terbanyak">Pengambilan Terbanyak</SelectItem>
-              <SelectItem value="tren">Tren 3 Hari Terakhir</SelectItem>
+              <SelectItem value="terbanyak">{SORT_LABEL.terbanyak}</SelectItem>
+              <SelectItem value="tren">{SORT_LABEL.tren}</SelectItem>
+              <SelectItem value="terbaru">{SORT_LABEL.terbaru}</SelectItem>
             </SelectContent>
           </Select>
-          {inactive.length > 0 && (
+          <Select value={wilayahFilter} onValueChange={(v) => setWilayahFilter(v ?? "all")}>
+            <SelectTrigger className="w-44" aria-label="Wilayah">
+              <SelectValue>{(v: string) => (v === "all" ? "Semua Wilayah" : v)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Wilayah</SelectItem>
+              {wilayahOptions.map((w) => (
+                <SelectItem key={w} value={w}>
+                  {w}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {filteredInactive.length > 0 && (
             <Button variant="outline" size="sm" onClick={() => setShowAll((v) => !v)}>
               <Users className="size-3.5" />
-              {showAll ? "Sembunyikan" : "Tampilkan"} {inactive.length} mitra tanpa transaksi bulan ini
+              {showAll ? "Sembunyikan" : "Tampilkan"} {filteredInactive.length} mitra tanpa transaksi bulan ini
               <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
             </Button>
           )}
         </div>
       </CardHeader>
       <CardContent>
-        {active.length === 0 ? (
+        {filteredActive.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada Delivery Order bulan ini.</p>
         ) : (
           <div className="flex flex-col divide-y">
@@ -168,9 +217,9 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
           </div>
         )}
 
-        {showAll && inactive.length > 0 && (
+        {showAll && filteredInactive.length > 0 && (
           <div className="flex flex-col divide-y border-t">
-            {inactive.map((m) => (
+            {filteredInactive.map((m) => (
               <MitraDOCard key={m.BusinessPartnerID} m={m} currentDay={currentDay} />
             ))}
           </div>

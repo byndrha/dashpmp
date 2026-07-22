@@ -18,6 +18,9 @@ export interface MitraDORow {
   TotalQty: number;
   PctAchievement: number | null;
   HasTransaksi: boolean;
+  // Used for the "Mitra Terbaru" sort mode — when this mitra joined,
+  // ISO date string or null (older ERP-imported rows can lack it).
+  JoinDate: string | null;
 }
 
 export interface MitraDOMonthly {
@@ -37,6 +40,7 @@ interface RawDailyRow {
   Kecamatan: string | null;
   PriceLevel: number | null;
   Capacity: number | null;
+  JoinDate: string | null;
   TransDate: string;
   QtyKantong: number;
 }
@@ -72,6 +76,7 @@ export async function getMitraDOMonthly(): Promise<MitraDOMonthly> {
             bp.NPWPAddress AS Kecamatan,
             bp.PriceLevel,
             bp.Capacity,
+            bp.JoinDate,
             CAST(do_.TransDate AS DATE) AS TransDate,
             ${KANTONG_QTY_EXPR} AS QtyKantong
         FROM DeliveryOrder do_
@@ -80,7 +85,7 @@ export async function getMitraDOMonthly(): Promise<MitraDOMonthly> {
         WHERE do_.IsDeleted = 0
           AND do_.TransDate >= @monthStart AND do_.TransDate < @monthEnd
         GROUP BY bp.BusinessPartnerID, bp.Name, bp.NPWPName, bp.NPWPAddress, bp.SalesmanID, bp.Gender,
-                 bp.PriceLevel, bp.Capacity, CAST(do_.TransDate AS DATE)
+                 bp.PriceLevel, bp.Capacity, bp.JoinDate, CAST(do_.TransDate AS DATE)
       `),
     getPriceLevelOptions(),
     getMitraList(),
@@ -106,6 +111,7 @@ export async function getMitraDOMonthly(): Promise<MitraDOMonthly> {
         TotalQty: 0,
         PctAchievement: null,
         HasTransaksi: true,
+        JoinDate: row.JoinDate,
       };
       byPartner.set(row.BusinessPartnerID, entry);
     }
@@ -144,6 +150,7 @@ export async function getMitraDOMonthly(): Promise<MitraDOMonthly> {
       TotalQty: 0,
       PctAchievement: null,
       HasTransaksi: false,
+      JoinDate: m.JoinDate,
     }))
     .sort((a, b) => a.Name.localeCompare(b.Name));
 

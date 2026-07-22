@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -122,6 +123,11 @@ function MitraFormDialog({
   const [wilayah, setWilayah] = useState(initial.wilayah ?? "");
   const [kecamatan, setKecamatan] = useState(initial.kecamatan ?? "");
   const [regencyCode, setRegencyCode] = useState<string | null>(null);
+  // Tooltip's own uncontrolled hover/focus detection doesn't fire when its
+  // trigger is a Textarea passed via `render` — controlling `open` directly
+  // off the field's focus state sidesteps that and is proven reliable
+  // elsewhere (filter-bar.tsx's same-date warning uses the same approach).
+  const [kompetitorFocused, setKompetitorFocused] = useState(false);
 
   // Auto-fills Wilayah/Kecamatan/Alamat from the geser-pin location whenever
   // it resolves — Kecamatan is frequently missing from OSM's Indonesia data
@@ -214,12 +220,12 @@ function MitraFormDialog({
             <Input id="mobileNo" name="mobileNo" placeholder="Kontak" defaultValue={initial.mobileNo ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="capacity" className="sr-only">Total Kapasitas (kantong/hari)</Label>
+            <Label htmlFor="capacity" className="sr-only">Kapasitas Harian</Label>
             <Input
               id="capacity"
               name="capacity"
               type="number"
-              placeholder="Total Kapasitas (kantong/hari)"
+              placeholder="Kapasitas Harian"
               defaultValue={initial.capacity ?? ""}
             />
           </div>
@@ -274,13 +280,22 @@ function MitraFormDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="kompetitor" className="sr-only">Daftar Kompetitor</Label>
-            <Textarea
-              id="kompetitor"
-              name="kompetitor"
-              defaultValue={initialKompetitor ?? ""}
-              placeholder="Daftar Kompetitor, satu per baris (opsional)"
-              rows={1}
-            />
+            <Tooltip open={kompetitorFocused}>
+              <TooltipTrigger
+                render={
+                  <Textarea
+                    id="kompetitor"
+                    name="kompetitor"
+                    defaultValue={initialKompetitor ?? ""}
+                    placeholder="Daftar Kompetitor"
+                    rows={1}
+                    onFocus={() => setKompetitorFocused(true)}
+                    onBlur={() => setKompetitorFocused(false)}
+                  />
+                }
+              />
+              <TooltipContent>Pisahkan satu kompetitor dengan koma</TooltipContent>
+            </Tooltip>
           </div>
           <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
             <Label className="sr-only">Lokasi GPS</Label>

@@ -408,4 +408,15 @@
       linear-gradient(45deg, color-mix(in oklch, var(--primary) 5%, transparent) 1px, transparent 1px);
     background-size: 64px 64px;
   }
+  /* Keeps an element scrollable (overflow still works, wheel/touch/drag all
+     still scroll it) while hiding the scrollbar chrome itself — used for
+     horizontally-scrollable strips (tab lists, day chips) where a visible
+     scrollbar reads as a layout bug rather than an affordance. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
