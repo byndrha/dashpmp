@@ -23,6 +23,11 @@ export interface MitraRow {
   Latitude: number | null;
   Longitude: number | null;
   GeoAlamat: string | null;
+  // Free-text list of competitors already serving this mitra, entered by
+  // marketing/admin — stored in DashboardMitraCompetitor (companion table,
+  // same pattern as DashboardMitraLocation) since BusinessPartner has no
+  // matching free-text column and it's not an ERP-owned concept.
+  Kompetitor: string | null;
 }
 
 export async function getMitraList(): Promise<MitraRow[]> {
@@ -44,10 +49,12 @@ export async function getMitraList(): Promise<MitraRow[]> {
         bp.Capacity,
         ml.Latitude,
         ml.Longitude,
-        ml.Alamat AS GeoAlamat
+        ml.Alamat AS GeoAlamat,
+        mc.Kompetitor
     FROM BusinessPartner bp
     LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
     LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
+    LEFT JOIN DashboardMitraCompetitor mc ON mc.BusinessPartnerID = bp.BusinessPartnerID
     WHERE ISNULL(bp.IsDeleted, 0) = 0
     ORDER BY bp.Name
   `);

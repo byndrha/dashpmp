@@ -2,6 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { createMitra, type MitraInput } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
+import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
 
 // A plain HTML <input type="datetime-local"> value ("2026-07-25T14:30") has
 // no timezone info. This app's users are all in WIB (UTC+7) — parsing that
@@ -39,6 +40,8 @@ export interface PengajuanRow {
   Alamat: string | null;
   Latitude: number | null;
   Longitude: number | null;
+  Kapasitas: number | null;
+  Kompetitor: string | null;
   Status: PengajuanStatus;
   CatatanTolak: string | null;
   ConvertedBusinessPartnerID: string | null;
@@ -62,6 +65,8 @@ export async function getPengajuanList(): Promise<PengajuanRow[]> {
         dmp.Alamat,
         dmp.Latitude,
         dmp.Longitude,
+        dmp.Kapasitas,
+        dmp.Kompetitor,
         dmp.Status,
         dmp.CatatanTolak,
         dmp.ConvertedBusinessPartnerID,
@@ -126,6 +131,8 @@ export interface PengajuanInput {
   alamat: string | null;
   latitude: number | null;
   longitude: number | null;
+  kapasitas: number | null;
+  kompetitor: string | null;
 }
 
 export async function createPengajuan(input: PengajuanInput, marketingUserId: string): Promise<void> {
@@ -142,13 +149,15 @@ export async function createPengajuan(input: PengajuanInput, marketingUserId: st
     .input("kecamatan", sql.VarChar(128), input.kecamatan)
     .input("alamat", sql.VarChar(1024), input.alamat)
     .input("lat", sql.Decimal(10, 7), input.latitude)
-    .input("lng", sql.Decimal(10, 7), input.longitude).query(`
+    .input("lng", sql.Decimal(10, 7), input.longitude)
+    .input("kapasitas", sql.Decimal(23, 4), input.kapasitas)
+    .input("kompetitor", sql.VarChar(1024), input.kompetitor).query(`
       INSERT INTO DashboardMitraPengajuan
         (MarketingUserID, NamaCalon, NoHP, WaktuPermintaanSampai, QtyKantong, PriceLevel,
-         Wilayah, Kecamatan, Alamat, Latitude, Longitude, Status, CreatedAt)
+         Wilayah, Kecamatan, Alamat, Latitude, Longitude, Kapasitas, Kompetitor, Status, CreatedAt)
       VALUES
         (@marketingUserId, @namaCalon, @noHP, @waktu, @qty, @priceLevel,
-         @wilayah, @kecamatan, @alamat, @lat, @lng, 'Menunggu', GETDATE())
+         @wilayah, @kecamatan, @alamat, @lat, @lng, @kapasitas, @kompetitor, 'Menunggu', GETDATE())
     `);
 }
 
@@ -166,7 +175,8 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
       UPDATE DashboardMitraPengajuan
       SET Status = 'Diproses'
       OUTPUT inserted.NamaCalon, inserted.NoHP, inserted.Alamat, inserted.Wilayah,
-             inserted.Kecamatan, inserted.PriceLevel, inserted.Latitude, inserted.Longitude
+             inserted.Kecamatan, inserted.PriceLevel, inserted.Latitude, inserted.Longitude,
+             inserted.Kapasitas, inserted.Kompetitor
       WHERE PengajuanID = @id AND Status = 'Menunggu'
     `);
 
@@ -180,6 +190,8 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
         PriceLevel: number | null;
         Latitude: number | null;
         Longitude: number | null;
+        Kapasitas: number | null;
+        Kompetitor: string | null;
       }
     | undefined;
   if (!row) throw new Error("Pengajuan tidak ditemukan atau sudah diproses");
@@ -200,7 +212,7 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
       gender: "Female",
       priceLevel: row.PriceLevel,
       termOfPaymentId: null,
-      capacity: null,
+      capacity: row.Kapasitas,
     };
     const businessPartnerId = await createMitra(mitraInput);
 
@@ -212,6 +224,10 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
         alamat: row.Alamat,
         userId: reviewerUserId,
       });
+    }
+
+    if (row.Kompetitor != null && row.Kompetitor.trim() !== "") {
+      await setMitraCompetitor({ businessPartnerId, kompetitor: row.Kompetitor, userId: reviewerUserId });
     }
 
     await pool

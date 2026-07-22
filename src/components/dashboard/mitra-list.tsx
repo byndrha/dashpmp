@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -34,6 +35,7 @@ import {
   updateMitraAction,
   deleteMitraAction,
   setMitraLocationAction,
+  setMitraCompetitorAction,
 } from "@/app/(dashboard)/mitra/actions";
 
 const PAGE_SIZE = 12;
@@ -94,6 +96,7 @@ function MitraFormDialog({
   onOpenChange,
   initial,
   initialLocation,
+  initialKompetitor,
   title,
   termOptions,
   priceLevels,
@@ -104,10 +107,11 @@ function MitraFormDialog({
   onOpenChange: (open: boolean) => void;
   initial: MitraInput;
   initialLocation: MitraLocationValue | null;
+  initialKompetitor: string | null;
   title: string;
   termOptions: TermOfPaymentOption[];
   priceLevels: PriceLevelOption[];
-  onSubmit: (input: MitraInput, location: MitraLocationValue | null) => void;
+  onSubmit: (input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) => void;
   pending: boolean;
 }) {
   const [gender, setGender] = useState(initial.gender ?? "Male");
@@ -155,7 +159,8 @@ function MitraFormDialog({
         termOfPaymentId: termOfPaymentId || null,
         capacity: formData.get("capacity") ? Number(formData.get("capacity")) : null,
       },
-      location
+      location,
+      String(formData.get("kompetitor") ?? "").trim() || null
     );
   }
 
@@ -176,31 +181,15 @@ function MitraFormDialog({
         }
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>Data mitra tersimpan langsung ke database MKEsindo.</DialogDescription>
         </DialogHeader>
-        <form action={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <form action={handleSubmit} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label htmlFor="name">Nama Mitra</Label>
             <Input id="name" name="name" defaultValue={initial.name} required />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mobileNo">Kontak</Label>
-            <Input id="mobileNo" name="mobileNo" defaultValue={initial.mobileNo ?? ""} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Tipe Mitra</Label>
-            <Select value={gender} onValueChange={(v) => setGender(v ?? "Male")}>
-              <SelectTrigger className="w-full">
-                <SelectValue>{(v: string) => (v === "Female" ? "Retail" : "Agen")}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Male">Agen</SelectItem>
-                <SelectItem value="Female">Retail</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label htmlFor="address">Alamat</Label>
@@ -213,6 +202,26 @@ function MitraFormDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Kecamatan</Label>
             <KecamatanSelect regencyCode={regencyCode} value={kecamatan} onChange={setKecamatan} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mobileNo">Kontak</Label>
+            <Input id="mobileNo" name="mobileNo" defaultValue={initial.mobileNo ?? ""} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="capacity">Total Kapasitas (kantong/hari)</Label>
+            <Input id="capacity" name="capacity" type="number" defaultValue={initial.capacity ?? ""} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Tipe Mitra</Label>
+            <Select value={gender} onValueChange={(v) => setGender(v ?? "Male")}>
+              <SelectTrigger className="w-full">
+                <SelectValue>{(v: string) => (v === "Female" ? "Retail" : "Agen")}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Male">Agen</SelectItem>
+                <SelectItem value="Female">Retail</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Harga</Label>
@@ -251,15 +260,21 @@ function MitraFormDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="capacity">Kapasitas (kantong/hari)</Label>
-            <Input id="capacity" name="capacity" type="number" defaultValue={initial.capacity ?? ""} />
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="kompetitor">Daftar Kompetitor</Label>
+            <Textarea
+              id="kompetitor"
+              name="kompetitor"
+              defaultValue={initialKompetitor ?? ""}
+              placeholder="Satu per baris (opsional)"
+              rows={1}
+            />
           </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
             <Label>Lokasi GPS</Label>
             <MitraLocationField value={location} onChange={setLocation} onGeocode={handleGeocode} />
           </div>
-          <DialogFooter className="sm:col-span-2">
+          <DialogFooter className="col-span-2 sm:col-span-4">
             <Button type="submit" disabled={pending} className="ml-auto">
               {pending ? "Menyimpan..." : "Simpan"}
             </Button>
@@ -325,23 +340,27 @@ export function MitraList({
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleCreate(input: MitraInput, location: MitraLocationValue | null) {
+  function handleCreate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
     startTransition(async () => {
       const id = await createMitraAction(input);
       if (location) {
         await setMitraLocationAction({ businessPartnerId: id, ...location });
       }
+      if (kompetitor) {
+        await setMitraCompetitorAction({ businessPartnerId: id, kompetitor });
+      }
       setCreating(false);
     });
   }
 
-  function handleUpdate(input: MitraInput, location: MitraLocationValue | null) {
+  function handleUpdate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
     if (!editing) return;
     startTransition(async () => {
       await updateMitraAction(editing.BusinessPartnerID, input);
       if (location) {
         await setMitraLocationAction({ businessPartnerId: editing.BusinessPartnerID, ...location });
       }
+      await setMitraCompetitorAction({ businessPartnerId: editing.BusinessPartnerID, kompetitor });
       setEditing(null);
     });
   }
@@ -517,6 +536,7 @@ export function MitraList({
         onOpenChange={setCreating}
         initial={emptyForm()}
         initialLocation={null}
+        initialKompetitor={null}
         title="Tambah Mitra"
         termOptions={termOptions}
         priceLevels={priceLevels}
@@ -529,6 +549,7 @@ export function MitraList({
           onOpenChange={(open) => !open && setEditing(null)}
           initial={rowToForm(editing)}
           initialLocation={rowToLocation(editing)}
+          initialKompetitor={editing.Kompetitor}
           title={`Edit Mitra — ${editing.Name}`}
           termOptions={termOptions}
           priceLevels={priceLevels}

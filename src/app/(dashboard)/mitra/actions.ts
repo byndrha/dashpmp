@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createMitra, updateMitra, deleteMitra, type MitraInput } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
+import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
 
 export async function createMitraAction(input: MitraInput): Promise<string> {
   const id = await createMitra(input);
@@ -32,5 +33,14 @@ export async function setMitraLocationAction(input: {
   if (!userId) throw new Error("Unauthorized");
 
   await setMitraLocation({ ...input, userId });
+  revalidatePath("/mitra");
+}
+
+export async function setMitraCompetitorAction(input: { businessPartnerId: string; kompetitor: string | null }) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  await setMitraCompetitor({ ...input, userId });
   revalidatePath("/mitra");
 }
