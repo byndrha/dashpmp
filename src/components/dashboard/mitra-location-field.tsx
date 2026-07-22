@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import { Geolocation } from "@capacitor/geolocation";
 import { Locate, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -85,29 +86,21 @@ export function MitraLocationField({
     reverseGeocode(lat, lng);
   }
 
-  function handleUseMyLocation() {
-    if (!navigator.geolocation) {
-      setGeoError("Perangkat/browser ini tidak mendukung GPS.");
-      return;
-    }
+  async function handleUseMyLocation() {
     setGeoError(null);
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        onChange({ latitude, longitude, alamat: current.alamat });
-        reverseGeocode(latitude, longitude);
-        setRecenterKey((k) => k + 1);
-        setLocating(false);
-      },
-      (err) => {
-        setGeoError(
-          err.code === err.PERMISSION_DENIED ? "Izin akses lokasi ditolak." : "Gagal mengambil lokasi GPS."
-        );
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    try {
+      const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+      const { latitude, longitude } = pos.coords;
+      onChange({ latitude, longitude, alamat: current.alamat });
+      reverseGeocode(latitude, longitude);
+      setRecenterKey((k) => k + 1);
+    } catch (err) {
+      const message = err instanceof Error ? err.message.toLowerCase() : "";
+      setGeoError(message.includes("denied") ? "Izin akses lokasi ditolak." : "Gagal mengambil lokasi GPS.");
+    } finally {
+      setLocating(false);
+    }
   }
 
   return (
