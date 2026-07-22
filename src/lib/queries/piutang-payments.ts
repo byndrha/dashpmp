@@ -18,9 +18,10 @@ export interface TodayReceivablePayment {
   Status: PiutangStatus;
 }
 
-export async function getTodayReceivablePayments(): Promise<TodayReceivablePayment[]> {
+export async function getTodayReceivablePayments(
+  businessDate: Date = getBusinessDate()
+): Promise<TodayReceivablePayment[]> {
   const pool = await getPool();
-  const businessDate = getBusinessDate();
   const result = await pool
     .request()
     .input("businessDate", sql.Date, businessDate)

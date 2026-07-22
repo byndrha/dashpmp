@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Phone, MapPin, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, Phone, MapPin, Package, Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,31 +188,43 @@ function MitraFormDialog({
         </DialogHeader>
         <form action={handleSubmit} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="name">Nama Mitra</Label>
-            <Input id="name" name="name" defaultValue={initial.name} required />
+            <Label htmlFor="name" className="sr-only">Nama Mitra</Label>
+            <Input id="name" name="name" placeholder="Nama Mitra" defaultValue={initial.name} required />
           </div>
           <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="address">Alamat</Label>
-            <Input id="address" name="address" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <Label htmlFor="address" className="sr-only">Alamat</Label>
+            <Input
+              id="address"
+              name="address"
+              placeholder="Alamat"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Wilayah</Label>
+            <Label className="sr-only">Wilayah</Label>
             <WilayahSelect value={wilayah} onChange={handleWilayahChange} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Kecamatan</Label>
+            <Label className="sr-only">Kecamatan</Label>
             <KecamatanSelect regencyCode={regencyCode} value={kecamatan} onChange={setKecamatan} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mobileNo">Kontak</Label>
-            <Input id="mobileNo" name="mobileNo" defaultValue={initial.mobileNo ?? ""} />
+            <Label htmlFor="mobileNo" className="sr-only">Kontak</Label>
+            <Input id="mobileNo" name="mobileNo" placeholder="Kontak" defaultValue={initial.mobileNo ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="capacity">Total Kapasitas (kantong/hari)</Label>
-            <Input id="capacity" name="capacity" type="number" defaultValue={initial.capacity ?? ""} />
+            <Label htmlFor="capacity" className="sr-only">Total Kapasitas (kantong/hari)</Label>
+            <Input
+              id="capacity"
+              name="capacity"
+              type="number"
+              placeholder="Total Kapasitas (kantong/hari)"
+              defaultValue={initial.capacity ?? ""}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Tipe Mitra</Label>
+            <Label className="sr-only">Tipe Mitra</Label>
             <Select value={gender} onValueChange={(v) => setGender(v ?? "Male")}>
               <SelectTrigger className="w-full">
                 <SelectValue>{(v: string) => (v === "Female" ? "Retail" : "Agen")}</SelectValue>
@@ -224,13 +236,13 @@ function MitraFormDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Harga</Label>
+            <Label className="sr-only">Harga</Label>
             <Select value={priceLevel} onValueChange={(v) => setPriceLevel(v ?? "")}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih harga">
+                <SelectValue placeholder="Harga">
                   {(v: string) => {
                     const p = priceLevels.find((pl) => String(pl.Level) === v);
-                    return p ? `Harga ${formatRupiah(p.Price)}` : "Pilih harga";
+                    return p ? `Harga ${formatRupiah(p.Price)}` : "Harga";
                   }}
                 </SelectValue>
               </SelectTrigger>
@@ -244,11 +256,11 @@ function MitraFormDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Tenggat Bayar</Label>
+            <Label className="sr-only">Tenggat Bayar</Label>
             <Select value={termOfPaymentId} onValueChange={(v) => setTermOfPaymentId(v ?? "")}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih tenggat">
-                  {(v: string) => termOptions.find((t) => t.TermOfPaymentID === v)?.TermOfPaymentName ?? "Pilih tenggat"}
+                <SelectValue placeholder="Tenggat Bayar">
+                  {(v: string) => termOptions.find((t) => t.TermOfPaymentID === v)?.TermOfPaymentName ?? "Tenggat Bayar"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -261,17 +273,17 @@ function MitraFormDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kompetitor">Daftar Kompetitor</Label>
+            <Label htmlFor="kompetitor" className="sr-only">Daftar Kompetitor</Label>
             <Textarea
               id="kompetitor"
               name="kompetitor"
               defaultValue={initialKompetitor ?? ""}
-              placeholder="Satu per baris (opsional)"
+              placeholder="Daftar Kompetitor, satu per baris (opsional)"
               rows={1}
             />
           </div>
           <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
-            <Label>Lokasi GPS</Label>
+            <Label className="sr-only">Lokasi GPS</Label>
             <MitraLocationField value={location} onChange={setLocation} onGeocode={handleGeocode} />
           </div>
           <DialogFooter className="col-span-2 sm:col-span-4">
@@ -306,6 +318,7 @@ export function MitraList({
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MitraRow | null>(null);
   const [pending, startTransition] = useTransition();
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
 
@@ -376,6 +389,16 @@ export function MitraList({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="sm:hidden"
+            onClick={() => setMobileFilterOpen((v) => !v)}
+          >
+            <Filter className="size-4" />
+            Filter
+          </Button>
+          <div className={cn("flex-wrap items-center gap-2 sm:flex", mobileFilterOpen ? "flex" : "hidden")}>
           <Input
             placeholder="Cari nama mitra..."
             value={search}
@@ -460,6 +483,7 @@ export function MitraList({
               ))}
             </SelectContent>
           </Select>
+          </div>
         </div>
         <Button onClick={() => setCreating(true)}>
           <Plus className="size-4" />

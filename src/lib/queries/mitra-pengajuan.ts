@@ -3,6 +3,9 @@ import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { createMitra, type MitraInput } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
+import { MARKETING_ROLE_ID, APPROVER_ROLE_IDS } from "@/lib/roles";
+
+export { MARKETING_ROLE_ID, APPROVER_ROLE_IDS };
 
 // A plain HTML <input type="datetime-local"> value ("2026-07-25T14:30") has
 // no timezone info. This app's users are all in WIB (UTC+7) — parsing that
@@ -16,13 +19,6 @@ function parseWibDateTimeLocal(value: string): Date {
   const [hour, minute] = (timePart ?? "00:00").split(":").map(Number);
   return new Date(Date.UTC(year, month - 1, day, hour - 7, minute));
 }
-
-// RoleID values from DashboardRole — already-existing roles in this
-// database, not created by this feature. Marketing (1003) is who submits
-// pengajuan; Supervisor (3) and Accounting (4), plus Super Admin, are who
-// may approve/reject (business decision — see design spec).
-export const MARKETING_ROLE_ID = 1003;
-export const APPROVER_ROLE_IDS = [3, 4];
 
 export type PengajuanStatus = "Menunggu" | "Diproses" | "Disetujui" | "Ditolak";
 
@@ -142,7 +138,7 @@ export async function createPengajuan(input: PengajuanInput, marketingUserId: st
     .input("marketingUserId", sql.VarChar(16), marketingUserId)
     .input("namaCalon", sql.VarChar(128), input.namaCalon)
     .input("noHP", sql.VarChar(50), input.noHP)
-    .input("waktu", sql.DateTime, parseWibDateTimeLocal(input.waktuPermintaanSampai))
+    .input("waktu", sql.DateTime, input.waktuPermintaanSampai ? parseWibDateTimeLocal(input.waktuPermintaanSampai) : null)
     .input("qty", sql.Decimal(23, 4), input.qtyKantong)
     .input("priceLevel", sql.Int, input.priceLevel)
     .input("wilayah", sql.VarChar(128), input.wilayah)
@@ -268,4 +264,17 @@ export async function rejectPengajuan(
           ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
       WHERE PengajuanID = @id AND Status = 'Menunggu'
     `);
+}
+
+// Hard delete — this only removes the pengajuan log entry, never the
+// BusinessPartner it may have already been converted into (that's a
+// separate, independently-stored record via ConvertedBusinessPartnerID;
+// deleting this row has no effect on it). Restricted to Super Admin only,
+// enforced in the server action, not here.
+export async function deletePengajuan(pengajuanId: number): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.Int, pengajuanId)
+    .query(`DELETE FROM DashboardMitraPengajuan WHERE PengajuanID = @id`);
 }

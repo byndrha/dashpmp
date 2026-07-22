@@ -13,10 +13,12 @@ export function PemasaranSection({
   rows,
   priceLevels,
   canApprove,
+  isSuperAdmin,
 }: {
   rows: PengajuanRow[];
   priceLevels: PriceLevelOption[];
   canApprove: boolean;
+  isSuperAdmin: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -38,7 +40,7 @@ export function PemasaranSection({
         </Button>
       </div>
 
-      <PengajuanList rows={rows} canApprove={canApprove} />
+      <PengajuanList rows={rows} canApprove={canApprove} isSuperAdmin={isSuperAdmin} />
 
       <PengajuanFormDialog
         open={creating}

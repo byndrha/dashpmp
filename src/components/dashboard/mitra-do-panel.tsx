@@ -1,16 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, Users, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
 
+type SortMode = "terbanyak" | "tren";
+
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+}
+
+// Compares the sum of the latest 3 recorded days against the 3 days before
+// that — a simple period-over-period read on whether a mitra's pickups are
+// trending up or down, not just their running total. Needs at least 6 days
+// of the month elapsed for a fair comparison; before that there's no
+// "previous 3 days" window yet, so it reports flat rather than guessing.
+function getTrend(dailyQty: number[], currentDay: number): { direction: "up" | "down" | "flat"; delta: number } {
+  const latestStart = currentDay - 3;
+  const prevStart = currentDay - 6;
+  if (prevStart < 0) return { direction: "flat", delta: 0 };
+  const latest = dailyQty.slice(latestStart, currentDay).reduce((sum, q) => sum + q, 0);
+  const previous = dailyQty.slice(prevStart, latestStart).reduce((sum, q) => sum + q, 0);
+  const delta = latest - previous;
+  return { direction: delta > 0 ? "up" : delta < 0 ? "down" : "flat", delta };
+}
+
+function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
+  if (direction === "up") return <TrendingUp className="mt-0.5 inline-block size-3.5 text-primary" />;
+  if (direction === "down") return <TrendingDown className="mt-0.5 inline-block size-3.5 text-destructive" />;
+  return <Minus className="mt-0.5 inline-block size-3.5 text-muted-foreground/40" />;
 }
 
 function DayChip({ day, qty, target, isPast }: { day: number; qty: number; target: number | null; isPast: boolean }) {
@@ -59,6 +83,7 @@ function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
           <p className="text-xs font-medium text-muted-foreground">
             {m.PctAchievement != null ? `${m.PctAchievement.toFixed(1)}% capaian` : "- capaian"}
           </p>
+          <TrendIcon direction={getTrend(m.DailyQty, currentDay).direction} />
         </div>
       </div>
       <div className="flex gap-1 overflow-x-auto pb-1">
@@ -72,7 +97,16 @@ function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
 
 export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
   const [showAll, setShowAll] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("terbanyak");
   const { active, inactive, currentDay } = data;
+
+  // "active" already arrives sorted by TotalQty desc (the "Pengambilan
+  // Terbanyak" mode) — only re-sort when the trend mode is picked, so the
+  // default path stays a no-op.
+  const sortedActive = useMemo(() => {
+    if (sortMode === "terbanyak") return active;
+    return [...active].sort((a, b) => getTrend(b.DailyQty, currentDay).delta - getTrend(a.DailyQty, currentDay).delta);
+  }, [active, sortMode, currentDay]);
 
   return (
     // Plain div standing in for <Card> here, minus `overflow-hidden` — Card
@@ -97,25 +131,38 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
           </span>
           <span>(Kemasan 5KG telah dikonversi)</span>
         </CardDescription>
-        {/* Lives inside the sticky CardHeader (not CardContent) so it's
+        {/* Lives inside the sticky CardHeader (not CardContent) so both stay
             reachable at every scroll position within this panel, not just
             near the bottom — a bottom-sticky button here had nothing left
             below it in the flow to stick against, so it never actually
             engaged until you'd already scrolled past the whole list. */}
-        {inactive.length > 0 && (
-          <Button variant="outline" size="sm" className="mt-1 self-start" onClick={() => setShowAll((v) => !v)}>
-            <Users className="size-3.5" />
-            {showAll ? "Sembunyikan" : "Tampilkan"} {inactive.length} mitra tanpa transaksi bulan ini
-            <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
-          </Button>
-        )}
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <Select value={sortMode} onValueChange={(v) => setSortMode((v as SortMode) ?? "terbanyak")}>
+            <SelectTrigger className="w-56" aria-label="Urutkan">
+              <SelectValue>
+                {(v: string) => (v === "tren" ? "Tren 3 Hari Terakhir" : "Pengambilan Terbanyak")}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="terbanyak">Pengambilan Terbanyak</SelectItem>
+              <SelectItem value="tren">Tren 3 Hari Terakhir</SelectItem>
+            </SelectContent>
+          </Select>
+          {inactive.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setShowAll((v) => !v)}>
+              <Users className="size-3.5" />
+              {showAll ? "Sembunyikan" : "Tampilkan"} {inactive.length} mitra tanpa transaksi bulan ini
+              <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {active.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada Delivery Order bulan ini.</p>
         ) : (
           <div className="flex flex-col divide-y">
-            {active.map((m) => (
+            {sortedActive.map((m) => (
               <MitraDOCard key={m.BusinessPartnerID} m={m} currentDay={currentDay} />
             ))}
           </div>

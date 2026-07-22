@@ -6,6 +6,7 @@ import {
   createPengajuan,
   approvePengajuan,
   rejectPengajuan,
+  deletePengajuan,
   APPROVER_ROLE_IDS,
   type PengajuanInput,
 } from "@/lib/queries/mitra-pengajuan";
@@ -41,5 +42,18 @@ export async function approvePengajuanAction(pengajuanId: number) {
 export async function rejectPengajuanAction(pengajuanId: number, catatan: string | null) {
   const user = await requireApprover();
   await rejectPengajuan(pengajuanId, user.id, catatan);
+  revalidatePath("/pemasaran");
+}
+
+// Deliberately narrower than requireApprover() — deleting a pengajuan
+// (unlike approve/reject) is restricted to Super Admin only, not
+// Supervisor/Accounting, per explicit business decision.
+export async function deletePengajuanAction(pengajuanId: number) {
+  const session = await auth();
+  const user = session?.user;
+  if (!user) throw new Error("Unauthorized");
+  if (!user.isSuperAdmin) throw new Error("Hanya Super Admin yang dapat menghapus pengajuan");
+
+  await deletePengajuan(pengajuanId);
   revalidatePath("/pemasaran");
 }

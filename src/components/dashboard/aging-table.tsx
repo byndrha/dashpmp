@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -204,6 +205,7 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("DaysOverdue");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -247,7 +249,16 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-3">
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-fit sm:hidden"
+        onClick={() => setMobileFilterOpen((v) => !v)}
+      >
+        <Filter className="size-4" />
+        Filter
+      </Button>
+      <div className={cn("flex-wrap gap-3 sm:flex", mobileFilterOpen ? "flex" : "hidden")}>
         <Input
           placeholder="Cari nama mitra..."
           value={search}

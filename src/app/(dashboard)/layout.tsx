@@ -3,6 +3,7 @@ import { getUserById } from "@/lib/queries/akun";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
+import { PullToRefresh } from "@/components/dashboard/pull-to-refresh";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 
@@ -32,7 +33,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             tablet with the sidebar collapsed can be too cramped at the same
             viewport width with the sidebar expanded; container queries see
             that difference, `sm:`/`lg:` viewport breakpoints don't. */}
-        <main className="@container/dashboard-main flex flex-1 flex-col gap-4 p-4">{children}</main>
+        <main className="@container/dashboard-main flex flex-1 flex-col gap-4 p-4">
+          <PullToRefresh>{children}</PullToRefresh>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

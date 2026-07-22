@@ -5,31 +5,41 @@ import { getWilayahList } from "@/lib/queries/wilayah";
 import { getPiutangPeriodSummary } from "@/lib/queries/piutang-summary";
 import { getTodayReceivablePayments } from "@/lib/queries/piutang-payments";
 import { getCollectionPriority } from "@/lib/queries/collection-priority";
+import { getBusinessDateISO } from "@/lib/business-date";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { AgingTable } from "@/components/dashboard/aging-table";
 import { PiutangStatusPanel, type StatusBucket } from "@/components/dashboard/piutang-status-panel";
-import { TodayPaymentsTable } from "@/components/dashboard/today-payments-table";
+import { PiutangPaymentsPanel } from "@/components/dashboard/piutang-payments-panel";
 import { CollectionPriorityTable } from "@/components/dashboard/collection-priority-table";
+import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
 import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import type { PiutangStatus } from "@/lib/queries/aging";
 
 export default async function AgingPage({
   searchParams,
 }: {
-  searchParams: Promise<DashboardSearchParams>;
+  searchParams: Promise<DashboardSearchParams & { piutangDate?: string }>;
 }) {
   await requireModuleAccess("aging");
   const params = await searchParams;
   const wilayah = params.wilayah || undefined;
   const filter = resolveFilter(params);
 
-  const [rows, wilayahList, periodSummary, todayPayments, priorityRows] = await Promise.all([
+  const todayISO = getBusinessDateISO();
+  const paymentsDate = params.piutangDate && params.piutangDate <= todayISO ? params.piutangDate : todayISO;
+  // paymentsDate is already a plain "YYYY-MM-DD" business-date string —
+  // constructing it directly (not re-deriving via getBusinessDate(), which
+  // re-applies the 14:00 WIB rollover against "now") keeps it exactly the
+  // UTC-midnight Date getTodayReceivablePayments expects.
+  const businessPaymentsDate = new Date(paymentsDate);
+
+  const [rows, wilayahList, periodSummary, paymentsRows, priorityRows] = await Promise.all([
     getAgingReceivables(wilayah),
     getWilayahList(),
     getPiutangPeriodSummary(filter),
-    getTodayReceivablePayments(),
+    getTodayReceivablePayments(businessPaymentsDate),
     getCollectionPriority(),
   ]);
 
@@ -79,11 +89,11 @@ export default async function AgingPage({
 
       <PiutangStatusPanel buckets={statusBuckets} />
 
-      <AgingTable rows={rows} />
-
-      <TodayPaymentsTable rows={todayPayments} />
-
-      <CollectionPriorityTable rows={priorityRows} />
+      <PiutangTabs
+        invoicePanel={<AgingTable rows={rows} />}
+        pembayaranPanel={<PiutangPaymentsPanel rows={paymentsRows} businessDate={paymentsDate} todayISO={todayISO} />}
+        prioritasPanel={<CollectionPriorityTable rows={priorityRows} />}
+      />
     </div>
   );
 }

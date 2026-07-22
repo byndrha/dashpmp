@@ -1,6 +1,12 @@
+"use client";
+
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { formatRupiah, formatTime, formatQty } from "@/lib/format";
+import { formatRupiah, formatDate, formatTime, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TodayReceivablePayment } from "@/lib/queries/piutang-payments";
 import type { PiutangStatus } from "@/lib/queries/aging";
@@ -11,12 +17,62 @@ const STATUS_BADGE: Record<PiutangStatus, string> = {
   Kritis: "bg-destructive/15 text-destructive",
 };
 
-export function TodayPaymentsTable({ rows }: { rows: TodayReceivablePayment[] }) {
+// businessDate/todayISO are both "YYYY-MM-DD" business-date strings (WIB,
+// see business-date.ts) — plain string comparison/arithmetic is safe since
+// that format sorts and diffs correctly without parsing.
+export function PiutangPaymentsPanel({
+  rows,
+  businessDate,
+  todayISO,
+}: {
+  rows: TodayReceivablePayment[];
+  businessDate: string;
+  todayISO: string;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isToday = businessDate === todayISO;
+  const totalAmount = rows.reduce((sum, r) => sum + r.Amount, 0);
+
+  function goToDate(newDate: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("piutangDate", newDate);
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  function shiftDate(deltaDays: number) {
+    const d = new Date(businessDate);
+    const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + deltaDays));
+    goToDate(next.toISOString().slice(0, 10));
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="font-display">Pembayaran Piutang Hari Ini</CardTitle>
-        <CardDescription>Pelunasan yang diterima dari mitra hari ini.</CardDescription>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+        <div>
+          <CardTitle className="font-display">
+            Pembayaran Piutang {isToday ? "Hari Ini" : formatDate(businessDate)}
+          </CardTitle>
+          <CardDescription>
+            {rows.length} dokumen SP &middot; total {formatRupiah(totalAmount)}
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" className="size-8" onClick={() => shiftDate(-1)}>
+            <ChevronLeft className="size-4" />
+          </Button>
+          <Input
+            type="date"
+            value={businessDate}
+            max={todayISO}
+            onChange={(e) => e.target.value && goToDate(e.target.value)}
+            className="h-8 w-40 text-xs"
+          />
+          <Button variant="outline" size="icon" className="size-8" disabled={isToday} onClick={() => shiftDate(1)}>
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @4xl:grid-cols-3">
@@ -51,7 +107,7 @@ export function TodayPaymentsTable({ rows }: { rows: TodayReceivablePayment[] })
           ))}
           {rows.length === 0 && (
             <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
-              Belum ada pembayaran piutang hari ini.
+              Belum ada pembayaran piutang {isToday ? "hari ini" : "pada tanggal ini"}.
             </p>
           )}
         </div>

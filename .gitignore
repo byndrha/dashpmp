@@ -51,3 +51,12 @@ next-env.d.ts
 android/app/*.keystore
 android/app/*.jks
 android/key.properties
+key.properties
+*.keystore
+
+# Android Studio build/IDE artifacts (regenerated locally, not source)
+android/.idea/
+android/.gradle/
+android/app/build/
+android/app/release/
+android/local.properties

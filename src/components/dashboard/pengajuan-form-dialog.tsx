@@ -103,45 +103,51 @@ export function PengajuanFormDialog({
         </DialogHeader>
         <form action={handleSubmit} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="namaCalon">Nama Calon Mitra</Label>
-            <Input id="namaCalon" name="namaCalon" required />
+            <Label htmlFor="namaCalon" className="sr-only">Nama Calon Mitra</Label>
+            <Input id="namaCalon" name="namaCalon" placeholder="Nama Calon Mitra" required />
           </div>
           <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="alamat">Alamat</Label>
-            <Input id="alamat" name="alamat" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <Label htmlFor="alamat" className="sr-only">Alamat</Label>
+            <Input
+              id="alamat"
+              name="alamat"
+              placeholder="Alamat"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Wilayah</Label>
+            <Label className="sr-only">Wilayah</Label>
             <WilayahSelect value={wilayah} onChange={handleWilayahChange} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Kecamatan</Label>
+            <Label className="sr-only">Kecamatan</Label>
             <KecamatanSelect regencyCode={regencyCode} value={kecamatan} onChange={setKecamatan} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="noHP">No HP</Label>
-            <Input id="noHP" name="noHP" required />
+            <Label htmlFor="noHP" className="sr-only">No HP</Label>
+            <Input id="noHP" name="noHP" placeholder="No HP" required />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kapasitas">Total Kapasitas (kantong/hari)</Label>
-            <Input id="kapasitas" name="kapasitas" type="number" min={0} />
+            <Label htmlFor="kapasitas" className="sr-only">Total Kapasitas (kantong/hari)</Label>
+            <Input id="kapasitas" name="kapasitas" type="number" min={0} placeholder="Total Kapasitas (kantong/hari)" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="qtyKantong">Qty Permintaan</Label>
-            <Input id="qtyKantong" name="qtyKantong" type="number" min={0} />
+            <Label htmlFor="qtyKantong" className="sr-only">Qty Permintaan</Label>
+            <Input id="qtyKantong" name="qtyKantong" type="number" min={0} placeholder="Qty Permintaan" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="waktuPermintaanSampai">Permintaan Tiba</Label>
-            <Input id="waktuPermintaanSampai" name="waktuPermintaanSampai" type="datetime-local" required />
+            <Label htmlFor="waktuPermintaanSampai" className="sr-only">Permintaan Tiba</Label>
+            <Input id="waktuPermintaanSampai" name="waktuPermintaanSampai" type="datetime-local" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Permintaan Harga</Label>
+            <Label className="sr-only">Permintaan Harga</Label>
             <Select value={priceLevel} onValueChange={(v) => setPriceLevel(v ?? "")}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih harga">
+                <SelectValue placeholder="Permintaan Harga">
                   {(v: string) => {
                     const p = priceLevels.find((pl) => String(pl.Level) === v);
-                    return p ? `Harga ${formatRupiah(p.Price)}` : "Pilih harga";
+                    return p ? `Harga ${formatRupiah(p.Price)}` : "Permintaan Harga";
                   }}
                 </SelectValue>
               </SelectTrigger>
@@ -155,16 +161,16 @@ export function PengajuanFormDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kompetitor">Daftar Kompetitor</Label>
+            <Label htmlFor="kompetitor" className="sr-only">Daftar Kompetitor</Label>
             <Textarea
               id="kompetitor"
               name="kompetitor"
-              placeholder="Satu per baris (opsional)"
+              placeholder="Daftar Kompetitor, satu per baris (opsional)"
               rows={1}
             />
           </div>
           <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
-            <Label>Lokasi GPS</Label>
+            <Label className="sr-only">Lokasi GPS</Label>
             <MitraLocationField value={location} onChange={setLocation} onGeocode={handleGeocode} />
             {!location && (
               <p className="text-xs text-destructive">Lokasi GPS wajib diisi — geser pin atau klik peta.</p>

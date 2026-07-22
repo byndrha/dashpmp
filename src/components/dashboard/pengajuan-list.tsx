@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MapPin, Phone, Calendar, Package } from "lucide-react";
+import { MapPin, Phone, Calendar, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +17,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDate, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PengajuanRow } from "@/lib/queries/mitra-pengajuan";
-import { approvePengajuanAction, rejectPengajuanAction } from "@/app/(dashboard)/pemasaran/actions";
+import {
+  approvePengajuanAction,
+  rejectPengajuanAction,
+  deletePengajuanAction,
+} from "@/app/(dashboard)/pemasaran/actions";
 
 const STATUS_BADGE: Record<PengajuanRow["Status"], string> = {
   Menunggu: "bg-warning/15 text-warning",
@@ -63,7 +67,15 @@ function RejectDialog({
   );
 }
 
-export function PengajuanList({ rows, canApprove }: { rows: PengajuanRow[]; canApprove: boolean }) {
+export function PengajuanList({
+  rows,
+  canApprove,
+  isSuperAdmin,
+}: {
+  rows: PengajuanRow[];
+  canApprove: boolean;
+  isSuperAdmin: boolean;
+}) {
   const [pending, startTransition] = useTransition();
   const [rejecting, setRejecting] = useState<PengajuanRow | null>(null);
 
@@ -91,6 +103,17 @@ export function PengajuanList({ rows, canApprove }: { rows: PengajuanRow[]; canA
     });
   }
 
+  function handleDelete(row: PengajuanRow) {
+    if (!confirm(`Hapus pengajuan "${row.NamaCalon}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+    startTransition(async () => {
+      try {
+        await deletePengajuanAction(row.PengajuanID);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Gagal menghapus pengajuan");
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @4xl:grid-cols-3">
@@ -104,9 +127,22 @@ export function PengajuanList({ rows, canApprove }: { rows: PengajuanRow[]; canA
                     Marketing: <span className="text-foreground">{row.MarketingNama}</span>
                   </p>
                 </div>
-                <span className={cn("shrink-0 rounded px-2 py-0.5 text-[11px] font-medium", STATUS_BADGE[row.Status])}>
-                  {row.Status}
-                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span className={cn("rounded px-2 py-0.5 text-[11px] font-medium", STATUS_BADGE[row.Status])}>
+                    {row.Status}
+                  </span>
+                  {isSuperAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      disabled={pending}
+                      onClick={() => handleDelete(row)}
+                    >
+                      <Trash2 className="size-3.5 text-destructive" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col gap-1 text-xs text-muted-foreground">
