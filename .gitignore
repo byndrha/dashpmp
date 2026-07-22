@@ -46,3 +46,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Capacitor Android signing (created manually later, never committed)
+android/app/*.keystore
+android/app/*.jks
+android/key.properties
