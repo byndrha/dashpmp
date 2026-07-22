@@ -86,6 +86,21 @@ export function MitraLocationField({
     reverseGeocode(lat, lng);
   }
 
+  // On native Android/iOS, Capacitor's Geolocation plugin rejects with a real
+  // Error whose .message contains "denied" for a permission refusal. In a
+  // plain browser (no native shell), the plugin's web implementation just
+  // forwards the browser's raw GeolocationPositionError unchanged — that's
+  // NOT an Error instance, but it exposes `.code === err.PERMISSION_DENIED`
+  // instead. Check both shapes so denial is detected correctly either way.
+  function isLocationPermissionDenied(err: unknown): boolean {
+    if (err instanceof Error) return err.message.toLowerCase().includes("denied");
+    if (typeof err === "object" && err !== null && "code" in err && "PERMISSION_DENIED" in err) {
+      const geoErr = err as GeolocationPositionError;
+      return geoErr.code === geoErr.PERMISSION_DENIED;
+    }
+    return false;
+  }
+
   async function handleUseMyLocation() {
     setGeoError(null);
     setLocating(true);
@@ -96,8 +111,7 @@ export function MitraLocationField({
       reverseGeocode(latitude, longitude);
       setRecenterKey((k) => k + 1);
     } catch (err) {
-      const message = err instanceof Error ? err.message.toLowerCase() : "";
-      setGeoError(message.includes("denied") ? "Izin akses lokasi ditolak." : "Gagal mengambil lokasi GPS.");
+      setGeoError(isLocationPermissionDenied(err) ? "Izin akses lokasi ditolak." : "Gagal mengambil lokasi GPS.");
     } finally {
       setLocating(false);
     }
