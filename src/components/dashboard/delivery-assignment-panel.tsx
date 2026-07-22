@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ function AssignmentRowCard({
   armada: ArmadaRow[];
 }) {
   const [, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   // If the current SalesmanID isn't in the assignable list (e.g. it's the
   // '0127' TakeAway sentinel, deliberately excluded from `drivers`), fall
@@ -38,15 +39,25 @@ function AssignmentRowCard({
 
   function handleDriverChange(value: string | null) {
     const salesmanId = !value || value === UNSET ? null : value;
+    setError(null);
     startTransition(async () => {
-      await assignDeliveryDriverAction(row.DeliveryOrderID, salesmanId);
+      try {
+        await assignDeliveryDriverAction(row.DeliveryOrderID, salesmanId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menugaskan driver.");
+      }
     });
   }
 
   function handleVehicleChange(value: string | null) {
     const vehicleName = !value || value === UNSET ? null : value;
+    setError(null);
     startTransition(async () => {
-      await assignDeliveryVehicleAction(row.DeliveryOrderID, vehicleName);
+      try {
+        await assignDeliveryVehicleAction(row.DeliveryOrderID, vehicleName);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menugaskan armada.");
+      }
     });
   }
 
@@ -97,6 +108,7 @@ function AssignmentRowCard({
             </SelectContent>
           </Select>
         </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </CardContent>
     </Card>
   );
