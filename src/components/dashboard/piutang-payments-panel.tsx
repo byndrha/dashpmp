@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useTransition } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,15 +33,22 @@ export function PiutangPaymentsPanel({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
   const isToday = businessDate === todayISO;
   const totalAmount = rows.reduce((sum, r) => sum + r.Amount, 0);
 
   function goToDate(newDate: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("piutangDate", newDate);
-    // scroll:false — this is a same-page date-nav, not a real navigation;
-    // without it Next.js resets scroll to the top on every date change.
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    // Wrapped in startTransition so isPending can drive the loading bar —
+    // this date change re-runs the whole server query behind it (unlike
+    // piutang-tabs.tsx's tab switch, which is pure client state), and that
+    // round-trip is slow enough that a silent wait reads as broken.
+    startTransition(() => {
+      // scroll:false — this is a same-page date-nav, not a real navigation;
+      // without it Next.js resets scroll to the top on every date change.
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    });
   }
 
   function shiftDate(deltaDays: number) {
@@ -50,7 +58,12 @@ export function PiutangPaymentsPanel({
   }
 
   return (
-    <Card>
+    <Card className="relative">
+      {isPending && (
+        <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-primary/15">
+          <div className="h-full w-1/3 animate-indeterminate rounded-full bg-primary" />
+        </div>
+      )}
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
         <div>
           <CardTitle className="font-display">
@@ -61,17 +74,24 @@ export function PiutangPaymentsPanel({
           </CardDescription>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="size-8" onClick={() => shiftDate(-1)}>
+          <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
             <ChevronLeft className="size-4" />
           </Button>
           <Input
             type="date"
             value={businessDate}
             max={todayISO}
+            disabled={isPending}
             onChange={(e) => e.target.value && goToDate(e.target.value)}
             className="h-8 w-40 text-xs"
           />
-          <Button variant="outline" size="icon" className="size-8" disabled={isToday} onClick={() => shiftDate(1)}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            disabled={isToday || isPending}
+            onClick={() => shiftDate(1)}
+          >
             <ChevronRight className="size-4" />
           </Button>
         </div>
