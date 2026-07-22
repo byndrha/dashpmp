@@ -23,10 +23,18 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
+import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
+import { WilayahSelect } from "@/components/dashboard/wilayah-select";
+import { KecamatanSelect } from "@/components/dashboard/kecamatan-select";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { MitraRow, TermOfPaymentOption, MitraInput, PriceLevelOption } from "@/lib/queries/mitra";
-import { createMitraAction, updateMitraAction, deleteMitraAction } from "@/app/(dashboard)/mitra/actions";
+import {
+  createMitraAction,
+  updateMitraAction,
+  deleteMitraAction,
+  setMitraLocationAction,
+} from "@/app/(dashboard)/mitra/actions";
 
 const PAGE_SIZE = 12;
 
@@ -76,10 +84,16 @@ function rowToForm(row: MitraRow): MitraInput {
   };
 }
 
+function rowToLocation(row: MitraRow): MitraLocationValue | null {
+  if (row.Latitude == null || row.Longitude == null) return null;
+  return { latitude: row.Latitude, longitude: row.Longitude, alamat: row.GeoAlamat };
+}
+
 function MitraFormDialog({
   open,
   onOpenChange,
   initial,
+  initialLocation,
   title,
   termOptions,
   priceLevels,
@@ -89,28 +103,60 @@ function MitraFormDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial: MitraInput;
+  initialLocation: MitraLocationValue | null;
   title: string;
   termOptions: TermOfPaymentOption[];
   priceLevels: PriceLevelOption[];
-  onSubmit: (input: MitraInput) => void;
+  onSubmit: (input: MitraInput, location: MitraLocationValue | null) => void;
   pending: boolean;
 }) {
   const [gender, setGender] = useState(initial.gender ?? "Male");
   const [termOfPaymentId, setTermOfPaymentId] = useState(initial.termOfPaymentId ?? "");
   const [priceLevel, setPriceLevel] = useState(initial.priceLevel != null ? String(initial.priceLevel) : "");
+  const [location, setLocation] = useState<MitraLocationValue | null>(initialLocation);
+  const [address, setAddress] = useState(initial.address ?? "");
+  const [wilayah, setWilayah] = useState(initial.wilayah ?? "");
+  const [kecamatan, setKecamatan] = useState(initial.kecamatan ?? "");
+  const [regencyCode, setRegencyCode] = useState<string | null>(null);
+
+  // Auto-fills Wilayah/Kecamatan/Alamat from the geser-pin location whenever
+  // it resolves — Kecamatan is frequently missing from OSM's Indonesia data
+  // (verified: rural areas often have no suburb/city_district tag at all),
+  // so that one's left untouched rather than overwritten with a blank guess.
+  // WilayahSelect resolves the matching regencyCode itself once its list has
+  // loaded (via handleWilayahChange below), so Kecamatan's dropdown unlocks
+  // right after.
+  function handleGeocode(suggestion: { alamat: string | null; wilayah: string | null; kecamatan: string | null }) {
+    if (suggestion.alamat) setAddress(suggestion.alamat);
+    if (suggestion.wilayah) setWilayah(suggestion.wilayah);
+    if (suggestion.kecamatan) setKecamatan(suggestion.kecamatan);
+  }
+
+  // Only clears Kecamatan when Wilayah actually changes to a different
+  // region — WilayahSelect also calls this to report the regencyCode it
+  // resolved for the CURRENT value (e.g. right after opening the edit
+  // dialog), which must not wipe out the Kecamatan that came with `initial`.
+  function handleWilayahChange(name: string, code: string | null) {
+    if (name !== wilayah) setKecamatan("");
+    setWilayah(name);
+    setRegencyCode(code);
+  }
 
   function handleSubmit(formData: FormData) {
-    onSubmit({
-      name: String(formData.get("name") ?? ""),
-      mobileNo: String(formData.get("mobileNo") ?? "") || null,
-      address: String(formData.get("address") ?? "") || null,
-      wilayah: String(formData.get("wilayah") ?? "") || null,
-      kecamatan: String(formData.get("kecamatan") ?? "") || null,
-      gender,
-      priceLevel: priceLevel ? Number(priceLevel) : null,
-      termOfPaymentId: termOfPaymentId || null,
-      capacity: formData.get("capacity") ? Number(formData.get("capacity")) : null,
-    });
+    onSubmit(
+      {
+        name: String(formData.get("name") ?? ""),
+        mobileNo: String(formData.get("mobileNo") ?? "") || null,
+        address: address || null,
+        wilayah: wilayah || null,
+        kecamatan: kecamatan || null,
+        gender,
+        priceLevel: priceLevel ? Number(priceLevel) : null,
+        termOfPaymentId: termOfPaymentId || null,
+        capacity: formData.get("capacity") ? Number(formData.get("capacity")) : null,
+      },
+      location
+    );
   }
 
   return (
@@ -122,6 +168,11 @@ function MitraFormDialog({
           setGender(initial.gender ?? "Male");
           setTermOfPaymentId(initial.termOfPaymentId ?? "");
           setPriceLevel(initial.priceLevel != null ? String(initial.priceLevel) : "");
+          setLocation(initialLocation);
+          setAddress(initial.address ?? "");
+          setWilayah(initial.wilayah ?? "");
+          setKecamatan(initial.kecamatan ?? "");
+          setRegencyCode(null);
         }
       }}
     >
@@ -153,15 +204,15 @@ function MitraFormDialog({
           </div>
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label htmlFor="address">Alamat</Label>
-            <Input id="address" name="address" defaultValue={initial.address ?? ""} />
+            <Input id="address" name="address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="wilayah">Wilayah</Label>
-            <Input id="wilayah" name="wilayah" defaultValue={initial.wilayah ?? ""} />
+            <Label>Wilayah</Label>
+            <WilayahSelect value={wilayah} onChange={handleWilayahChange} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kecamatan">Kecamatan</Label>
-            <Input id="kecamatan" name="kecamatan" defaultValue={initial.kecamatan ?? ""} />
+            <Label>Kecamatan</Label>
+            <KecamatanSelect regencyCode={regencyCode} value={kecamatan} onChange={setKecamatan} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Harga</Label>
@@ -203,6 +254,10 @@ function MitraFormDialog({
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label htmlFor="capacity">Kapasitas (kantong/hari)</Label>
             <Input id="capacity" name="capacity" type="number" defaultValue={initial.capacity ?? ""} />
+          </div>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Lokasi GPS</Label>
+            <MitraLocationField value={location} onChange={setLocation} onGeocode={handleGeocode} />
           </div>
           <DialogFooter className="sm:col-span-2">
             <Button type="submit" disabled={pending} className="ml-auto">
@@ -270,17 +325,23 @@ export function MitraList({
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleCreate(input: MitraInput) {
+  function handleCreate(input: MitraInput, location: MitraLocationValue | null) {
     startTransition(async () => {
-      await createMitraAction(input);
+      const id = await createMitraAction(input);
+      if (location) {
+        await setMitraLocationAction({ businessPartnerId: id, ...location });
+      }
       setCreating(false);
     });
   }
 
-  function handleUpdate(input: MitraInput) {
+  function handleUpdate(input: MitraInput, location: MitraLocationValue | null) {
     if (!editing) return;
     startTransition(async () => {
       await updateMitraAction(editing.BusinessPartnerID, input);
+      if (location) {
+        await setMitraLocationAction({ businessPartnerId: editing.BusinessPartnerID, ...location });
+      }
       setEditing(null);
     });
   }
@@ -455,6 +516,7 @@ export function MitraList({
         open={creating}
         onOpenChange={setCreating}
         initial={emptyForm()}
+        initialLocation={null}
         title="Tambah Mitra"
         termOptions={termOptions}
         priceLevels={priceLevels}
@@ -466,6 +528,7 @@ export function MitraList({
           open={!!editing}
           onOpenChange={(open) => !open && setEditing(null)}
           initial={rowToForm(editing)}
+          initialLocation={rowToLocation(editing)}
           title={`Edit Mitra — ${editing.Name}`}
           termOptions={termOptions}
           priceLevels={priceLevels}

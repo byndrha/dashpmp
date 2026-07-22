@@ -16,6 +16,13 @@ export interface MitraRow {
   TermOfPaymentName: string | null;
   TermOfPaymentDays: number | null;
   Capacity: number | null;
+  // GPS location saved via the "Lokasi Mitra" map field — separate from
+  // Alamat above (ERP's own free-text address field) since these are two
+  // independent data sources (DashboardMitraLocation, added specifically
+  // for map-based distance routing).
+  Latitude: number | null;
+  Longitude: number | null;
+  GeoAlamat: string | null;
 }
 
 export async function getMitraList(): Promise<MitraRow[]> {
@@ -34,9 +41,13 @@ export async function getMitraList(): Promise<MitraRow[]> {
         bp.TermOfPaymentID,
         top_.TermOfPayment AS TermOfPaymentName,
         top_.Value AS TermOfPaymentDays,
-        bp.Capacity
+        bp.Capacity,
+        ml.Latitude,
+        ml.Longitude,
+        ml.Alamat AS GeoAlamat
     FROM BusinessPartner bp
     LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
+    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
     WHERE ISNULL(bp.IsDeleted, 0) = 0
     ORDER BY bp.Name
   `);
