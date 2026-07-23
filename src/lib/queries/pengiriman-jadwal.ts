@@ -3,10 +3,13 @@ import { assignDeliveryDriver, assignDeliveryVehicle } from "@/lib/queries/deliv
 import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
-// mitra-do.ts's KANTONG_QTY_EXPR, but against `Qty` (what's ordered/loaded)
-// rather than `Delivered` — a departure is being planned/loaded, it hasn't
-// necessarily been marked delivered yet.
-const JADWAL_KANTONG_EXPR = `SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Qty / 2.0 ELSE dod.Qty END)`;
+// mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
+// (not DeliveryOrderDetail) is the uniform source of line-item data for
+// both Draft and Terbit Jadwal rows — a Draft has no DeliveryOrderDetail
+// yet.
+const JADWAL_KANTONG_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END)`;
+
+export type JadwalStatus = "Draft" | "Terbit";
 
 export interface JadwalCard {
   JadwalID: number;
@@ -16,8 +19,12 @@ export interface JadwalCard {
   JamJadwal: string | Date;
   JamMulaiMuat: string | Date | null;
   JamAktualBerangkat: string | Date | null;
+  Status: JadwalStatus;
   TotalKantong: number;
-  TotalDO: number;
+  // Renamed from TotalDO — during Draft this counts SO lines, not DO
+  // documents (there are none yet). Same count either way since one SO
+  // becomes exactly one DO, just a more accurate name.
+  TotalStop: number;
 }
 
 export async function getPengirimanBoard(businessDate: string): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[] }> {
@@ -35,15 +42,16 @@ export async function getPengirimanBoard(businessDate: string): Promise<{ armada
             j.JamJadwal,
             j.JamMulaiMuat,
             j.JamAktualBerangkat,
+            j.Status,
             ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS TotalKantong,
-            COUNT(DISTINCT jd.DeliveryOrderID) AS TotalDO
+            COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop
         FROM DashboardPengirimanJadwal j
         LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
         LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
-        LEFT JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = jd.DeliveryOrderID
+        LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
         WHERE j.IsDeleted = 0
           AND j.JamJadwal >= DATEADD(HOUR, -7, CAST(@businessDate AS DATETIME)) AND j.JamJadwal < DATEADD(HOUR, -7, DATEADD(DAY, 1, CAST(@businessDate AS DATETIME)))
-        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat
+        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status
         ORDER BY j.JamJadwal
       `),
   ]);
@@ -51,117 +59,133 @@ export async function getPengirimanBoard(businessDate: string): Promise<{ armada
 }
 
 export interface JadwalDetailRow {
-  DeliveryOrderID: string;
+  JadwalDetailID: number;
+  SalesOrderID: string;
+  DeliveryOrderID: string | null;
+  Urutan: number;
   CustomerName: string;
   Qty: number;
   Wilayah: string;
   Kecamatan: string | null;
   Alamat: string | null;
   MobileNo: string | null;
+  Latitude: number | null;
+  Longitude: number | null;
 }
 
+// Always sources customer/qty/address from SalesOrder/SalesOrderDetail via
+// jd.SalesOrderID, uniformly for Draft and Terbit — DeliveryOrderID is
+// bookkeeping only (set once real DO rows exist after publish), never a
+// read dependency. Ordered by Urutan so this doubles as "the current stop
+// order" for the route-validation UI.
 export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow[]> {
   const pool = await getPool();
   const result = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId).query(`
       SELECT
+          jd.JadwalDetailID,
+          jd.SalesOrderID,
           jd.DeliveryOrderID,
+          jd.Urutan,
           bp.Name AS CustomerName,
           ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty,
           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           bp.NPWPAddress AS Kecamatan,
           bp.Address AS Alamat,
-          bp.MobileNo
+          bp.MobileNo,
+          ml.Latitude,
+          ml.Longitude
       FROM DashboardPengirimanJadwalDetail jd
-      JOIN DeliveryOrder do_ ON do_.DeliveryOrderID = jd.DeliveryOrderID
-      JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
-      LEFT JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = jd.DeliveryOrderID
+      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+      JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+      LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+      LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
       WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
-      GROUP BY jd.DeliveryOrderID, bp.Name, bp.NPWPName, bp.NPWPAddress, bp.Address, bp.MobileNo
-      ORDER BY bp.Name
+      GROUP BY jd.JadwalDetailID, jd.SalesOrderID, jd.DeliveryOrderID, jd.Urutan,
+               bp.Name, bp.NPWPName, bp.NPWPAddress, bp.Address, bp.MobileNo, ml.Latitude, ml.Longitude
+      ORDER BY jd.Urutan
     `);
   return result.recordset;
 }
 
-export interface UnassignedDO {
-  DeliveryOrderID: string;
+export interface AvailableSalesOrder {
+  SalesOrderID: string;
   VoucherNo: string;
   CustomerName: string;
   Wilayah: string;
   Qty: number;
+  DueDate: string | Date | null;
 }
 
-export async function getUnassignedDeliveryOrders(businessDate: string): Promise<UnassignedDO[]> {
+// SO is "available" for a departure on businessDate when: DueDate falls on
+// that day, it's open (not closed/deleted), no DeliveryOrder has been
+// created from it yet, and it isn't already sitting in another active
+// (non-deleted) Jadwal's detail rows — draft or published.
+export async function getAvailableSalesOrders(businessDate: string): Promise<AvailableSalesOrder[]> {
   const pool = await getPool();
   const result = await pool
     .request()
     .input("businessDate", sql.Date, businessDate).query(`
       SELECT
-          do_.DeliveryOrderID,
-          do_.VoucherNo,
+          so.SalesOrderID,
+          so.VoucherNo,
           bp.Name AS CustomerName,
           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-          ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty
-      FROM DeliveryOrder do_
-      LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
-      LEFT JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
-      WHERE do_.IsDeleted = 0
-        AND do_.TransDate >= @businessDate AND do_.TransDate < DATEADD(DAY, 1, @businessDate)
+          ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty,
+          so.DueDate
+      FROM SalesOrder so
+      LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+      LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
+      WHERE so.IsDeleted = 0
+        AND so.IsClosed = 0
+        AND so.DueDate >= @businessDate AND so.DueDate < DATEADD(DAY, 1, @businessDate)
+        AND NOT EXISTS (
+          SELECT 1 FROM DeliveryOrder do_ WHERE do_.SalesOrderID = so.SalesOrderID AND do_.IsDeleted = 0
+        )
         AND NOT EXISTS (
           SELECT 1 FROM DashboardPengirimanJadwalDetail jd
-          WHERE jd.DeliveryOrderID = do_.DeliveryOrderID AND jd.IsDeleted = 0
+          JOIN DashboardPengirimanJadwal j ON j.JadwalID = jd.JadwalID
+          WHERE jd.SalesOrderID = so.SalesOrderID AND jd.IsDeleted = 0 AND j.IsDeleted = 0
         )
-      GROUP BY do_.DeliveryOrderID, do_.VoucherNo, bp.Name, bp.NPWPName
+      GROUP BY so.SalesOrderID, so.VoucherNo, bp.Name, bp.NPWPName, so.DueDate
       ORDER BY bp.Name
     `);
   return result.recordset;
 }
 
-export async function createJadwal(input: {
+export async function createJadwalDraft(input: {
   armadaId: number;
-  salesmanId: string | null;
   jamJadwal: Date;
-  deliveryOrderIds: string[];
+  salesOrderIds: string[];
 }): Promise<number> {
   const pool = await getPool();
-
-  // VehicleNo (written to each DO below) stores the Armada's display name,
-  // not its numeric ID — same convention assignDeliveryVehicle already
-  // uses. Resolved here so callers only need to pass armadaId.
-  const armadaResult = await pool
-    .request()
-    .input("armadaId", sql.Int, input.armadaId)
-    .query(`SELECT Nama FROM DashboardArmada WHERE ArmadaID = @armadaId`);
-  const armadaNama = (armadaResult.recordset[0] as { Nama: string } | undefined)?.Nama ?? null;
 
   const result = await pool
     .request()
     .input("armadaId", sql.Int, input.armadaId)
-    .input("salesmanId", sql.VarChar(16), input.salesmanId)
     .input("jamJadwal", sql.DateTime, input.jamJadwal).query(`
-      INSERT INTO DashboardPengirimanJadwal (ArmadaID, SalesmanID, JamJadwal, IsDeleted, ModifiedDate)
+      INSERT INTO DashboardPengirimanJadwal (ArmadaID, SalesmanID, JamJadwal, Status, IsDeleted, ModifiedDate)
       OUTPUT inserted.JadwalID
-      VALUES (@armadaId, @salesmanId, @jamJadwal, 0, GETDATE())
+      VALUES (@armadaId, NULL, @jamJadwal, 'Draft', 0, GETDATE())
     `);
   const jadwalId = (result.recordset[0] as { JadwalID: number }).JadwalID;
 
   try {
-    for (const doId of input.deliveryOrderIds) {
+    for (let i = 0; i < input.salesOrderIds.length; i++) {
       await pool
         .request()
         .input("jadwalId", sql.Int, jadwalId)
-        .input("doId", sql.VarChar(16), doId)
-        .query(`INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, DeliveryOrderID, IsDeleted) VALUES (@jadwalId, @doId, 0)`);
-      await assignDeliveryDriver(doId, input.salesmanId);
-      await assignDeliveryVehicle(doId, armadaNama);
+        .input("soId", sql.VarChar(16), input.salesOrderIds[i])
+        .input("urutan", sql.Int, i)
+        .query(`
+          INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, SalesOrderID, DeliveryOrderID, Urutan, IsDeleted)
+          VALUES (@jadwalId, @soId, NULL, @urutan, 0)
+        `);
     }
   } catch (err) {
-    // Don't leave a half-created Jadwal (header committed, only some DOs
-    // attached) visible on the board — soft-delete what was inserted so far
-    // and rethrow. Driver/vehicle assignments already made on earlier DOs in
-    // the loop are intentionally left as-is (see createJadwal's caller docs);
-    // reverting those risks its own failure and is out of scope here.
+    // Same compensating-cleanup discipline as the rest of this file's
+    // multi-step writes: don't leave a half-created draft visible.
     await pool
       .request()
       .input("jadwalId", sql.Int, jadwalId)
@@ -176,13 +200,80 @@ export async function createJadwal(input: {
   return jadwalId;
 }
 
-export async function updateJadwalTime(jadwalId: number, jamJadwal: Date): Promise<void> {
+export async function deleteJadwalDraft(jadwalId: number): Promise<void> {
   const pool = await getPool();
+  const statusResult = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const status = (statusResult.recordset[0] as { Status: JadwalStatus } | undefined)?.Status;
+  if (status !== "Draft") {
+    throw new Error("Hanya keberangkatan berstatus Draft yang bisa dibatalkan.");
+  }
+
   await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
-    .input("jamJadwal", sql.DateTime, jamJadwal)
-    .query(`UPDATE DashboardPengirimanJadwal SET JamJadwal = @jamJadwal, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+    .query(`UPDATE DashboardPengirimanJadwalDetail SET IsDeleted = 1 WHERE JadwalID = @jadwalId`);
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`UPDATE DashboardPengirimanJadwal SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+}
+
+// Persists a manual drag-and-drop stop reorder — dashboard-only bookkeeping,
+// touches no DeliveryOrder field, so it's safe to call regardless of
+// Draft/Terbit status.
+export async function updateJadwalUrutan(jadwalId: number, orderedDetailIds: number[]): Promise<void> {
+  const pool = await getPool();
+  for (let i = 0; i < orderedDetailIds.length; i++) {
+    await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .input("detailId", sql.Int, orderedDetailIds[i])
+      .input("urutan", sql.Int, i)
+      .query(`UPDATE DashboardPengirimanJadwalDetail SET Urutan = @urutan WHERE JadwalID = @jadwalId AND JadwalDetailID = @detailId`);
+  }
+}
+
+export async function updateJadwalDriverTime(
+  jadwalId: number,
+  input: { jamJadwal: Date; salesmanId: string | null }
+): Promise<void> {
+  const pool = await getPool();
+  const current = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT Status, ArmadaID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number } | undefined;
+  if (!row) throw new Error("Keberangkatan tidak ditemukan.");
+
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .input("jamJadwal", sql.DateTime, input.jamJadwal)
+    .input("salesmanId", sql.VarChar(16), input.salesmanId)
+    .query(`UPDATE DashboardPengirimanJadwal SET JamJadwal = @jamJadwal, SalesmanID = @salesmanId, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+
+  if (row.Status === "Terbit") {
+    const armadaResult = await pool
+      .request()
+      .input("armadaId", sql.Int, row.ArmadaID)
+      .query(`SELECT Nama FROM DashboardArmada WHERE ArmadaID = @armadaId`);
+    const armadaNama = (armadaResult.recordset[0] as { Nama: string } | undefined)?.Nama ?? null;
+
+    const linkedDOs = await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .query(`
+        SELECT DeliveryOrderID FROM DashboardPengirimanJadwalDetail
+        WHERE JadwalID = @jadwalId AND IsDeleted = 0 AND DeliveryOrderID IS NOT NULL
+      `);
+    for (const r of linkedDOs.recordset as { DeliveryOrderID: string }[]) {
+      await assignDeliveryDriver(r.DeliveryOrderID, input.salesmanId);
+      await assignDeliveryVehicle(r.DeliveryOrderID, armadaNama);
+    }
+  }
 }
 
 export async function startMuat(jadwalId: number): Promise<void> {
@@ -199,4 +290,179 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .query(`UPDATE DashboardPengirimanJadwal SET JamAktualBerangkat = GETDATE(), ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+}
+
+const DOC_SUFFIX = "003/001";
+const BRANCH_ID = "011";
+const DEPARTMENT_ID = "0110";
+
+async function nextDeliveryOrderId(pool: sql.ConnectionPool): Promise<string> {
+  const result = await pool.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderID AS INT)) AS MaxID FROM DeliveryOrder`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextDeliveryOrderDetailId(pool: sql.ConnectionPool): Promise<string> {
+  const result = await pool.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderDetailID AS INT)) AS MaxID FROM DeliveryOrderDetail`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextDOVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Promise<string> {
+  const result = await pool
+    .request()
+    .input("pattern", sql.VarChar(64), `MKE/DO/%/${yearMonth}/${DOC_SUFFIX}`).query(`
+      SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq
+      FROM DeliveryOrder
+      WHERE VoucherNo LIKE @pattern
+    `);
+  const maxSeq = (result.recordset[0]?.MaxSeq as number | null) ?? 0;
+  return String(maxSeq + 1).padStart(6, "0");
+}
+
+interface SalesOrderForPublish {
+  BusinessPartnerID: string;
+  DueDate: Date | null;
+}
+interface SalesOrderDetailForPublish {
+  SalesOrderDetailID: string;
+  ItemID: string;
+  Name: string;
+  Qty: number;
+  Unit: string;
+  Price: number;
+  Amount: number;
+}
+
+// Draft -> Terbit. For each detail row (in Urutan order), creates one real
+// DeliveryOrder + its DeliveryOrderDetail line(s) from the linked
+// SalesOrder/SalesOrderDetail, shaped to match live-verified existing
+// SO-linked DO rows exactly (see this plan's Global Constraints). Writes
+// the new DeliveryOrderID back onto the detail row, then flips
+// Jadwal.Status. On partial failure, soft-deletes only the DeliveryOrder/
+// DeliveryOrderDetail rows this call itself created (not the Jadwal/SO
+// selection) and rethrows — matching createJadwalDraft's own compensating-
+// cleanup precedent, scoped to what this function owns.
+export async function publishJadwal(jadwalId: number): Promise<void> {
+  const pool = await getPool();
+
+  const header = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT ArmadaID, SalesmanID, Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const headerRow = header.recordset[0] as { ArmadaID: number; SalesmanID: string | null; Status: JadwalStatus } | undefined;
+  if (!headerRow) throw new Error("Keberangkatan tidak ditemukan.");
+  if (headerRow.Status !== "Draft") throw new Error("Keberangkatan ini sudah diterbitkan.");
+  if (!headerRow.SalesmanID) throw new Error("Driver wajib diisi sebelum menerbitkan.");
+
+  const armadaResult = await pool
+    .request()
+    .input("armadaId", sql.Int, headerRow.ArmadaID)
+    .query(`SELECT Nama FROM DashboardArmada WHERE ArmadaID = @armadaId`);
+  const armadaNama = (armadaResult.recordset[0] as { Nama: string } | undefined)?.Nama ?? null;
+
+  const details = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`
+      SELECT JadwalDetailID, SalesOrderID FROM DashboardPengirimanJadwalDetail
+      WHERE JadwalID = @jadwalId AND IsDeleted = 0
+      ORDER BY Urutan
+    `);
+  const detailRows = details.recordset as { JadwalDetailID: number; SalesOrderID: string }[];
+  if (detailRows.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
+
+  const createdDeliveryOrderIds: string[] = [];
+  const now = new Date();
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  try {
+    for (const detail of detailRows) {
+      const soResult = await pool
+        .request()
+        .input("soId", sql.VarChar(16), detail.SalesOrderID)
+        .query(`SELECT BusinessPartnerID, DueDate FROM SalesOrder WHERE SalesOrderID = @soId`);
+      const so = soResult.recordset[0] as SalesOrderForPublish | undefined;
+      if (!so) throw new Error(`Sales Order ${detail.SalesOrderID} tidak ditemukan.`);
+
+      const sodResult = await pool
+        .request()
+        .input("soId", sql.VarChar(16), detail.SalesOrderID)
+        .query(`SELECT SalesOrderDetailID, ItemID, Name, Qty, Unit, Price, Amount FROM SalesOrderDetail WHERE SalesOrderID = @soId`);
+      const soDetails = sodResult.recordset as SalesOrderDetailForPublish[];
+
+      const deliveryOrderId = await nextDeliveryOrderId(pool);
+      const voucherSeq = await nextDOVoucherSeq(pool, yearMonth);
+      const voucherNo = `MKE/DO/${voucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+
+      await pool
+        .request()
+        .input("id", sql.VarChar(16), deliveryOrderId)
+        .input("voucherNo", sql.VarChar(128), voucherNo)
+        .input("branchId", sql.VarChar(16), BRANCH_ID)
+        .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+        .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
+        .input("soId", sql.VarChar(16), detail.SalesOrderID)
+        .input("vehicleNo", sql.VarChar(50), armadaNama)
+        .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID)
+        .input("dueDate", sql.DateTime, so.DueDate).query(`
+          INSERT INTO DeliveryOrder
+            (DeliveryOrderID, VoucherNo, TransDate, BranchID, DepartmentID, BusinessPartnerID, Notes, SalesOrderID,
+             IsClosed, ExpeditionID, VehicleNo, AddressDelivery, IsDeleted, ModifiedDate, PIC, ShippingNo,
+             BusinessPartnerLocationID, IsInvoiced, CurrencyID, Rate, StatusForm, SalesmanID, OverLimit,
+             ReferenceNo, DueDate, ProjectID, AddressDeliveryID, IsDOReturn)
+          VALUES
+            (@id, @voucherNo, GETDATE(), @branchId, @departmentId, @bpId, '', @soId,
+             0, '', @vehicleNo, '', 0, GETDATE(), '', NULL,
+             NULL, 0, '', 1, 1, @salesmanId, 0,
+             '', @dueDate, '', '', NULL)
+        `);
+      createdDeliveryOrderIds.push(deliveryOrderId);
+
+      for (const sod of soDetails) {
+        const detailId = await nextDeliveryOrderDetailId(pool);
+        await pool
+          .request()
+          .input("id", sql.VarChar(16), detailId)
+          .input("doId", sql.VarChar(16), deliveryOrderId)
+          .input("itemId", sql.VarChar(160), sod.ItemID)
+          .input("name", sql.VarChar(160), sod.Name)
+          .input("qty", sql.Decimal(23, 4), sod.Qty)
+          .input("unit", sql.VarChar(8), sod.Unit)
+          .input("price", sql.Decimal(23, 4), sod.Price)
+          .input("amount", sql.Decimal(23, 4), sod.Amount)
+          .input("soDetailId", sql.VarChar(16), sod.SalesOrderDetailID).query(`
+            INSERT INTO DeliveryOrderDetail
+              (DeliveryOrderDetailID, DeliveryOrderID, ItemID, Qty, Unit, UnitRatio, Ratio, Price, Disc, DiscValue,
+               DiscRp, Amount, Delivered, Name, Outstanding, Description, Cashback, SalesOrderDetailID)
+            VALUES
+              (@id, @doId, @itemId, @qty, @unit, @qty, 1, @price, 0, NULL,
+               0, @amount, @qty, @name, @qty, NULL, 0, @soDetailId)
+          `);
+      }
+
+      await pool
+        .request()
+        .input("detailId", sql.Int, detail.JadwalDetailID)
+        .input("doId", sql.VarChar(16), deliveryOrderId)
+        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = @doId WHERE JadwalDetailID = @detailId`);
+    }
+  } catch (err) {
+    for (const doId of createdDeliveryOrderIds) {
+      await pool
+        .request()
+        .input("doId", sql.VarChar(16), doId)
+        .query(`UPDATE DeliveryOrder SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
+      await pool
+        .request()
+        .input("doId", sql.VarChar(16), doId)
+        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = NULL WHERE DeliveryOrderID = @doId`);
+    }
+    throw err;
+  }
+
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
 }
