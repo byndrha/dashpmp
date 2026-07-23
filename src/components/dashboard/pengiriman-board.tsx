@@ -326,7 +326,21 @@ function ArmadaRowBoard({
   onCreateClick: (armadaId: number) => void;
 }) {
   return (
-    <div className="flex items-stretch">
+    // self-start: without it, the column ancestor's default align-items:
+    // stretch cross-sizes this row down to the scroll container's own
+    // clientWidth (e.g. 998px) even though its children need much more
+    // (224px info column + DAY_WIDTH timeline). That shrunk row box then
+    // becomes the sticky info column's containing block, and position:
+    // sticky is spec-constrained to never move outside its containing
+    // block — so it stops tracking the scroll once it would need to
+    // translate past (row width - column width), well short of the
+    // timeline's actual scrollable extent. self-start lets the row size
+    // to its natural (unstretched) content width instead, so its box
+    // spans the full scrollable area and the sticky column can track the
+    // whole way. shrink-0 on the timeline (below) is the matching half of
+    // the fix — it stops flex-shrink from quietly squashing the timeline
+    // back down to fit whatever width the row is (auto-)given.
+    <div className="flex items-stretch self-start">
       <div className="sticky left-0 z-10 flex w-56 shrink-0 flex-col gap-1.5 bg-card py-3 pr-3">
         <div className="flex items-center gap-2">
           {armada.FotoPath ? (
@@ -364,7 +378,7 @@ function ArmadaRowBoard({
           </Button>
         </div>
       </div>
-      <div className="relative border-l" style={{ width: DAY_WIDTH, height: 72 }}>
+      <div className="relative shrink-0 border-l" style={{ width: DAY_WIDTH, height: 72 }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * HOUR_WIDTH, width: HOUR_WIDTH }} />
         ))}
