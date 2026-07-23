@@ -1,12 +1,7 @@
 // app/api/routing/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getRoute } from "@/lib/osrm";
-
-// Titik asal: lokasi Pabrik Es PMP Ponorogo (dari Google Maps).
-const PABRIK_ORIGIN = {
-  lat: -7.8462825,
-  lng: 111.4759937,
-};
+import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -21,10 +16,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await getRoute(PABRIK_ORIGIN, {
-      lat: parseFloat(destLat),
-      lng: parseFloat(destLng),
-    });
+    const pabrik = await getPabrikLocation();
+    const result = await getRoute(
+      { lat: pabrik.latitude, lng: pabrik.longitude },
+      { lat: parseFloat(destLat), lng: parseFloat(destLng) }
+    );
 
     return NextResponse.json(result);
   } catch (err) {
