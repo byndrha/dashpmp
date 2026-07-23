@@ -42,7 +42,7 @@ export async function getPengirimanBoard(businessDate: string): Promise<{ armada
         LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
         LEFT JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = jd.DeliveryOrderID
         WHERE j.IsDeleted = 0
-          AND j.JamJadwal >= @businessDate AND j.JamJadwal < DATEADD(DAY, 1, @businessDate)
+          AND j.JamJadwal >= DATEADD(HOUR, -7, CAST(@businessDate AS DATETIME)) AND j.JamJadwal < DATEADD(HOUR, -7, DATEADD(DAY, 1, CAST(@businessDate AS DATETIME)))
         GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat
         ORDER BY j.JamJadwal
       `),
