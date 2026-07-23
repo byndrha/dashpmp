@@ -73,6 +73,10 @@ function JadwalDetailDialog({
 
   useEffect(() => {
     if (jadwalId == null) {
+      // Clears stale detail rows from the previously open card — not derived
+      // from props/state during render since detail is otherwise only ever
+      // populated by the fetch below.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDetail(null);
       return;
     }
@@ -85,6 +89,9 @@ function JadwalDetailDialog({
   useEffect(() => {
     if (jamJadwal == null) return;
     const d = new Date(jamJadwal);
+    // Syncs the time input from the jamJadwal prop when the open card
+    // changes — not derivable from render since the input is user-editable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
   }, [jamJadwal]);
 
@@ -180,6 +187,10 @@ function CreateJadwalDialog({
 
   useEffect(() => {
     if (!open) return;
+    // Resets the form when the dialog re-opens for a new Armada — not
+    // derivable from render since these are user-editable fields, not
+    // computed from props.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(new Set());
     setTime("08:00");
     setSalesmanId("");
@@ -489,7 +500,7 @@ export function PengirimanBoard({
       </CardHeader>
       <CardContent>
         {sortedArmada.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Belum ada armada. Tambah lewat "Kelola Armada".</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Belum ada armada. Tambah lewat &quot;Kelola Armada&quot;.</p>
         ) : (
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <div className="overflow-x-auto">
