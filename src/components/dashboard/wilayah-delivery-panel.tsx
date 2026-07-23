@@ -62,38 +62,47 @@ export function WilayahDeliveryPanel({
                         onWilayahClick && "hover:border-primary/40 hover:bg-primary/10"
                       )}
                     >
-                      {/* Top row: wilayah name (left) + total periode terpilih (right,
-                          moved here from below the name). */}
+                      {/* Top row: wilayah name (left) + % ketercapaian target (top-right). */}
                       <div className="flex items-start justify-between gap-2">
                         <p className="min-w-0 truncate text-xs font-medium text-muted-foreground">{w.Wilayah}</p>
+                        <p
+                          className={cn(
+                            "shrink-0 text-xs font-semibold tabular-nums",
+                            w.PctAchievement != null && w.PctAchievement >= 100 && "text-primary"
+                          )}
+                        >
+                          {w.PctAchievement != null ? `${w.PctAchievement.toFixed(0)}%` : "-"}
+                        </p>
+                      </div>
+
+                      {/* Divider spanning the full tile width, right below the
+                          name/% row (edge-to-edge via negative margin to
+                          offset the button's own padding). */}
+                      <div className="-mx-2.5 my-1.5 border-t" />
+
+                      {/* Middle row: "Hari ini:" label above its number (left)
+                          paired with the period total, vertically centered
+                          on the right. */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[9px] text-muted-foreground">Hari ini:</p>
+                          <p className="text-sm font-semibold tabular-nums">
+                            {w.TotalKantongHariIni.toLocaleString("id-ID")}
+                          </p>
+                        </div>
                         <p className="shrink-0 font-display text-sm font-semibold tabular-nums">
                           {w.TotalKantong.toLocaleString("id-ID")}
                         </p>
                       </div>
-                      {/* Second row: hari ini + target harian (left) paired with
-                          target periode + % ketercapaian (right). */}
-                      <div className="mt-1.5 flex items-end justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold tabular-nums">
-                            Hari ini: {w.TotalKantongHariIni.toLocaleString("id-ID")}
-                          </p>
-                          <p className="text-[10px] tabular-nums text-muted-foreground">
-                            Target: {w.TargetHarian != null ? w.TargetHarian.toLocaleString("id-ID") : "-"}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-[10px] tabular-nums text-muted-foreground">
-                            Target {w.TargetPeriode != null ? w.TargetPeriode.toLocaleString("id-ID") : "-"}
-                          </p>
-                          <p
-                            className={cn(
-                              "text-xs font-semibold tabular-nums",
-                              w.PctAchievement != null && w.PctAchievement >= 100 && "text-primary"
-                            )}
-                          >
-                            {w.PctAchievement != null ? `${w.PctAchievement.toFixed(0)}%` : "-"}
-                          </p>
-                        </div>
+
+                      {/* Bottom row: target harian (left) paired with target periode (right). */}
+                      <div className="mt-1 flex items-end justify-between gap-2">
+                        <p className="text-[10px] tabular-nums text-muted-foreground">
+                          Target: {w.TargetHarian != null ? w.TargetHarian.toLocaleString("id-ID") : "-"}
+                        </p>
+                        <p className="text-[10px] tabular-nums text-muted-foreground">
+                          Target {w.TargetPeriode != null ? w.TargetPeriode.toLocaleString("id-ID") : "-"}
+                        </p>
                       </div>
                       <ArrowRight className="absolute bottom-2 right-2 size-3.5 text-muted-foreground" />
                     </button>
