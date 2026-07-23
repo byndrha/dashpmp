@@ -32,11 +32,14 @@ import {
 // 24-hour axis, but the per-hour width is now derived from the available
 // container width at render time (see useContainerWidth below) instead of a
 // fixed 80px — a fixed width made the timeline wider than most screens,
-// forcing a long horizontal scrollbar. DAY_WIDTH always equals the
-// container's own width now, so there's nothing to scroll in the normal
-// case.
+// forcing a long horizontal scrollbar. DAY_WIDTH now equals the container's
+// own width MINUS the sticky info column (INFO_COL_WIDTH, matching w-56),
+// since that column shares the same scroll container and permanently eats
+// into its width — omitting it here previously left a residual ~224px of
+// overflow no matter how wide the screen was.
 const MIN_HOUR_WIDTH = 28;
 const MIN_CARD_WIDTH = 40;
+const INFO_COL_WIDTH = 224;
 
 function hourFraction(value: string | Date): number {
   const d = new Date(value);
@@ -301,7 +304,7 @@ export function PengirimanBoard({
   const [createArmadaId, setCreateArmadaId] = useState<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
-  const hourWidth = Math.max(MIN_HOUR_WIDTH, containerWidth / 24);
+  const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
   const dayWidth = hourWidth * 24;
 
   const jadwalByArmada = useMemo(() => {
