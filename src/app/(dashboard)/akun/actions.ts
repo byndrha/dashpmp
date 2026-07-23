@@ -82,10 +82,12 @@ export async function deleteUserAction(userId: number) {
 }
 
 export async function getPabrikLocationAction() {
+  await requireSuperAdmin();
   return getPabrikLocation();
 }
 
 export async function setPabrikLocationAction(input: { latitude: number; longitude: number; alamat: string | null }): Promise<void> {
+  await requireSuperAdmin();
   await setPabrikLocation(input);
   revalidatePath("/akun");
 }

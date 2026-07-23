@@ -209,25 +209,49 @@ export function RouteValidationDialog({
     const next = arrayMove(order, oldIndex, newIndex);
     setOrder(next);
     if (jadwalId != null) {
-      startTransition(() => updateJadwalUrutanAction(jadwalId, next.map((d) => d.JadwalDetailID)));
+      setError(null);
+      startTransition(async () => {
+        try {
+          await updateJadwalUrutanAction(jadwalId, next.map((d) => d.JadwalDetailID));
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Gagal menyimpan urutan tujuan.");
+        }
+      });
     }
   }
 
+  // Standalone "Simpan" path — still needed on its own since editing
+  // driver/time while already Terbit (re-assigning driver/vehicle onto
+  // existing DOs) doesn't go through handlePublish.
   function handleSaveDriverTime() {
     if (jadwalId == null) return;
-    startTransition(() =>
-      updateJadwalDriverTimeAction(jadwalId, {
-        jamJadwal: combineDateAndTime(businessDate, time),
-        salesmanId: driverId || null,
-      })
-    );
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateJadwalDriverTimeAction(jadwalId, {
+          jamJadwal: combineDateAndTime(businessDate, time),
+          salesmanId: driverId || null,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menyimpan driver/waktu.");
+      }
+    });
   }
 
+  // "Terbitkan" always persists the currently-selected driver/time first —
+  // otherwise a driver picked but not yet "Simpan"-ed would still read as
+  // NULL server-side (publishJadwal checks the persisted SalesmanID column,
+  // not client state), failing confusingly even though the button looked
+  // ready.
   function handlePublish() {
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
       try {
+        await updateJadwalDriverTimeAction(jadwalId, {
+          jamJadwal: combineDateAndTime(businessDate, time),
+          salesmanId: driverId || null,
+        });
         await publishJadwalAction(jadwalId);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menerbitkan DO.");

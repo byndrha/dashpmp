@@ -1,6 +1,8 @@
 import { getPool, sql } from "@/lib/db";
 import { assignDeliveryDriver, assignDeliveryVehicle } from "@/lib/queries/delivery";
 import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
+import { getPabrikLocation } from "@/lib/queries/pabrik-location";
+import { getMultiPointRoute } from "@/lib/osrm";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
 // mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
@@ -211,14 +213,21 @@ export async function deleteJadwalDraft(jadwalId: number): Promise<void> {
     throw new Error("Hanya keberangkatan berstatus Draft yang bisa dibatalkan.");
   }
 
-  await pool
-    .request()
-    .input("jadwalId", sql.Int, jadwalId)
-    .query(`UPDATE DashboardPengirimanJadwalDetail SET IsDeleted = 1 WHERE JadwalID = @jadwalId`);
+  // Header first, details second: if the second statement never runs (e.g.
+  // a connection drop between the two calls), the Jadwal is already
+  // IsDeleted=1 — every read that joins through it (including
+  // getAvailableSalesOrders's NOT EXISTS check, which requires
+  // j.IsDeleted = 0) already treats its SOs as available again, so there's
+  // no phantom "0 visible stops but still active" Draft possible even if
+  // the detail cleanup below never completes.
   await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .query(`UPDATE DashboardPengirimanJadwal SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`UPDATE DashboardPengirimanJadwalDetail SET IsDeleted = 1 WHERE JadwalID = @jadwalId`);
 }
 
 // Persists a manual drag-and-drop stop reorder — dashboard-only bookkeeping,
@@ -355,28 +364,70 @@ export async function publishJadwal(jadwalId: number): Promise<void> {
   if (headerRow.Status !== "Draft") throw new Error("Keberangkatan ini sudah diterbitkan.");
   if (!headerRow.SalesmanID) throw new Error("Driver wajib diisi sebelum menerbitkan.");
 
-  const armadaResult = await pool
-    .request()
-    .input("armadaId", sql.Int, headerRow.ArmadaID)
-    .query(`SELECT Nama FROM DashboardArmada WHERE ArmadaID = @armadaId`);
-  const armadaNama = (armadaResult.recordset[0] as { Nama: string } | undefined)?.Nama ?? null;
+  // Server-side mirror of the client's mandatory route-computed check
+  // (design spec: checked client- AND server-side) — a direct server-action
+  // call bypassing the UI must not be able to skip it. Deliberately BEFORE
+  // the publish claim below, so a failed route check never leaves the
+  // Jadwal wrongly flipped to Terbit.
+  const stopsForRouteCheck = await getJadwalDetail(jadwalId);
+  if (stopsForRouteCheck.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
+  const missingCoords = stopsForRouteCheck.some((s) => s.Latitude == null || s.Longitude == null);
+  if (missingCoords) {
+    throw new Error("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
+  }
+  const pabrik = await getPabrikLocation();
+  try {
+    await getMultiPointRoute([
+      { lat: pabrik.latitude, lng: pabrik.longitude },
+      ...stopsForRouteCheck.map((s) => ({ lat: s.Latitude as number, lng: s.Longitude as number })),
+      { lat: pabrik.latitude, lng: pabrik.longitude },
+    ]);
+  } catch {
+    throw new Error("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
+  }
 
-  const details = await pool
+  // Atomically claim the publish: only succeeds if Status is still 'Draft'.
+  // Guards against two racing publishJadwal calls for the same jadwalId
+  // both passing the Status!=='Draft' check above and then both creating a
+  // duplicate set of real DeliveryOrder/DeliveryOrderDetail rows.
+  const claim = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
-    .query(`
-      SELECT JadwalDetailID, SalesOrderID, DeliveryOrderID FROM DashboardPengirimanJadwalDetail
-      WHERE JadwalID = @jadwalId AND IsDeleted = 0
-      ORDER BY Urutan
-    `);
-  const detailRows = details.recordset as { JadwalDetailID: number; SalesOrderID: string; DeliveryOrderID: string | null }[];
-  if (detailRows.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
+    .query(
+      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
+    );
+  if (claim.rowsAffected[0] === 0) {
+    throw new Error("Keberangkatan ini sudah diterbitkan atau sedang diproses.");
+  }
 
   const createdDeliveryOrderIds: string[] = [];
   const now = new Date();
   const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   try {
+    const armadaResult = await pool
+      .request()
+      .input("armadaId", sql.Int, headerRow.ArmadaID)
+      .query(`SELECT Nama FROM DashboardArmada WHERE ArmadaID = @armadaId AND IsDeleted = 0`);
+    const armadaRow = armadaResult.recordset[0] as { Nama: string } | undefined;
+    // Publishing assigns a real vehicle to a real ERP document — a
+    // soft-deleted Armada (deleted after this Draft was created, before it
+    // was published) must block publish rather than silently write a
+    // stale or blank VehicleNo onto a permanent DeliveryOrder.
+    if (!armadaRow) throw new Error("Armada sudah dihapus, tidak bisa menerbitkan.");
+    const armadaNama = armadaRow.Nama;
+
+    const details = await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .query(`
+        SELECT JadwalDetailID, SalesOrderID, DeliveryOrderID FROM DashboardPengirimanJadwalDetail
+        WHERE JadwalID = @jadwalId AND IsDeleted = 0
+        ORDER BY Urutan
+      `);
+    const detailRows = details.recordset as { JadwalDetailID: number; SalesOrderID: string; DeliveryOrderID: string | null }[];
+    if (detailRows.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
+
     for (const detail of detailRows) {
       // Idempotent-retry guard: if a previous publishJadwal attempt already
       // created a DeliveryOrder for this detail row (and only failed later,
@@ -464,11 +515,14 @@ export async function publishJadwal(jadwalId: number): Promise<void> {
         .input("doId", sql.VarChar(16), doId)
         .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = NULL WHERE DeliveryOrderID = @doId`);
     }
+    // The claim above already flipped Status to 'Terbit' before this loop
+    // ran — a genuinely failed publish attempt must revert it back to
+    // 'Draft' so it can be retried, on top of the DeliveryOrder/JadwalDetail
+    // cleanup already done above.
+    await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .query(`UPDATE DashboardPengirimanJadwal SET Status = 'Draft', ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
     throw err;
   }
-
-  await pool
-    .request()
-    .input("jadwalId", sql.Int, jadwalId)
-    .query(`UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
 }
