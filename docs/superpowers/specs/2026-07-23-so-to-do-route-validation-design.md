@@ -42,17 +42,14 @@ documents are actually issued.
   `mitra-location-map.tsx` already implement an editable Leaflet
   pick-a-point-on-map field (search, "use my location", reverse geocode) —
   reused as-is for the new Pabrik Location settings field.
-- `DashboardPengirimanJadwal` (2 rows) / `DashboardPengirimanJadwalDetail` (3
-  rows) currently hold rows created during the prior plan's live testing
-  (test vehicles "GrandMax Test 2026" / "GrranMax 1973"). These predate
-  `SalesOrderID` and have no SO to backfill from. **Migration decision,
-  needs the user's confirmation during spec review:** soft-delete these 2
-  test Jadwal rows (and their 3 detail rows) as part of the DDL task, since
-  they're artifacts of automated verification, not real departures. If the
-  user wants to keep them, they'd need to be manually backfilled with a
-  placeholder or left with a nullable `SalesOrderID`, complicating every
-  query that joins through it — soft-delete is the clean option and is
-  recommended.
+- `DashboardPengirimanJadwal` / `DashboardPengirimanJadwalDetail` and the two
+  test `DashboardArmada` rows ("GrandMax Test 2026" / "GrranMax 1973")
+  created during the prior plan's live testing have already been
+  soft-deleted (confirmed by the user 2026-07-23), including reverting the
+  `VehicleNo`/`SalesmanID` those tests had written onto 3 real
+  `DeliveryOrder` rows. No pre-existing rows remain for the DDL task to
+  migrate — `SalesOrderID` can go straight to `NOT NULL` with no backfill
+  step needed.
 
 ## Status Lifecycle
 
@@ -101,16 +98,13 @@ no "un-publish."
 ALTER TABLE DashboardPengirimanJadwal ADD Status VARCHAR(10) NOT NULL DEFAULT 'Draft';
 ALTER TABLE DashboardPengirimanJadwal ADD CreatedByUserID VARCHAR(16) NULL;
 
-ALTER TABLE DashboardPengirimanJadwalDetail ADD SalesOrderID VARCHAR(16) NULL; -- backfilled below, then tightened
+-- The prior plan's test rows are already soft-deleted (see "Current State"
+-- above) but still physically present, so ADD...NOT NULL still needs a
+-- DEFAULT to satisfy them — every future (non-deleted) row always sets a
+-- real SalesOrderID explicitly, this default only ever backfills dead rows.
+ALTER TABLE DashboardPengirimanJadwalDetail ADD SalesOrderID VARCHAR(16) NOT NULL DEFAULT '';
 ALTER TABLE DashboardPengirimanJadwalDetail ADD Urutan INT NOT NULL DEFAULT 0;
 ALTER TABLE DashboardPengirimanJadwalDetail ALTER COLUMN DeliveryOrderID VARCHAR(16) NULL;
-
--- Migration: soft-delete the 2 pre-existing test Jadwal rows and their 3
--- detail rows (see "Current State" above) before tightening SalesOrderID to
--- NOT NULL, since they have no SO to backfill.
-UPDATE DashboardPengirimanJadwalDetail SET IsDeleted = 1 WHERE JadwalID IN (1, 2);
-UPDATE DashboardPengirimanJadwal SET IsDeleted = 1 WHERE JadwalID IN (1, 2);
-ALTER TABLE DashboardPengirimanJadwalDetail ALTER COLUMN SalesOrderID VARCHAR(16) NOT NULL;
 
 CREATE TABLE DashboardPabrikLocation (
   ID INT IDENTITY PRIMARY KEY,
