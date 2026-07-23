@@ -60,3 +60,6 @@ android/.gradle/
 android/app/build/
 android/app/release/
 android/local.properties
+
+# user-uploaded files (local disk storage, never committed)
+public/uploads/
