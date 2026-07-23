@@ -146,48 +146,6 @@ export async function getDriverOptions(): Promise<DriverOption[]> {
   return result.recordset;
 }
 
-export interface DeliveryAssignmentRow {
-  DeliveryOrderID: string;
-  VoucherNo: string;
-  // mssql returns DATETIME columns as real Date instances, which survive
-  // Server->Client Component serialization as Date (not auto-stringified) —
-  // this is only ever a plain string after a JSON round-trip, never
-  // straight off this query's recordset. Format with formatTime()/
-  // formatDate() (both already accept `string | Date`), never `.slice(...)`.
-  TransDate: string | Date;
-  Wilayah: string;
-  CustomerName: string;
-  SalesmanID: string | null;
-  DriverName: string | null;
-  VehicleNo: string | null;
-}
-
-// One row per DeliveryOrder (not per detail line, unlike getOpenDeliveries)
-// for the given business date — this is what the assignment panel lists.
-export async function getDeliveryAssignments(businessDate: Date): Promise<DeliveryAssignmentRow[]> {
-  const pool = await getPool();
-  const result = await pool
-    .request()
-    .input("businessDate", sql.Date, businessDate).query(`
-      SELECT
-          do.DeliveryOrderID,
-          do.VoucherNo,
-          do.TransDate,
-          ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-          bp.Name AS CustomerName,
-          do.SalesmanID,
-          sm.Name AS DriverName,
-          NULLIF(do.VehicleNo, '') AS VehicleNo
-      FROM DeliveryOrder do
-      LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do.BusinessPartnerID
-      LEFT JOIN Salesman sm ON sm.SalesmanID = do.SalesmanID
-      WHERE do.IsDeleted = 0
-        AND do.TransDate >= @businessDate AND do.TransDate < DATEADD(DAY, 1, @businessDate)
-      ORDER BY do.TransDate DESC
-    `);
-  return result.recordset;
-}
-
 export async function assignDeliveryDriver(deliveryOrderId: string, salesmanId: string | null): Promise<void> {
   const pool = await getPool();
   await pool
