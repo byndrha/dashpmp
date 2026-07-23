@@ -139,7 +139,7 @@ export async function getAvailableSalesOrders(businessDate: string): Promise<Ava
       LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
       WHERE so.IsDeleted = 0
         AND so.IsClosed = 0
-        AND so.DueDate >= @businessDate AND so.DueDate < DATEADD(DAY, 1, @businessDate)
+        AND so.DueDate >= DATEADD(HOUR, -7, CAST(@businessDate AS DATETIME)) AND so.DueDate < DATEADD(HOUR, -7, DATEADD(DAY, 1, CAST(@businessDate AS DATETIME)))
         AND NOT EXISTS (
           SELECT 1 FROM DeliveryOrder do_ WHERE do_.SalesOrderID = so.SalesOrderID AND do_.IsDeleted = 0
         )
@@ -365,11 +365,11 @@ export async function publishJadwal(jadwalId: number): Promise<void> {
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .query(`
-      SELECT JadwalDetailID, SalesOrderID FROM DashboardPengirimanJadwalDetail
+      SELECT JadwalDetailID, SalesOrderID, DeliveryOrderID FROM DashboardPengirimanJadwalDetail
       WHERE JadwalID = @jadwalId AND IsDeleted = 0
       ORDER BY Urutan
     `);
-  const detailRows = details.recordset as { JadwalDetailID: number; SalesOrderID: string }[];
+  const detailRows = details.recordset as { JadwalDetailID: number; SalesOrderID: string; DeliveryOrderID: string | null }[];
   if (detailRows.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
 
   const createdDeliveryOrderIds: string[] = [];
@@ -378,6 +378,12 @@ export async function publishJadwal(jadwalId: number): Promise<void> {
 
   try {
     for (const detail of detailRows) {
+      // Idempotent-retry guard: if a previous publishJadwal attempt already
+      // created a DeliveryOrder for this detail row (and only failed later,
+      // e.g. on the final Status='Terbit' UPDATE), skip it instead of
+      // creating a duplicate DO for the same SO.
+      if (detail.DeliveryOrderID) continue;
+
       const soResult = await pool
         .request()
         .input("soId", sql.VarChar(16), detail.SalesOrderID)
