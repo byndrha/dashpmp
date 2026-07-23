@@ -146,14 +146,31 @@ export async function createJadwal(input: {
     `);
   const jadwalId = (result.recordset[0] as { JadwalID: number }).JadwalID;
 
-  for (const doId of input.deliveryOrderIds) {
+  try {
+    for (const doId of input.deliveryOrderIds) {
+      await pool
+        .request()
+        .input("jadwalId", sql.Int, jadwalId)
+        .input("doId", sql.VarChar(16), doId)
+        .query(`INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, DeliveryOrderID, IsDeleted) VALUES (@jadwalId, @doId, 0)`);
+      await assignDeliveryDriver(doId, input.salesmanId);
+      await assignDeliveryVehicle(doId, armadaNama);
+    }
+  } catch (err) {
+    // Don't leave a half-created Jadwal (header committed, only some DOs
+    // attached) visible on the board — soft-delete what was inserted so far
+    // and rethrow. Driver/vehicle assignments already made on earlier DOs in
+    // the loop are intentionally left as-is (see createJadwal's caller docs);
+    // reverting those risks its own failure and is out of scope here.
     await pool
       .request()
       .input("jadwalId", sql.Int, jadwalId)
-      .input("doId", sql.VarChar(16), doId)
-      .query(`INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, DeliveryOrderID, IsDeleted) VALUES (@jadwalId, @doId, 0)`);
-    await assignDeliveryDriver(doId, input.salesmanId);
-    await assignDeliveryVehicle(doId, armadaNama);
+      .query(`UPDATE DashboardPengirimanJadwalDetail SET IsDeleted = 1 WHERE JadwalID = @jadwalId`);
+    await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .query(`UPDATE DashboardPengirimanJadwal SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+    throw err;
   }
 
   return jadwalId;
