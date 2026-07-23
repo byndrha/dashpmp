@@ -1,6 +1,6 @@
 "use client";
 
-import { DndContext, useDraggable, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, useDraggable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Plus, Phone, MapPin } from "lucide-react";
@@ -385,6 +385,7 @@ export function PengirimanBoard({
   const isToday = businessDate === todayISO;
   const [detailJadwalId, setDetailJadwalId] = useState<number | null>(null);
   const [createArmadaId, setCreateArmadaId] = useState<number | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const jadwalByArmada = useMemo(() => {
     const map = new Map<number, JadwalCardData[]>();
@@ -490,7 +491,7 @@ export function PengirimanBoard({
         {sortedArmada.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada armada. Tambah lewat "Kelola Armada".</p>
         ) : (
-          <DndContext onDragEnd={handleDragEnd}>
+          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <div className="overflow-x-auto">
               <div className="flex flex-col divide-y">
                 {sortedArmada.map((a) => (
