@@ -5,7 +5,7 @@ import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type D
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
-import { GripVertical, MapPin, Phone, Route as RouteIcon, Fuel, Clock } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -99,7 +99,6 @@ export function RouteValidationDialog({
   // dialog (it has no Jadwal left to show once deleted).
   onDeleted?: () => void;
 }) {
-  const [detail, setDetail] = useState<JadwalDetailRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<JadwalDetailRow[]>([]);
   const [time, setTime] = useState("00:00");
@@ -117,8 +116,6 @@ export function RouteValidationDialog({
   useEffect(() => {
     if (jadwalId == null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDetail(null);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOrder([]);
       return;
     }
@@ -126,7 +123,6 @@ export function RouteValidationDialog({
     setError(null);
     getJadwalDetailAction(jadwalId)
       .then((rows) => {
-        setDetail(rows);
         setOrder(rows);
       })
       .finally(() => setLoading(false));
@@ -139,7 +135,6 @@ export function RouteValidationDialog({
     // derivable from render since these are user-editable inputs.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDriverId(jadwal.SalesmanID ?? "");
   }, [jadwal]);
 
@@ -157,9 +152,14 @@ export function RouteValidationDialog({
   // (which in turn keeps "Terbitkan" disabled, matching the mandatory-route
   // rule) instead of silently skipping stops.
   useEffect(() => {
+    let cancelled = false;
     if (pabrik == null || order.length === 0) return;
     const missing = order.some((o) => o.Latitude == null || o.Longitude == null);
     if (missing) {
+      // Stops changed to a set that genuinely can't be routed (missing
+      // coordinates) — reset any stale route from the previous stop order
+      // so "Terbitkan" doesn't stay enabled against it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoute(null);
       setRouteError("Beberapa tujuan belum punya lokasi tersimpan — tidak bisa hitung rute.");
       return;
@@ -178,6 +178,7 @@ export function RouteValidationDialog({
     })
       .then((res) => res.json())
       .then((data: MultiPointRoute | { error: string }) => {
+        if (cancelled) return;
         if ("error" in data) {
           setRoute(null);
           setRouteError(data.error);
@@ -186,10 +187,17 @@ export function RouteValidationDialog({
         }
       })
       .catch(() => {
+        if (cancelled) return;
         setRoute(null);
         setRouteError("Gagal menghitung rute.");
       })
-      .finally(() => setRouteLoading(false));
+      .finally(() => {
+        if (cancelled) return;
+        setRouteLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [order, pabrik]);
 
   function handleDragEnd(event: DragEndEvent) {
