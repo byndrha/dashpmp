@@ -31,10 +31,11 @@ export interface MitraGeocodeSuggestion {
   kecamatan: string | null;
 }
 
-// Same coordinates as PABRIK_ORIGIN in app/api/routing/route.ts — a sensible
-// starting pin for a mitra that doesn't have a saved location yet, since
-// mitra are all within driving distance of the pabrik anyway.
-const PABRIK_DEFAULT: MitraLocationValue = {
+// Last-resort fallback while /api/pabrik-location hasn't resolved yet (or
+// if it errors) — same coordinate DashboardPabrikLocation is seeded with.
+// A sensible starting pin for a mitra with no saved location either way,
+// since mitra are all within driving distance of the pabrik.
+const PABRIK_FALLBACK: MitraLocationValue = {
   latitude: -7.8462825,
   longitude: 111.4759937,
   alamat: null,
@@ -56,7 +57,8 @@ export function MitraLocationField({
   wilayah?: string | null;
   kecamatan?: string | null;
 }) {
-  const current = value ?? PABRIK_DEFAULT;
+  const [pabrik, setPabrik] = useState<MitraLocationValue>(PABRIK_FALLBACK);
+  const current = value ?? pabrik;
   const [recenterKey, setRecenterKey] = useState(0);
   const [locating, setLocating] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
@@ -65,6 +67,23 @@ export function MitraLocationField({
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/pabrik-location")
+      .then((res) => res.json())
+      .then((data: { latitude: number; longitude: number; alamat: string | null }) => {
+        if (!cancelled) setPabrik(data);
+      })
+      .catch(() => {
+        // Keep PABRIK_FALLBACK — this only affects the map's decorative
+        // Pabrik marker and a mitra-with-no-location's starting pin,
+        // neither is worth surfacing an error for.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -187,6 +206,7 @@ export function MitraLocationField({
           longitude={current.longitude}
           onChange={handleMove}
           recenterKey={recenterKey}
+          pabrikPosition={[pabrik.latitude, pabrik.longitude]}
         />
         {/* Bottom-left, not top-left — Leaflet's own zoom in/out control sits
             top-left by default, so this avoids overlapping it. Solid

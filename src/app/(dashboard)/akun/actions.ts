@@ -10,6 +10,7 @@ import {
   countActiveSuperAdmins,
   listRoles,
 } from "@/lib/queries/akun";
+import { getPabrikLocation, setPabrikLocation } from "@/lib/queries/pabrik-location";
 
 export async function createUserAction(input: {
   nama: string;
@@ -77,5 +78,14 @@ export async function deleteUserAction(userId: number) {
     throw new Error("Tidak bisa menghapus akun ini — minimal harus ada satu Super Administrator aktif.");
   }
   await deleteUser(userId);
+  revalidatePath("/akun");
+}
+
+export async function getPabrikLocationAction() {
+  return getPabrikLocation();
+}
+
+export async function setPabrikLocationAction(input: { latitude: number; longitude: number; alamat: string | null }): Promise<void> {
+  await setPabrikLocation(input);
   revalidatePath("/akun");
 }

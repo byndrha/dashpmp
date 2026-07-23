@@ -30,9 +30,6 @@ const pabrikIcon = L.divIcon({
   iconAnchor: [7, 7],
 });
 
-// Same coordinates as PABRIK_ORIGIN in app/api/routing/route.ts.
-const PABRIK_POSITION: [number, number] = [-7.8462825, 111.4759937];
-
 type MapStyle = "light" | "dark" | "satellite";
 
 // Satellite (Esri) and Light (CyclOSM) need no signup/key. Dark deliberately
@@ -90,9 +87,12 @@ export interface MitraLocationMapProps {
   longitude: number;
   onChange: (lat: number, lng: number) => void;
   recenterKey: number;
+  // [lat, lng] — sourced from DashboardPabrikLocation via the caller
+  // (MitraLocationField), not hardcoded here anymore.
+  pabrikPosition: [number, number];
 }
 
-export function MitraLocationMap({ latitude, longitude, onChange, recenterKey }: MitraLocationMapProps) {
+export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, pabrikPosition }: MitraLocationMapProps) {
   const markerRef = useRef<L.Marker>(null);
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   const tile = TILE_SOURCES[mapStyle];
@@ -117,7 +117,7 @@ export function MitraLocationMap({ latitude, longitude, onChange, recenterKey }:
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
-        <Marker position={PABRIK_POSITION} icon={pabrikIcon} />
+        <Marker position={pabrikPosition} icon={pabrikIcon} />
         <Marker
           position={[latitude, longitude]}
           icon={mitraIcon}
