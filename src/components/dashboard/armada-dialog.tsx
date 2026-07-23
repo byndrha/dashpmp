@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { ARMADA_STATUS, type ArmadaRow, type ArmadaInput, type ArmadaStatus } from "@/lib/queries/armada";
+import { ARMADA_STATUS, type ArmadaStatus } from "@/lib/armada-status";
+import { type ArmadaRow, type ArmadaInput } from "@/lib/queries/armada";
 import { createArmadaAction, updateArmadaAction, deleteArmadaAction } from "@/app/(dashboard)/delivery/actions";
 
 const STATUS_BADGE: Record<ArmadaStatus, string> = {

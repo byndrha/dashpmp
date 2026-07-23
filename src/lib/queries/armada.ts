@@ -1,7 +1,7 @@
 import { getPool, sql } from "@/lib/db";
+import { ARMADA_STATUS, type ArmadaStatus } from "@/lib/armada-status";
 
-export const ARMADA_STATUS = ["Baik", "Rusak", "Perbaikan", "Tertahan"] as const;
-export type ArmadaStatus = (typeof ARMADA_STATUS)[number];
+export { ARMADA_STATUS, type ArmadaStatus };
 
 export interface ArmadaRow {
   ArmadaID: number;
