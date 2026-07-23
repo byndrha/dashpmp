@@ -8,24 +8,41 @@ export interface WilayahDeliverySummary {
   Qty5KG: number;
   TotalKantong: number;
   TotalKantongHariIni: number;
+  // Sum of Capacity across every active mitra in this wilayah — same Target
+  // concept already used per-mitra in mitra-do.ts, aggregated up here.
+  // null means no active mitra in this wilayah (as opposed to 0, meaning
+  // mitra exist but none have a Capacity set).
+  TargetHarian: number | null;
+  TargetPeriode: number | null;
+  PctAchievement: number | null;
 }
 
 const WILAYAH_EXPR = `ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui')`;
 
-// Kantong count here is a plain 10KG+5KG sum (1 bag = 1 kantong regardless of
-// size) — the general "Kantong Terkirim" convention used everywhere else in
-// this app (sales-overview.ts, Beranda). The 5KG-counts-as-half-a-kantong
-// rule in mitra-do.ts is specific to that panel's DO-vs-Capacity-target math,
-// not a general delivery-count convention.
+// Kantong here counts a 5KG bag as half a kantong (the same KANTONG_QTY_EXPR
+// convention as mitra-do.ts) rather than the plain 10KG+5KG sum used
+// elsewhere in the app (sales-overview.ts, Beranda) — required so
+// TotalKantong/TotalKantongHariIni are directly comparable to
+// TargetHarian/TargetPeriode below, which are aggregated from
+// BusinessPartner.Capacity (itself defined in this same 5KG-halved unit).
 //
 // TotalKantongHariIni is always "today" (business date), independent of the
 // period `filter` — the panel shows both side by side, and today's number
 // would silently disappear whenever the filter's range doesn't include today.
+//
+// TargetHarian/TargetPeriode come from a separate query (SUM(bp.Capacity)
+// per wilayah, scaled to the filter's day count for TargetPeriode) since
+// Capacity is a property of the mitra, independent of whether they
+// transacted in the filtered period.
 export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promise<WilayahDeliverySummary[]> {
   const pool = await getPool();
   const businessToday = getBusinessDate();
+  const daysInRange = Math.max(
+    1,
+    Math.round((new Date(filter.endDate).getTime() - new Date(filter.startDate).getTime()) / 86400000)
+  );
 
-  const [periodResult, todayResult] = await Promise.all([
+  const [periodResult, todayResult, targetResult] = await Promise.all([
     pool
       .request()
       .input("startDate", sql.Date, filter.startDate)
@@ -48,7 +65,7 @@ export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promis
       .query(`
         SELECT
             ${WILAYAH_EXPR} AS Wilayah,
-            ISNULL(SUM(dod.Delivered), 0) AS TotalKantongHariIni
+            ISNULL(SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivered / 2.0 ELSE dod.Delivered END), 0) AS TotalKantongHariIni
         FROM DeliveryOrder do_
         JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
         LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
@@ -56,20 +73,55 @@ export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promis
           AND do_.TransDate >= @businessDate AND do_.TransDate < DATEADD(DAY, 1, @businessDate)
         GROUP BY ${WILAYAH_EXPR}
       `),
+    pool.request().query(`
+      SELECT
+          ${WILAYAH_EXPR} AS Wilayah,
+          ISNULL(SUM(bp.Capacity), 0) AS TargetHarian
+      FROM BusinessPartner bp
+      WHERE ISNULL(bp.IsDeleted, 0) = 0
+      GROUP BY ${WILAYAH_EXPR}
+    `),
   ]);
 
-  const byWilayah = new Map<string, { Qty10KG: number; Qty5KG: number; TotalKantongHariIni: number }>();
+  const byWilayah = new Map<
+    string,
+    { Qty10KG: number; Qty5KG: number; TotalKantongHariIni: number; TargetHarian: number | null }
+  >();
   for (const r of periodResult.recordset as { Wilayah: string; Qty10KG: number; Qty5KG: number }[]) {
-    byWilayah.set(r.Wilayah, { Qty10KG: r.Qty10KG, Qty5KG: r.Qty5KG, TotalKantongHariIni: 0 });
+    byWilayah.set(r.Wilayah, { Qty10KG: r.Qty10KG, Qty5KG: r.Qty5KG, TotalKantongHariIni: 0, TargetHarian: null });
   }
   for (const r of todayResult.recordset as { Wilayah: string; TotalKantongHariIni: number }[]) {
     const entry = byWilayah.get(r.Wilayah);
     if (entry) entry.TotalKantongHariIni = r.TotalKantongHariIni;
-    else byWilayah.set(r.Wilayah, { Qty10KG: 0, Qty5KG: 0, TotalKantongHariIni: r.TotalKantongHariIni });
+    else
+      byWilayah.set(r.Wilayah, {
+        Qty10KG: 0,
+        Qty5KG: 0,
+        TotalKantongHariIni: r.TotalKantongHariIni,
+        TargetHarian: null,
+      });
+  }
+  for (const r of targetResult.recordset as { Wilayah: string; TargetHarian: number }[]) {
+    const entry = byWilayah.get(r.Wilayah);
+    if (entry) entry.TargetHarian = r.TargetHarian;
+    else byWilayah.set(r.Wilayah, { Qty10KG: 0, Qty5KG: 0, TotalKantongHariIni: 0, TargetHarian: r.TargetHarian });
   }
 
   return [...byWilayah.entries()]
-    .map(([Wilayah, v]) => ({ Wilayah, ...v, TotalKantong: v.Qty10KG + v.Qty5KG }))
+    .map(([Wilayah, v]) => {
+      const TotalKantong = v.Qty10KG + v.Qty5KG / 2;
+      const TargetPeriode = v.TargetHarian != null ? v.TargetHarian * daysInRange : null;
+      return {
+        Wilayah,
+        Qty10KG: v.Qty10KG,
+        Qty5KG: v.Qty5KG,
+        TotalKantong,
+        TotalKantongHariIni: v.TotalKantongHariIni,
+        TargetHarian: v.TargetHarian,
+        TargetPeriode,
+        PctAchievement: TargetPeriode ? (TotalKantong / TargetPeriode) * 100 : null,
+      };
+    })
     .sort((a, b) => b.TotalKantong - a.TotalKantong);
 }
 

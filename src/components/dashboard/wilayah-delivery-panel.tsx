@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { WilayahDeliverySummary } from "@/lib/queries/delivery";
@@ -27,7 +28,7 @@ export function WilayahDeliveryPanel({
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
               <div>
-                <p className="text-[11px] text-muted-foreground">Total Periode</p>
+                <p className="text-[11px] text-muted-foreground">Total Periode Terpilih</p>
                 <p className="font-display text-sm font-semibold tabular-nums">
                   {grandTotal.toLocaleString("id-ID")} kantong
                 </p>
@@ -56,18 +57,45 @@ export function WilayahDeliveryPanel({
                       type="button"
                       onClick={() => onWilayahClick?.(w.Wilayah)}
                       className={cn(
-                        "rounded-lg border p-2.5 text-left transition-colors",
+                        "relative rounded-lg border p-2.5 pb-6 text-left transition-colors",
                         i === 0 ? "border-primary/30 bg-primary/5" : "border-border bg-card/50",
                         onWilayahClick && "hover:border-primary/40 hover:bg-primary/10"
                       )}
                     >
-                      <p className="truncate text-xs font-medium text-muted-foreground">{w.Wilayah}</p>
-                      <p className="mt-1 font-display text-sm font-semibold tabular-nums">
-                        {w.TotalKantong.toLocaleString("id-ID")}
-                      </p>
-                      <p className="text-[10px] tabular-nums text-muted-foreground">
-                        Hari ini: {w.TotalKantongHariIni.toLocaleString("id-ID")}
-                      </p>
+                      {/* Top row: wilayah name (left) + total periode terpilih (right,
+                          moved here from below the name). */}
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 truncate text-xs font-medium text-muted-foreground">{w.Wilayah}</p>
+                        <p className="shrink-0 font-display text-sm font-semibold tabular-nums">
+                          {w.TotalKantong.toLocaleString("id-ID")}
+                        </p>
+                      </div>
+                      {/* Second row: hari ini + target harian (left) paired with
+                          target periode + % ketercapaian (right). */}
+                      <div className="mt-1.5 flex items-end justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold tabular-nums">
+                            Hari ini: {w.TotalKantongHariIni.toLocaleString("id-ID")}
+                          </p>
+                          <p className="text-[10px] tabular-nums text-muted-foreground">
+                            Target: {w.TargetHarian != null ? w.TargetHarian.toLocaleString("id-ID") : "-"}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-[10px] tabular-nums text-muted-foreground">
+                            Target {w.TargetPeriode != null ? w.TargetPeriode.toLocaleString("id-ID") : "-"}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-xs font-semibold tabular-nums",
+                              w.PctAchievement != null && w.PctAchievement >= 100 && "text-primary"
+                            )}
+                          >
+                            {w.PctAchievement != null ? `${w.PctAchievement.toFixed(0)}%` : "-"}
+                          </p>
+                        </div>
+                      </div>
+                      <ArrowRight className="absolute bottom-2 right-2 size-3.5 text-muted-foreground" />
                     </button>
                   ))}
                 </div>
