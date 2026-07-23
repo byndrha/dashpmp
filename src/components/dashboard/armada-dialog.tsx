@@ -58,6 +58,7 @@ function ArmadaFormDialog({
   title,
   onSubmit,
   pending,
+  error,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -65,6 +66,7 @@ function ArmadaFormDialog({
   title: string;
   onSubmit: (input: ArmadaInput) => void;
   pending: boolean;
+  error: string | null;
 }) {
   const [fotoPath, setFotoPath] = useState(initial.fotoPath);
   const [status, setStatus] = useState<ArmadaStatus>(initial.status);
@@ -191,6 +193,7 @@ function ArmadaFormDialog({
               <img src={fotoPath} alt="Pratinjau foto armada" className="h-24 w-24 rounded-lg object-cover" />
             )}
           </div>
+          {error && <p className="col-span-2 text-xs text-destructive">{error}</p>}
           <DialogFooter className="col-span-2">
             <Button type="submit" disabled={pending || uploading} className="ml-auto">
               {pending ? "Menyimpan..." : "Simpan"}
@@ -313,17 +316,20 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
         </DialogContent>
       </Dialog>
 
-      <ArmadaFormDialog
-        open={creating}
-        onOpenChange={(next) => {
-          setCreating(next);
-          if (!next) setOpen(true);
-        }}
-        initial={emptyForm()}
-        title="Tambah Armada"
-        onSubmit={handleCreate}
-        pending={pending}
-      />
+      {creating && (
+        <ArmadaFormDialog
+          open={creating}
+          onOpenChange={(next) => {
+            setCreating(next);
+            if (!next) setOpen(true);
+          }}
+          initial={emptyForm()}
+          title="Tambah Armada"
+          onSubmit={handleCreate}
+          pending={pending}
+          error={error}
+        />
+      )}
       {editing && (
         <ArmadaFormDialog
           open={!!editing}
@@ -337,6 +343,7 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
           title={`Edit Armada — ${editing.Nama}`}
           onSubmit={handleUpdate}
           pending={pending}
+          error={error}
         />
       )}
     </>
