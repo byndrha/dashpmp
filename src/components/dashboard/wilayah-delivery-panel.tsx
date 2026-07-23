@@ -5,9 +5,11 @@ import type { WilayahDeliverySummary } from "@/lib/queries/delivery";
 export function WilayahDeliveryPanel({
   data,
   collapsed,
+  onWilayahClick,
 }: {
   data: WilayahDeliverySummary[];
   collapsed: boolean;
+  onWilayahClick?: (wilayah: string) => void;
 }) {
   const grandTotal = data.reduce((sum, w) => sum + w.TotalKantong, 0);
   const grandTotalToday = data.reduce((sum, w) => sum + w.TotalKantongHariIni, 0);
@@ -49,11 +51,14 @@ export function WilayahDeliveryPanel({
               <div className="@container">
                 <div className="grid grid-cols-2 gap-2 @sm:grid-cols-3">
                   {data.map((w, i) => (
-                    <div
+                    <button
                       key={w.Wilayah}
+                      type="button"
+                      onClick={() => onWilayahClick?.(w.Wilayah)}
                       className={cn(
-                        "rounded-lg border p-2.5",
-                        i === 0 ? "border-primary/30 bg-primary/5" : "border-border bg-card/50"
+                        "rounded-lg border p-2.5 text-left transition-colors",
+                        i === 0 ? "border-primary/30 bg-primary/5" : "border-border bg-card/50",
+                        onWilayahClick && "hover:border-primary/40 hover:bg-primary/10"
                       )}
                     >
                       <p className="truncate text-xs font-medium text-muted-foreground">{w.Wilayah}</p>
@@ -63,7 +68,7 @@ export function WilayahDeliveryPanel({
                       <p className="text-[10px] tabular-nums text-muted-foreground">
                         Hari ini: {w.TotalKantongHariIni.toLocaleString("id-ID")}
                       </p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

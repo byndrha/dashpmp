@@ -1,7 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
-import { MapPin, Phone, Calendar, Package, Trash2 } from "lucide-react";
+import { MapPin, Phone, Calendar, Package, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,55 @@ import {
   rejectPengajuanAction,
   deletePengajuanAction,
 } from "@/app/(dashboard)/pemasaran/actions";
+
+const LocationViewMap = dynamic(
+  () => import("@/components/dashboard/location-view-map").then((m) => m.LocationViewMap),
+  { ssr: false, loading: () => <Skeleton className="h-[260px] w-full rounded-lg" /> }
+);
+
+function LocationDialog({ row, onOpenChange }: { row: PengajuanRow | null; onOpenChange: (open: boolean) => void }) {
+  const hasLocation = row?.Latitude != null && row?.Longitude != null;
+
+  return (
+    <Dialog open={!!row} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Lokasi — {row?.NamaCalon}</DialogTitle>
+          <DialogDescription>
+            {row?.Alamat || row?.Wilayah
+              ? [row?.Alamat, row?.Kecamatan, row?.Wilayah].filter(Boolean).join(", ")
+              : "Belum ada alamat tercatat."}
+          </DialogDescription>
+        </DialogHeader>
+        {hasLocation && row ? (
+          <div className="flex flex-col gap-2">
+            <LocationViewMap latitude={row.Latitude!} longitude={row.Longitude!} />
+            <p className="text-xs text-muted-foreground">
+              {row.Latitude!.toFixed(6)}, {row.Longitude!.toFixed(6)}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              render={
+                <a
+                  href={`https://www.google.com/maps?q=${row.Latitude},${row.Longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+            >
+              <ExternalLink className="size-3.5" />
+              Lihat di Google Maps
+            </Button>
+          </div>
+        ) : (
+          <p className="py-6 text-center text-sm text-muted-foreground">Belum ada titik lokasi GPS tercatat.</p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const STATUS_BADGE: Record<PengajuanRow["Status"], string> = {
   Menunggu: "bg-warning/15 text-warning",
@@ -78,6 +129,7 @@ export function PengajuanList({
 }) {
   const [pending, startTransition] = useTransition();
   const [rejecting, setRejecting] = useState<PengajuanRow | null>(null);
+  const [viewingLocation, setViewingLocation] = useState<PengajuanRow | null>(null);
 
   function handleApprove(row: PengajuanRow) {
     if (!confirm(`Setujui pengajuan "${row.NamaCalon}"? Mitra baru akan otomatis dibuat.`)) return;
@@ -118,7 +170,11 @@ export function PengajuanList({
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @4xl:grid-cols-3">
         {rows.map((row) => (
-          <Card key={row.PengajuanID} className="py-3.5">
+          <Card
+            key={row.PengajuanID}
+            className="cursor-pointer py-3.5 transition-colors hover:bg-accent/50"
+            onClick={() => setViewingLocation(row)}
+          >
             <CardContent className="flex flex-col gap-2 px-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -137,7 +193,10 @@ export function PengajuanList({
                       size="icon"
                       className="size-6"
                       disabled={pending}
-                      onClick={() => handleDelete(row)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(row);
+                      }}
                     >
                       <Trash2 className="size-3.5 text-destructive" />
                     </Button>
@@ -178,7 +237,15 @@ export function PengajuanList({
 
               {canApprove && row.Status === "Menunggu" && (
                 <div className="flex gap-2 border-t pt-2">
-                  <Button size="sm" className="flex-1" disabled={pending} onClick={() => handleApprove(row)}>
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    disabled={pending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleApprove(row);
+                    }}
+                  >
                     Setujui
                   </Button>
                   <Button
@@ -186,7 +253,10 @@ export function PengajuanList({
                     variant="outline"
                     className="flex-1"
                     disabled={pending}
-                    onClick={() => setRejecting(row)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRejecting(row);
+                    }}
                   >
                     Tolak
                   </Button>
@@ -208,6 +278,8 @@ export function PengajuanList({
           pending={pending}
         />
       )}
+
+      <LocationDialog row={viewingLocation} onOpenChange={(open) => !open && setViewingLocation(null)} />
     </div>
   );
 }

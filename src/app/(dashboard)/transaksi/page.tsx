@@ -6,7 +6,6 @@ import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { TransaksiPanels } from "@/components/dashboard/transaksi-panels";
-import { MitraDOPanel } from "@/components/dashboard/mitra-do-panel";
 
 export default async function TransaksiPage({
   searchParams,
@@ -19,7 +18,7 @@ export default async function TransaksiPage({
   const [orders, wilayahList, mitraDO, wilayahDelivery] = await Promise.all([
     getSalesOrderCards(filter),
     getWilayahList(),
-    getMitraDOMonthly(),
+    getMitraDOMonthly(filter),
     getWilayahDeliverySummary(filter),
   ]);
 
@@ -30,9 +29,7 @@ export default async function TransaksiPage({
         <FilterBar wilayahList={wilayahList} />
       </div>
 
-      <TransaksiPanels orders={orders} wilayahDelivery={wilayahDelivery} />
-
-      <MitraDOPanel data={mitraDO} />
+      <TransaksiPanels orders={orders} wilayahDelivery={wilayahDelivery} mitraDO={mitraDO} />
     </div>
   );
 }

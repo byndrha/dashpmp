@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ChevronDown, Users, TrendingUp, TrendingDown, Minus, ArrowUpDown } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,20 +18,33 @@ const SORT_LABEL: Record<SortMode, string> = {
   terbaru: "Mitra Terbaru",
 };
 
+// Fixed width for the sticky-left info column, shared between the header
+// spacer and every row's info block so the date columns line up exactly.
+const INFO_COL_CLASS = "w-52 sm:w-56";
+// Fixed width for each date column, shared between the header's per-date
+// total cells and every row's DayChip so both line up exactly.
+const DAY_COL_CLASS = "h-11 w-12";
+
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
 }
 
-// Compares the sum of the latest 3 recorded days against the 3 days before
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Compares the sum of the latest 3 elapsed days against the 3 days before
 // that — a simple period-over-period read on whether a mitra's pickups are
 // trending up or down, not just their running total. Needs at least 6 days
-// of the month elapsed for a fair comparison; before that there's no
-// "previous 3 days" window yet, so it reports flat rather than guessing.
-function getTrend(dailyQty: number[], currentDay: number): { direction: "up" | "down" | "flat"; delta: number } {
-  const latestStart = currentDay - 3;
-  const prevStart = currentDay - 6;
+// elapsed in the filtered range for a fair comparison; before that there's
+// no "previous 3 days" window yet, so it reports flat rather than guessing.
+function getTrend(dailyQty: number[], elapsedDays: number): { direction: "up" | "down" | "flat"; delta: number } {
+  const latestStart = elapsedDays - 3;
+  const prevStart = elapsedDays - 6;
   if (prevStart < 0) return { direction: "flat", delta: 0 };
-  const latest = dailyQty.slice(latestStart, currentDay).reduce((sum, q) => sum + q, 0);
+  const latest = dailyQty.slice(latestStart, elapsedDays).reduce((sum, q) => sum + q, 0);
   const previous = dailyQty.slice(prevStart, latestStart).reduce((sum, q) => sum + q, 0);
   const delta = latest - previous;
   return { direction: delta > 0 ? "up" : delta < 0 ? "down" : "flat", delta };
@@ -43,64 +56,25 @@ function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
   return <Minus className="mt-0.5 inline-block size-3.5 text-muted-foreground/40" />;
 }
 
-function DayChip({ day, qty, target, isPast }: { day: number; qty: number; target: number | null; isPast: boolean }) {
+// Right-border-only cells (no rounded chip look) so adjacent cells across
+// every row in the list line up into continuous vertical divider lines,
+// per-date, running from the header total row down through the whole list.
+function DayChip({ dateISO, qty, target, isPast }: { dateISO: string; qty: number; target: number | null; isPast: boolean }) {
   const state = !isPast ? "future" : target == null ? "neutral" : qty >= target ? "hit" : "miss";
+  const day = Number(dateISO.slice(8, 10));
   return (
     <div
       className={cn(
-        "flex h-11 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border text-[10px] tabular-nums",
-        state === "hit" && "border-primary/30 bg-primary/10 text-primary",
-        state === "miss" && "border-destructive/30 bg-destructive/10 text-destructive",
-        state === "future" && "border-dashed text-muted-foreground/50",
+        "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r text-[10px] tabular-nums",
+        DAY_COL_CLASS,
+        state === "hit" && "bg-primary/10 text-primary",
+        state === "miss" && "bg-destructive/10 text-destructive",
+        state === "future" && "text-muted-foreground/50",
         state === "neutral" && "text-muted-foreground"
       )}
     >
       <span className="opacity-60">{day}</span>
       <span className="font-semibold">{isPast ? formatQty(qty) : "-"}</span>
-    </div>
-  );
-}
-
-function MitraDOCard({ m, currentDay }: { m: MitraDORow; currentDay: number }) {
-  return (
-    <div className="flex flex-col gap-1.5 py-3">
-      {/* Name, Wilayah/Kecamatan, and Harga/Target all stack tightly in one
-          left column — the right column (Total/%/trend) is the only thing
-          that belongs on the right, so Harga/Target moved off it instead of
-          leaving both sides half-empty. items-start + shrink-0 on the right
-          block keeps it pinned top-right even though the left column is now
-          taller (3 lines instead of 1). */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <p className="flex items-center gap-1.5 font-medium">
-            <span className="truncate">{m.Name}</span>
-            <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
-              {m.PartnerType}
-            </Badge>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {m.Wilayah}
-            {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Harga {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"} · Target Harian{" "}
-            {m.TargetHarian != null ? formatQty(m.TargetHarian) : "-"} · Target Bulanan{" "}
-            {m.TargetBulanan != null ? formatQty(m.TargetBulanan) : "-"}
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="font-semibold tabular-nums">{formatQty(m.TotalQty)} kantong</p>
-          <p className="text-xs font-medium text-muted-foreground">
-            {m.PctAchievement != null ? `${m.PctAchievement.toFixed(1)}% capaian` : "- capaian"}
-          </p>
-          <TrendIcon direction={getTrend(m.DailyQty, currentDay).direction} />
-        </div>
-      </div>
-      <div className="flex gap-1 overflow-x-auto pb-1">
-        {m.DailyQty.map((qty, i) => (
-          <DayChip key={i} day={i + 1} qty={qty} target={m.TargetHarian} isPast={i + 1 <= currentDay} />
-        ))}
-      </div>
     </div>
   );
 }
@@ -115,11 +89,87 @@ function compareJoinDateDesc(a: MitraDORow, b: MitraDORow): number {
   return new Date(b.JoinDate).getTime() - new Date(a.JoinDate).getTime();
 }
 
-export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
+function MitraDOCard({
+  m,
+  dates,
+  todayISO,
+  elapsedDays,
+}: {
+  m: MitraDORow;
+  dates: string[];
+  todayISO: string;
+  elapsedDays: number;
+}) {
+  const trend = getTrend(m.DailyQty, elapsedDays);
+  return (
+    <div className="flex items-stretch">
+      {/* Sticky within the shared horizontal-scroll ancestor (not the page)
+          — stays pinned to the left edge of the scroll viewport while the
+          date columns to its right scroll underneath it. bg-card keeps
+          scrolled-under cells from showing through. Total/%/trend paired
+          on the right of each line (not a separate 4th line) to fit
+          everything in this narrower fixed-width column. */}
+      <div className={cn("sticky left-0 z-10 flex shrink-0 flex-col justify-center gap-1 bg-card py-3 pr-3", INFO_COL_CLASS)}>
+        <div className="flex items-start justify-between gap-1">
+          <p className="flex min-w-0 items-center gap-1.5 font-medium">
+            <span className="truncate">{m.Name}</span>
+            <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+              {m.PartnerType}
+            </Badge>
+          </p>
+          <span className="shrink-0 text-xs font-semibold tabular-nums">{formatQty(m.TotalQty)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-1 text-xs text-muted-foreground">
+          <span className="truncate">
+            {m.Wilayah}
+            {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
+          </span>
+          <span className="flex shrink-0 items-center gap-1">
+            {m.PctAchievement != null ? `${m.PctAchievement.toFixed(0)}%` : "-"}
+            <TrendIcon direction={trend.direction} />
+          </span>
+        </div>
+        <p className="truncate text-xs text-muted-foreground">
+          Harga {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"} · Target Harian{" "}
+          {m.TargetHarian != null ? formatQty(m.TargetHarian) : "-"}
+        </p>
+      </div>
+      <div className="flex border-l">
+        {dates.map((dateISO, i) => (
+          <DayChip key={dateISO} dateISO={dateISO} qty={m.DailyQty[i]} target={m.TargetHarian} isPast={dateISO <= todayISO} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function MitraDOPanel({
+  data,
+  wilayahFilter,
+  onWilayahFilterChange,
+}: {
+  data: MitraDOMonthly;
+  wilayahFilter: string;
+  onWilayahFilterChange: (wilayah: string) => void;
+}) {
   const [showAll, setShowAll] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("terbanyak");
-  const [wilayahFilter, setWilayahFilter] = useState("all");
-  const { active, inactive, currentDay } = data;
+  const { active, inactive, daysInRange, rangeStartISO, todayISO } = data;
+  const bodyScrollRef = useRef<HTMLDivElement>(null);
+  const headerScrollRef = useRef<HTMLDivElement>(null);
+
+  const dates = useMemo(
+    () => Array.from({ length: daysInRange }, (_, i) => addDaysISO(rangeStartISO, i)),
+    [daysInRange, rangeStartISO]
+  );
+
+  // How many days of the visible range have elapsed (clamped to the range
+  // itself) — feeds the "Tren 3 Hari Terakhir" sort, which needs a plain
+  // count, not a date.
+  const elapsedDays = useMemo(() => {
+    const todayIndex = Math.round((new Date(todayISO).getTime() - new Date(rangeStartISO).getTime()) / 86400000);
+    return Math.min(daysInRange, Math.max(0, todayIndex + 1));
+  }, [todayISO, rangeStartISO, daysInRange]);
 
   const wilayahOptions = useMemo(
     () => [...new Set([...active, ...inactive].map((m) => m.Wilayah))].sort(),
@@ -135,6 +185,18 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
     [inactive, wilayahFilter]
   );
 
+  // Reflects whatever the Wilayah filter currently shows, not the
+  // unfiltered total — matches what the user is actually looking at.
+  const totalKantong = useMemo(() => filteredActive.reduce((sum, m) => sum + m.TotalQty, 0), [filteredActive]);
+
+  const totalPerDate = useMemo(() => {
+    const totals = new Array(daysInRange).fill(0);
+    for (const m of filteredActive) {
+      for (let i = 0; i < daysInRange; i++) totals[i] += m.DailyQty[i];
+    }
+    return totals;
+  }, [filteredActive, daysInRange]);
+
   // filteredActive already arrives sorted by TotalQty desc (the
   // "Pengambilan Terbanyak" mode) — only re-sort for the other modes, so
   // the default path stays a no-op.
@@ -142,9 +204,18 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
     if (sortMode === "terbanyak") return filteredActive;
     if (sortMode === "terbaru") return [...filteredActive].sort(compareJoinDateDesc);
     return [...filteredActive].sort(
-      (a, b) => getTrend(b.DailyQty, currentDay).delta - getTrend(a.DailyQty, currentDay).delta
+      (a, b) => getTrend(b.DailyQty, elapsedDays).delta - getTrend(a.DailyQty, elapsedDays).delta
     );
-  }, [filteredActive, sortMode, currentDay]);
+  }, [filteredActive, sortMode, elapsedDays]);
+
+  // One-way mirror: the body's own horizontal scrollbar is what the user
+  // actually drags; the header's date-total row has no scrollbar of its
+  // own (overflow-x-hidden) and just has its scrollLeft driven to match,
+  // so both stay visually locked together as one continuous grid even
+  // though they live in separate sticky/non-sticky DOM regions.
+  function handleBodyScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+  }
 
   return (
     // Plain div standing in for <Card> here, minus `overflow-hidden` — Card
@@ -157,7 +228,12 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
           pinned below the app header while scrolling through the mitra list
           in CardContent, and lets go once this div's bottom comes into view. */}
       <CardHeader className="sticky top-14 z-20 border-b bg-card pt-3">
-        <CardTitle className="font-display">Transaksi DO per Mitra — Bulan Berjalan</CardTitle>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <CardTitle className="font-display">Transaksi DO per Mitra — Bulan Berjalan</CardTitle>
+          <p className="shrink-0 text-right text-sm font-semibold tabular-nums text-primary">
+            {formatQty(totalKantong)} kantong
+          </p>
+        </div>
         <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-primary" />
@@ -186,7 +262,7 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
               <SelectItem value="terbaru">{SORT_LABEL.terbaru}</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={wilayahFilter} onValueChange={(v) => setWilayahFilter(v ?? "all")}>
+          <Select value={wilayahFilter} onValueChange={(v) => onWilayahFilterChange(v ?? "all")}>
             <SelectTrigger className="w-44" aria-label="Wilayah">
               <SelectValue>{(v: string) => (v === "all" ? "Semua Wilayah" : v)}</SelectValue>
             </SelectTrigger>
@@ -207,23 +283,46 @@ export function MitraDOPanel({ data }: { data: MitraDOMonthly }) {
             </Button>
           )}
         </div>
+        {/* Per-date total row — mirrors the body's horizontal scroll (see
+            handleBodyScroll) so it always lines up with the date columns
+            below it, while staying put in the sticky header itself. */}
+        <div className="mt-2 flex min-w-0 border-t pt-2">
+          <div className={cn("shrink-0 self-center pr-3 text-xs font-medium text-muted-foreground", INFO_COL_CLASS)}>
+            Total per Tanggal
+          </div>
+          <div ref={headerScrollRef} className="flex min-w-0 flex-1 overflow-x-hidden border-l">
+            {dates.map((dateISO, i) => (
+              <div
+                key={dateISO}
+                className={cn(
+                  "flex shrink-0 items-center justify-center border-r text-[10px] font-semibold tabular-nums text-primary",
+                  DAY_COL_CLASS
+                )}
+              >
+                {formatQty(totalPerDate[i])}
+              </div>
+            ))}
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {filteredActive.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada Delivery Order bulan ini.</p>
         ) : (
-          <div className="flex flex-col divide-y">
-            {sortedActive.map((m) => (
-              <MitraDOCard key={m.BusinessPartnerID} m={m} currentDay={currentDay} />
-            ))}
-          </div>
-        )}
+          <div ref={bodyScrollRef} onScroll={handleBodyScroll} className="overflow-x-auto">
+            <div className="flex flex-col divide-y">
+              {sortedActive.map((m) => (
+                <MitraDOCard key={m.BusinessPartnerID} m={m} dates={dates} todayISO={todayISO} elapsedDays={elapsedDays} />
+              ))}
+            </div>
 
-        {showAll && filteredInactive.length > 0 && (
-          <div className="flex flex-col divide-y border-t">
-            {filteredInactive.map((m) => (
-              <MitraDOCard key={m.BusinessPartnerID} m={m} currentDay={currentDay} />
-            ))}
+            {showAll && filteredInactive.length > 0 && (
+              <div className="flex flex-col divide-y border-t">
+                {filteredInactive.map((m) => (
+                  <MitraDOCard key={m.BusinessPartnerID} m={m} dates={dates} todayISO={todayISO} elapsedDays={elapsedDays} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </CardContent>
