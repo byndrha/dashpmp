@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const TABS = [
   { value: "terbuka", label: "Pengiriman Terbuka" },
-  { value: "penugasan", label: "Penugasan Armada & Driver" },
+  { value: "papan", label: "Papan Pengiriman" },
 ] as const;
 
 // Same pattern as piutang-tabs.tsx: pure client-side tab state, no URL
@@ -13,10 +13,10 @@ const TABS = [
 // upfront by the server page.
 export function PengirimanTabs({
   terbukaPanel,
-  penugasanPanel,
+  papanPanel,
 }: {
   terbukaPanel: React.ReactNode;
-  penugasanPanel: React.ReactNode;
+  papanPanel: React.ReactNode;
 }) {
   const [activeTab, setActiveTab] = useState<string>("terbuka");
 
@@ -30,7 +30,7 @@ export function PengirimanTabs({
         ))}
       </TabsList>
       <TabsContent value="terbuka">{terbukaPanel}</TabsContent>
-      <TabsContent value="penugasan">{penugasanPanel}</TabsContent>
+      <TabsContent value="papan">{papanPanel}</TabsContent>
     </Tabs>
   );
 }

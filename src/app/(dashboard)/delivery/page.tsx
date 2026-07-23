@@ -1,11 +1,11 @@
 import { requireModuleAccess } from "@/lib/require-access";
-import { getOpenDeliveries, getDeliveryAssignments, getDriverOptions } from "@/lib/queries/delivery";
-import { getArmadaList } from "@/lib/queries/armada";
+import { getOpenDeliveries, getDriverOptions } from "@/lib/queries/delivery";
+import { getPengirimanBoard } from "@/lib/queries/pengiriman-jadwal";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { OpenDeliveriesPanel } from "@/components/dashboard/open-deliveries-panel";
-import { DeliveryAssignmentPanel } from "@/components/dashboard/delivery-assignment-panel";
+import { PengirimanBoard } from "@/components/dashboard/pengiriman-board";
 import { PengirimanTabs } from "@/components/dashboard/pengiriman-tabs";
 
 export default async function DeliveryPage({
@@ -16,21 +16,18 @@ export default async function DeliveryPage({
   await requireModuleAccess("delivery");
   const params = await searchParams;
   // Wilayah only filters the "Pengiriman Terbuka" tab (getOpenDeliveries) —
-  // the assignment tab is date-scoped instead and intentionally shows every
-  // wilayah for that date.
+  // the board is date-scoped instead and intentionally shows every wilayah
+  // for that date.
   const wilayah = params.wilayah || undefined;
 
   const todayISO = getBusinessDateISO();
-  const assignmentDate =
-    params.pengirimanDate && params.pengirimanDate <= todayISO ? params.pengirimanDate : todayISO;
-  const businessAssignmentDate = new Date(assignmentDate);
+  const boardDate = params.pengirimanDate && params.pengirimanDate <= todayISO ? params.pengirimanDate : todayISO;
 
-  const [rows, wilayahList, assignmentRows, drivers, armada] = await Promise.all([
+  const [rows, wilayahList, board, drivers] = await Promise.all([
     getOpenDeliveries(wilayah),
     getWilayahList(),
-    getDeliveryAssignments(businessAssignmentDate),
+    getPengirimanBoard(boardDate),
     getDriverOptions(),
-    getArmadaList(),
   ]);
 
   return (
@@ -42,12 +39,12 @@ export default async function DeliveryPage({
 
       <PengirimanTabs
         terbukaPanel={<OpenDeliveriesPanel rows={rows} />}
-        penugasanPanel={
-          <DeliveryAssignmentPanel
-            rows={assignmentRows}
+        papanPanel={
+          <PengirimanBoard
+            armada={board.armada}
+            jadwal={board.jadwal}
             drivers={drivers}
-            armada={armada}
-            businessDate={assignmentDate}
+            businessDate={boardDate}
             todayISO={todayISO}
           />
         }
