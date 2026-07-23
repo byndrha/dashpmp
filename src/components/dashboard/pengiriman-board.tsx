@@ -1,5 +1,6 @@
 "use client";
 
+import { DndContext, useDraggable, type DragEndEvent } from "@dnd-kit/core";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Plus, Phone, MapPin } from "lucide-react";
@@ -271,6 +272,37 @@ function CreateJadwalDialog({
   );
 }
 
+function DraggableJadwalCard({ jadwal: j, onCardClick }: { jadwal: JadwalCardData; onCardClick: (jadwalId: number) => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `jadwal-${j.JadwalID}`,
+    data: { jadwalId: j.JadwalID },
+  });
+
+  return (
+    <button
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      type="button"
+      onClick={() => !isDragging && onCardClick(j.JadwalID)}
+      className={cn(
+        "absolute top-2 flex flex-col gap-0.5 rounded-md border border-primary/30 bg-primary/10 p-1.5 text-left text-[10px] shadow-sm",
+        isDragging && "z-20 opacity-70 shadow-lg"
+      )}
+      style={{
+        left: hourFraction(j.JamJadwal) * HOUR_WIDTH,
+        width: CARD_WIDTH,
+        transform: transform ? `translateX(${transform.x}px)` : undefined,
+      }}
+    >
+      <span className="font-semibold tabular-nums">{formatTime(j.JamJadwal)}</span>
+      <span className="tabular-nums text-muted-foreground">{j.TotalKantong} kantong</span>
+      <span className="tabular-nums text-muted-foreground">{j.TotalDO} DO</span>
+      {j.JamAktualBerangkat && <span className="text-primary">Berangkat</span>}
+    </button>
+  );
+}
+
 function ArmadaRowBoard({
   armada,
   jadwal,
@@ -326,18 +358,7 @@ function ArmadaRowBoard({
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * HOUR_WIDTH, width: HOUR_WIDTH }} />
         ))}
         {jadwal.map((j) => (
-          <button
-            key={j.JadwalID}
-            type="button"
-            onClick={() => onCardClick(j.JadwalID)}
-            className="absolute top-2 flex flex-col gap-0.5 rounded-md border border-primary/30 bg-primary/10 p-1.5 text-left text-[10px] shadow-sm"
-            style={{ left: hourFraction(j.JamJadwal) * HOUR_WIDTH, width: CARD_WIDTH }}
-          >
-            <span className="font-semibold tabular-nums">{formatTime(j.JamJadwal)}</span>
-            <span className="tabular-nums text-muted-foreground">{j.TotalKantong} kantong</span>
-            <span className="tabular-nums text-muted-foreground">{j.TotalDO} DO</span>
-            {j.JamAktualBerangkat && <span className="text-primary">Berangkat</span>}
-          </button>
+          <DraggableJadwalCard key={j.JadwalID} jadwal={j} onCardClick={onCardClick} />
         ))}
       </div>
     </div>
@@ -405,6 +426,26 @@ export function PengirimanBoard({
     goToDate(next.toISOString().slice(0, 10));
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const jadwalId = event.active.data.current?.jadwalId as number | undefined;
+    if (jadwalId == null || event.delta.x === 0) return;
+
+    const current = jadwal.find((j) => j.JadwalID === jadwalId);
+    if (!current) return;
+
+    const currentHour = hourFraction(current.JamJadwal);
+    const deltaHours = event.delta.x / HOUR_WIDTH;
+    // Round to the nearest 15 minutes (0.25h), clamp to a valid day.
+    const newHour = Math.min(23.75, Math.max(0, Math.round((currentHour + deltaHours) * 4) / 4));
+    const hour = Math.floor(newHour);
+    const minute = Math.round((newHour - hour) * 60);
+    const newTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+
+    startTransition(() => {
+      updateJadwalTimeAction(jadwalId, combineDateAndTime(businessDate, newTime));
+    });
+  }
+
   return (
     <Card className="relative">
       {isPending && (
@@ -449,19 +490,21 @@ export function PengirimanBoard({
         {sortedArmada.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada armada. Tambah lewat "Kelola Armada".</p>
         ) : (
-          <div className="overflow-x-auto">
-            <div className="flex flex-col divide-y">
-              {sortedArmada.map((a) => (
-                <ArmadaRowBoard
-                  key={a.ArmadaID}
-                  armada={a}
-                  jadwal={jadwalByArmada.get(a.ArmadaID) ?? []}
-                  onCardClick={setDetailJadwalId}
-                  onCreateClick={setCreateArmadaId}
-                />
-              ))}
+          <DndContext onDragEnd={handleDragEnd}>
+            <div className="overflow-x-auto">
+              <div className="flex flex-col divide-y">
+                {sortedArmada.map((a) => (
+                  <ArmadaRowBoard
+                    key={a.ArmadaID}
+                    armada={a}
+                    jadwal={jadwalByArmada.get(a.ArmadaID) ?? []}
+                    onCardClick={setDetailJadwalId}
+                    onCreateClick={setCreateArmadaId}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          </DndContext>
         )}
       </CardContent>
 
