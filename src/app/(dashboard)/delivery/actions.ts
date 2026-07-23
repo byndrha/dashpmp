@@ -1,17 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createArmada, updateArmada, deleteArmada } from "@/lib/queries/armada";
+import { createArmada, updateArmada, deleteArmada, type ArmadaInput } from "@/lib/queries/armada";
 import { assignDeliveryDriver, assignDeliveryVehicle } from "@/lib/queries/delivery";
 
-export async function createArmadaAction(nama: string): Promise<number> {
-  const id = await createArmada(nama);
+export async function createArmadaAction(input: ArmadaInput): Promise<number> {
+  const id = await createArmada(input);
   revalidatePath("/delivery");
   return id;
 }
 
-export async function updateArmadaAction(id: number, nama: string): Promise<void> {
-  await updateArmada(id, nama);
+export async function updateArmadaAction(id: number, input: ArmadaInput): Promise<void> {
+  await updateArmada(id, input);
   revalidatePath("/delivery");
 }
 
