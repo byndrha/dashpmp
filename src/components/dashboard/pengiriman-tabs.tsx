@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const TABS = [
-  { value: "terbuka", label: "Pengiriman Terbuka" },
   { value: "papan", label: "Papan Pengiriman" },
+  { value: "terbuka", label: "Pengiriman Terbuka" },
 ] as const;
 
 // Same pattern as piutang-tabs.tsx: pure client-side tab state, no URL
@@ -18,7 +18,7 @@ export function PengirimanTabs({
   terbukaPanel: React.ReactNode;
   papanPanel: React.ReactNode;
 }) {
-  const [activeTab, setActiveTab] = useState<string>("terbuka");
+  const [activeTab, setActiveTab] = useState<string>("papan");
 
   return (
     <Tabs value={activeTab} onValueChange={(v) => typeof v === "string" && setActiveTab(v)}>
@@ -29,8 +29,8 @@ export function PengirimanTabs({
           </TabsTrigger>
         ))}
       </TabsList>
-      <TabsContent value="terbuka">{terbukaPanel}</TabsContent>
       <TabsContent value="papan">{papanPanel}</TabsContent>
+      <TabsContent value="terbuka">{terbukaPanel}</TabsContent>
     </Tabs>
   );
 }
