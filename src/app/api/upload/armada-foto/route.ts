@@ -24,10 +24,15 @@ export async function POST(req: NextRequest) {
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const uploadDir = path.join(process.cwd(), "public", "uploads", "armada");
-  await mkdir(uploadDir, { recursive: true });
 
-  const bytes = await file.arrayBuffer();
-  await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
+  try {
+    await mkdir(uploadDir, { recursive: true });
+
+    const bytes = await file.arrayBuffer();
+    await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
+  } catch {
+    return NextResponse.json({ error: "Gagal menyimpan foto" }, { status: 500 });
+  }
 
   return NextResponse.json({ path: `/uploads/armada/${fileName}` });
 }
