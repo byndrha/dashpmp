@@ -75,6 +75,12 @@ export interface SalesDayPoint {
   DOQty: number;
 }
 
+export interface HourlyPoint {
+  hour: number; // 0-23, WIB wall-clock hour
+  NetSales: number;
+  DOQty: number;
+}
+
 export interface SalesDayComparison {
   label: string;
   // "YYYY-MM-DD" for the compared date itself — shown in the UI instead of
@@ -86,6 +92,17 @@ export interface SalesDayComparison {
   previous: SalesDayPoint | null;
   NominalPctChange: number | null;
   QtyPctChange: number | null;
+  // This period's own 24-point WIB-hour breakdown — null exactly when
+  // `previous` is null (period skipped, e.g. "Pekan Lalu" crossing months).
+  hourly: HourlyPoint[] | null;
+}
+
+export interface SalesDayComparisonResult {
+  comparisons: SalesDayComparison[];
+  todayHourly: HourlyPoint[];
+  // Current WIB wall-clock hour (0-23) — hours after this on "today" haven't
+  // happened yet, so the UI can show "-" instead of a misleading 0.
+  currentWibHour: number;
 }
 
 // Same calendar day-of-month `monthsBack` months earlier, clamped to the
@@ -410,11 +427,101 @@ export async function getSalesOverview(): Promise<SalesOverview> {
   };
 }
 
+function buildBucketClauses(
+  bounds: { key: string; lo: Date; hi: Date }[],
+  column: string
+): { caseExpr: string; whereOr: string } {
+  const whens = bounds.map((b, i) => `WHEN ${column} >= @lo${i} AND ${column} < @hi${i} THEN '${b.key}'`);
+  const ors = bounds.map((b, i) => `(${column} >= @lo${i} AND ${column} < @hi${i})`);
+  return { caseExpr: `CASE ${whens.join(" ")} END`, whereOr: ors.join(" OR ") };
+}
+
+// Per-WIB-hour Nominal+Qty for an arbitrary set of WIB calendar dates, keyed
+// by caller-supplied labels. `date` must be a UTC-midnight Date representing
+// a WIB calendar date (this file's convention, e.g. from getBusinessDate()).
+//
+// TransDate is a real UTC instant (not naive-WIB-as-UTC) — see the
+// transdate-wib-utc-boundary-bug finding: a WIB wall-clock time of 03:00 is
+// stored as UTC 20:00 the *previous* day. Two WIB-aware conversions follow
+// from that:
+//  - Day boundaries: shifting the JS Date by -7h before sending it as the
+//    SQL parameter converts "WIB midnight" into the equivalent UTC instant,
+//    done here in JS rather than SQL-side DATEADD (equivalent, simpler).
+//  - Hour-of-day: DATEPART(HOUR, DATEADD(HOUR, 7, TransDate)) shifts each
+//    row's stored UTC instant back to WIB wall-clock before reading the
+//    hour — this is the one place in the codebase doing per-row hourly
+//    bucketing, so unlike the day-level convention used elsewhere (left
+//    unfixed pending a dedicated audit, per that finding), a 7-hour offset
+//    here would be immediately, obviously wrong (an actual 14:00 WIB rush
+//    would render under "07:00") — not a subtle few-percent edge case.
+async function getHourlyBuckets(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  buckets: { key: string; date: Date }[]
+): Promise<Map<string, HourlyPoint[]>> {
+  const bounds = buckets.map((b) => {
+    const lo = new Date(b.date.getTime() - 7 * 60 * 60 * 1000);
+    const hi = new Date(lo.getTime() + 24 * 60 * 60 * 1000);
+    return { key: b.key, lo, hi };
+  });
+
+  const net = buildBucketClauses(bounds, "TransDate");
+  const qty = buildBucketClauses(bounds, "do_.TransDate");
+
+  const netRequest = pool.request();
+  const qtyRequest = pool.request();
+  bounds.forEach((b, i) => {
+    netRequest.input(`lo${i}`, sql.DateTime, b.lo).input(`hi${i}`, sql.DateTime, b.hi);
+    qtyRequest.input(`lo${i}`, sql.DateTime, b.lo).input(`hi${i}`, sql.DateTime, b.hi);
+  });
+
+  const [netResult, qtyResult] = await Promise.all([
+    netRequest.query(`
+      SELECT ${net.caseExpr} AS PeriodKey,
+             DATEPART(HOUR, DATEADD(HOUR, 7, TransDate)) AS HourWIB,
+             SUM(Netto) AS NetSales
+      FROM SalesInvoice
+      WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
+        AND (${net.whereOr})
+      GROUP BY ${net.caseExpr}, DATEPART(HOUR, DATEADD(HOUR, 7, TransDate))
+    `),
+    qtyRequest.query(`
+      SELECT ${qty.caseExpr} AS PeriodKey,
+             DATEPART(HOUR, DATEADD(HOUR, 7, do_.TransDate)) AS HourWIB,
+             SUM(dod.Delivered) AS DOQty
+      FROM DeliveryOrder do_
+      JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+      WHERE do_.IsDeleted = 0
+        AND (${qty.whereOr})
+      GROUP BY ${qty.caseExpr}, DATEPART(HOUR, DATEADD(HOUR, 7, do_.TransDate))
+    `),
+  ]);
+
+  const merged = new Map<string, HourlyPoint[]>();
+  for (const b of bounds) {
+    merged.set(
+      b.key,
+      Array.from({ length: 24 }, (_, hour) => ({ hour, NetSales: 0, DOQty: 0 }))
+    );
+  }
+  for (const row of netResult.recordset as { PeriodKey: string; HourWIB: number; NetSales: number }[]) {
+    const arr = merged.get(row.PeriodKey);
+    if (arr) arr[row.HourWIB].NetSales = row.NetSales;
+  }
+  for (const row of qtyResult.recordset as { PeriodKey: string; HourWIB: number; DOQty: number }[]) {
+    const arr = merged.get(row.PeriodKey);
+    if (arr) arr[row.HourWIB].DOQty = row.DOQty;
+  }
+  return merged;
+}
+
 // Day-level comparison for Beranda's "Perbandingan Penjualan" panel — distinct
 // from getSalesOverview()'s month-level comparisons array. `today` is passed
 // in (from a getSalesForDay() call the page already made) rather than
 // re-queried here.
-export async function getSalesDayComparison(today: SalesToday, businessToday: Date): Promise<SalesDayComparison[]> {
+export async function getSalesDayComparison(
+  today: SalesToday,
+  businessToday: Date
+): Promise<SalesDayComparisonResult> {
   const pool = await getPool();
 
   const kemarin = new Date(
@@ -489,19 +596,44 @@ export async function getSalesDayComparison(today: SalesToday, businessToday: Da
 
   const current: SalesDayPoint = { NetSales: today.NetSales, DOQty: today.Qty10KG + today.Qty5KG };
 
-  const buildDay = (label: string, date: Date, previous: SalesDayPoint | null): SalesDayComparison => ({
+  const hourlyBuckets: { key: string; date: Date }[] = [
+    { key: "today", date: businessToday },
+    { key: "kemarin", date: kemarin },
+    { key: "bulanLalu", date: bulanLalu },
+    { key: "tahunLalu", date: tahunLalu },
+  ];
+  // Skipped along with the daily "Pekan Lalu" figures — no point querying an
+  // hourly breakdown for a period the panel won't show at all.
+  if (pekanLaluAvailable) hourlyBuckets.push({ key: "pekanLalu", date: pekanLalu });
+  const hourly = await getHourlyBuckets(pool, hourlyBuckets);
+
+  const currentWibHour = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jakarta", hour: "2-digit", hour12: false }).format(new Date())
+  ) % 24;
+
+  const buildDay = (label: string, date: Date, key: string, previous: SalesDayPoint | null): SalesDayComparison => ({
     label,
     dateISO: date.toISOString().slice(0, 10),
     current,
     previous,
     NominalPctChange: previous ? pctChange(current.NetSales, previous.NetSales) : null,
     QtyPctChange: previous ? pctChange(current.DOQty, previous.DOQty) : null,
+    hourly: previous ? (hourly.get(key) ?? null) : null,
   });
 
-  return [
-    buildDay("Kemarin", kemarin, { NetSales: net.KemarinNet, DOQty: qty.KemarinQty }),
-    buildDay("Pekan Lalu", pekanLalu, pekanLaluAvailable ? { NetSales: net.PekanLaluNet, DOQty: qty.PekanLaluQty } : null),
-    buildDay("Bulan Lalu", bulanLalu, { NetSales: net.BulanLaluNet, DOQty: qty.BulanLaluQty }),
-    buildDay("Tahun Lalu", tahunLalu, { NetSales: net.TahunLaluNet, DOQty: qty.TahunLaluQty }),
-  ];
+  return {
+    comparisons: [
+      buildDay("Kemarin", kemarin, "kemarin", { NetSales: net.KemarinNet, DOQty: qty.KemarinQty }),
+      buildDay(
+        "Pekan Lalu",
+        pekanLalu,
+        "pekanLalu",
+        pekanLaluAvailable ? { NetSales: net.PekanLaluNet, DOQty: qty.PekanLaluQty } : null
+      ),
+      buildDay("Bulan Lalu", bulanLalu, "bulanLalu", { NetSales: net.BulanLaluNet, DOQty: qty.BulanLaluQty }),
+      buildDay("Tahun Lalu", tahunLalu, "tahunLalu", { NetSales: net.TahunLaluNet, DOQty: qty.TahunLaluQty }),
+    ],
+    todayHourly: hourly.get("today") ?? [],
+    currentWibHour,
+  };
 }

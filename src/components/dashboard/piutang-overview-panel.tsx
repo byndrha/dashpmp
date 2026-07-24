@@ -16,7 +16,15 @@ const STATUS_STYLE: Record<PiutangStatus, string> = {
 // Kritis/Perhatian/Sehat status (count, nominal, share of the total, and
 // average aging), all sourced from getPiutangStatusOverview()'s per-mitra
 // rollup so the numbers stay consistent with /aging's status counts.
-export function PiutangOverviewPanel({ overview }: { overview: PiutangStatusOverview }) {
+export function PiutangOverviewPanel({
+  overview,
+  ratioPiutangOmzetPct,
+}: {
+  overview: PiutangStatusOverview;
+  // Piutang outstanding ÷ omzet (penjualan) bulan berjalan — same metric as
+  // /aging's "Rasio Piutang / Omzet" KPI card (getPiutangPeriodSummary).
+  ratioPiutangOmzetPct: number;
+}) {
   return (
     <Card className="py-4">
       <CardHeader className="px-4">
@@ -34,6 +42,9 @@ export function PiutangOverviewPanel({ overview }: { overview: PiutangStatusOver
             </p>
             <p className="font-display text-sm font-semibold tabular-nums text-primary">
               {formatRupiah(overview.totalOutstanding)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Rasio Piutang / Omzet: <span className="font-medium text-foreground">{formatPercentPoints(ratioPiutangOmzetPct)}</span>
             </p>
           </div>
 

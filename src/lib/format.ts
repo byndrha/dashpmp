@@ -35,14 +35,15 @@ export function formatDate(value: string | Date): string {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(value));
 }
 
-// "dd/MM" — compact day+month, e.g. for a comparison-period column header
-// where a bare day number would be ambiguous across month/year boundaries.
-// UTC getters (not local) to match this app's UTC-midnight-as-WIB-calendar-date
-// convention (see business-date.ts) — a local-time formatter could shift the
-// displayed day by one on a host running behind UTC.
+// "dd/MM/yy" — compact day+month+year, e.g. for a comparison-period column
+// header where a bare day number would be ambiguous across month/year
+// boundaries. UTC getters (not local) to match this app's
+// UTC-midnight-as-WIB-calendar-date convention (see business-date.ts) — a
+// local-time formatter could shift the displayed day by one on a host
+// running behind UTC.
 export function formatDayMonth(value: string | Date): string {
   const date = new Date(value);
-  return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}/${String(date.getUTCFullYear()).slice(-2)}`;
 }
 
 export function formatTime(value: string | Date): string {

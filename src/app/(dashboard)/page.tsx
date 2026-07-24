@@ -4,9 +4,10 @@ import { Wallet, Receipt, Package, LineChart, Zap, ShoppingCart, ArrowRight, Tru
 import { requireModuleAccess } from "@/lib/require-access";
 import { getTodayWilayahPulse } from "@/lib/queries/activity";
 import { getAgingReceivables, getPiutangStatusOverview } from "@/lib/queries/aging";
+import { getPiutangPeriodSummary } from "@/lib/queries/piutang-summary";
 import { getSalesForDay, getSalesDayComparison } from "@/lib/queries/sales-overview";
 import { getTopMitraPiutang } from "@/lib/queries/top-mitra-piutang";
-import { getBusinessDate } from "@/lib/business-date";
+import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { WilayahPulse } from "@/components/dashboard/wilayah-pulse";
 import { SalesDayComparisonPanel } from "@/components/dashboard/sales-day-comparison-panel";
@@ -36,14 +37,22 @@ export default async function BerandaPage() {
   }
 
   const businessToday = getBusinessDate();
-  const [wilayahPulse, aging, todaySales, piutangOverview, topMitraPiutang] = await Promise.all([
+  const businessMonthFilter = {
+    startDate: monthBoundary(businessToday).toISOString().slice(0, 10),
+    endDate: monthBoundary(businessToday, 1).toISOString().slice(0, 10),
+  };
+  const [wilayahPulse, aging, todaySales, piutangOverview, topMitraPiutang, piutangPeriodSummary] = await Promise.all([
     getTodayWilayahPulse(),
     getAgingReceivables(),
     getSalesForDay(businessToday),
     getPiutangStatusOverview(),
     getTopMitraPiutang(),
+    getPiutangPeriodSummary(businessMonthFilter),
   ]);
-  const salesDayComparison = await getSalesDayComparison(todaySales, businessToday);
+  const { comparisons: salesDayComparison, todayHourly, currentWibHour } = await getSalesDayComparison(
+    todaySales,
+    businessToday
+  );
 
   // Penjualan Hari Ini must come from getSalesForDay (the same unrestricted
   // query the Penjualan module's "Hari Ini" card uses), NOT from summing
@@ -73,7 +82,11 @@ export default async function BerandaPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <SalesDayComparisonPanel comparisons={salesDayComparison} />
+        <SalesDayComparisonPanel
+          comparisons={salesDayComparison}
+          todayHourly={todayHourly}
+          currentWibHour={currentWibHour}
+        />
 
         <div className="flex flex-col gap-3">
           {MODULE_LINKS.map((m) => (
@@ -95,7 +108,7 @@ export default async function BerandaPage() {
         </div>
       </div>
 
-      <PiutangOverviewPanel overview={piutangOverview} />
+      <PiutangOverviewPanel overview={piutangOverview} ratioPiutangOmzetPct={piutangPeriodSummary.RatioPiutangOmzetPct} />
 
       <TopMitraPiutangPanel rows={topMitraPiutang} />
     </div>

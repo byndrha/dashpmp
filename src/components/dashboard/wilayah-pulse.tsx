@@ -22,7 +22,9 @@ export function WilayahPulse({ wilayah }: { wilayah: TodayWilayahPulse[] }) {
             <p className="truncate text-xs font-medium text-muted-foreground">{w.Wilayah}</p>
           </div>
           <p className="mt-1.5 font-display text-sm font-semibold tabular-nums">{formatRupiah(w.NetSales)}</p>
-          <p className="text-[11px] text-muted-foreground">{w.InvoiceCount} invoice hari ini</p>
+          <p className="text-[11px] text-muted-foreground tabular-nums">
+            {w.Qty.toLocaleString("id-ID")} kantong &middot; {w.DOCount} DO hari ini
+          </p>
         </div>
       ))}
     </div>
