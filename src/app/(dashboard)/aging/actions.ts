@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { setCollectionTarget, removeCollectionTarget } from "@/lib/queries/collection-priority";
+import { setCollectionTarget, removeCollectionTarget, setMitraNote } from "@/lib/queries/collection-priority";
 
 export async function saveCollectionTargetAction(input: {
   businessPartnerId: string;
@@ -24,4 +24,16 @@ export async function removeCollectionTargetAction(businessPartnerId: string) {
 
   await removeCollectionTarget(businessPartnerId);
   revalidatePath("/aging");
+}
+
+// Invoked from Beranda's Top 10 Mitra panel as well as anywhere else a
+// quick note makes sense — revalidates both.
+export async function setMitraNoteAction(input: { businessPartnerId: string; note: string | null }) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  await setMitraNote(input.businessPartnerId, input.note, userId);
+  revalidatePath("/aging");
+  revalidatePath("/");
 }

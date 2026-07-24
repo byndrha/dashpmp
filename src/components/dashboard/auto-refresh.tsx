@@ -3,7 +3,11 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const REFRESH_INTERVAL_MS = 60_000;
+// 10 minutes, not 1 — a 1-minute refresh across every open dashboard tab
+// added enough concurrent load on the (largely unindexed, per past
+// findings) ERP tables to risk SQL request timeouts, especially stacked on
+// top of the notification scanner's own 20s polling.
+const REFRESH_INTERVAL_MS = 600_000;
 
 // Keeps every dashboard page's Server Component data reasonably fresh
 // without requiring a manual Pull to Refresh — same soft router.refresh()

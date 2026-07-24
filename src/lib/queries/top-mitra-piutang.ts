@@ -22,10 +22,19 @@ export interface TopMitraPiutangRow {
   AvgDOPerHari: number;
   DOTerakhir: string | Date | null;
   TerakhirPembayaran: string | Date | null;
+  TargetNote: string | null;
 }
 
-// Returns the top 10 mitra by outstanding piutang for EVERY Wilayah (plus
-// the global top 10, which is always a subset of that union — a globally
+// Ranks by Rasio Piutang (Piutang ÷ Omzet) descending — a mitra with zero
+// recorded Omzet (never paid anything, ratio otherwise undefined/÷0) is
+// ranked *highest*, not excluded: 100% of their business is unpaid, which
+// reads as the most severe case, not a data gap to hide.
+function ratioRank(r: { PiutangBerjalan: number; Omzet: number }): number {
+  return r.Omzet ? r.PiutangBerjalan / r.Omzet : Infinity;
+}
+
+// Returns the top 10 mitra by Rasio Piutang for EVERY Wilayah (plus the
+// global top 10, which is always a subset of that union — a globally
 // top-10 mitra can't rank below 10th within its own Wilayah). The panel
 // filters/slices this client-side so picking a Wilayah still shows a full
 // 10 rows (top 10 *within* that Wilayah), not a shrunk-down filter of the
@@ -43,10 +52,9 @@ export async function getTopMitraPiutang(): Promise<TopMitraPiutangRow[]> {
 
   const selected = new Map<string, (typeof priority)[number]>();
   for (const [, list] of byWilayah) {
-    // Each Wilayah's own slice of `priority` is already sorted
-    // PiutangBerjalan DESC (inherited from getCollectionPriority()'s
-    // ORDER BY), so a plain slice is correct — no re-sort needed.
-    for (const r of list.slice(0, TOP_N)) selected.set(r.BusinessPartnerID, r);
+    for (const r of [...list].sort((a, b) => ratioRank(b) - ratioRank(a)).slice(0, TOP_N)) {
+      selected.set(r.BusinessPartnerID, r);
+    }
   }
   const top = [...selected.values()];
   if (top.length === 0) return [];
@@ -93,6 +101,7 @@ export async function getTopMitraPiutang(): Promise<TopMitraPiutangRow[]> {
       AvgDOPerHari: doRow && daysElapsed ? doRow.MonthQty / daysElapsed : 0,
       DOTerakhir: doRow?.DOTerakhir ?? null,
       TerakhirPembayaran: r.TerakhirBayar,
+      TargetNote: r.TargetNote,
     };
   });
 }

@@ -179,6 +179,28 @@ export async function setCollectionTarget(input: {
     `);
 }
 
+// Upserts ONLY the Note column — unlike setCollectionTarget() above, this
+// never touches TargetDate/TargetAmount, so a quick note added from
+// Beranda's Top 10 panel can't silently wipe out a target already set from
+// the Aging module's "Target Pelunasan" dialog on the same mitra.
+export async function setMitraNote(businessPartnerId: string, note: string | null, userId: string): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("businessPartnerId", sql.VarChar(16), businessPartnerId)
+    .input("note", sql.VarChar(256), note)
+    .input("userId", sql.VarChar(16), userId).query(`
+      MERGE DashboardCollectionTarget AS target
+      USING (SELECT @businessPartnerId AS BusinessPartnerID) AS src
+      ON target.BusinessPartnerID = src.BusinessPartnerID
+      WHEN MATCHED THEN
+        UPDATE SET Note = @note, UpdatedAt = GETDATE()
+      WHEN NOT MATCHED THEN
+        INSERT (BusinessPartnerID, Note, CreatedByUserID)
+        VALUES (@businessPartnerId, @note, @userId);
+    `);
+}
+
 export async function removeCollectionTarget(businessPartnerId: string): Promise<void> {
   const pool = await getPool();
   await pool

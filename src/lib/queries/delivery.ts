@@ -15,6 +15,10 @@ export interface WilayahDeliverySummary {
   TargetHarian: number | null;
   TargetPeriode: number | null;
   PctAchievement: number | null;
+  // TotalKantong ÷ daysInRange — actual average delivered per day over the
+  // filtered period (a calendar month by default), distinct from
+  // TargetHarian (a capacity-based target, not an actual figure).
+  AvgPerHari: number;
 }
 
 const WILAYAH_EXPR = `ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui')`;
@@ -120,6 +124,7 @@ export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promis
         TargetHarian: v.TargetHarian,
         TargetPeriode,
         PctAchievement: TargetPeriode ? (TotalKantong / TargetPeriode) * 100 : null,
+        AvgPerHari: TotalKantong / daysInRange,
       };
     })
     .sort((a, b) => b.TotalKantong - a.TotalKantong);
