@@ -292,8 +292,15 @@ export function RouteValidationDialog({
 
   return (
     <Dialog open={jadwalId != null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
+      {/* Widened past the base Dialog's sm:max-w-sm — a bare max-w-4xl loses
+          to that rule (same specificity, but sm:max-w-sm sits later in
+          Tailwind's compiled output), so the override needs its own sm:
+          variant too, same fix already established in mitra-list.tsx /
+          pengajuan-form-dialog.tsx. Scales further at lg: since this dialog
+          holds a map + list side by side and genuinely benefits from a
+          landscape screen's extra width, unlike a plain form dialog. */}
+      <DialogContent className="max-w-lg p-0 sm:max-w-3xl lg:max-w-6xl">
+        <DialogHeader className="p-4 pb-0">
           <DialogTitle className="flex items-center gap-2">
             Validasi Rute
             {jadwal && (
@@ -305,12 +312,31 @@ export function RouteValidationDialog({
           <DialogDescription>Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum menerbitkan DO.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32" />
+        {/* Mobile (default): map first, full-bleed, then the config panel
+            below it as a rounded-top "sheet" pulled up slightly to overlap
+            the map's bottom edge — same idea as Google Maps' bottom sheet,
+            built with layout order + a negative margin rather than a real
+            drag-to-resize sheet (out of scope here).
+            md and up: reverts to config-left / map-right side by side,
+            matching how a desktop map + form split is usually laid out. */}
+        <div className="flex flex-col md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]">
+          <div className="order-1 h-[34vh] min-h-[220px] w-full overflow-hidden md:order-2 md:h-auto md:min-h-[440px] md:rounded-lg">
+            {pabrik && order.length > 0 ? (
+              <RouteMap
+                pabrik={pabrik}
+                stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
+                geometry={route?.geometry ?? null}
+              />
+            ) : (
+              <Skeleton className="h-full w-full md:rounded-lg" />
+            )}
+          </div>
+
+          <div className="order-2 -mt-4 flex flex-col gap-3 rounded-t-2xl bg-popover p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] md:order-1 md:mt-0 md:rounded-none md:p-0 md:shadow-none">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32 shrink-0" />
               <Select value={driverId} onValueChange={(v) => setDriverId(v ?? "")}>
-                <SelectTrigger className="flex-1">
+                <SelectTrigger className="min-w-40 flex-1">
                   <SelectValue placeholder="Driver">
                     {(v: string) => drivers.find((d) => d.SalesmanID === v)?.Name ?? "Pilih Driver"}
                   </SelectValue>
@@ -323,7 +349,7 @@ export function RouteValidationDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <Button size="sm" variant="outline" disabled={pending} onClick={handleSaveDriverTime}>
+              <Button size="sm" variant="outline" className="shrink-0" disabled={pending} onClick={handleSaveDriverTime}>
                 Simpan
               </Button>
             </div>
@@ -386,18 +412,6 @@ export function RouteValidationDialog({
                   {pending ? "Menerbitkan..." : "Terbitkan"}
                 </Button>
               </div>
-            )}
-          </div>
-
-          <div className="min-h-[320px] md:min-h-full">
-            {pabrik && order.length > 0 ? (
-              <RouteMap
-                pabrik={pabrik}
-                stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
-                geometry={route?.geometry ?? null}
-              />
-            ) : (
-              <Skeleton className="h-full min-h-[320px] w-full rounded-lg" />
             )}
           </div>
         </div>
