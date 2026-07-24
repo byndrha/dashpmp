@@ -1,15 +1,29 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { ChevronDown, Users, TrendingUp, TrendingDown, Minus, ArrowUpDown, Search } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  ChevronDown,
+  Users,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Search,
+} from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
+import { updateMitraCapacityAction } from "@/app/(dashboard)/mitra/actions";
 
 type SortMode = "terbanyak" | "tren" | "terbaru";
 
@@ -60,9 +74,28 @@ function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
 // Right-border-only cells (no rounded chip look) so adjacent cells across
 // every row in the list line up into continuous vertical divider lines,
 // per-date, running from the header total row down through the whole list.
-function DayChip({ dateISO, qty, target, isPast }: { dateISO: string; qty: number; target: number | null; isPast: boolean }) {
+function DayChip({
+  dateISO,
+  qty,
+  prevQty,
+  target,
+  isPast,
+}: {
+  dateISO: string;
+  qty: number;
+  // The immediately preceding date's qty for this same mitra — null for the
+  // very first date in the visible range (nothing to compare against) or
+  // when the point of comparison itself hasn't happened yet.
+  prevQty: number | null;
+  target: number | null;
+  isPast: boolean;
+}) {
   const state = !isPast ? "future" : target == null ? "neutral" : qty >= target ? "hit" : "miss";
   const day = Number(dateISO.slice(8, 10));
+  // Only meaningful for a day that's actually elapsed and has a prior day to
+  // compare against — a future placeholder cell or the range's first date
+  // shows no arrow rather than a misleading flat/up/down guess.
+  const change = isPast && prevQty != null ? (qty > prevQty ? "up" : qty < prevQty ? "down" : "flat") : null;
   return (
     <div
       className={cn(
@@ -75,8 +108,83 @@ function DayChip({ dateISO, qty, target, isPast }: { dateISO: string; qty: numbe
       )}
     >
       <span className="opacity-60">{day}</span>
-      <span className="font-semibold">{isPast ? formatQty(qty) : "-"}</span>
+      <span className="flex items-center gap-0.5 font-semibold">
+        {isPast ? formatQty(qty) : "-"}
+        {change === "up" && <ArrowUp className="size-2.5 shrink-0 text-primary" />}
+        {change === "down" && <ArrowDown className="size-2.5 shrink-0 text-destructive" />}
+      </span>
     </div>
+  );
+}
+
+// Small pill button doubling as the current daily-target display AND its
+// own quick editor — click it, type a new value, Simpan. Writes straight to
+// BusinessPartner.Capacity (the same column TargetHarian is read from) via
+// a targeted single-field action, not the full mitra edit form.
+function TargetButton({ businessPartnerId, target }: { businessPartnerId: string; target: number | null }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(target != null ? String(target) : "");
+  const [pending, startTransition] = useTransition();
+
+  function handleSave() {
+    const trimmed = value.trim();
+    const parsed = trimmed === "" ? null : Number(trimmed);
+    if (parsed != null && (Number.isNaN(parsed) || parsed < 0)) {
+      toast.error("Target harus berupa angka positif.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await updateMitraCapacityAction(businessPartnerId, parsed);
+        setOpen(false);
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Gagal menyimpan target.");
+      }
+    });
+  }
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Resets the draft to the current saved value each time it's
+        // reopened — not derivable from render since this is a
+        // user-editable field, and a stale draft from a prior open/cancel
+        // shouldn't linger.
+        if (next) setValue(target != null ? String(target) : "");
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className="ml-auto flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors hover:bg-muted"
+          />
+        }
+      >
+        <span className="size-2 shrink-0 rounded-full bg-primary" />
+        {target != null ? formatQty(target) : "-"}
+      </PopoverTrigger>
+      <PopoverContent className="w-56" align="end">
+        <p className="text-xs font-medium">Ubah Target Harian</p>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={0}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Kantong/hari"
+            className="h-8 text-xs"
+          />
+          <Button size="sm" disabled={pending} onClick={handleSave}>
+            {pending ? "..." : "Simpan"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -102,6 +210,10 @@ function MitraDOCard({
   elapsedDays: number;
 }) {
   const trend = getTrend(m.DailyQty, elapsedDays);
+  // Average per elapsed day, not per every day in the visible range —
+  // matches TargetHarian's own per-day meaning, and dividing by the full
+  // range would understate the average for a range that isn't over yet.
+  const avgQty = elapsedDays > 0 ? m.TotalQty / elapsedDays : null;
   return (
     <div className="flex items-stretch">
       {/* Sticky within the shared horizontal-scroll ancestor (not the page)
@@ -130,14 +242,24 @@ function MitraDOCard({
             <TrendIcon direction={trend.direction} />
           </span>
         </div>
-        <p className="truncate text-xs text-muted-foreground">
-          Harga {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"} · Target Harian{" "}
-          {m.TargetHarian != null ? formatQty(m.TargetHarian) : "-"}
-        </p>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-medium tabular-nums text-foreground">
+            {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"}
+          </span>
+          <span className="truncate tabular-nums">Rata-rata {avgQty != null ? formatQty(avgQty) : "-"}</span>
+          <TargetButton businessPartnerId={m.BusinessPartnerID} target={m.TargetHarian} />
+        </div>
       </div>
       <div className="flex border-l">
         {dates.map((dateISO, i) => (
-          <DayChip key={dateISO} dateISO={dateISO} qty={m.DailyQty[i]} target={m.TargetHarian} isPast={dateISO <= todayISO} />
+          <DayChip
+            key={dateISO}
+            dateISO={dateISO}
+            qty={m.DailyQty[i]}
+            prevQty={i > 0 ? m.DailyQty[i - 1] : null}
+            target={m.TargetHarian}
+            isPast={dateISO <= todayISO}
+          />
         ))}
       </div>
     </div>

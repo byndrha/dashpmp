@@ -257,6 +257,20 @@ export async function updateMitra(id: string, input: MitraInput): Promise<void> 
     `);
 }
 
+// Targeted single-field update for the quick "ubah target" button on the
+// Transaksi DO per Mitra panel — deliberately not routed through
+// updateMitra()/MitraInput, which requires the full mitra form's field set
+// and would need an extra fetch to backfill everything else just to touch
+// this one column.
+export async function updateMitraCapacity(businessPartnerId: string, capacity: number | null): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), businessPartnerId)
+    .input("capacity", sql.Decimal(23, 4), capacity)
+    .query(`UPDATE BusinessPartner SET Capacity = @capacity, ModifiedDate = GETDATE() WHERE BusinessPartnerID = @id`);
+}
+
 export async function deleteMitra(id: string): Promise<void> {
   const pool = await getPool();
   await pool

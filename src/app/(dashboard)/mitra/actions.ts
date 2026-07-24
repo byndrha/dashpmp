@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { createMitra, updateMitra, deleteMitra, type MitraInput } from "@/lib/queries/mitra";
+import { createMitra, updateMitra, updateMitraCapacity, deleteMitra, type MitraInput } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
 
@@ -15,6 +15,12 @@ export async function createMitraAction(input: MitraInput): Promise<string> {
 export async function updateMitraAction(id: string, input: MitraInput) {
   await updateMitra(id, input);
   revalidatePath("/mitra");
+}
+
+export async function updateMitraCapacityAction(id: string, capacity: number | null) {
+  await updateMitraCapacity(id, capacity);
+  revalidatePath("/mitra");
+  revalidatePath("/transaksi");
 }
 
 export async function deleteMitraAction(id: string) {
