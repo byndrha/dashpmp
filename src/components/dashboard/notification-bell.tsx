@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -50,11 +51,18 @@ export function NotificationBell() {
 
   const unreadCount = notifications.filter((n) => !n.IsRead).length;
 
-  function handleClick(notification: NotificationRow) {
+  async function handleClick(notification: NotificationRow) {
     setNotifications((prev) =>
       prev.map((n) => (n.NotificationID === notification.NotificationID ? { ...n, IsRead: true } : n))
     );
-    markNotificationReadAction(notification.NotificationID);
+    try {
+      await markNotificationReadAction(notification.NotificationID);
+    } catch {
+      setNotifications((prev) =>
+        prev.map((n) => (n.NotificationID === notification.NotificationID ? { ...n, IsRead: false } : n))
+      );
+      toast.error("Gagal menandai notifikasi terbaca.");
+    }
     setOpen(false);
     router.push(notification.LinkUrl);
   }
