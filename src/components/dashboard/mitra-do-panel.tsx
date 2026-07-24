@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { ChevronDown, Users, TrendingUp, TrendingDown, Minus, ArrowUpDown } from "lucide-react";
+import { ChevronDown, Users, TrendingUp, TrendingDown, Minus, ArrowUpDown, Search } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -154,6 +155,7 @@ export function MitraDOPanel({
 }) {
   const [showAll, setShowAll] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("terbanyak");
+  const [search, setSearch] = useState("");
   const { active, inactive, daysInRange, rangeStartISO, todayISO } = data;
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
@@ -176,14 +178,15 @@ export function MitraDOPanel({
     [active, inactive]
   );
 
-  const filteredActive = useMemo(
-    () => (wilayahFilter === "all" ? active : active.filter((m) => m.Wilayah === wilayahFilter)),
-    [active, wilayahFilter]
-  );
-  const filteredInactive = useMemo(
-    () => (wilayahFilter === "all" ? inactive : inactive.filter((m) => m.Wilayah === wilayahFilter)),
-    [inactive, wilayahFilter]
-  );
+  const searchQuery = search.trim().toLowerCase();
+  const filteredActive = useMemo(() => {
+    const byWilayah = wilayahFilter === "all" ? active : active.filter((m) => m.Wilayah === wilayahFilter);
+    return searchQuery ? byWilayah.filter((m) => m.Name.toLowerCase().includes(searchQuery)) : byWilayah;
+  }, [active, wilayahFilter, searchQuery]);
+  const filteredInactive = useMemo(() => {
+    const byWilayah = wilayahFilter === "all" ? inactive : inactive.filter((m) => m.Wilayah === wilayahFilter);
+    return searchQuery ? byWilayah.filter((m) => m.Name.toLowerCase().includes(searchQuery)) : byWilayah;
+  }, [inactive, wilayahFilter, searchQuery]);
 
   // Reflects whatever the Wilayah filter currently shows, not the
   // unfiltered total — matches what the user is actually looking at.
@@ -251,6 +254,15 @@ export function MitraDOPanel({
             below it in the flow to stick against, so it never actually
             engaged until you'd already scrolled past the whole list. */}
         <div className="mt-1 flex flex-wrap items-center gap-2">
+          <div className="relative w-48">
+            <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari nama mitra..."
+              className="h-9 pl-8 text-xs"
+            />
+          </div>
           <Select value={sortMode} onValueChange={(v) => setSortMode((v as SortMode) ?? "terbanyak")}>
             <SelectTrigger className="w-56" aria-label="Urutkan">
               <ArrowUpDown className="size-3.5 text-muted-foreground" />

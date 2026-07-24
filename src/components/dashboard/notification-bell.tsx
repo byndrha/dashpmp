@@ -17,6 +17,32 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [open, setOpen] = useState(false);
 
+  // Requested once per mount, not per event — repeatedly calling
+  // requestPermission() for every incoming notification would be both
+  // pointless (the browser only ever prompts once per origin) and, while
+  // still "default" (never answered), would re-prompt on every SSE event.
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  async function handleClick(notification: NotificationRow) {
+    setNotifications((prev) =>
+      prev.map((n) => (n.NotificationID === notification.NotificationID ? { ...n, IsRead: true } : n))
+    );
+    try {
+      await markNotificationReadAction(notification.NotificationID);
+    } catch {
+      setNotifications((prev) =>
+        prev.map((n) => (n.NotificationID === notification.NotificationID ? { ...n, IsRead: false } : n))
+      );
+      toast.error("Gagal menandai notifikasi terbaca.");
+    }
+    setOpen(false);
+    router.push(notification.LinkUrl);
+  }
+
   useEffect(() => {
     // The SSE connection is deliberately opened only AFTER the initial
     // fetch resolves and its rows are in state — opening both in parallel
@@ -40,6 +66,28 @@ export function NotificationBell() {
           if (prev.some((n) => n.NotificationID === event.NotificationID)) return prev;
           return [{ ...event, IsRead: false }, ...prev];
         });
+
+        // Surfaces immediately as a toast — the whole point of this is that
+        // a user shouldn't have to open the bell popover to notice a new
+        // notification arrived.
+        toast(event.Title, {
+          description: event.Message,
+          action: {
+            label: "Lihat",
+            onClick: () => handleClick({ ...event, IsRead: false }),
+          },
+        });
+
+        // Native OS-level notification (shows as a Windows toast in
+        // Chrome/Edge) — only fires if the user already granted permission;
+        // never re-prompts from here (see the mount-time effect above).
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          const osNotification = new Notification(event.Title, { body: event.Message, tag: `notif-${event.NotificationID}` });
+          osNotification.onclick = () => {
+            window.focus();
+            handleClick({ ...event, IsRead: false });
+          };
+        }
       };
     }).catch(() => {
       if (cancelled) return;
@@ -50,25 +98,10 @@ export function NotificationBell() {
       cancelled = true;
       source?.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.IsRead).length;
-
-  async function handleClick(notification: NotificationRow) {
-    setNotifications((prev) =>
-      prev.map((n) => (n.NotificationID === notification.NotificationID ? { ...n, IsRead: true } : n))
-    );
-    try {
-      await markNotificationReadAction(notification.NotificationID);
-    } catch {
-      setNotifications((prev) =>
-        prev.map((n) => (n.NotificationID === notification.NotificationID ? { ...n, IsRead: false } : n))
-      );
-      toast.error("Gagal menandai notifikasi terbaca.");
-    }
-    setOpen(false);
-    router.push(notification.LinkUrl);
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

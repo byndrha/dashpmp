@@ -40,7 +40,7 @@ export function PemasaranSection({
         </Button>
       </div>
 
-      <PengajuanList rows={rows} canApprove={canApprove} isSuperAdmin={isSuperAdmin} />
+      <PengajuanList rows={rows} priceLevels={priceLevels} canApprove={canApprove} isSuperAdmin={isSuperAdmin} />
 
       <PengajuanFormDialog
         open={creating}

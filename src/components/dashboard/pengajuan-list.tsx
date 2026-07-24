@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useTransition } from "react";
-import { MapPin, Phone, Calendar, Package, Trash2, ExternalLink } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { MapPin, Phone, Calendar, Package, Wallet, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatRupiah, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PengajuanRow } from "@/lib/queries/mitra-pengajuan";
+import type { PriceLevelOption } from "@/lib/queries/mitra";
 import {
   approvePengajuanAction,
   rejectPengajuanAction,
@@ -120,16 +121,20 @@ function RejectDialog({
 
 export function PengajuanList({
   rows,
+  priceLevels,
   canApprove,
   isSuperAdmin,
 }: {
   rows: PengajuanRow[];
+  priceLevels: PriceLevelOption[];
   canApprove: boolean;
   isSuperAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [rejecting, setRejecting] = useState<PengajuanRow | null>(null);
   const [viewingLocation, setViewingLocation] = useState<PengajuanRow | null>(null);
+
+  const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
 
   function handleApprove(row: PengajuanRow) {
     if (!confirm(`Setujui pengajuan "${row.NamaCalon}"? Mitra baru akan otomatis dibuat.`)) return;
@@ -204,26 +209,39 @@ export function PengajuanList({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <Phone className="size-3" /> {row.NoHP || "-"}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <Phone className="size-3 shrink-0" />
+                  <span className="truncate">{row.NoHP || "-"}</span>
                 </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="size-3" />
-                  {row.Wilayah || "-"}
-                  {row.Kecamatan ? ` | ${row.Kecamatan}` : ""}
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <Wallet className="size-3 shrink-0" />
+                  <span className="truncate">
+                    {row.PriceLevel != null && priceByLevel.has(row.PriceLevel)
+                      ? formatRupiah(priceByLevel.get(row.PriceLevel)!)
+                      : "-"}
+                  </span>
                 </span>
-                {row.Alamat && <span className="truncate pl-[18px]">{row.Alamat}</span>}
-                <span className="inline-flex items-center gap-1.5">
-                  <Calendar className="size-3" />
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <MapPin className="size-3 shrink-0" />
+                  <span className="truncate">
+                    {row.Wilayah || "-"}
+                    {row.Kecamatan ? ` | ${row.Kecamatan}` : ""}
+                  </span>
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <Package className="size-3 shrink-0" />
+                  <span className="truncate">
+                    {row.QtyKantong ? `${row.QtyKantong.toLocaleString("id-ID")} kantong` : "Belum ada minat"}
+                  </span>
+                </span>
+                {row.Alamat && <span className="col-span-2 truncate pl-[18px]">{row.Alamat}</span>}
+                <span className="col-span-2 inline-flex items-center gap-1.5">
+                  <Calendar className="size-3 shrink-0" />
                   Diminta sampai{" "}
                   {row.WaktuPermintaanSampai
                     ? `${formatDate(row.WaktuPermintaanSampai)} ${formatTime(row.WaktuPermintaanSampai)}`
                     : "-"}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Package className="size-3" />
-                  {row.QtyKantong ? `${row.QtyKantong.toLocaleString("id-ID")} kantong` : "Belum ada minat pesan"}
                 </span>
               </div>
 

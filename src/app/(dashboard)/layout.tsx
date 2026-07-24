@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { AutoRefresh } from "@/components/dashboard/auto-refresh";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
@@ -36,6 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             viewport width with the sidebar expanded; container queries see
             that difference, `sm:`/`lg:` viewport breakpoints don't. */}
         <main className="@container/dashboard-main flex flex-1 flex-col gap-4 p-4">
+          <AutoRefresh />
           <PullToRefresh>{children}</PullToRefresh>
         </main>
       </SidebarInset>

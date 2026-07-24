@@ -387,9 +387,20 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Blocks the browser's own native pull-to-refresh/rubber-band bounce at
+       the document scroller — without this, PullToRefresh's custom gesture
+       (pull-to-refresh.tsx) fights the native one: the whole viewport
+       (including the sticky header, which lives outside that component)
+       visibly drags down with the native overscroll before our JS-driven
+       indicator ever gets a chance to render. overscroll-behavior only
+       takes effect on an element that's part of the actual scroll chain
+       (html/body here, since the page itself scrolls, not an inner div),
+       so this can't be scoped to pull-to-refresh.tsx's own wrapper. */
+    overscroll-behavior-y: contain;
   }
   html {
     @apply font-sans;
+    overscroll-behavior-y: contain;
   }
   ::selection {
     @apply bg-primary/30 text-foreground;
