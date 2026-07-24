@@ -5,7 +5,7 @@ import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type D
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,14 +19,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { JadwalCard as JadwalCardData, JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
+import { formatTime } from "@/lib/format";
+import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
 import {
   getJadwalDetailAction,
   updateJadwalUrutanAction,
   updateJadwalDriverTimeAction,
-  publishJadwalAction,
+  addSalesOrdersToJadwalAction,
+  getAvailableSalesOrdersAction,
   deleteJadwalDraftAction,
   startMuatAction,
   startBerangkatAction,
@@ -84,6 +86,7 @@ export function RouteValidationDialog({
   businessDate,
   drivers,
   konsumsiBBM,
+  kapasitasMaks,
   onOpenChange,
   onDeleted,
 }: {
@@ -94,6 +97,9 @@ export function RouteValidationDialog({
   // by the caller (JadwalCard itself doesn't carry KonsumsiBBM, ArmadaRow
   // does).
   konsumsiBBM: number | null;
+  // Capacity hard-block input, same resolution path as konsumsiBBM. Null
+  // means no limit has been configured, so nothing is blocked.
+  kapasitasMaks: number | null;
   onOpenChange: (open: boolean) => void;
   // Fired after a successful "Batalkan Draft" so the caller can close this
   // dialog (it has no Jadwal left to show once deleted).
@@ -110,12 +116,29 @@ export function RouteValidationDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  const [adding, setAdding] = useState(false);
+  const [availableToAdd, setAvailableToAdd] = useState<AvailableSalesOrder[]>([]);
+  const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set());
+  const [addError, setAddError] = useState<string | null>(null);
+
   const jadwalId = jadwal?.JadwalID ?? null;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const totalQty = useMemo(() => order.reduce((sum, o) => sum + o.Qty, 0), [order]);
+  const selectedToAddQty = useMemo(
+    () => availableToAdd.filter((so) => selectedToAdd.has(so.SalesOrderID)).reduce((sum, so) => sum + so.Qty, 0),
+    [availableToAdd, selectedToAdd]
+  );
 
   useEffect(() => {
+    // Resets the "Tambahkan" sub-panel when a different Jadwal card is
+    // opened — not derivable from render since these are user-editable
+    // picker fields, not synced from any jadwal prop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAdding(false);
+    setSelectedToAdd(new Set());
+    setAddError(null);
+
     if (jadwalId == null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOrder([]);
       return;
     }
@@ -149,7 +172,7 @@ export function RouteValidationDialog({
   // Recomputes the route whenever the stop order or the pabrik location
   // changes. Every stop must have a saved coordinate — otherwise a full
   // route genuinely can't be computed, so this surfaces as routeError
-  // (which in turn keeps "Terbitkan" disabled, matching the mandatory-route
+  // (which in turn keeps "Berangkat" disabled, matching the mandatory-route
   // rule) instead of silently skipping stops.
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +181,7 @@ export function RouteValidationDialog({
     if (missing) {
       // Stops changed to a set that genuinely can't be routed (missing
       // coordinates) — reset any stale route from the previous stop order
-      // so "Terbitkan" doesn't stay enabled against it.
+      // so "Berangkat" doesn't stay enabled against it.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoute(null);
       setRouteError("Beberapa tujuan belum punya lokasi tersimpan — tidak bisa hitung rute.");
@@ -222,7 +245,7 @@ export function RouteValidationDialog({
 
   // Standalone "Simpan" path — still needed on its own since editing
   // driver/time while already Terbit (re-assigning driver/vehicle onto
-  // existing DOs) doesn't go through handlePublish.
+  // existing DOs) doesn't go through handleBerangkat.
   function handleSaveDriverTime() {
     if (jadwalId == null) return;
     setError(null);
@@ -234,27 +257,6 @@ export function RouteValidationDialog({
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menyimpan driver/waktu.");
-      }
-    });
-  }
-
-  // "Terbitkan" always persists the currently-selected driver/time first —
-  // otherwise a driver picked but not yet "Simpan"-ed would still read as
-  // NULL server-side (publishJadwal checks the persisted SalesmanID column,
-  // not client state), failing confusingly even though the button looked
-  // ready.
-  function handlePublish() {
-    if (jadwalId == null) return;
-    setError(null);
-    startTransition(async () => {
-      try {
-        await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: combineDateAndTime(businessDate, time),
-          salesmanId: driverId || null,
-        });
-        await publishJadwalAction(jadwalId);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menerbitkan DO.");
       }
     });
   }
@@ -275,16 +277,77 @@ export function RouteValidationDialog({
 
   function handleMuat() {
     if (jadwalId == null) return;
-    startTransition(() => startMuatAction(jadwalId));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await startMuatAction(jadwalId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal mencatat mulai muat.");
+      }
+    });
   }
 
+  // "Berangkat" always persists the currently-selected driver/time first —
+  // otherwise a driver picked but not yet "Simpan"-ed would still read as
+  // NULL server-side (startBerangkat checks the persisted SalesmanID column,
+  // not client state), failing confusingly even though the button looked
+  // ready. This is also the moment real DO documents get created — there is
+  // no separate "Terbitkan" step anymore.
   function handleBerangkat() {
     if (jadwalId == null) return;
-    startTransition(() => startBerangkatAction(jadwalId));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateJadwalDriverTimeAction(jadwalId, {
+          jamJadwal: combineDateAndTime(businessDate, time),
+          salesmanId: driverId || null,
+        });
+        await startBerangkatAction(jadwalId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal memproses keberangkatan.");
+      }
+    });
+  }
+
+  function handleOpenAdd() {
+    if (jadwalId == null) return;
+    setAdding(true);
+    setSelectedToAdd(new Set());
+    setAddError(null);
+    getAvailableSalesOrdersAction(businessDate).then(setAvailableToAdd);
+  }
+
+  function handleToggleAdd(id: string, qty: number) {
+    setSelectedToAdd((prev) => {
+      const isSelected = prev.has(id);
+      if (!isSelected && kapasitasMaks != null && totalQty + selectedToAddQty + qty > kapasitasMaks) {
+        return prev;
+      }
+      const next = new Set(prev);
+      if (isSelected) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleConfirmAdd() {
+    if (jadwalId == null || selectedToAdd.size === 0) return;
+    setAddError(null);
+    startTransition(async () => {
+      try {
+        await addSalesOrdersToJadwalAction(jadwalId, [...selectedToAdd]);
+        const rows = await getJadwalDetailAction(jadwalId);
+        setOrder(rows);
+        setAdding(false);
+      } catch (err) {
+        setAddError(err instanceof Error ? err.message : "Gagal menambahkan SO.");
+      }
+    });
   }
 
   const isDraft = jadwal?.Status === "Draft";
-  const canPublish = isDraft && driverId !== "" && route != null && !routeLoading;
+  const overCapacity = kapasitasMaks != null && totalQty > kapasitasMaks;
+  const canBerangkat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity;
   const totalFuelLiters = useMemo(() => {
     if (route == null || konsumsiBBM == null) return null;
     return Math.round(route.distanceKm * konsumsiBBM * 10) / 10;
@@ -309,7 +372,7 @@ export function RouteValidationDialog({
               </Badge>
             )}
           </DialogTitle>
-          <DialogDescription>Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum menerbitkan DO.</DialogDescription>
+          <DialogDescription>Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum berangkat.</DialogDescription>
         </DialogHeader>
 
         {/* Mobile (default): map first, full-bleed, then the config panel
@@ -354,14 +417,104 @@ export function RouteValidationDialog({
               </Button>
             </div>
 
-            {!isDraft && (
+            {isDraft ? (
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={handleMuat}>
-                  Mulai Muat
+                <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
+                  Batalkan Draft
                 </Button>
-                <Button size="sm" className="flex-1" disabled={pending} onClick={handleBerangkat}>
-                  Berangkat
+                {jadwal?.JamMulaiMuat == null && (
+                  <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={handleMuat}>
+                    Mulai Muat
+                  </Button>
+                )}
+                <Button size="sm" className="flex-1" disabled={!canBerangkat || pending} onClick={handleBerangkat}>
+                  {pending ? "Memproses..." : "Berangkat"}
                 </Button>
+              </div>
+            ) : (
+              jadwal?.JamAktualBerangkat && (
+                <p className="flex items-center gap-1.5 text-xs text-primary">
+                  <PackageCheck className="size-3.5" />
+                  Sudah berangkat pukul {formatTime(jadwal.JamAktualBerangkat)}
+                </p>
+              )
+            )}
+
+            {overCapacity && (
+              <p className="text-xs text-destructive">
+                Total muatan {totalQty} kantong melebihi kapasitas armada ({kapasitasMaks} kantong).
+              </p>
+            )}
+
+            {jadwal?.JamMulaiMuat && (
+              <p className="flex items-center gap-1.5 rounded-lg border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+                <Clock className="size-3.5" />
+                Mulai Muat pukul {formatTime(jadwal.JamMulaiMuat)}
+              </p>
+            )}
+
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">Daftar Tujuan ({order.length})</p>
+              {isDraft && !adding && (
+                <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-xs" disabled={pending} onClick={handleOpenAdd}>
+                  <Plus className="size-3.5" />
+                  Tambahkan
+                </Button>
+              )}
+            </div>
+
+            {isDraft && adding && (
+              <div className="flex flex-col gap-2 rounded-lg border p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Pilih SO tambahan</span>
+                  {kapasitasMaks != null && (
+                    <span
+                      className={cn(
+                        "text-xs tabular-nums",
+                        totalQty + selectedToAddQty > kapasitasMaks ? "text-destructive" : "text-muted-foreground"
+                      )}
+                    >
+                      {totalQty + selectedToAddQty} / {kapasitasMaks} kantong
+                    </span>
+                  )}
+                </div>
+                {addError && <p className="text-xs text-destructive">{addError}</p>}
+                <div className="flex max-h-40 flex-col divide-y overflow-y-auto rounded-md border">
+                  {availableToAdd.map((so) => {
+                    const isSelected = selectedToAdd.has(so.SalesOrderID);
+                    const soOverCapacity = !isSelected && kapasitasMaks != null && totalQty + selectedToAddQty + so.Qty > kapasitasMaks;
+                    return (
+                      <button
+                        key={so.SalesOrderID}
+                        type="button"
+                        disabled={soOverCapacity}
+                        onClick={() => handleToggleAdd(so.SalesOrderID, so.Qty)}
+                        className={cn(
+                          "flex items-center justify-between gap-2 px-2 py-1.5 text-left text-xs transition-colors",
+                          isSelected && "bg-primary/10",
+                          !isSelected && !soOverCapacity && "hover:bg-muted",
+                          soOverCapacity && "cursor-not-allowed opacity-40"
+                        )}
+                      >
+                        <span className="min-w-0 truncate">
+                          {so.CustomerName} <span className="text-muted-foreground">· {so.Wilayah}</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">{so.Qty} kantong</span>
+                      </button>
+                    );
+                  })}
+                  {availableToAdd.length === 0 && (
+                    <p className="py-4 text-center text-xs text-muted-foreground">Tidak ada SO yang tersedia.</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={() => setAdding(false)}>
+                    Batal
+                  </Button>
+                  <Button size="sm" className="flex-1" disabled={pending || selectedToAdd.size === 0} onClick={handleConfirmAdd}>
+                    Tambah ({selectedToAdd.size})
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -402,17 +555,6 @@ export function RouteValidationDialog({
             )}
 
             {error && <p className="text-xs text-destructive">{error}</p>}
-
-            {isDraft && (
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" disabled={pending} onClick={handleDeleteDraft}>
-                  Batalkan Draft
-                </Button>
-                <Button className="flex-1" disabled={!canPublish || pending} onClick={handlePublish}>
-                  {pending ? "Menerbitkan..." : "Terbitkan"}
-                </Button>
-              </div>
-            )}
           </div>
         </div>
       </DialogContent>

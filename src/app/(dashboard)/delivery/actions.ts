@@ -5,9 +5,9 @@ import { createArmada, updateArmada, deleteArmada, type ArmadaInput } from "@/li
 import {
   createJadwalDraft,
   deleteJadwalDraft,
+  addSalesOrdersToJadwal,
   updateJadwalUrutan,
   updateJadwalDriverTime,
-  publishJadwal,
   startMuat,
   startBerangkat,
   getJadwalDetail,
@@ -47,6 +47,11 @@ export async function deleteJadwalDraftAction(jadwalId: number): Promise<void> {
   revalidatePath("/delivery");
 }
 
+export async function addSalesOrdersToJadwalAction(jadwalId: number, salesOrderIds: string[]): Promise<void> {
+  await addSalesOrdersToJadwal(jadwalId, salesOrderIds);
+  revalidatePath("/delivery");
+}
+
 export async function updateJadwalUrutanAction(jadwalId: number, orderedDetailIds: number[]): Promise<void> {
   await updateJadwalUrutan(jadwalId, orderedDetailIds);
   revalidatePath("/delivery");
@@ -57,11 +62,6 @@ export async function updateJadwalDriverTimeAction(
   input: { jamJadwal: Date; salesmanId: string | null }
 ): Promise<void> {
   await updateJadwalDriverTime(jadwalId, input);
-  revalidatePath("/delivery");
-}
-
-export async function publishJadwalAction(jadwalId: number): Promise<void> {
-  await publishJadwal(jadwalId);
   revalidatePath("/delivery");
 }
 

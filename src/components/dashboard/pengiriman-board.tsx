@@ -75,11 +75,15 @@ function CreateJadwalDialog({
   onOpenChange,
   armadaId,
   businessDate,
+  kapasitasMaks,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   armadaId: number | null;
   businessDate: string;
+  // Hard-caps total selected Qty against the target Armada's KapasitasMaks —
+  // null means no limit has been configured, so nothing is disabled.
+  kapasitasMaks: number | null;
 }) {
   const [available, setAvailable] = useState<AvailableSalesOrder[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -98,10 +102,19 @@ function CreateJadwalDialog({
     getAvailableSalesOrdersAction(businessDate).then(setAvailable);
   }, [open, businessDate]);
 
-  function toggle(id: string) {
+  const selectedQty = useMemo(
+    () => available.filter((so) => selected.has(so.SalesOrderID)).reduce((sum, so) => sum + so.Qty, 0),
+    [available, selected]
+  );
+
+  function toggle(id: string, qty: number) {
     setSelected((prev) => {
+      const isSelected = prev.has(id);
+      if (!isSelected && kapasitasMaks != null && selectedQty + qty > kapasitasMaks) {
+        return prev;
+      }
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
+      if (isSelected) next.delete(id);
       else next.add(id);
       return next;
     });
@@ -131,29 +144,50 @@ function CreateJadwalDialog({
           <DialogTitle>Keberangkatan Baru</DialogTitle>
           <DialogDescription>
             Pilih Sales Order yang akan menjadi DO pada keberangkatan ini. Driver &amp; rute divalidasi setelah draft
-            dibuat — belum menerbitkan dokumen apa pun.
+            dibuat — dokumen DO baru terbit saat klik Berangkat.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32" />
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <div className="flex max-h-64 flex-col divide-y overflow-y-auto rounded-lg border">
-            {available.map((so) => (
-              <button
-                key={so.SalesOrderID}
-                type="button"
-                onClick={() => toggle(so.SalesOrderID)}
+          <div className="flex items-center gap-2">
+            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32" />
+            {kapasitasMaks != null && (
+              <span
                 className={cn(
-                  "flex items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors",
-                  selected.has(so.SalesOrderID) ? "bg-primary/10" : "hover:bg-muted"
+                  "ml-auto text-xs tabular-nums",
+                  selectedQty > kapasitasMaks ? "text-destructive" : "text-muted-foreground"
                 )}
               >
-                <span className="min-w-0 truncate">
-                  {so.CustomerName} <span className="text-xs text-muted-foreground">· {so.Wilayah}</span>
-                </span>
-                <span className="shrink-0 tabular-nums text-muted-foreground">{so.Qty} kantong</span>
-              </button>
-            ))}
+                {selectedQty} / {kapasitasMaks} kantong
+              </span>
+            )}
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex max-h-64 flex-col divide-y overflow-y-auto rounded-lg border">
+            {available.map((so) => {
+              const isSelected = selected.has(so.SalesOrderID);
+              const overCapacity = !isSelected && kapasitasMaks != null && selectedQty + so.Qty > kapasitasMaks;
+              return (
+                <button
+                  key={so.SalesOrderID}
+                  type="button"
+                  disabled={overCapacity}
+                  onClick={() => toggle(so.SalesOrderID, so.Qty)}
+                  className={cn(
+                    "flex items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors",
+                    isSelected && "bg-primary/10",
+                    !isSelected && !overCapacity && "hover:bg-muted",
+                    overCapacity && "cursor-not-allowed opacity-40"
+                  )}
+                >
+                  <span className="min-w-0 truncate">
+                    {so.CustomerName} <span className="text-xs text-muted-foreground">· {so.Wilayah}</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {so.Qty} kantong{overCapacity && " · kapasitas penuh"}
+                  </span>
+                </button>
+              );
+            })}
             {available.length === 0 && (
               <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada SO yang tersedia.</p>
             )}
@@ -332,6 +366,7 @@ export function PengirimanBoard({
 
   const openJadwal = jadwal.find((j) => j.JadwalID === detailJadwalId) ?? null;
   const openArmada = openJadwal ? armada.find((a) => a.ArmadaID === openJadwal.ArmadaID) : null;
+  const createArmada = createArmadaId != null ? armada.find((a) => a.ArmadaID === createArmadaId) : null;
 
   function goToDate(newDate: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -440,6 +475,7 @@ export function PengirimanBoard({
         businessDate={businessDate}
         drivers={drivers}
         konsumsiBBM={openArmada?.KonsumsiBBM ?? null}
+        kapasitasMaks={openArmada?.KapasitasMaks ?? null}
         onOpenChange={(open) => !open && setDetailJadwalId(null)}
         onDeleted={() => setDetailJadwalId(null)}
       />
@@ -448,6 +484,7 @@ export function PengirimanBoard({
         onOpenChange={(open) => !open && setCreateArmadaId(null)}
         armadaId={createArmadaId}
         businessDate={businessDate}
+        kapasitasMaks={createArmada?.KapasitasMaks ?? null}
       />
     </Card>
   );
