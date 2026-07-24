@@ -41,6 +41,9 @@ export function NotificationBell() {
           return [{ ...event, IsRead: false }, ...prev];
         });
       };
+    }).catch(() => {
+      if (cancelled) return;
+      toast.error("Gagal memuat notifikasi.");
     });
 
     return () => {

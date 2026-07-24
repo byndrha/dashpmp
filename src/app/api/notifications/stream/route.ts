@@ -21,7 +21,20 @@ export async function GET() {
     start(controller) {
       listener = (event: NotificationEvent) => {
         if (!canView(permissions, event.TargetModuleKey)) return;
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch (err) {
+          // controller.enqueue() can throw if the client disconnected
+          // abruptly (proxy drop, tab killed, device sleep) and this
+          // stream's controller is already closed/errored, but `cancel()`
+          // hasn't fired yet to unregister the listener. EventEmitter.emit()
+          // invokes listeners synchronously and does not catch exceptions,
+          // so letting this escape would abort delivery to every other
+          // connection registered after this one, and propagate back up
+          // through scanner.ts's runScan() loop. Swallowing it here keeps
+          // this stale connection's failure isolated.
+          console.warn("Notification stream enqueue failed for a stale connection:", err);
+        }
       };
       notificationEventBus.on(NOTIFICATION_EVENT, listener);
       // A comment-only SSE line (ignored by EventSource's message parser)
