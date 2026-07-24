@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import { PullToRefresh } from "@/components/dashboard/pull-to-refresh";
@@ -22,6 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="font-medium">Dashboard PMP Group</span>
           </div>
           <div className="flex items-center gap-1">
+            <NotificationBell />
             <AppearanceMenu />
             <UserMenu name={session?.user?.name ?? session?.user?.username ?? "User"} profile={profile} />
           </div>
