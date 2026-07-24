@@ -236,6 +236,7 @@ function MitraDOCard({
           <span className="truncate">
             {m.Wilayah}
             {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
+            {m.MarketingNama ? ` · ${m.MarketingNama}` : ""}
           </span>
           <span className="flex shrink-0 items-center gap-1">
             {m.PctAchievement != null ? `${m.PctAchievement.toFixed(0)}%` : "-"}
@@ -266,14 +267,29 @@ function MitraDOCard({
   );
 }
 
+// Sentinel for "mitra with no Marketing assigned to their Wilayah/Kecamatan
+// yet" — distinct from "all" (no filter applied), since null can't be a
+// Select value.
+const UNASSIGNED_MARKETING = "__unassigned__";
+
+function matchesMarketingFilter(m: MitraDORow, marketingFilter: string): boolean {
+  if (marketingFilter === "all") return true;
+  if (marketingFilter === UNASSIGNED_MARKETING) return !m.MarketingNama;
+  return m.MarketingNama === marketingFilter;
+}
+
 export function MitraDOPanel({
   data,
   wilayahFilter,
   onWilayahFilterChange,
+  marketingFilter,
+  onMarketingFilterChange,
 }: {
   data: MitraDOMonthly;
   wilayahFilter: string;
   onWilayahFilterChange: (wilayah: string) => void;
+  marketingFilter: string;
+  onMarketingFilterChange: (marketing: string) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("terbanyak");
@@ -300,15 +316,23 @@ export function MitraDOPanel({
     [active, inactive]
   );
 
+  const marketingOptions = useMemo(
+    () =>
+      [...new Set([...active, ...inactive].map((m) => m.MarketingNama).filter((n): n is string => !!n))].sort(),
+    [active, inactive]
+  );
+
   const searchQuery = search.trim().toLowerCase();
   const filteredActive = useMemo(() => {
     const byWilayah = wilayahFilter === "all" ? active : active.filter((m) => m.Wilayah === wilayahFilter);
-    return searchQuery ? byWilayah.filter((m) => m.Name.toLowerCase().includes(searchQuery)) : byWilayah;
-  }, [active, wilayahFilter, searchQuery]);
+    const byMarketing = byWilayah.filter((m) => matchesMarketingFilter(m, marketingFilter));
+    return searchQuery ? byMarketing.filter((m) => m.Name.toLowerCase().includes(searchQuery)) : byMarketing;
+  }, [active, wilayahFilter, marketingFilter, searchQuery]);
   const filteredInactive = useMemo(() => {
     const byWilayah = wilayahFilter === "all" ? inactive : inactive.filter((m) => m.Wilayah === wilayahFilter);
-    return searchQuery ? byWilayah.filter((m) => m.Name.toLowerCase().includes(searchQuery)) : byWilayah;
-  }, [inactive, wilayahFilter, searchQuery]);
+    const byMarketing = byWilayah.filter((m) => matchesMarketingFilter(m, marketingFilter));
+    return searchQuery ? byMarketing.filter((m) => m.Name.toLowerCase().includes(searchQuery)) : byMarketing;
+  }, [inactive, wilayahFilter, marketingFilter, searchQuery]);
 
   // Reflects whatever the Wilayah filter currently shows, not the
   // unfiltered total — matches what the user is actually looking at.
@@ -405,6 +429,24 @@ export function MitraDOPanel({
               {wilayahOptions.map((w) => (
                 <SelectItem key={w} value={w}>
                   {w}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={marketingFilter} onValueChange={(v) => onMarketingFilterChange(v ?? "all")}>
+            <SelectTrigger className="w-44" aria-label="Marketing">
+              <SelectValue>
+                {(v: string) =>
+                  v === "all" ? "Semua Marketing" : v === UNASSIGNED_MARKETING ? "Belum Ditentukan" : v
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Marketing</SelectItem>
+              <SelectItem value={UNASSIGNED_MARKETING}>Belum Ditentukan</SelectItem>
+              {marketingOptions.map((n) => (
+                <SelectItem key={n} value={n}>
+                  {n}
                 </SelectItem>
               ))}
             </SelectContent>

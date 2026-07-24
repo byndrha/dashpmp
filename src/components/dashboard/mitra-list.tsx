@@ -523,9 +523,14 @@ export function MitraList({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{m.Name}</p>
-                  <Badge variant="outline" className="mt-0.5 h-5 px-1.5 text-[10px]">
-                    {m.PartnerType}
-                  </Badge>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                      {m.PartnerType}
+                    </Badge>
+                    <Badge variant={m.MarketingNama ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
+                      {m.MarketingNama ?? "Belum Ditentukan"}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditing(m)}>

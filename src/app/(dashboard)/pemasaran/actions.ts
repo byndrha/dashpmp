@@ -10,6 +10,7 @@ import {
   APPROVER_ROLE_IDS,
   type PengajuanInput,
 } from "@/lib/queries/mitra-pengajuan";
+import { addMarketingWilayah, removeMarketingWilayah } from "@/lib/queries/marketing-wilayah";
 
 export async function createPengajuanAction(input: PengajuanInput) {
   const session = await auth();
@@ -56,4 +57,24 @@ export async function deletePengajuanAction(pengajuanId: number) {
 
   await deletePengajuan(pengajuanId);
   revalidatePath("/pemasaran");
+}
+
+export async function addMarketingWilayahAction(input: {
+  marketingUserId: string;
+  wilayah: string;
+  kecamatan: string | null;
+}) {
+  const user = await requireApprover();
+  await addMarketingWilayah({ ...input, createdByUserId: user.id });
+  revalidatePath("/pemasaran");
+  revalidatePath("/mitra");
+  revalidatePath("/transaksi");
+}
+
+export async function removeMarketingWilayahAction(id: number) {
+  await requireApprover();
+  await removeMarketingWilayah(id);
+  revalidatePath("/pemasaran");
+  revalidatePath("/mitra");
+  revalidatePath("/transaksi");
 }

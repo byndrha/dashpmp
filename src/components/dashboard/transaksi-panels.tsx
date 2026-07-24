@@ -24,6 +24,7 @@ export function TransaksiPanels({
   // can drive it directly — this is the single shared "which region is the
   // DO-per-Mitra panel currently filtered to" state.
   const [mitraDOWilayah, setMitraDOWilayah] = useState("all");
+  const [mitraDOMarketing, setMitraDOMarketing] = useState("all");
   const mitraDORef = useRef<HTMLDivElement>(null);
 
   function handleWilayahClick(wilayah: string) {
@@ -46,7 +47,13 @@ export function TransaksiPanels({
       </div>
 
       <div ref={mitraDORef}>
-        <MitraDOPanel data={mitraDO} wilayahFilter={mitraDOWilayah} onWilayahFilterChange={setMitraDOWilayah} />
+        <MitraDOPanel
+          data={mitraDO}
+          wilayahFilter={mitraDOWilayah}
+          onWilayahFilterChange={setMitraDOWilayah}
+          marketingFilter={mitraDOMarketing}
+          onMarketingFilterChange={setMitraDOMarketing}
+        />
       </div>
     </div>
   );

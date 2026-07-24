@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
+import { getMarketingWilayahAssignments, resolveResponsibleMarketing } from "@/lib/queries/marketing-wilayah";
 import type { PartnerType } from "@/types/dashboard";
 
 export interface MitraRow {
@@ -32,39 +33,49 @@ export interface MitraRow {
   // set on creation by createMitra() below, so "Mitra Terbaru" sorting
   // (mitra-do-panel.tsx) works for dashboard-created mitra too.
   JoinDate: string | null;
+  // Resolved from DashboardMarketingWilayah via this Mitra's own
+  // Wilayah/Kecamatan — see resolveResponsibleMarketing() in
+  // marketing-wilayah.ts. Null when no Marketing covers this area yet.
+  MarketingNama: string | null;
 }
 
 export async function getMitraList(): Promise<MitraRow[]> {
   const pool = await getPool();
-  const result = await pool.request().query(`
-    SELECT
-        bp.BusinessPartnerID,
-        bp.Name,
-        bp.MobileNo AS Kontak,
-        bp.Address AS Alamat,
-        bp.NPWPName AS Wilayah,
-        bp.NPWPAddress AS Kecamatan,
-        ${PARTNER_TYPE_CASE} AS PartnerType,
-        bp.Gender,
-        bp.PriceLevel,
-        bp.TermOfPaymentID,
-        top_.TermOfPayment AS TermOfPaymentName,
-        top_.Value AS TermOfPaymentDays,
-        bp.Capacity,
-        ml.Latitude,
-        ml.Longitude,
-        ml.Alamat AS GeoAlamat,
-        mc.Kompetitor,
-        bp.JoinDate
-    FROM BusinessPartner bp
-    LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
-    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
-    LEFT JOIN DashboardMitraCompetitor mc ON mc.BusinessPartnerID = bp.BusinessPartnerID
-    WHERE ISNULL(bp.IsDeleted, 0) = 0
-    ORDER BY bp.Name
-  `);
+  const [result, marketingAssignments] = await Promise.all([
+    pool.request().query(`
+      SELECT
+          bp.BusinessPartnerID,
+          bp.Name,
+          bp.MobileNo AS Kontak,
+          bp.Address AS Alamat,
+          bp.NPWPName AS Wilayah,
+          bp.NPWPAddress AS Kecamatan,
+          ${PARTNER_TYPE_CASE} AS PartnerType,
+          bp.Gender,
+          bp.PriceLevel,
+          bp.TermOfPaymentID,
+          top_.TermOfPayment AS TermOfPaymentName,
+          top_.Value AS TermOfPaymentDays,
+          bp.Capacity,
+          ml.Latitude,
+          ml.Longitude,
+          ml.Alamat AS GeoAlamat,
+          mc.Kompetitor,
+          bp.JoinDate
+      FROM BusinessPartner bp
+      LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
+      LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
+      LEFT JOIN DashboardMitraCompetitor mc ON mc.BusinessPartnerID = bp.BusinessPartnerID
+      WHERE ISNULL(bp.IsDeleted, 0) = 0
+      ORDER BY bp.Name
+    `),
+    getMarketingWilayahAssignments(),
+  ]);
 
-  return result.recordset;
+  return (result.recordset as Omit<MitraRow, "MarketingNama">[]).map((r) => ({
+    ...r,
+    MarketingNama: resolveResponsibleMarketing(r.Wilayah, r.Kecamatan, marketingAssignments),
+  }));
 }
 
 export interface TermOfPaymentOption {

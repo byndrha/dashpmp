@@ -2,6 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
 import { getMitraList, getPriceLevelOptions } from "@/lib/queries/mitra";
+import { getMarketingWilayahAssignments, resolveResponsibleMarketing } from "@/lib/queries/marketing-wilayah";
 import type { PartnerType, DateRangeFilter } from "@/types/dashboard";
 
 export interface MitraDORow {
@@ -10,6 +11,9 @@ export interface MitraDORow {
   PartnerType: PartnerType;
   Wilayah: string;
   Kecamatan: string | null;
+  // Resolved from DashboardMarketingWilayah — see resolveResponsibleMarketing()
+  // in marketing-wilayah.ts. Null when no Marketing covers this area yet.
+  MarketingNama: string | null;
   HargaJual: number | null;
   TargetHarian: number | null;
   // Capacity scaled to the filtered period's length (daysInRange), not
@@ -69,7 +73,7 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
   const daysInRange = Math.max(1, Math.round((rangeEnd.getTime() - rangeStart.getTime()) / 86400000));
   const todayISO = getBusinessDateISO();
 
-  const [dailyResult, priceLevels, allMitra] = await Promise.all([
+  const [dailyResult, priceLevels, allMitra, marketingAssignments] = await Promise.all([
     pool
       .request()
       .input("rangeStart", sql.Date, rangeStart)
@@ -96,6 +100,7 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
       `),
     getPriceLevelOptions(),
     getMitraList(),
+    getMarketingWilayahAssignments(),
   ]);
 
   const priceByLevel = new Map(priceLevels.map((p) => [p.Level, p.Price]));
@@ -111,6 +116,7 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
         PartnerType: row.PartnerType,
         Wilayah: row.Wilayah,
         Kecamatan: row.Kecamatan,
+        MarketingNama: resolveResponsibleMarketing(row.Wilayah, row.Kecamatan, marketingAssignments),
         HargaJual: row.PriceLevel != null ? priceByLevel.get(row.PriceLevel) ?? null : null,
         TargetHarian: row.Capacity,
         TargetBulanan: row.Capacity != null ? row.Capacity * daysInRange : null,
@@ -151,6 +157,7 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
       PartnerType: m.PartnerType,
       Wilayah: m.Wilayah ?? "Tidak Diketahui",
       Kecamatan: m.Kecamatan,
+      MarketingNama: m.MarketingNama,
       HargaJual: m.PriceLevel != null ? priceByLevel.get(m.PriceLevel) ?? null : null,
       TargetHarian: m.Capacity,
       TargetBulanan: m.Capacity != null ? m.Capacity * daysInRange : null,

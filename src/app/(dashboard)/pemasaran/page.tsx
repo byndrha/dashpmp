@@ -1,18 +1,24 @@
 import { requireModuleAccess } from "@/lib/require-access";
 import { getPengajuanList, getMarketingKPI, APPROVER_ROLE_IDS, MARKETING_ROLE_ID } from "@/lib/queries/mitra-pengajuan";
 import { getPriceLevelOptions } from "@/lib/queries/mitra";
+import { getMarketingWilayahAssignments, getMarketingUsers } from "@/lib/queries/marketing-wilayah";
 import { MarketingKPIPanel } from "@/components/dashboard/marketing-kpi-panel";
 import { PemasaranSection } from "@/components/dashboard/pemasaran-section";
+import { MarketingWilayahPanel } from "@/components/dashboard/marketing-wilayah-panel";
 
 export default async function PemasaranPage() {
   const session = await requireModuleAccess("pemasaran");
-  const [rows, allKpiRows, priceLevels] = await Promise.all([
+  const canApprove = session.user.isSuperAdmin || APPROVER_ROLE_IDS.includes(session.user.roleId);
+
+  const [rows, allKpiRows, priceLevels, wilayahAssignments, marketingUsers] = await Promise.all([
     getPengajuanList(),
     getMarketingKPI(),
     getPriceLevelOptions(),
+    // Only fetched for approvers — Marketing themselves never see this
+    // panel, so there's no point loading it for them.
+    canApprove ? getMarketingWilayahAssignments() : Promise.resolve([]),
+    canApprove ? getMarketingUsers() : Promise.resolve([]),
   ]);
-
-  const canApprove = session.user.isSuperAdmin || APPROVER_ROLE_IDS.includes(session.user.roleId);
 
   // Marketing sees only their own progress here — Supervisor/Accounting/Super
   // Admin (the roles that actually approve/reject and monitor the team)
@@ -25,6 +31,8 @@ export default async function PemasaranPage() {
       <h1 className="font-display text-xl font-semibold">Pemasaran</h1>
 
       <MarketingKPIPanel rows={kpiRows} />
+
+      {canApprove && <MarketingWilayahPanel assignments={wilayahAssignments} marketingUsers={marketingUsers} />}
 
       <PemasaranSection
         rows={rows}
