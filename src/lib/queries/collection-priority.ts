@@ -12,6 +12,10 @@ export interface CollectionPriorityRow {
   Kecamatan: string | null;
   PiutangAwal: number;
   PiutangBerjalan: number;
+  // Days since the oldest still-unpaid invoice's DueDate — same figure
+  // Status buckets off, exposed directly for panels that need the raw
+  // number (e.g. Beranda's Top 10 Mitra Piutang "Outstanding Day").
+  MaxDaysOverdue: number | null;
   TargetAmount: number | null;
   // mssql returns a DATETIME column as a real Date instance, which survives
   // Server->Client Component serialization as a Date (not auto-stringified)
@@ -113,6 +117,7 @@ export async function getCollectionPriority(): Promise<CollectionPriorityRow[]> 
         bp.NPWPAddress AS Kecamatan,
         ISNULL(ba.PiutangAwal, 0) AS PiutangAwal,
         mb.PiutangBerjalan,
+        mb.MaxDaysOverdue,
         ct.TargetAmount,
         ct.TargetDate,
         ct.Note AS TargetNote,

@@ -77,6 +77,11 @@ export interface SalesDayPoint {
 
 export interface SalesDayComparison {
   label: string;
+  // "YYYY-MM-DD" for the compared date itself — shown in the UI instead of
+  // `label`, which is now only a fallback/semantic key. Present even when
+  // `previous` is null (e.g. "Pekan Lalu" crossing into last month) so the
+  // skipped date is still visible.
+  dateISO: string;
   current: SalesDayPoint;
   previous: SalesDayPoint | null;
   NominalPctChange: number | null;
@@ -484,8 +489,9 @@ export async function getSalesDayComparison(today: SalesToday, businessToday: Da
 
   const current: SalesDayPoint = { NetSales: today.NetSales, DOQty: today.Qty10KG + today.Qty5KG };
 
-  const buildDay = (label: string, previous: SalesDayPoint | null): SalesDayComparison => ({
+  const buildDay = (label: string, date: Date, previous: SalesDayPoint | null): SalesDayComparison => ({
     label,
+    dateISO: date.toISOString().slice(0, 10),
     current,
     previous,
     NominalPctChange: previous ? pctChange(current.NetSales, previous.NetSales) : null,
@@ -493,9 +499,9 @@ export async function getSalesDayComparison(today: SalesToday, businessToday: Da
   });
 
   return [
-    buildDay("Kemarin", { NetSales: net.KemarinNet, DOQty: qty.KemarinQty }),
-    buildDay("Pekan Lalu", pekanLaluAvailable ? { NetSales: net.PekanLaluNet, DOQty: qty.PekanLaluQty } : null),
-    buildDay("Bulan Lalu", { NetSales: net.BulanLaluNet, DOQty: qty.BulanLaluQty }),
-    buildDay("Tahun Lalu", { NetSales: net.TahunLaluNet, DOQty: qty.TahunLaluQty }),
+    buildDay("Kemarin", kemarin, { NetSales: net.KemarinNet, DOQty: qty.KemarinQty }),
+    buildDay("Pekan Lalu", pekanLalu, pekanLaluAvailable ? { NetSales: net.PekanLaluNet, DOQty: qty.PekanLaluQty } : null),
+    buildDay("Bulan Lalu", bulanLalu, { NetSales: net.BulanLaluNet, DOQty: qty.BulanLaluQty }),
+    buildDay("Tahun Lalu", tahunLalu, { NetSales: net.TahunLaluNet, DOQty: qty.TahunLaluQty }),
   ];
 }

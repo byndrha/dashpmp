@@ -5,11 +5,13 @@ import { requireModuleAccess } from "@/lib/require-access";
 import { getTodayWilayahPulse } from "@/lib/queries/activity";
 import { getAgingReceivables, getPiutangStatusOverview } from "@/lib/queries/aging";
 import { getSalesForDay, getSalesDayComparison } from "@/lib/queries/sales-overview";
+import { getTopMitraPiutang } from "@/lib/queries/top-mitra-piutang";
 import { getBusinessDate } from "@/lib/business-date";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { WilayahPulse } from "@/components/dashboard/wilayah-pulse";
 import { SalesDayComparisonPanel } from "@/components/dashboard/sales-day-comparison-panel";
 import { PiutangOverviewPanel } from "@/components/dashboard/piutang-overview-panel";
+import { TopMitraPiutangPanel } from "@/components/dashboard/top-mitra-piutang-panel";
 import { GreetingHeader } from "@/components/dashboard/greeting-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatRupiah } from "@/lib/format";
@@ -34,11 +36,12 @@ export default async function BerandaPage() {
   }
 
   const businessToday = getBusinessDate();
-  const [wilayahPulse, aging, todaySales, piutangOverview] = await Promise.all([
+  const [wilayahPulse, aging, todaySales, piutangOverview, topMitraPiutang] = await Promise.all([
     getTodayWilayahPulse(),
     getAgingReceivables(),
     getSalesForDay(businessToday),
     getPiutangStatusOverview(),
+    getTopMitraPiutang(),
   ]);
   const salesDayComparison = await getSalesDayComparison(todaySales, businessToday);
 
@@ -93,6 +96,8 @@ export default async function BerandaPage() {
       </div>
 
       <PiutangOverviewPanel overview={piutangOverview} />
+
+      <TopMitraPiutangPanel rows={topMitraPiutang} />
     </div>
   );
 }

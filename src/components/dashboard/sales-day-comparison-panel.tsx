@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { Truck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { TrendPill } from "@/components/dashboard/sales-chips";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatDayMonth } from "@/lib/format";
 import type { SalesDayComparison } from "@/lib/queries/sales-overview";
 
 // Shorter than formatRupiah() — needed so a value + trend pill still fit on
@@ -59,7 +59,7 @@ export function SalesDayComparisonPanel({ comparisons }: { comparisons: SalesDay
             </span>
             {comparisons.map((c) => (
               <Fragment key={c.label}>
-                <span className="whitespace-nowrap text-xs text-foreground">{c.label}</span>
+                <span className="whitespace-nowrap text-xs text-foreground tabular-nums">{formatDayMonth(c.dateISO)}</span>
                 {c.previous ? (
                   <>
                     <div className="flex items-center justify-end gap-1">
