@@ -2,13 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Wallet, Receipt, Package, LineChart, Zap, ShoppingCart, ArrowRight, Truck } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
-import { getRecentInvoices, getTodayWilayahPulse } from "@/lib/queries/activity";
-import { getAgingReceivables } from "@/lib/queries/aging";
-import { getSalesForDay } from "@/lib/queries/sales-overview";
+import { getTodayWilayahPulse } from "@/lib/queries/activity";
+import { getAgingReceivables, getPiutangStatusOverview } from "@/lib/queries/aging";
+import { getSalesForDay, getSalesDayComparison } from "@/lib/queries/sales-overview";
 import { getBusinessDate } from "@/lib/business-date";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { WilayahPulse } from "@/components/dashboard/wilayah-pulse";
-import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
+import { SalesDayComparisonPanel } from "@/components/dashboard/sales-day-comparison-panel";
+import { PiutangOverviewPanel } from "@/components/dashboard/piutang-overview-panel";
 import { GreetingHeader } from "@/components/dashboard/greeting-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatRupiah } from "@/lib/format";
@@ -32,21 +33,22 @@ export default async function BerandaPage() {
     redirect("/pemasaran");
   }
 
-  const [recentInvoices, wilayahPulse, aging, todaySales] = await Promise.all([
-    getRecentInvoices(15),
+  const businessToday = getBusinessDate();
+  const [wilayahPulse, aging, todaySales, piutangOverview] = await Promise.all([
     getTodayWilayahPulse(),
     getAgingReceivables(),
-    getSalesForDay(getBusinessDate()),
+    getSalesForDay(businessToday),
+    getPiutangStatusOverview(),
   ]);
+  const salesDayComparison = await getSalesDayComparison(todaySales, businessToday);
 
-  // Penjualan Hari Ini / Invoice Hari Ini must come from getSalesForDay (the
-  // same unrestricted query the Penjualan module's "Hari Ini" card uses),
-  // NOT from summing wilayahPulse — that's capped to the top 6 wilayah for
-  // the "Pulsa Wilayah" widget below, so summing it silently drops revenue
-  // from every wilayah past the top 6 (verified live: today it undercounted
-  // by the full Wonogiri total).
+  // Penjualan Hari Ini must come from getSalesForDay (the same unrestricted
+  // query the Penjualan module's "Hari Ini" card uses), NOT from summing
+  // wilayahPulse — that's capped to the top 6 wilayah for the "Pulsa
+  // Wilayah" widget below, so summing it silently drops revenue from every
+  // wilayah past the top 6 (verified live: today it undercounted by the
+  // full Wonogiri total).
   const todayNetSales = todaySales.NetSales;
-  const todayInvoices = todaySales.SICount;
   const kantongTerkirim = todaySales.Qty10KG + todaySales.Qty5KG;
   const totalOutstanding = aging.reduce((sum, r) => sum + r.Outstanding, 0);
 
@@ -56,11 +58,10 @@ export default async function BerandaPage() {
     <div className="flex flex-col gap-5">
       <GreetingHeader name={name} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Penjualan Hari Ini" value={formatRupiah(todayNetSales)} icon={Wallet} tone="positive" />
-        <KpiCard label="Invoice Hari Ini" value={todayInvoices.toLocaleString("id-ID")} icon={ShoppingCart} />
-        <KpiCard label="Piutang Outstanding" value={formatRupiah(totalOutstanding)} icon={Receipt} tone="warning" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard label="Kantong Terkirim" value={kantongTerkirim.toLocaleString("id-ID")} icon={Package} />
+        <KpiCard label="Penjualan Hari Ini" value={formatRupiah(todayNetSales)} icon={Wallet} tone="positive" />
+        <KpiCard label="Piutang Outstanding" value={formatRupiah(totalOutstanding)} icon={Receipt} tone="warning" />
       </div>
 
       <div>
@@ -69,7 +70,7 @@ export default async function BerandaPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <RecentActivityFeed invoices={recentInvoices} />
+        <SalesDayComparisonPanel comparisons={salesDayComparison} />
 
         <div className="flex flex-col gap-3">
           {MODULE_LINKS.map((m) => (
@@ -90,6 +91,8 @@ export default async function BerandaPage() {
           ))}
         </div>
       </div>
+
+      <PiutangOverviewPanel overview={piutangOverview} />
     </div>
   );
 }

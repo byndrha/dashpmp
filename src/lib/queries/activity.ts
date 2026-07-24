@@ -1,35 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { getBusinessDate } from "@/lib/business-date";
 
-export interface RecentInvoice {
-  SalesInvoiceID: string;
-  VoucherNo: string;
-  TransDate: string;
-  Wilayah: string;
-  CustomerName: string;
-  Netto: number;
-}
-
-export async function getRecentInvoices(limit = 15): Promise<RecentInvoice[]> {
-  const pool = await getPool();
-  const result = await pool.request().query(`
-    SELECT TOP ${limit}
-        si.SalesInvoiceID,
-        si.VoucherNo,
-        si.TransDate,
-        ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-        bp.Name AS CustomerName,
-        si.Netto
-    FROM SalesInvoice si
-    LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = si.BusinessPartnerID
-    WHERE si.IsDeleted = 0
-      AND ISNULL(si.IsPerforma, 0) = 0
-    ORDER BY si.TransDate DESC
-  `);
-
-  return result.recordset;
-}
-
 export interface TodayWilayahPulse {
   Wilayah: string;
   NetSales: number;

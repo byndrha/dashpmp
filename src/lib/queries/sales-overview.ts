@@ -70,6 +70,33 @@ export interface SalesOverview {
   ytd: SalesYTD;
 }
 
+export interface SalesDayPoint {
+  NetSales: number;
+  DOQty: number;
+}
+
+export interface SalesDayComparison {
+  label: string;
+  current: SalesDayPoint;
+  previous: SalesDayPoint | null;
+  NominalPctChange: number | null;
+  QtyPctChange: number | null;
+}
+
+// Same calendar day-of-month `monthsBack` months earlier, clamped to the
+// last day of the target month when it doesn't have that many days. Plain
+// UTC arithmetic (not date-fns) to stay consistent with the rest of this
+// file's date handling — see monthBoundary()'s comment in business-date.ts
+// for why local-time Date construction is unsafe here. Shared by
+// getSalesForDay's "last month" lookback and getSalesDayComparison's
+// "Bulan Lalu"/"Tahun Lalu" points.
+function sameDayMonthsBack(date: Date, monthsBack: number): Date {
+  const targetYear = date.getUTCFullYear();
+  const targetMonthIndex = date.getUTCMonth() - monthsBack;
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonthIndex + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(targetYear, targetMonthIndex, Math.min(date.getUTCDate(), daysInTargetMonth)));
+}
+
 function qtyByKemasan(rows: { Kemasan: string; Qty: number }[]): KemasanQty {
   return {
     Qty10KG: rows.find((r) => r.Kemasan === "10KG")?.Qty ?? 0,
@@ -81,23 +108,9 @@ function qtyByKemasan(rows: { Kemasan: string; Qty: number }[]): KemasanQty {
 // render and the prev/next day navigation on that same card.
 export async function getSalesForDay(date: Date): Promise<SalesToday> {
   const pool = await getPool();
-  // Same calendar day-of-month, one month back — clamped to the last day of
-  // the target month when it doesn't have that many days. Built with plain
-  // UTC arithmetic (not date-fns' subMonths) to stay consistent with the
-  // rest of this file's date handling — see monthBoundary()'s comment in
-  // business-date.ts for why local-time Date construction is unsafe here.
-  //
-  // Without the clamp, Date.UTC() silently overflows into the *next* month
-  // for any day past the target month's length: e.g. for Jul 31, month-1 is
-  // June (30 days), so Date.UTC(year, 5, 31) normalizes to Jul 1 — "last
-  // month" would resolve to a day in the current month, not June 30, and
-  // the growth badge would compare today's revenue against the wrong day's.
-  const targetYear = date.getUTCFullYear();
-  const targetMonthIndex = date.getUTCMonth() - 1;
-  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonthIndex + 1, 0)).getUTCDate();
-  const lastMonthDay = new Date(
-    Date.UTC(targetYear, targetMonthIndex, Math.min(date.getUTCDate(), daysInTargetMonth))
-  );
+  // Same calendar day-of-month, one month back — see sameDayMonthsBack()'s
+  // comment for why the clamp matters and why plain UTC arithmetic is used.
+  const lastMonthDay = sameDayMonthsBack(date, 1);
 
   const [dayResult, doQtyResult, siQtyResult, lastMonthResult] = await Promise.all([
     pool
@@ -390,4 +403,99 @@ export async function getSalesOverview(): Promise<SalesOverview> {
       AvgPrice: ytdTotalQty ? ytdRow.NetSales / ytdTotalQty : 0,
     },
   };
+}
+
+// Day-level comparison for Beranda's "Perbandingan Penjualan" panel — distinct
+// from getSalesOverview()'s month-level comparisons array. `today` is passed
+// in (from a getSalesForDay() call the page already made) rather than
+// re-queried here.
+export async function getSalesDayComparison(today: SalesToday, businessToday: Date): Promise<SalesDayComparison[]> {
+  const pool = await getPool();
+
+  const kemarin = new Date(
+    Date.UTC(businessToday.getUTCFullYear(), businessToday.getUTCMonth(), businessToday.getUTCDate() - 1)
+  );
+  const pekanLalu = new Date(
+    Date.UTC(businessToday.getUTCFullYear(), businessToday.getUTCMonth(), businessToday.getUTCDate() - 7)
+  );
+  // "Pekan Lalu" is deliberately scoped to the current calendar month — if
+  // H-7 lands in the previous month, that comparison point is left out
+  // (previous: null) rather than silently comparing across a month boundary,
+  // per explicit product decision.
+  const pekanLaluAvailable =
+    pekanLalu.getUTCFullYear() === businessToday.getUTCFullYear() &&
+    pekanLalu.getUTCMonth() === businessToday.getUTCMonth();
+  const bulanLalu = sameDayMonthsBack(businessToday, 1);
+  const tahunLalu = sameDayMonthsBack(businessToday, 12);
+
+  // Lower-bounded by @tahunLalu (the earliest of the four dates) so SQL
+  // Server can prune the scan, mirroring getSalesOverview()'s
+  // twoYearsAgoMonthStart bound.
+  const [netResult, qtyResult] = await Promise.all([
+    pool
+      .request()
+      .input("kemarin", sql.Date, kemarin)
+      .input("pekanLalu", sql.Date, pekanLalu)
+      .input("bulanLalu", sql.Date, bulanLalu)
+      .input("tahunLalu", sql.Date, tahunLalu)
+      .query(`
+        SELECT
+            ISNULL(SUM(CASE WHEN TransDate >= @kemarin AND TransDate < DATEADD(DAY, 1, @kemarin) THEN Netto ELSE 0 END), 0) AS KemarinNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @pekanLalu AND TransDate < DATEADD(DAY, 1, @pekanLalu) THEN Netto ELSE 0 END), 0) AS PekanLaluNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @bulanLalu AND TransDate < DATEADD(DAY, 1, @bulanLalu) THEN Netto ELSE 0 END), 0) AS BulanLaluNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @tahunLalu AND TransDate < DATEADD(DAY, 1, @tahunLalu) THEN Netto ELSE 0 END), 0) AS TahunLaluNet
+        FROM SalesInvoice
+        WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
+          AND TransDate >= @tahunLalu
+      `),
+    // DOQty uses DeliveryOrderDetail.Delivered, not .Qty — see getSalesTrend()
+    // in sales.ts for why .Qty inflates totals.
+    pool
+      .request()
+      .input("kemarin", sql.Date, kemarin)
+      .input("pekanLalu", sql.Date, pekanLalu)
+      .input("bulanLalu", sql.Date, bulanLalu)
+      .input("tahunLalu", sql.Date, tahunLalu)
+      .query(`
+        SELECT
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @kemarin AND do_.TransDate < DATEADD(DAY, 1, @kemarin) THEN dod.Delivered ELSE 0 END), 0) AS KemarinQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @pekanLalu AND do_.TransDate < DATEADD(DAY, 1, @pekanLalu) THEN dod.Delivered ELSE 0 END), 0) AS PekanLaluQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @bulanLalu AND do_.TransDate < DATEADD(DAY, 1, @bulanLalu) THEN dod.Delivered ELSE 0 END), 0) AS BulanLaluQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @tahunLalu AND do_.TransDate < DATEADD(DAY, 1, @tahunLalu) THEN dod.Delivered ELSE 0 END), 0) AS TahunLaluQty
+        FROM DeliveryOrder do_
+        JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= @tahunLalu
+      `),
+  ]);
+
+  const net = netResult.recordset[0] as {
+    KemarinNet: number;
+    PekanLaluNet: number;
+    BulanLaluNet: number;
+    TahunLaluNet: number;
+  };
+  const qty = qtyResult.recordset[0] as {
+    KemarinQty: number;
+    PekanLaluQty: number;
+    BulanLaluQty: number;
+    TahunLaluQty: number;
+  };
+
+  const current: SalesDayPoint = { NetSales: today.NetSales, DOQty: today.Qty10KG + today.Qty5KG };
+
+  const buildDay = (label: string, previous: SalesDayPoint | null): SalesDayComparison => ({
+    label,
+    current,
+    previous,
+    NominalPctChange: previous ? pctChange(current.NetSales, previous.NetSales) : null,
+    QtyPctChange: previous ? pctChange(current.DOQty, previous.DOQty) : null,
+  });
+
+  return [
+    buildDay("Kemarin", { NetSales: net.KemarinNet, DOQty: qty.KemarinQty }),
+    buildDay("Pekan Lalu", pekanLaluAvailable ? { NetSales: net.PekanLaluNet, DOQty: qty.PekanLaluQty } : null),
+    buildDay("Bulan Lalu", { NetSales: net.BulanLaluNet, DOQty: qty.BulanLaluQty }),
+    buildDay("Tahun Lalu", { NetSales: net.TahunLaluNet, DOQty: qty.TahunLaluQty }),
+  ];
 }

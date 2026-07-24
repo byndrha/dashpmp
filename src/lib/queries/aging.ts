@@ -110,3 +110,80 @@ export async function getAgingReceivables(wilayah?: string): Promise<AgingRow[]>
 
   return result.recordset;
 }
+
+export interface PiutangStatusBucket {
+  status: PiutangStatus;
+  mitraCount: number;
+  outstanding: number;
+  ratioPct: number;
+  avgAgingDays: number;
+}
+
+export interface PiutangStatusOverview {
+  totalMitra: number;
+  totalOutstanding: number;
+  buckets: PiutangStatusBucket[];
+}
+
+// Lightweight per-mitra rollup for Beranda's "Detail Piutang" panel — same
+// per-mitra Status logic as getCollectionPriority() (MAX days-overdue across
+// a mitra's unpaid invoices, not per-invoice like getAgingReceivables()'s
+// STATUS_CASE), so the Kritis/Perhatian/Sehat counts stay consistent with
+// what /aging shows. Deliberately skips getCollectionPriority()'s
+// OrderStats/PaymentStats/DashboardCollectionTarget joins — this panel only
+// needs the aggregate counts/totals, not per-mitra order/payment/target detail.
+export async function getPiutangStatusOverview(): Promise<PiutangStatusOverview> {
+  const pool = await getPool();
+
+  const result = await pool.request().query(`
+    WITH InvoiceBalance AS (
+        SELECT si.SalesInvoiceID, si.BusinessPartnerID, si.DueDate,
+               (cb.Netto - cb.Paid - cb.Deposit - cb.OtherPayment) AS Outstanding
+        FROM (
+            SELECT SalesInvoiceID, SUM(Netto) AS Netto, SUM(Deposit) AS Deposit,
+                   SUM(Paid) AS Paid, SUM(OtherPayment) AS OtherPayment
+            FROM vCustomerStatement
+            GROUP BY SalesInvoiceID
+        ) cb
+        JOIN SalesInvoice si ON si.SalesInvoiceID = cb.SalesInvoiceID
+        WHERE si.IsDeleted = 0
+    ),
+    MitraBalance AS (
+        SELECT BusinessPartnerID,
+               SUM(CASE WHEN Outstanding > 0 THEN Outstanding ELSE 0 END) AS PiutangBerjalan,
+               MAX(CASE WHEN Outstanding > 0 THEN DATEDIFF(DAY, DueDate, GETDATE()) END) AS MaxDaysOverdue
+        FROM InvoiceBalance
+        GROUP BY BusinessPartnerID
+    )
+    SELECT
+        PiutangBerjalan,
+        MaxDaysOverdue,
+        CASE
+            WHEN MaxDaysOverdue IS NULL OR MaxDaysOverdue <= 30 THEN 'Sehat'
+            WHEN MaxDaysOverdue <= 60 THEN 'Perhatian'
+            ELSE 'Kritis'
+        END AS Status
+    FROM MitraBalance
+    WHERE PiutangBerjalan > 0
+  `);
+
+  const rows = result.recordset as { PiutangBerjalan: number; MaxDaysOverdue: number | null; Status: PiutangStatus }[];
+
+  const totalMitra = rows.length;
+  const totalOutstanding = rows.reduce((sum, r) => sum + r.PiutangBerjalan, 0);
+
+  const buckets: PiutangStatusBucket[] = (["Kritis", "Perhatian", "Sehat"] as PiutangStatus[]).map((status) => {
+    const matching = rows.filter((r) => r.Status === status);
+    const outstanding = matching.reduce((sum, r) => sum + r.PiutangBerjalan, 0);
+    const agingSum = matching.reduce((sum, r) => sum + (r.MaxDaysOverdue ?? 0), 0);
+    return {
+      status,
+      mitraCount: matching.length,
+      outstanding,
+      ratioPct: totalOutstanding ? (outstanding / totalOutstanding) * 100 : 0,
+      avgAgingDays: matching.length ? agingSum / matching.length : 0,
+    };
+  });
+
+  return { totalMitra, totalOutstanding, buckets };
+}
