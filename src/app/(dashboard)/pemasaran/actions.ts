@@ -11,6 +11,9 @@ import {
   type PengajuanInput,
 } from "@/lib/queries/mitra-pengajuan";
 import { addMarketingWilayah, removeMarketingWilayah } from "@/lib/queries/marketing-wilayah";
+import { setMarketingPeriodSetting } from "@/lib/queries/marketing-period";
+import { setWilayahPotentialTarget } from "@/lib/queries/wilayah-potential-target";
+import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 
 export async function createPengajuanAction(input: PengajuanInput) {
   const session = await auth();
@@ -59,12 +62,26 @@ export async function deletePengajuanAction(pengajuanId: number) {
   revalidatePath("/pemasaran");
 }
 
+// Deliberately separate from requireApprover() — who manages Cakupan
+// Wilayah Marketing (Supervisor/Accounting/Manager/Super Admin) was
+// requested independently of who approves/rejects Pengajuan, so the two
+// checks must be free to diverge.
+async function requireWilayahManager() {
+  const session = await auth();
+  const user = session?.user;
+  if (!user) throw new Error("Unauthorized");
+  if (!user.isSuperAdmin && !WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId)) {
+    throw new Error("Tidak punya izin mengatur cakupan wilayah Marketing");
+  }
+  return user;
+}
+
 export async function addMarketingWilayahAction(input: {
   marketingUserId: string;
   wilayah: string;
   kecamatan: string | null;
 }) {
-  const user = await requireApprover();
+  const user = await requireWilayahManager();
   await addMarketingWilayah({ ...input, createdByUserId: user.id });
   revalidatePath("/pemasaran");
   revalidatePath("/mitra");
@@ -72,9 +89,27 @@ export async function addMarketingWilayahAction(input: {
 }
 
 export async function removeMarketingWilayahAction(id: number) {
-  await requireApprover();
+  await requireWilayahManager();
   await removeMarketingWilayah(id);
   revalidatePath("/pemasaran");
   revalidatePath("/mitra");
   revalidatePath("/transaksi");
+}
+
+export async function setMarketingPeriodSettingAction(input: { startDate: string; periodDays: number }) {
+  const user = await requireWilayahManager();
+  if (input.periodDays < 1 || input.periodDays > 62) {
+    throw new Error("Panjang periode harus antara 1 dan 62 hari.");
+  }
+  await setMarketingPeriodSetting({ ...input, userId: user.id });
+  revalidatePath("/pemasaran");
+}
+
+export async function setWilayahPotentialTargetAction(input: { wilayah: string; potentialTarget: number }) {
+  const user = await requireWilayahManager();
+  if (input.potentialTarget < 0) {
+    throw new Error("Potensial target tidak boleh negatif.");
+  }
+  await setWilayahPotentialTarget({ ...input, userId: user.id });
+  revalidatePath("/pemasaran");
 }

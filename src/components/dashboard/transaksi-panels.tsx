@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WilayahDeliveryPanel } from "@/components/dashboard/wilayah-delivery-panel";
@@ -14,18 +14,29 @@ export function TransaksiPanels({
   orders,
   wilayahDelivery,
   mitraDO,
+  initialMarketingFilter,
 }: {
   orders: SalesOrderCard[];
   wilayahDelivery: WilayahDeliverySummary[];
   mitraDO: MitraDOMonthly;
+  // Seeded from Kinerja Marketing's "?marketing=" deep link (Pemasaran) —
+  // clicking a Marketing there lands here pre-filtered, scrolled straight
+  // to the DO-per-Mitra panel instead of the page top.
+  initialMarketingFilter?: string;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   // Lifted here (not local to MitraDOPanel) so clicking a Wilayah tile below
   // can drive it directly — this is the single shared "which region is the
   // DO-per-Mitra panel currently filtered to" state.
   const [mitraDOWilayah, setMitraDOWilayah] = useState("all");
-  const [mitraDOMarketing, setMitraDOMarketing] = useState("all");
+  const [mitraDOMarketing, setMitraDOMarketing] = useState(initialMarketingFilter || "all");
   const mitraDORef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (initialMarketingFilter) mitraDORef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Only ever meant to fire once, off the value the page loaded with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleWilayahClick(wilayah: string) {
     setMitraDOWilayah(wilayah);

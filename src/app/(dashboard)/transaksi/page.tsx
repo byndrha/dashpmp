@@ -10,7 +10,7 @@ import { TransaksiPanels } from "@/components/dashboard/transaksi-panels";
 export default async function TransaksiPage({
   searchParams,
 }: {
-  searchParams: Promise<DashboardSearchParams>;
+  searchParams: Promise<DashboardSearchParams & { marketing?: string }>;
 }) {
   await requireModuleAccess("transaksi");
   const params = await searchParams;
@@ -29,7 +29,12 @@ export default async function TransaksiPage({
         <FilterBar wilayahList={wilayahList} />
       </div>
 
-      <TransaksiPanels orders={orders} wilayahDelivery={wilayahDelivery} mitraDO={mitraDO} />
+      <TransaksiPanels
+        orders={orders}
+        wilayahDelivery={wilayahDelivery}
+        mitraDO={mitraDO}
+        initialMarketingFilter={params.marketing}
+      />
     </div>
   );
 }
