@@ -66,57 +66,98 @@ export interface SalesTrendPoint {
 // Deliberately not filtered by Wilayah — SO/DO don't carry
 // BusinessPartner-derived Wilayah as cleanly as SalesInvoice does, and the
 // trend is meant to read as one overall pulse.
+//
+// Previously a single query: a "Days" CTE (union of distinct days across the
+// 3 tables) joined to 6 correlated subqueries per day — for a ~30-day filter
+// that's ~180 independent scalar subquery scans. Measured at 14s even with a
+// TransDate index in place. Rewritten as one grouped, set-based aggregation
+// per source table (mirrors getSalesTrendMonthly's fix below), unioning the
+// distinct day-keys from each result to reproduce the original "only days
+// with at least one SI/SO/DO" behavior.
 export async function getSalesTrend(filter: DateRangeFilter): Promise<SalesTrendPoint[]> {
   const pool = await getPool();
-  const result = await pool
-    .request()
-    .input("startDate", sql.Date, filter.startDate)
-    .input("endDate", sql.Date, filter.endDate).query(`
-      WITH Days AS (
-          SELECT CAST(si.TransDate AS DATE) AS TransDate FROM SalesInvoice si
-            WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0 AND si.TransDate >= @startDate AND si.TransDate < @endDate
-          UNION
-          SELECT CAST(so.TransDate AS DATE) FROM SalesOrder so
-            WHERE so.IsDeleted = 0 AND so.TransDate >= @startDate AND so.TransDate < @endDate
-          UNION
-          SELECT CAST(do_.TransDate AS DATE) FROM DeliveryOrder do_
-            WHERE do_.IsDeleted = 0 AND do_.TransDate >= @startDate AND do_.TransDate < @endDate
-      )
-      SELECT
-          d.TransDate,
-          ISNULL((SELECT SUM(si.Netto) FROM SalesInvoice si
-                  WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
-                    AND CAST(si.TransDate AS DATE) = d.TransDate), 0) AS NetSales,
-          (SELECT COUNT(*) FROM SalesOrder so
-             WHERE so.IsDeleted = 0 AND CAST(so.TransDate AS DATE) = d.TransDate) AS SOCount,
-          ISNULL((SELECT SUM(sod.Qty) FROM SalesOrder so
-                  JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
-                  WHERE so.IsDeleted = 0 AND CAST(so.TransDate AS DATE) = d.TransDate), 0) AS SOQty,
-          (SELECT COUNT(*) FROM DeliveryOrder do_
-             WHERE do_.IsDeleted = 0 AND CAST(do_.TransDate AS DATE) = d.TransDate) AS DOCount,
-          -- DeliveryOrderDetail.Qty is the qty on the *original order line*,
-          -- which can be much larger than any single delivery when an order
-          -- is fulfilled across several DOs (verified against live data —
-          -- summing Qty inflated a day's total by ~5x). Delivered is the
-          -- actual quantity moved on this specific DO, same column already
-          -- used for "Sisa Belum Dikirim" in the Pengiriman module.
-          ISNULL((SELECT SUM(dod.Delivered) FROM DeliveryOrder do_
-                  JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
-                  WHERE do_.IsDeleted = 0 AND CAST(do_.TransDate AS DATE) = d.TransDate), 0) AS DOQty,
-          (SELECT COUNT(*) FROM SalesInvoice si
-             WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
-               AND CAST(si.TransDate AS DATE) = d.TransDate) AS SICount,
-          ISNULL((SELECT SUM(sid.Qty) FROM SalesInvoice si
-                  JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
-                  WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
-                    AND CAST(si.TransDate AS DATE) = d.TransDate), 0) AS SIQty
-      FROM Days d
-      ORDER BY d.TransDate ASC
-    `);
+  const withParams = () =>
+    pool.request().input("startDate", sql.Date, filter.startDate).input("endDate", sql.Date, filter.endDate);
 
-  return result.recordset.map((row) => ({
-    ...row,
-    TransDate: row.TransDate instanceof Date ? row.TransDate.toISOString().slice(0, 10) : row.TransDate,
+  const [siResult, siQtyResult, soHeaderResult, soDetailResult, doHeaderResult, doDetailResult] = await Promise.all([
+    withParams().query(`
+      SELECT CAST(si.TransDate AS DATE) AS TransDate, SUM(si.Netto) AS NetSales, COUNT(*) AS SICount
+      FROM SalesInvoice si
+      WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+        AND si.TransDate >= @startDate AND si.TransDate < @endDate
+      GROUP BY CAST(si.TransDate AS DATE)
+    `),
+    // Separate join-grouped pass for SIQty — folding it into the query above
+    // would fan out si.Netto across detail rows and overcount NetSales.
+    withParams().query(`
+      SELECT CAST(si.TransDate AS DATE) AS TransDate, SUM(sid.Qty) AS SIQty
+      FROM SalesInvoice si
+      JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
+      WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+        AND si.TransDate >= @startDate AND si.TransDate < @endDate
+      GROUP BY CAST(si.TransDate AS DATE)
+    `),
+    withParams().query(`
+      SELECT CAST(so.TransDate AS DATE) AS TransDate, COUNT(*) AS SOCount
+      FROM SalesOrder so
+      WHERE so.IsDeleted = 0 AND so.TransDate >= @startDate AND so.TransDate < @endDate
+      GROUP BY CAST(so.TransDate AS DATE)
+    `),
+    withParams().query(`
+      SELECT CAST(so.TransDate AS DATE) AS TransDate, SUM(sod.Qty) AS SOQty
+      FROM SalesOrder so
+      JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
+      WHERE so.IsDeleted = 0 AND so.TransDate >= @startDate AND so.TransDate < @endDate
+      GROUP BY CAST(so.TransDate AS DATE)
+    `),
+    withParams().query(`
+      SELECT CAST(do_.TransDate AS DATE) AS TransDate, COUNT(*) AS DOCount
+      FROM DeliveryOrder do_
+      WHERE do_.IsDeleted = 0 AND do_.TransDate >= @startDate AND do_.TransDate < @endDate
+      GROUP BY CAST(do_.TransDate AS DATE)
+    `),
+    // DeliveryOrderDetail.Qty is the qty on the *original order line*, which
+    // can be much larger than any single delivery when an order is
+    // fulfilled across several DOs (verified against live data — summing
+    // Qty inflated a day's total by ~5x). Delivered is the actual quantity
+    // moved on this specific DO, same column already used for "Sisa Belum
+    // Dikirim" in the Pengiriman module.
+    withParams().query(`
+      SELECT CAST(do_.TransDate AS DATE) AS TransDate, SUM(dod.Delivered) AS DOQty
+      FROM DeliveryOrder do_
+      JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+      WHERE do_.IsDeleted = 0 AND do_.TransDate >= @startDate AND do_.TransDate < @endDate
+      GROUP BY CAST(do_.TransDate AS DATE)
+    `),
+  ]);
+
+  const dateKey = (d: Date) => (d instanceof Date ? d.toISOString().slice(0, 10) : d);
+  const byDate = <T>(recordset: { TransDate: Date }[], pick: (row: unknown) => T): Map<string, T> =>
+    new Map(recordset.map((row) => [dateKey(row.TransDate), pick(row)]));
+
+  const netSalesByDate = byDate(siResult.recordset, (r) => (r as { NetSales: number }).NetSales);
+  const siCountByDate = byDate(siResult.recordset, (r) => (r as { SICount: number }).SICount);
+  const siQtyByDate = byDate(siQtyResult.recordset, (r) => (r as { SIQty: number }).SIQty);
+  const soCountByDate = byDate(soHeaderResult.recordset, (r) => (r as { SOCount: number }).SOCount);
+  const soQtyByDate = byDate(soDetailResult.recordset, (r) => (r as { SOQty: number }).SOQty);
+  const doCountByDate = byDate(doHeaderResult.recordset, (r) => (r as { DOCount: number }).DOCount);
+  const doQtyByDate = byDate(doDetailResult.recordset, (r) => (r as { DOQty: number }).DOQty);
+
+  const allDates = new Set<string>([
+    ...netSalesByDate.keys(),
+    ...soCountByDate.keys(),
+    ...doCountByDate.keys(),
+  ]);
+
+  return [...allDates].sort().map((TransDate) => ({
+    TransDate,
+    NetSales: netSalesByDate.get(TransDate) ?? 0,
+    SOCount: soCountByDate.get(TransDate) ?? 0,
+    SOQty: soQtyByDate.get(TransDate) ?? 0,
+    DOCount: doCountByDate.get(TransDate) ?? 0,
+    DOQty: doQtyByDate.get(TransDate) ?? 0,
+    SICount: siCountByDate.get(TransDate) ?? 0,
+    SIQty: siQtyByDate.get(TransDate) ?? 0,
   }));
 }
 
@@ -134,54 +175,101 @@ export interface SalesTrendMonthPoint {
 // Same per-period shape as getSalesTrend(), aggregated by month instead of
 // by day, for the last 12 months (11 months ago through the current
 // business month, i.e. this month back to the same month last year).
-// Built as 12 UNION ALL'd blocks (one per month) rather than a calendar
-// table — month boundaries come from monthBoundary()'s UTC-safe arithmetic
-// (see sales-overview.ts for why raw date-fns/local-time boundaries are
-// unsafe once sent to SQL Server as DATE params).
+//
+// Previously built as 12 UNION ALL'd blocks x 6 correlated subqueries each
+// (72 scalar subquery scans per call) — measured live at 40s+ even with a
+// TransDate index in place, since the optimizer never gets to do one
+// sequential range scan per table, just 72 independent seeks. Rewritten as
+// one grouped, set-based aggregation per source table (5 queries total,
+// each a single pass over the 12-month range), then merged into the
+// 12-month array in JS. Month boundaries still come from monthBoundary()'s
+// UTC-safe arithmetic (see sales-overview.ts for why raw date-fns/local-time
+// boundaries are unsafe once sent to SQL Server as DATE params).
 export async function getSalesTrendMonthly(): Promise<SalesTrendMonthPoint[]> {
   const pool = await getPool();
   const businessToday = getBusinessDate();
-  const request = pool.request();
-  const blocks: string[] = [];
+  const rangeStart = monthBoundary(businessToday, -11);
+  const rangeEnd = monthBoundary(businessToday, 1);
 
+  const monthBucket = (column: string) => `DATEFROMPARTS(YEAR(${column}), MONTH(${column}), 1)`;
+
+  const withParams = () =>
+    pool.request().input("rangeStart", sql.Date, rangeStart).input("rangeEnd", sql.Date, rangeEnd);
+
+  const [siResult, soHeaderResult, soDetailResult, doHeaderResult, doDetailResult] = await Promise.all([
+    withParams().query(`
+      SELECT ${monthBucket("si.TransDate")} AS MonthStart,
+             SUM(si.Netto) AS NetSales, COUNT(*) AS SICount
+      FROM SalesInvoice si
+      WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+        AND si.TransDate >= @rangeStart AND si.TransDate < @rangeEnd
+      GROUP BY ${monthBucket("si.TransDate")}
+    `),
+    withParams().query(`
+      SELECT ${monthBucket("so.TransDate")} AS MonthStart, COUNT(*) AS SOCount
+      FROM SalesOrder so
+      WHERE so.IsDeleted = 0 AND so.TransDate >= @rangeStart AND so.TransDate < @rangeEnd
+      GROUP BY ${monthBucket("so.TransDate")}
+    `),
+    withParams().query(`
+      SELECT ${monthBucket("so.TransDate")} AS MonthStart, SUM(sod.Qty) AS SOQty
+      FROM SalesOrder so
+      JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
+      WHERE so.IsDeleted = 0 AND so.TransDate >= @rangeStart AND so.TransDate < @rangeEnd
+      GROUP BY ${monthBucket("so.TransDate")}
+    `),
+    withParams().query(`
+      SELECT ${monthBucket("do_.TransDate")} AS MonthStart, COUNT(*) AS DOCount
+      FROM DeliveryOrder do_
+      WHERE do_.IsDeleted = 0 AND do_.TransDate >= @rangeStart AND do_.TransDate < @rangeEnd
+      GROUP BY ${monthBucket("do_.TransDate")}
+    `),
+    withParams().query(`
+      SELECT ${monthBucket("do_.TransDate")} AS MonthStart, SUM(dod.Delivered) AS DOQty
+      FROM DeliveryOrder do_
+      JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+      WHERE do_.IsDeleted = 0 AND do_.TransDate >= @rangeStart AND do_.TransDate < @rangeEnd
+      GROUP BY ${monthBucket("do_.TransDate")}
+    `),
+    // SIQty (kantong invoiced) needs its own join-grouped pass — folding it
+    // into the siResult query above would fan out si.Netto across detail
+    // rows and overcount NetSales.
+  ]);
+  const siQtyResult = await withParams().query(`
+      SELECT ${monthBucket("si.TransDate")} AS MonthStart, SUM(sid.Qty) AS SIQty
+      FROM SalesInvoice si
+      JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
+      WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+        AND si.TransDate >= @rangeStart AND si.TransDate < @rangeEnd
+      GROUP BY ${monthBucket("si.TransDate")}
+    `);
+
+  const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  const byMonth = <T>(recordset: { MonthStart: Date }[], pick: (row: unknown) => T): Map<string, T> =>
+    new Map(recordset.map((row) => [monthKey(row.MonthStart), pick(row)]));
+
+  const netSalesByMonth = byMonth(siResult.recordset, (r) => (r as { NetSales: number }).NetSales);
+  const siCountByMonth = byMonth(siResult.recordset, (r) => (r as { SICount: number }).SICount);
+  const soCountByMonth = byMonth(soHeaderResult.recordset, (r) => (r as { SOCount: number }).SOCount);
+  const soQtyByMonth = byMonth(soDetailResult.recordset, (r) => (r as { SOQty: number }).SOQty);
+  const doCountByMonth = byMonth(doHeaderResult.recordset, (r) => (r as { DOCount: number }).DOCount);
+  const doQtyByMonth = byMonth(doDetailResult.recordset, (r) => (r as { DOQty: number }).DOQty);
+  const siQtyByMonth = byMonth(siQtyResult.recordset, (r) => (r as { SIQty: number }).SIQty);
+
+  const points: SalesTrendMonthPoint[] = [];
   for (let i = 11; i >= 0; i--) {
     const monthStart = monthBoundary(businessToday, -i);
-    const monthEnd = monthBoundary(businessToday, -i + 1);
-    request.input(`start${i}`, sql.Date, monthStart);
-    request.input(`end${i}`, sql.Date, monthEnd);
-    blocks.push(`
-      SELECT
-          @start${i} AS MonthStart,
-          ISNULL((SELECT SUM(si.Netto) FROM SalesInvoice si
-                  WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
-                    AND si.TransDate >= @start${i} AND si.TransDate < @end${i}), 0) AS NetSales,
-          (SELECT COUNT(*) FROM SalesOrder so
-             WHERE so.IsDeleted = 0 AND so.TransDate >= @start${i} AND so.TransDate < @end${i}) AS SOCount,
-          ISNULL((SELECT SUM(sod.Qty) FROM SalesOrder so
-                  JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
-                  WHERE so.IsDeleted = 0 AND so.TransDate >= @start${i} AND so.TransDate < @end${i}), 0) AS SOQty,
-          (SELECT COUNT(*) FROM DeliveryOrder do_
-             WHERE do_.IsDeleted = 0 AND do_.TransDate >= @start${i} AND do_.TransDate < @end${i}) AS DOCount,
-          ISNULL((SELECT SUM(dod.Delivered) FROM DeliveryOrder do_
-                  JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
-                  WHERE do_.IsDeleted = 0 AND do_.TransDate >= @start${i} AND do_.TransDate < @end${i}), 0) AS DOQty,
-          (SELECT COUNT(*) FROM SalesInvoice si
-             WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
-               AND si.TransDate >= @start${i} AND si.TransDate < @end${i}) AS SICount,
-          ISNULL((SELECT SUM(sid.Qty) FROM SalesInvoice si
-                  JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
-                  WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
-                    AND si.TransDate >= @start${i} AND si.TransDate < @end${i}), 0) AS SIQty
-    `);
+    const key = monthKey(monthStart);
+    points.push({
+      Month: key,
+      NetSales: netSalesByMonth.get(key) ?? 0,
+      SOCount: soCountByMonth.get(key) ?? 0,
+      SOQty: soQtyByMonth.get(key) ?? 0,
+      DOCount: doCountByMonth.get(key) ?? 0,
+      DOQty: doQtyByMonth.get(key) ?? 0,
+      SICount: siCountByMonth.get(key) ?? 0,
+      SIQty: siQtyByMonth.get(key) ?? 0,
+    });
   }
-
-  const result = await request.query(`${blocks.join(" UNION ALL ")} ORDER BY MonthStart ASC`);
-
-  return result.recordset.map((row) => {
-    const monthStart = row.MonthStart as Date;
-    return {
-      ...row,
-      Month: `${monthStart.getUTCFullYear()}-${String(monthStart.getUTCMonth() + 1).padStart(2, "0")}`,
-    };
-  });
+  return points;
 }

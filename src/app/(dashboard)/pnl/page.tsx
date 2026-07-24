@@ -4,6 +4,7 @@ import { getCOADetail } from "@/lib/queries/keuangan-detail";
 import { getBalanceSheetDetail } from "@/lib/queries/balance-sheet";
 import { getCashFlowDetail } from "@/lib/queries/cash-flow";
 import { getCashFlowHarian, getCashFlowHarianHistory } from "@/lib/queries/cash-flow-harian";
+import { getHPPBersih } from "@/lib/queries/hpp-bersih";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { requireModuleAccess } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -15,6 +16,7 @@ import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
 import { CashFlowHarianPanel } from "@/components/dashboard/cash-flow-harian-panel";
 import { CashFlowHarianHistoryPanel } from "@/components/dashboard/cash-flow-harian-history-panel";
+import { HPPBersihPanel } from "@/components/dashboard/hpp-bersih-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercent, formatDate } from "@/lib/format";
 
@@ -27,15 +29,17 @@ export default async function PnLPage({
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();
-  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian, cashFlowHarianHistory] = await Promise.all([
-    getPnL(filter),
-    getBEP(filter),
-    getCOADetail(filter),
-    getBalanceSheetDetail(filter),
-    getCashFlowDetail(filter),
-    getCashFlowHarian(cfDate),
-    getCashFlowHarianHistory(),
-  ]);
+  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian, cashFlowHarianHistory, hppBersih] =
+    await Promise.all([
+      getPnL(filter),
+      getBEP(filter),
+      getCOADetail(filter),
+      getBalanceSheetDetail(filter),
+      getCashFlowDetail(filter),
+      getCashFlowHarian(cfDate),
+      getCashFlowHarianHistory(),
+      getHPPBersih(new Date().getUTCFullYear()),
+    ]);
   const periodStart = new Date(filter.startDate);
   // filter.endDate is an exclusive boundary (start of the day *after* the
   // selected period) — the balance sheet's actual "as of" cutoff is the day
@@ -174,6 +178,8 @@ export default async function PnLPage({
         Usaha Lainnya, Beban Penunjang) sebesar {formatRupiah(bep.MixedCost)} sengaja tidak
         dimasukkan ke perhitungan BEP di atas — perlu direview manual.
       </p>
+
+      <HPPBersihPanel initialData={hppBersih} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   addCashFlowExpense,
   deleteCashFlowExpense,
 } from "@/lib/queries/cash-flow-harian";
+import { getHPPBersih } from "@/lib/queries/hpp-bersih";
 
 export async function saveCOABudgetAction(input: {
   chartOfAccountId: string;
@@ -56,4 +57,14 @@ export async function deleteCashFlowExpenseAction(id: number) {
 
   await deleteCashFlowExpense(id);
   revalidatePath("/pnl");
+}
+
+// Read-only — just refetches a different year's worth of already-visible
+// page data, so an isAuthenticated check is enough (no role-gate, same as
+// the rest of /pnl which is already gated by requireModuleAccess).
+export async function getHPPBersihAction(year: number) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  return getHPPBersih(year);
 }

@@ -10,12 +10,22 @@ const config: sql.config = {
     encrypt: process.env.DB_ENCRYPT !== "false",
     trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === "true",
   },
-  connectionTimeout: 10000,
-  requestTimeout: 20000,
+  // Measured live against this DB host: opening a fresh connection (TLS
+  // handshake + auth) alone takes ~5s, before any query even runs — with the
+  // old min:0/idleTimeoutMillis:30000 pool, any page whose Promise.all fires
+  // several concurrent queries after 30s of quiet pays that ~5s handshake
+  // cost N times in parallel, competing for the same DB host. min: 2 keeps
+  // warm connections alive so bursts reuse an already-open socket instead
+  // (subsequent queries on a warm connection measured ~0.4-0.5s). Timeouts
+  // bumped to give legitimately slow queries (some of this app's aggregate
+  // queries measured 9-17s under concurrent load, see aging.ts) real
+  // headroom instead of hard-failing right at the edge.
+  connectionTimeout: 15000,
+  requestTimeout: 40000,
   pool: {
     max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000,
+    min: 2,
+    idleTimeoutMillis: 600000,
   },
 };
 
