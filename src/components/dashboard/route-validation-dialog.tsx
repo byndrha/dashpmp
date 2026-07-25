@@ -84,6 +84,7 @@ function SortableStopRow({ detail, index }: { detail: JadwalDetailRow; index: nu
 export function RouteValidationDialog({
   jadwal,
   businessDate,
+  todayISO,
   drivers,
   konsumsiBBM,
   kapasitasMaks,
@@ -92,6 +93,7 @@ export function RouteValidationDialog({
 }: {
   jadwal: JadwalCardData | null;
   businessDate: string;
+  todayISO: string;
   drivers: DriverOption[];
   // Fuel estimate input — the Armada the open Jadwal belongs to, resolved
   // by the caller (JadwalCard itself doesn't carry KonsumsiBBM, ArmadaRow
@@ -346,8 +348,9 @@ export function RouteValidationDialog({
   }
 
   const isDraft = jadwal?.Status === "Draft";
+  const isFutureDate = businessDate > todayISO;
   const overCapacity = kapasitasMaks != null && totalQty > kapasitasMaks;
-  const canBerangkat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity;
+  const canBerangkat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity && !isFutureDate;
   const totalFuelLiters = useMemo(() => {
     if (route == null || konsumsiBBM == null) return null;
     return Math.round(route.distanceKm * konsumsiBBM * 10) / 10;
@@ -423,7 +426,13 @@ export function RouteValidationDialog({
                   Batalkan Draft
                 </Button>
                 {jadwal?.JamMulaiMuat == null && (
-                  <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={handleMuat}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    disabled={pending || isFutureDate}
+                    onClick={handleMuat}
+                  >
                     Mulai Muat
                   </Button>
                 )}
@@ -438,6 +447,13 @@ export function RouteValidationDialog({
                   Sudah berangkat pukul {formatTime(jadwal.JamAktualBerangkat)}
                 </p>
               )
+            )}
+
+            {isDraft && isFutureDate && (
+              <p className="text-xs text-muted-foreground">
+                Keberangkatan ini dijadwalkan untuk {businessDate} — Mulai Muat dan Berangkat baru bisa dilakukan
+                pada hari itu.
+              </p>
             )}
 
             {overCapacity && (

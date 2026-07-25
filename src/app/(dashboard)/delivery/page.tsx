@@ -21,7 +21,8 @@ export default async function DeliveryPage({
   const wilayah = params.wilayah || undefined;
 
   const todayISO = getBusinessDateISO();
-  const boardDate = params.pengirimanDate && params.pengirimanDate <= todayISO ? params.pengirimanDate : todayISO;
+  const boardDate =
+    params.pengirimanDate && /^\d{4}-\d{2}-\d{2}$/.test(params.pengirimanDate) ? params.pengirimanDate : todayISO;
 
   const [rows, wilayahList, board, drivers] = await Promise.all([
     getOpenDeliveries(wilayah),

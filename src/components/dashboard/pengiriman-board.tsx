@@ -429,7 +429,6 @@ export function PengirimanBoard({
             <Input
               type="date"
               value={businessDate}
-              max={todayISO}
               disabled={isPending}
               onChange={(e) => e.target.value && goToDate(e.target.value)}
               className="h-8 w-40 text-xs"
@@ -438,7 +437,7 @@ export function PengirimanBoard({
               variant="outline"
               size="icon"
               className="size-8"
-              disabled={isToday || isPending}
+              disabled={isPending}
               onClick={() => shiftDate(1)}
             >
               <ChevronRight className="size-4" />
@@ -473,6 +472,7 @@ export function PengirimanBoard({
       <RouteValidationDialog
         jadwal={openJadwal}
         businessDate={businessDate}
+        todayISO={todayISO}
         drivers={drivers}
         konsumsiBBM={openArmada?.KonsumsiBBM ?? null}
         kapasitasMaks={openArmada?.KapasitasMaks ?? null}
