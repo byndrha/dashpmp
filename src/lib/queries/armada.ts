@@ -1,7 +1,8 @@
 import { getPool, sql } from "@/lib/db";
 import { ARMADA_STATUS, type ArmadaStatus } from "@/lib/armada-status";
+import { FUEL_TYPES, type FuelType } from "@/lib/armada-fuel";
 
-export { ARMADA_STATUS, type ArmadaStatus };
+export { ARMADA_STATUS, type ArmadaStatus, FUEL_TYPES, type FuelType };
 
 export interface ArmadaRow {
   ArmadaID: number;
@@ -13,6 +14,10 @@ export interface ArmadaRow {
   KapasitasMaks: number | null;
   Status: ArmadaStatus;
   FotoPath: string | null;
+  JenisBBM: FuelType | null;
+  BiayaBBMPerLiter: number | null;
+  PajakLimaTahunan: string | Date | null;
+  BiayaPajakLimaTahunan: number | null;
 }
 
 export interface ArmadaInput {
@@ -24,12 +29,17 @@ export interface ArmadaInput {
   kapasitasMaks: number | null;
   status: ArmadaStatus;
   fotoPath: string | null;
+  jenisBBM: FuelType | null;
+  biayaBBMPerLiter: number | null;
+  pajakLimaTahunan: string | null;
+  biayaPajakLimaTahunan: number | null;
 }
 
 export async function getArmadaList(): Promise<ArmadaRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT ArmadaID, Nama, PlatNomor, Brand, Model, KonsumsiBBM, KapasitasMaks, Status, FotoPath
+    SELECT ArmadaID, Nama, PlatNomor, Brand, Model, KonsumsiBBM, KapasitasMaks, Status, FotoPath,
+           JenisBBM, BiayaBBMPerLiter, PajakLimaTahunan, BiayaPajakLimaTahunan
     FROM DashboardArmada
     WHERE IsDeleted = 0
     ORDER BY Nama
@@ -48,12 +58,18 @@ export async function createArmada(input: ArmadaInput): Promise<number> {
     .input("konsumsiBBM", sql.Decimal(10, 2), input.konsumsiBBM)
     .input("kapasitasMaks", sql.Decimal(23, 4), input.kapasitasMaks)
     .input("status", sql.VarChar(20), input.status)
-    .input("fotoPath", sql.VarChar(256), input.fotoPath).query(`
+    .input("fotoPath", sql.VarChar(256), input.fotoPath)
+    .input("jenisBBM", sql.VarChar(20), input.jenisBBM)
+    .input("biayaBBMPerLiter", sql.Decimal(18, 2), input.biayaBBMPerLiter)
+    .input("pajakLimaTahunan", sql.Date, input.pajakLimaTahunan)
+    .input("biayaPajakLimaTahunan", sql.Decimal(18, 2), input.biayaPajakLimaTahunan).query(`
       INSERT INTO DashboardArmada
-        (Nama, PlatNomor, Brand, Model, KonsumsiBBM, KapasitasMaks, Status, FotoPath, IsDeleted, ModifiedDate)
+        (Nama, PlatNomor, Brand, Model, KonsumsiBBM, KapasitasMaks, Status, FotoPath, IsDeleted, ModifiedDate,
+         JenisBBM, BiayaBBMPerLiter, PajakLimaTahunan, BiayaPajakLimaTahunan)
       OUTPUT inserted.ArmadaID
       VALUES
-        (@nama, @platNomor, @brand, @model, @konsumsiBBM, @kapasitasMaks, @status, @fotoPath, 0, GETDATE())
+        (@nama, @platNomor, @brand, @model, @konsumsiBBM, @kapasitasMaks, @status, @fotoPath, 0, GETDATE(),
+         @jenisBBM, @biayaBBMPerLiter, @pajakLimaTahunan, @biayaPajakLimaTahunan)
     `);
   return (result.recordset[0] as { ArmadaID: number }).ArmadaID;
 }
@@ -70,10 +86,16 @@ export async function updateArmada(id: number, input: ArmadaInput): Promise<void
     .input("konsumsiBBM", sql.Decimal(10, 2), input.konsumsiBBM)
     .input("kapasitasMaks", sql.Decimal(23, 4), input.kapasitasMaks)
     .input("status", sql.VarChar(20), input.status)
-    .input("fotoPath", sql.VarChar(256), input.fotoPath).query(`
+    .input("fotoPath", sql.VarChar(256), input.fotoPath)
+    .input("jenisBBM", sql.VarChar(20), input.jenisBBM)
+    .input("biayaBBMPerLiter", sql.Decimal(18, 2), input.biayaBBMPerLiter)
+    .input("pajakLimaTahunan", sql.Date, input.pajakLimaTahunan)
+    .input("biayaPajakLimaTahunan", sql.Decimal(18, 2), input.biayaPajakLimaTahunan).query(`
       UPDATE DashboardArmada SET
         Nama = @nama, PlatNomor = @platNomor, Brand = @brand, Model = @model,
         KonsumsiBBM = @konsumsiBBM, KapasitasMaks = @kapasitasMaks, Status = @status, FotoPath = @fotoPath,
+        JenisBBM = @jenisBBM, BiayaBBMPerLiter = @biayaBBMPerLiter,
+        PajakLimaTahunan = @pajakLimaTahunan, BiayaPajakLimaTahunan = @biayaPajakLimaTahunan,
         ModifiedDate = GETDATE()
       WHERE ArmadaID = @id
     `);
