@@ -126,3 +126,116 @@ export async function createSalesOrderFromPengajuan(input: CreateSalesOrderInput
 
   return salesOrderId;
 }
+
+export type KantongVariant = "10kg" | "5kg";
+
+const KANTONG_VARIANTS: Record<KantongVariant, { itemId: string; name: string; unit: string }> = {
+  "10kg": { itemId: KANTONG_ITEM_ID, name: KANTONG_ITEM_NAME, unit: KANTONG_UNIT },
+  "5kg": { itemId: "0111", name: "Es Tube Jual 5 KG", unit: KANTONG_UNIT },
+};
+
+export interface CreateSalesOrderManualInput {
+  businessPartnerId: string;
+  variant: KantongVariant;
+  qtyKantong: number;
+  deliveryDateTime: Date;
+}
+
+// Manual Sales Order creation for the Pemesanan module (mitra already
+// exists, unlike createSalesOrderFromPengajuan which may run before a full
+// mitra record does) — mirrors that function's live-verified SalesOrder/
+// SalesOrderDetail shape exactly, except TermOfPaymentID/AddressInvoice
+// come from the mitra's own BusinessPartner row (falling back to the same
+// hardcoded default only when the mitra's own value is blank), and either
+// kantong variant can be ordered. DueDate is set to the chosen delivery
+// datetime, not a separately-entered due date — in this flow they're the
+// same moment by construction.
+export async function createSalesOrderManual(input: CreateSalesOrderManualInput): Promise<string> {
+  if (input.qtyKantong <= 0) throw new Error("Qty pemesanan harus lebih dari 0.");
+
+  const pool = await getPool();
+  const variant = KANTONG_VARIANTS[input.variant];
+
+  const bpResult = await pool
+    .request()
+    .input("bpId", sql.VarChar(16), input.businessPartnerId).query(`
+      SELECT TermOfPaymentID, Address, PriceLevel FROM BusinessPartner
+      WHERE BusinessPartnerID = @bpId AND ISNULL(IsDeleted, 0) = 0
+    `);
+  const bp = bpResult.recordset[0] as
+    | { TermOfPaymentID: string | null; Address: string | null; PriceLevel: number | null }
+    | undefined;
+  if (!bp) throw new Error("Mitra tidak ditemukan.");
+  if (bp.PriceLevel == null) throw new Error("Mitra belum punya Price Level — atur dulu di modul Mitra.");
+
+  const priceLevels = await getPriceLevelOptions(variant.name);
+  const price = priceLevels.find((p) => p.Level === bp.PriceLevel)?.Price ?? 0;
+  const amount = input.qtyKantong * price;
+
+  const termOfPaymentId = bp.TermOfPaymentID?.trim() ? bp.TermOfPaymentID : SO_TERM_OF_PAYMENT_ID;
+  const addressInvoice = bp.Address?.slice(0, 128) ?? "";
+
+  const salesOrderId = await nextSalesOrderId(pool);
+  const salesOrderDetailId = await nextSalesOrderDetailId(pool);
+  const now = new Date();
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const voucherSeq = await nextVoucherSeq(pool, yearMonth);
+  const voucherNo = `MKE/SO/${voucherSeq}/${yearMonth}/${SO_DOC_SUFFIX}`;
+
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), salesOrderId)
+    .input("voucherNo", sql.VarChar(128), voucherNo)
+    .input("dueDate", sql.DateTime, input.deliveryDateTime)
+    .input("branchId", sql.VarChar(16), SO_BRANCH_ID)
+    .input("departmentId", sql.VarChar(16), SO_DEPARTMENT_ID)
+    .input("bpId", sql.VarChar(16), input.businessPartnerId)
+    .input("termOfPaymentId", sql.VarChar(16), termOfPaymentId)
+    .input("addressInvoice", sql.VarChar(128), addressInvoice)
+    .input("amount", sql.Decimal(23, 4), amount)
+    .input("netto", sql.Decimal(23, 4), amount).query(`
+      INSERT INTO SalesOrder
+        (SalesOrderID, VoucherNo, ReferenceNo, TransDate, DueDate, BranchID, DepartmentID, BusinessPartnerID,
+         TermOfPaymentID, AddressInvoice, AddressDelivery, AddressDeliveryID, CurrencyID, IsClosed, Notes,
+         Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, IsInvoiced, IsDeleted, ModifiedDate, Rate,
+         StatusForm, SalesmanID, ServiceTaxValue, ServiceTax, Visitor, PromotionID, Number, DiscRpBefore,
+         ProjectID, BillOfQuantityID, NotesDelivery, DeliveryMemo, Status)
+      VALUES
+        (@id, @voucherNo, '', GETDATE(), @dueDate, @branchId, @departmentId, @bpId,
+         @termOfPaymentId, @addressInvoice, '', '', '', 0, '',
+         @amount, 0, 0, 0, 0, 0, @netto, 0, 0, GETDATE(), 1,
+         1, '', 0, 0, 0, '', 1, 0,
+         '', '', '', '', '')
+    `);
+
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), salesOrderDetailId)
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .input("itemId", sql.VarChar(150), variant.itemId)
+    .input("name", sql.VarChar(150), variant.name)
+    .input("qty", sql.Float, input.qtyKantong)
+    .input("unit", sql.VarChar(16), variant.unit)
+    .input("price", sql.Float, price)
+    .input("amount", sql.Float, amount).query(`
+      INSERT INTO SalesOrderDetail
+        (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp,
+         Ratio, Amount, FlagClosed)
+      VALUES
+        (@id, @soId, @itemId, @name, @qty, @unit, @price, 0, 0, 0,
+         1, @amount, '')
+    `);
+
+  return salesOrderId;
+}
+
+// Soft-deletes a SalesOrder — compensating cleanup for createPemesanan
+// (pemesanan.ts) when the scheduling step after SO creation fails, matching
+// createJadwalDraft's own cleanup discipline in pengiriman-jadwal.ts.
+export async function softDeleteSalesOrder(salesOrderId: string): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), salesOrderId)
+    .query(`UPDATE SalesOrder SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE SalesOrderID = @id`);
+}
