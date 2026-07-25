@@ -1,6 +1,13 @@
 import { getPool, sql } from "@/lib/db";
 import { createSalesOrderManual, softDeleteSalesOrder, type KantongVariant } from "@/lib/queries/sales-order";
-import { createJadwalDraft, deleteJadwalDraft, updateJadwalDriverTime, JADWAL_KANTONG_EXPR } from "@/lib/queries/pengiriman-jadwal";
+import {
+  createJadwalDraft,
+  deleteJadwalDraft,
+  updateJadwalDriverTime,
+  JADWAL_KANTONG_EXPR,
+  getCurrentAssignment,
+  removeSalesOrderFromJadwal,
+} from "@/lib/queries/pengiriman-jadwal";
 
 export interface CreatePemesananInput {
   businessPartnerId: string;
@@ -133,4 +140,41 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     ORDER BY so.TransDate DESC
   `);
   return result.recordset;
+}
+
+export interface ReschedulePemesananInput {
+  salesOrderId: string;
+  armadaId: number;
+  deliveryDateTime: Date;
+  salesmanId: string | null;
+}
+
+// Moves ONE Sales Order to a different armada/waktu/driver without
+// touching whatever other SOs are still bundled in its current Draft (if
+// it's currently assigned to one at all — a never-scheduled SO, status
+// "Belum Dijadwalkan", has no current assignment and this just schedules
+// it fresh). Reuses createJadwalDraft/updateJadwalDriverTime exactly as
+// createPemesanan already does, so the same capacity check and
+// JamJadwal-not-before-TransDate validation (pengiriman-jadwal.ts) apply
+// here too — nothing about this path bypasses either rule.
+export async function reschedulePemesanan(input: ReschedulePemesananInput): Promise<{ jadwalId: number }> {
+  const current = await getCurrentAssignment(input.salesOrderId);
+  if (current) {
+    await removeSalesOrderFromJadwal(current.jadwalId, input.salesOrderId);
+  }
+
+  const jadwalId = await createJadwalDraft({
+    armadaId: input.armadaId,
+    jamJadwal: input.deliveryDateTime,
+    salesOrderIds: [input.salesOrderId],
+  });
+
+  if (input.salesmanId) {
+    await updateJadwalDriverTime(jadwalId, {
+      jamJadwal: input.deliveryDateTime,
+      salesmanId: input.salesmanId,
+    });
+  }
+
+  return { jadwalId };
 }

@@ -664,3 +664,67 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
     throw err;
   }
 }
+
+// Detaches one SO from a Draft without disturbing the other SOs still
+// bundled in it — the gap "Batalkan Draft" (whole-departure cancel) and
+// "Tambahkan" (add-only) leave: there was no way to move a single stop to
+// a different vehicle/time. If this was the last remaining stop, the
+// now-empty Draft is cleaned up too, mirroring deleteJadwalDraft's own
+// discipline of never leaving a visible-but-empty ghost Draft.
+export async function removeSalesOrderFromJadwal(jadwalId: number, salesOrderId: string): Promise<void> {
+  const pool = await getPool();
+  const header = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const status = (header.recordset[0] as { Status: JadwalStatus } | undefined)?.Status;
+  if (status !== "Draft") {
+    throw new Error("Hanya SO pada keberangkatan berstatus Draft yang bisa diubah penjadwalannya.");
+  }
+
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .query(`UPDATE DashboardPengirimanJadwalDetail SET IsDeleted = 1 WHERE JadwalID = @jadwalId AND SalesOrderID = @soId AND IsDeleted = 0`);
+
+  const remaining = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT COUNT(*) AS Cnt FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const cnt = (remaining.recordset[0] as { Cnt: number }).Cnt;
+  if (cnt === 0) {
+    await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .query(`UPDATE DashboardPengirimanJadwal SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+  }
+}
+
+export interface CurrentAssignment {
+  jadwalId: number;
+  armadaId: number;
+  jamJadwal: Date;
+  salesmanId: string | null;
+}
+
+// Resolves a Sales Order's current Draft assignment, if any — used to
+// pre-fill "Ubah Pemesanan". Deliberately Draft-only (Status = 'Draft'):
+// once a Jadwal is Terbit, reassigning driver/vehicle already has its own
+// established path (RouteValidationDialog's "Simpan", which cascades onto
+// the real DeliveryOrder) — that's a different edit surface from this one.
+export async function getCurrentAssignment(salesOrderId: string): Promise<CurrentAssignment | null> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("salesOrderId", sql.VarChar(16), salesOrderId).query(`
+      SELECT TOP 1 j.JadwalID, j.ArmadaID, j.JamJadwal, j.SalesmanID
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN DashboardPengirimanJadwal j ON j.JadwalID = jd.JadwalID AND j.IsDeleted = 0 AND j.Status = 'Draft'
+      WHERE jd.SalesOrderID = @salesOrderId AND jd.IsDeleted = 0
+      ORDER BY jd.JadwalDetailID DESC
+    `);
+  const row = result.recordset[0] as { JadwalID: number; ArmadaID: number; JamJadwal: Date; SalesmanID: string | null } | undefined;
+  if (!row) return null;
+  return { jadwalId: row.JadwalID, armadaId: row.ArmadaID, jamJadwal: row.JamJadwal, salesmanId: row.SalesmanID };
+}
