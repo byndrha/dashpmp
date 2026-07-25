@@ -1,6 +1,11 @@
 import { getPool, sql } from "@/lib/db";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
-import { getMarketingWilayahAssignments, resolveResponsibleMarketing } from "@/lib/queries/marketing-wilayah";
+import {
+  getMarketingWilayahAssignments,
+  getMarketingMitraAssignments,
+  resolveResponsibleMarketing,
+  buildMitraOverrideMap,
+} from "@/lib/queries/marketing-wilayah";
 import type { PartnerType } from "@/types/dashboard";
 
 export interface MitraRow {
@@ -41,7 +46,7 @@ export interface MitraRow {
 
 export async function getMitraList(): Promise<MitraRow[]> {
   const pool = await getPool();
-  const [result, marketingAssignments] = await Promise.all([
+  const [result, marketingAssignments, mitraAssignments] = await Promise.all([
     pool.request().query(`
       SELECT
           bp.BusinessPartnerID,
@@ -70,11 +75,13 @@ export async function getMitraList(): Promise<MitraRow[]> {
       ORDER BY bp.Name
     `),
     getMarketingWilayahAssignments(),
+    getMarketingMitraAssignments(),
   ]);
 
+  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
   return (result.recordset as Omit<MitraRow, "MarketingNama">[]).map((r) => ({
     ...r,
-    MarketingNama: resolveResponsibleMarketing(r.Wilayah, r.Kecamatan, marketingAssignments),
+    MarketingNama: resolveResponsibleMarketing(r.BusinessPartnerID, r.Wilayah, r.Kecamatan, marketingAssignments, mitraOverrides),
   }));
 }
 

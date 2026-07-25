@@ -10,7 +10,12 @@ import {
   APPROVER_ROLE_IDS,
   type PengajuanInput,
 } from "@/lib/queries/mitra-pengajuan";
-import { addMarketingWilayah, removeMarketingWilayah } from "@/lib/queries/marketing-wilayah";
+import {
+  addMarketingWilayah,
+  removeMarketingWilayah,
+  addMarketingMitra,
+  removeMarketingMitra,
+} from "@/lib/queries/marketing-wilayah";
 import { setMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import { setWilayahPotentialTarget } from "@/lib/queries/wilayah-potential-target";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
@@ -91,6 +96,22 @@ export async function addMarketingWilayahAction(input: {
 export async function removeMarketingWilayahAction(id: number) {
   await requireWilayahManager();
   await removeMarketingWilayah(id);
+  revalidatePath("/pemasaran");
+  revalidatePath("/mitra");
+  revalidatePath("/transaksi");
+}
+
+export async function addMarketingMitraAction(input: { marketingUserId: string; businessPartnerId: string }) {
+  const user = await requireWilayahManager();
+  await addMarketingMitra({ ...input, createdByUserId: user.id });
+  revalidatePath("/pemasaran");
+  revalidatePath("/mitra");
+  revalidatePath("/transaksi");
+}
+
+export async function removeMarketingMitraAction(id: number) {
+  await requireWilayahManager();
+  await removeMarketingMitra(id);
   revalidatePath("/pemasaran");
   revalidatePath("/mitra");
   revalidatePath("/transaksi");

@@ -4,7 +4,9 @@ import { getMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import {
   getMarketingUsers,
   getMarketingWilayahAssignments,
+  getMarketingMitraAssignments,
   resolveResponsibleMarketing,
+  buildMitraOverrideMap,
 } from "@/lib/queries/marketing-wilayah";
 
 // One (Marketing, Wilayah, Kecamatan) bucket — kept unaggregated (not
@@ -44,17 +46,23 @@ const KANTONG_QTY_EXPR = `SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivere
 // included — one with no scope has no mitra to attribute deliveries to, so
 // showing them would just be a confusing all-zero row.
 export async function getMarketingPerformance(): Promise<MarketingPerformanceData> {
-  const [period, assignments, marketingUsers] = await Promise.all([
+  const [period, assignments, marketingUsers, mitraAssignments] = await Promise.all([
     getMarketingPeriodSetting(),
     getMarketingWilayahAssignments(),
     getMarketingUsers(),
+    getMarketingMitraAssignments(),
   ]);
+  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
 
   const pool = await getPool();
   const rangeStart = new Date(period.startDate);
   const rangeEnd = new Date(rangeStart.getTime() + period.periodDays * 86400000);
   const todayISO = getBusinessDateISO();
 
+  // Grouped per-mitra (not just per Wilayah/Kecamatan) so a mitra with a
+  // priority override (resolveResponsibleMarketing) can be pulled into its
+  // overriding Marketing's bucket individually, without dragging the rest of
+  // its Wilayah/Kecamatan along with it.
   const [dailyResult, mitraResult] = await Promise.all([
     pool
       .request()
@@ -62,6 +70,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       .input("rangeEnd", sql.Date, rangeEnd)
       .query(`
         SELECT
+            bp.BusinessPartnerID,
             ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
             bp.NPWPAddress AS Kecamatan,
             CAST(do_.TransDate AS DATE) AS TransDate,
@@ -71,10 +80,11 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
         JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
         WHERE do_.IsDeleted = 0
           AND do_.TransDate >= @rangeStart AND do_.TransDate < @rangeEnd
-        GROUP BY bp.NPWPName, bp.NPWPAddress, CAST(do_.TransDate AS DATE)
+        GROUP BY bp.BusinessPartnerID, bp.NPWPName, bp.NPWPAddress, CAST(do_.TransDate AS DATE)
       `),
     pool.request().query(`
       SELECT
+          BusinessPartnerID,
           ISNULL(NULLIF(LTRIM(RTRIM(NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           NPWPAddress AS Kecamatan,
           Capacity
@@ -88,8 +98,8 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     `${marketingUserId}|${wilayah}|${kecamatan ?? ""}`;
   const cells = new Map<string, MarketingScopeCell>();
 
-  function getCell(wilayah: string, kecamatan: string | null): MarketingScopeCell | null {
-    const marketingName = resolveResponsibleMarketing(wilayah, kecamatan, assignments);
+  function getCell(businessPartnerId: string, wilayah: string, kecamatan: string | null): MarketingScopeCell | null {
+    const marketingName = resolveResponsibleMarketing(businessPartnerId, wilayah, kecamatan, assignments, mitraOverrides);
     if (!marketingName) return null;
     const user = marketingByName.get(marketingName);
     if (!user) return null;
@@ -109,18 +119,24 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     return cell;
   }
 
-  for (const r of mitraResult.recordset as { Wilayah: string; Kecamatan: string | null; Capacity: number | null }[]) {
-    const cell = getCell(r.Wilayah, r.Kecamatan);
+  for (const r of mitraResult.recordset as {
+    BusinessPartnerID: string;
+    Wilayah: string;
+    Kecamatan: string | null;
+    Capacity: number | null;
+  }[]) {
+    const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
     if (cell && r.Capacity) cell.TargetHarian += r.Capacity;
   }
 
   for (const r of dailyResult.recordset as {
+    BusinessPartnerID: string;
     Wilayah: string;
     Kecamatan: string | null;
     TransDate: string;
     QtyKantong: number;
   }[]) {
-    const cell = getCell(r.Wilayah, r.Kecamatan);
+    const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
     if (!cell) continue;
     const dayIndex = Math.round((new Date(r.TransDate).getTime() - rangeStart.getTime()) / 86400000);
     if (dayIndex >= 0 && dayIndex < period.periodDays) cell.DailyQty[dayIndex] += r.QtyKantong;

@@ -4,16 +4,18 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, Settings2 } from "lucide-react";
+import { ArrowUp, ArrowDown, Settings2, Star, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { MarketingPerformanceData, MarketingScopeCell } from "@/lib/queries/marketing-performance";
 import type { MarketingKPIRow } from "@/lib/queries/mitra-pengajuan";
+import type { MarketingMitraAssignment } from "@/lib/queries/marketing-wilayah";
 import { setMarketingPeriodSettingAction } from "@/app/(dashboard)/pemasaran/actions";
 
 // Absorbed from the old MarketingKPIPanel ("Pencapaian Marketing — Bulan
@@ -230,6 +232,66 @@ function PeriodSettings({ rangeStartISO, periodDays }: { rangeStartISO: string; 
 
 const ALL = "all";
 
+// Highest target (Capacity) first; mitra with no target set sort last
+// rather than clumping at the top as a false "highest" — same convention as
+// mitra-do-panel.tsx's compareTargetDesc.
+function compareCapacityDesc(a: MarketingMitraAssignment, b: MarketingMitraAssignment): number {
+  if (a.Capacity == null && b.Capacity == null) return 0;
+  if (a.Capacity == null) return 1;
+  if (b.Capacity == null) return -1;
+  return b.Capacity - a.Capacity;
+}
+
+// The per-Mitra priority overrides (set via "Kelola Cakupan Wilayah
+// Marketing" → Mitra Prioritas) — collapsed by default since it's a
+// secondary drill-down, not the primary per-Marketing view above. Sorted by
+// highest target first per explicit request.
+function MitraPrioritasSection({ mitraAssignments }: { mitraAssignments: MarketingMitraAssignment[] }) {
+  const [open, setOpen] = useState(false);
+  const sorted = useMemo(() => [...mitraAssignments].sort(compareCapacityDesc), [mitraAssignments]);
+
+  if (mitraAssignments.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t pt-3">
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
+        <Star className="size-3.5 fill-primary text-primary" />
+        {open ? "Sembunyikan" : "Tampilkan"} {mitraAssignments.length} Mitra Prioritas
+        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+      </Button>
+      {open && (
+        <div className="mt-2 max-h-[40vh] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mitra</TableHead>
+                <TableHead>Wilayah</TableHead>
+                <TableHead>Marketing Penanggung Jawab</TableHead>
+                <TableHead className="text-right">Target/Hari</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((a) => (
+                <TableRow key={a.MarketingMitraID}>
+                  <TableCell className="font-medium">{a.MitraName}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {a.Wilayah}
+                    {a.Kecamatan ? ` · ${a.Kecamatan}` : ""}
+                  </TableCell>
+                  <TableCell>{a.MarketingNama}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {a.Capacity != null ? formatQty(a.Capacity) : "-"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Per-Marketing counterpart to Transaksi's "Transaksi DO per Mitra — Bulan
 // Berjalan" panel — same day-grid layout, but each row aggregates every
 // mitra resolved to that Marketing's Wilayah/Kecamatan scope (not one row
@@ -242,10 +304,12 @@ export function MarketingPerformancePanel({
   data,
   kpiRows,
   canManageSettings,
+  mitraAssignments,
 }: {
   data: MarketingPerformanceData;
   kpiRows: MarketingKPIRow[];
   canManageSettings: boolean;
+  mitraAssignments: MarketingMitraAssignment[];
 }) {
   const { cells, periodDays, rangeStartISO, todayISO } = data;
   const [wilayahFilter, setWilayahFilter] = useState(ALL);
@@ -402,6 +466,7 @@ export function MarketingPerformancePanel({
             </div>
           </div>
         )}
+        <MitraPrioritasSection mitraAssignments={mitraAssignments} />
       </CardContent>
     </Card>
   );

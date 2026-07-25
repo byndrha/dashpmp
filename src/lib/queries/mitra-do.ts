@@ -2,7 +2,12 @@ import { getPool, sql } from "@/lib/db";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
 import { getMitraList, getPriceLevelOptions } from "@/lib/queries/mitra";
-import { getMarketingWilayahAssignments, resolveResponsibleMarketing } from "@/lib/queries/marketing-wilayah";
+import {
+  getMarketingWilayahAssignments,
+  getMarketingMitraAssignments,
+  resolveResponsibleMarketing,
+  buildMitraOverrideMap,
+} from "@/lib/queries/marketing-wilayah";
 import type { PartnerType, DateRangeFilter } from "@/types/dashboard";
 
 export interface MitraDORow {
@@ -73,7 +78,7 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
   const daysInRange = Math.max(1, Math.round((rangeEnd.getTime() - rangeStart.getTime()) / 86400000));
   const todayISO = getBusinessDateISO();
 
-  const [dailyResult, priceLevels, allMitra, marketingAssignments] = await Promise.all([
+  const [dailyResult, priceLevels, allMitra, marketingAssignments, mitraAssignments] = await Promise.all([
     pool
       .request()
       .input("rangeStart", sql.Date, rangeStart)
@@ -101,8 +106,10 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
     getPriceLevelOptions(),
     getMitraList(),
     getMarketingWilayahAssignments(),
+    getMarketingMitraAssignments(),
   ]);
 
+  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
   const priceByLevel = new Map(priceLevels.map((p) => [p.Level, p.Price]));
   const rows = dailyResult.recordset as RawDailyRow[];
 
@@ -116,7 +123,13 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
         PartnerType: row.PartnerType,
         Wilayah: row.Wilayah,
         Kecamatan: row.Kecamatan,
-        MarketingNama: resolveResponsibleMarketing(row.Wilayah, row.Kecamatan, marketingAssignments),
+        MarketingNama: resolveResponsibleMarketing(
+          row.BusinessPartnerID,
+          row.Wilayah,
+          row.Kecamatan,
+          marketingAssignments,
+          mitraOverrides
+        ),
         HargaJual: row.PriceLevel != null ? priceByLevel.get(row.PriceLevel) ?? null : null,
         TargetHarian: row.Capacity,
         TargetBulanan: row.Capacity != null ? row.Capacity * daysInRange : null,

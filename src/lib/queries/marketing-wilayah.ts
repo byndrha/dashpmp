@@ -86,14 +86,112 @@ export async function removeMarketingWilayah(id: number): Promise<void> {
     .query(`DELETE FROM DashboardMarketingWilayah WHERE MarketingWilayahID = @id`);
 }
 
-// Resolves which Marketing is responsible for a Mitra's Wilayah/Kecamatan:
-// an exact Wilayah+Kecamatan assignment wins first, then a whole-Wilayah
-// assignment (Kecamatan IS NULL) as fallback, then unassigned (null).
+// Per-mitra override: a Marketing can be made explicitly responsible for one
+// specific Mitra, taking priority over whatever Wilayah/Kecamatan coverage
+// would otherwise apply — even if that Mitra sits inside another Marketing's
+// wilayah. One row per Mitra (DB-enforced via a unique index on
+// BusinessPartnerID), so a Mitra has at most one priority override.
+export interface MarketingMitraAssignment {
+  MarketingMitraID: number;
+  MarketingUserID: string;
+  MarketingNama: string;
+  BusinessPartnerID: string;
+  MitraName: string;
+  Wilayah: string;
+  Kecamatan: string | null;
+  Capacity: number | null;
+  CreatedAt: string;
+}
+
+export interface MitraOption {
+  BusinessPartnerID: string;
+  Name: string;
+  Wilayah: string;
+}
+
+export async function getMarketingMitraAssignments(): Promise<MarketingMitraAssignment[]> {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT mm.MarketingMitraID, mm.MarketingUserID, ISNULL(du.Nama, 'Tidak diketahui') AS MarketingNama,
+           mm.BusinessPartnerID, bp.Name AS MitraName,
+           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
+           bp.NPWPAddress AS Kecamatan, bp.Capacity, mm.CreatedAt
+    FROM DashboardMarketingMitra mm
+    JOIN BusinessPartner bp ON bp.BusinessPartnerID = mm.BusinessPartnerID
+    LEFT JOIN DashboardUser du ON du.UserID = TRY_CAST(mm.MarketingUserID AS INT)
+    ORDER BY du.Nama, bp.Name
+  `);
+  return result.recordset;
+}
+
+// Lightweight list for the "assign a specific Mitra" search combobox — not
+// the full getMitraList() (which also resolves Marketing/growth data this
+// picker doesn't need).
+export async function getMitraOptions(): Promise<MitraOption[]> {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT BusinessPartnerID, Name,
+           ISNULL(NULLIF(LTRIM(RTRIM(NPWPName)), ''), 'Tidak Diketahui') AS Wilayah
+    FROM BusinessPartner
+    WHERE ISNULL(IsDeleted, 0) = 0
+    ORDER BY Name
+  `);
+  return result.recordset;
+}
+
+// Same atomic-claim pattern as addMarketingWilayah — the unique index on
+// BusinessPartnerID is the real guarantee, this WHERE NOT EXISTS just turns
+// the conflict into a clean thrown error instead of a raw constraint
+// violation reaching the caller.
+export async function addMarketingMitra(input: {
+  marketingUserId: string;
+  businessPartnerId: string;
+  createdByUserId: string;
+}): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("marketingUserId", sql.VarChar(16), input.marketingUserId)
+    .input("businessPartnerId", sql.VarChar(16), input.businessPartnerId)
+    .input("createdBy", sql.VarChar(16), input.createdByUserId).query(`
+      INSERT INTO DashboardMarketingMitra (MarketingUserID, BusinessPartnerID, CreatedByUserID)
+      SELECT @marketingUserId, @businessPartnerId, @createdBy
+      WHERE NOT EXISTS (
+        SELECT 1 FROM DashboardMarketingMitra WHERE BusinessPartnerID = @businessPartnerId
+      )
+    `);
+  if (result.rowsAffected[0] === 0) {
+    throw new Error("Mitra ini sudah memiliki Marketing penanggung jawab prioritas.");
+  }
+}
+
+export async function removeMarketingMitra(id: number): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.Int, id)
+    .query(`DELETE FROM DashboardMarketingMitra WHERE MarketingMitraID = @id`);
+}
+
+export function buildMitraOverrideMap(assignments: MarketingMitraAssignment[]): Map<string, string> {
+  return new Map(assignments.map((a) => [a.BusinessPartnerID, a.MarketingNama]));
+}
+
+// Resolves which Marketing is responsible for a Mitra: a per-Mitra priority
+// override wins first (even across Wilayah boundaries), then an exact
+// Wilayah+Kecamatan assignment, then a whole-Wilayah assignment (Kecamatan
+// IS NULL) as fallback, then unassigned (null).
 export function resolveResponsibleMarketing(
+  businessPartnerId: string | null,
   wilayah: string | null,
   kecamatan: string | null,
-  assignments: MarketingWilayahAssignment[]
+  assignments: MarketingWilayahAssignment[],
+  mitraOverrides?: Map<string, string>
 ): string | null {
+  if (businessPartnerId) {
+    const override = mitraOverrides?.get(businessPartnerId);
+    if (override) return override;
+  }
   if (!wilayah) return null;
   if (kecamatan) {
     const specific = assignments.find((a) => a.Wilayah === wilayah && a.Kecamatan === kecamatan);
