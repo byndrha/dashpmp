@@ -88,11 +88,15 @@ export interface MitraLocationMapProps {
   onChange: (lat: number, lng: number) => void;
   recenterKey: number;
   // [lat, lng] — sourced from DashboardPabrikLocation via the caller
-  // (MitraLocationField), not hardcoded here anymore.
-  pabrikPosition: [number, number];
+  // (MitraLocationField), not hardcoded here anymore. Omitted entirely in
+  // readOnly view contexts that don't need the Pabrik reference marker.
+  pabrikPosition?: [number, number];
+  // Plain display — no drag, no click-to-move, no style switcher clutter.
+  // Used by MitraDetailDialog's default (non-editing) view.
+  readOnly?: boolean;
 }
 
-export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, pabrikPosition }: MitraLocationMapProps) {
+export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, pabrikPosition, readOnly }: MitraLocationMapProps) {
   const markerRef = useRef<L.Marker>(null);
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   const tile = TILE_SOURCES[mapStyle];
@@ -117,15 +121,15 @@ export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, p
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
-        <Marker position={pabrikPosition} icon={pabrikIcon} />
+        {pabrikPosition && <Marker position={pabrikPosition} icon={pabrikIcon} />}
         <Marker
           position={[latitude, longitude]}
           icon={mitraIcon}
-          draggable
-          eventHandlers={{ dragend: handleDragEnd }}
+          draggable={!readOnly}
+          eventHandlers={readOnly ? undefined : { dragend: handleDragEnd }}
           ref={markerRef}
         />
-        <ClickToMove onMove={onChange} />
+        {!readOnly && <ClickToMove onMove={onChange} />}
         <RecenterOnTrigger lat={latitude} lng={longitude} triggerKey={recenterKey} />
       </MapContainer>
 

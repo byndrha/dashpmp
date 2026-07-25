@@ -28,6 +28,9 @@ export interface MarketingPerformanceData {
   rangeStartISO: string;
   todayISO: string;
   cells: MarketingScopeCell[];
+  // Daily qty per BusinessPartnerID, for priority-mitra (DashboardMarketingMitra)
+  // only — see the collapsed per-Marketing mitra list in Kinerja Marketing.
+  mitraDailyQty: Record<string, number[]>;
 }
 
 // Kantong here counts a 5KG bag as half a kantong — same KANTONG_QTY_EXPR
@@ -129,6 +132,14 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     if (cell && r.Capacity) cell.TargetHarian += r.Capacity;
   }
 
+  // Per-mitra daily breakdown, but only for mitra with a priority override —
+  // reuses dailyResult (already fetched for the cell aggregation above)
+  // rather than a second query, and is deliberately NOT built for every
+  // mitra in scope (that could be hundreds per Marketing) — just the small
+  // curated priority set shown, collapsed, in Kinerja Marketing.
+  const mitraDailyQty: Record<string, number[]> = {};
+  for (const id of mitraOverrides.keys()) mitraDailyQty[id] = new Array(period.periodDays).fill(0);
+
   for (const r of dailyResult.recordset as {
     BusinessPartnerID: string;
     Wilayah: string;
@@ -139,8 +150,16 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
     if (!cell) continue;
     const dayIndex = Math.round((new Date(r.TransDate).getTime() - rangeStart.getTime()) / 86400000);
-    if (dayIndex >= 0 && dayIndex < period.periodDays) cell.DailyQty[dayIndex] += r.QtyKantong;
+    if (dayIndex < 0 || dayIndex >= period.periodDays) continue;
+    cell.DailyQty[dayIndex] += r.QtyKantong;
+    if (mitraDailyQty[r.BusinessPartnerID]) mitraDailyQty[r.BusinessPartnerID][dayIndex] += r.QtyKantong;
   }
 
-  return { periodDays: period.periodDays, rangeStartISO: period.startDate, todayISO, cells: [...cells.values()] };
+  return {
+    periodDays: period.periodDays,
+    rangeStartISO: period.startDate,
+    todayISO,
+    cells: [...cells.values()],
+    mitraDailyQty,
+  };
 }

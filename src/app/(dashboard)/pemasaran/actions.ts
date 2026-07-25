@@ -18,6 +18,11 @@ import {
 } from "@/lib/queries/marketing-wilayah";
 import { setMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import { setWilayahPotentialTarget } from "@/lib/queries/wilayah-potential-target";
+import {
+  getMarketingVisitLogForDate,
+  saveMarketingVisitLog,
+  type MarketingVisitLogEntry,
+} from "@/lib/queries/marketing-visit-log";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 
 export async function createPengajuanAction(input: PengajuanInput) {
@@ -133,4 +138,26 @@ export async function setWilayahPotentialTargetAction(input: { wilayah: string; 
   }
   await setWilayahPotentialTarget({ ...input, userId: user.id });
   revalidatePath("/pemasaran");
+}
+
+export async function getMarketingVisitLogAction(
+  businessPartnerId: string,
+  dateISO: string
+): Promise<MarketingVisitLogEntry | null> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  return getMarketingVisitLogForDate(businessPartnerId, dateISO);
+}
+
+export async function saveMarketingVisitLogAction(input: {
+  businessPartnerId: string;
+  dateISO: string;
+  hasilKunjungan: string | null;
+}) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  await saveMarketingVisitLog({ ...input, userId });
 }

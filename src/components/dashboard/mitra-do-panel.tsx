@@ -13,11 +13,16 @@ import {
   ArrowDown,
   ArrowUpDown,
   Search,
+  MessageCircle,
+  Phone,
+  Loader2,
 } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
@@ -25,7 +30,9 @@ import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
+import type { ContactType } from "@/lib/queries/mitra-contact-log";
 import { updateMitraCapacityAction } from "@/app/(dashboard)/mitra/actions";
+import { getMitraContactLogAction, saveMitraContactLogAction } from "@/app/(dashboard)/transaksi/actions";
 
 type SortMode = "target" | "persentase" | "terbanyak" | "tren" | "terbaru";
 
@@ -41,8 +48,11 @@ const SORT_LABEL: Record<SortMode, string> = {
 // spacer and every row's info block so the date columns line up exactly.
 const INFO_COL_CLASS = "w-52 sm:w-56";
 // Fixed width for each date column, shared between the header's per-date
-// total cells and every row's DayChip so both line up exactly.
-const DAY_COL_CLASS = "h-11 w-12";
+// total cells and every row's DayChip so both line up exactly. Taller than
+// before (was h-11) to fit the Chat/Telepon log icon row DayChip adds below
+// the qty — the header total cells just end up with a little extra
+// (harmless, still vertically centered) breathing room.
+const DAY_COL_CLASS = "h-14 w-12";
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
@@ -75,16 +85,144 @@ function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
   return <Minus className="mt-0.5 inline-block size-3.5 text-muted-foreground/40" />;
 }
 
+// Narrator log for one mitra+date+channel — what a phone/chat follow-up
+// turned up about a discrepancy between what was ordered and what actually
+// shipped. Fetched lazily on open (one mitra, one date, both channels in a
+// single call) rather than bundled into the page's initial load, which
+// would mean a query per mitra per visible date — easily thousands of rows
+// nobody's looking at yet.
+function ContactLogButton({
+  businessPartnerId,
+  dateISO,
+  contactType,
+}: {
+  businessPartnerId: string;
+  dateISO: string;
+  contactType: ContactType;
+}) {
+  const Icon = contactType === "Chat" ? MessageCircle : Phone;
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [hasEntry, setHasEntry] = useState(false);
+  const [hasilPenawaran, setHasilPenawaran] = useState("");
+  const [angkaPemesanan, setAngkaPemesanan] = useState("");
+  const [alasanTidakSesuai, setAlasanTidakSesuai] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) return;
+    setLoading(true);
+    getMitraContactLogAction(businessPartnerId, dateISO)
+      .then((entries) => {
+        const found = entries.find((e) => e.ContactType === contactType) ?? null;
+        setHasEntry(!!found);
+        setHasilPenawaran(found?.HasilPenawaran ?? "");
+        setAngkaPemesanan(found?.AngkaPemesanan != null ? String(found.AngkaPemesanan) : "");
+        setAlasanTidakSesuai(found?.AlasanTidakSesuai ?? "");
+      })
+      .catch(() => toast.error("Gagal memuat catatan."))
+      .finally(() => setLoading(false));
+  }
+
+  function handleSave() {
+    startTransition(async () => {
+      try {
+        await saveMitraContactLogAction({
+          businessPartnerId,
+          dateISO,
+          contactType,
+          hasilPenawaran: hasilPenawaran.trim() || null,
+          angkaPemesanan: angkaPemesanan.trim() ? Number(angkaPemesanan) : null,
+          alasanTidakSesuai: alasanTidakSesuai.trim() || null,
+        });
+        setHasEntry(true);
+        setOpen(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Gagal menyimpan catatan.");
+      }
+    });
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            title={contactType}
+            className="rounded p-0.5 transition-colors hover:bg-muted"
+          />
+        }
+      >
+        <Icon className={cn("size-2.5", hasEntry ? "text-primary" : "text-muted-foreground/40")} />
+      </PopoverTrigger>
+      <PopoverContent className="w-64" align="center">
+        <p className="mb-2 text-xs font-medium">
+          Log {contactType} &mdash; {dateISO.slice(8, 10)}/{dateISO.slice(5, 7)}/{dateISO.slice(0, 4)}
+        </p>
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            Memuat...
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1">
+              <Label className="text-[10px] text-muted-foreground">Hasil Penawaran Pemesanan</Label>
+              <Textarea
+                value={hasilPenawaran}
+                onChange={(e) => setHasilPenawaran(e.target.value)}
+                rows={2}
+                className="text-xs"
+                placeholder="Apa hasil penawaran ke mitra..."
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-[10px] text-muted-foreground">Angka Pemesanan</Label>
+              <Input
+                type="number"
+                min={0}
+                value={angkaPemesanan}
+                onChange={(e) => setAngkaPemesanan(e.target.value)}
+                className="h-8 text-xs"
+                placeholder="Kantong"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-[10px] text-muted-foreground">
+                Alasan Pengiriman Tidak Sesuai Pemesanan Awal
+              </Label>
+              <Textarea
+                value={alasanTidakSesuai}
+                onChange={(e) => setAlasanTidakSesuai(e.target.value)}
+                rows={2}
+                className="text-xs"
+                placeholder="Opsional..."
+              />
+            </div>
+            <Button size="sm" disabled={pending} onClick={handleSave} className="mt-1">
+              {pending ? "Menyimpan..." : "Simpan"}
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // Right-border-only cells (no rounded chip look) so adjacent cells across
 // every row in the list line up into continuous vertical divider lines,
 // per-date, running from the header total row down through the whole list.
 function DayChip({
+  businessPartnerId,
   dateISO,
   qty,
   prevQty,
   target,
   isPast,
 }: {
+  businessPartnerId: string;
   dateISO: string;
   qty: number;
   // The immediately preceding date's qty for this same mitra — null for the
@@ -103,7 +241,7 @@ function DayChip({
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r text-[10px] tabular-nums",
+        "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r py-1 text-[10px] tabular-nums",
         DAY_COL_CLASS,
         state === "hit" && "bg-primary/10 text-primary",
         state === "miss" && "bg-destructive/10 text-destructive",
@@ -116,6 +254,10 @@ function DayChip({
         {isPast ? formatQty(qty) : "-"}
         {change === "up" && <ArrowUp className="size-2.5 shrink-0 text-primary" />}
         {change === "down" && <ArrowDown className="size-2.5 shrink-0 text-destructive" />}
+      </span>
+      <span className="flex items-center gap-0.5">
+        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Chat" />
+        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" />
       </span>
     </div>
   );
@@ -278,6 +420,7 @@ function MitraDOCard({
         {dates.map((dateISO, i) => (
           <DayChip
             key={dateISO}
+            businessPartnerId={m.BusinessPartnerID}
             dateISO={dateISO}
             qty={m.DailyQty[i]}
             prevQty={i > 0 ? m.DailyQty[i - 1] : null}
@@ -368,6 +511,18 @@ export function MitraDOPanel({
     }
     return totals;
   }, [filteredActive, daysInRange]);
+
+  // "Yang ditampilkan" = whatever's actually rendered below — filteredActive
+  // plus filteredInactive only when that section is toggled open, same
+  // source exportRows uses so the header stays consistent with both.
+  const displayedMitra = useMemo(
+    () => (showAll ? [...filteredActive, ...filteredInactive] : filteredActive),
+    [showAll, filteredActive, filteredInactive]
+  );
+  const totalTargetDisplayed = useMemo(
+    () => displayedMitra.reduce((sum, m) => sum + (m.TargetHarian ?? 0), 0),
+    [displayedMitra]
+  );
 
   // filteredActive already arrives sorted by TotalQty desc — only the
   // "Pengambilan Terbanyak" mode can skip re-sorting as a no-op.
@@ -544,8 +699,14 @@ export function MitraDOPanel({
             handleBodyScroll) so it always lines up with the date columns
             below it, while staying put in the sticky header itself. */}
         <div className="mt-2 flex min-w-0 border-t pt-2">
-          <div className={cn("shrink-0 self-center pr-3 text-xs font-medium text-muted-foreground", INFO_COL_CLASS)}>
-            Total per Tanggal
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-between gap-1 self-center pr-3 text-xs font-medium text-muted-foreground",
+              INFO_COL_CLASS
+            )}
+          >
+            <span>{displayedMitra.length} mitra ditampilkan</span>
+            <span className="tabular-nums text-foreground">{formatQty(totalTargetDisplayed)}</span>
           </div>
           <div ref={headerScrollRef} className="flex min-w-0 flex-1 overflow-x-hidden border-l">
             {dates.map((dateISO, i) => (

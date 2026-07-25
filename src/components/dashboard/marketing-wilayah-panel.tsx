@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, MapPin, Map, Star } from "lucide-react";
+import { Plus, X, MapPin, Map as MapIcon, Star, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -143,10 +142,58 @@ export function MarketingWilayahPanel({
     });
   }
 
+  // One row per Marketing instead of one row per (Wilayah, Kecamatan) pair —
+  // every assignment they hold shows as a removable badge inside that single
+  // row, per explicit request to keep the table from ballooning into dozens
+  // of near-duplicate rows for a Marketing covering many Kecamatan.
+  const groupedAssignments = useMemo(() => {
+    const byMarketing = new Map<string, { MarketingUserID: string; MarketingNama: string; items: MarketingWilayahAssignment[] }>();
+    for (const a of assignments) {
+      let g = byMarketing.get(a.MarketingUserID);
+      if (!g) {
+        g = { MarketingUserID: a.MarketingUserID, MarketingNama: a.MarketingNama, items: [] };
+        byMarketing.set(a.MarketingUserID, g);
+      }
+      g.items.push(a);
+    }
+    return [...byMarketing.values()].sort((a, b) => a.MarketingNama.localeCompare(b.MarketingNama));
+  }, [assignments]);
+
+  // Marketing -> Wilayah -> Mitra, three levels deep per explicit request —
+  // a Marketing's priority mitra list is what most needs scanning at a
+  // glance, and grouping by Wilayah within that keeps mitra from the same
+  // region together instead of one flat alphabetical dump.
+  const groupedMitra = useMemo(() => {
+    const byMarketing = new Map<
+      string,
+      { MarketingUserID: string; MarketingNama: string; byWilayah: Map<string, MarketingMitraAssignment[]> }
+    >();
+    for (const a of mitraAssignments) {
+      let g = byMarketing.get(a.MarketingUserID);
+      if (!g) {
+        g = { MarketingUserID: a.MarketingUserID, MarketingNama: a.MarketingNama, byWilayah: new Map() };
+        byMarketing.set(a.MarketingUserID, g);
+      }
+      let list = g.byWilayah.get(a.Wilayah);
+      if (!list) {
+        list = [];
+        g.byWilayah.set(a.Wilayah, list);
+      }
+      list.push(a);
+    }
+    return [...byMarketing.values()]
+      .map((g) => ({
+        ...g,
+        wilayahGroups: [...g.byWilayah.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+        totalCapacity: [...g.byWilayah.values()].flat().reduce((sum, a) => sum + (a.Capacity ?? 0), 0),
+      }))
+      .sort((a, b) => a.MarketingNama.localeCompare(b.MarketingNama));
+  }, [mitraAssignments]);
+
   return (
     <>
       <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-        <Map className="size-4" />
+        <MapIcon className="size-4" />
         Kelola Cakupan Wilayah Marketing
       </Button>
 
@@ -214,45 +261,35 @@ export function MarketingWilayahPanel({
               </Button>
             </div>
 
-            {assignments.length === 0 ? (
+            {groupedAssignments.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Belum ada cakupan wilayah yang diatur.</p>
             ) : (
-              <div className="max-h-[50vh] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Marketing</TableHead>
-                      <TableHead>Wilayah</TableHead>
-                      <TableHead>Kecamatan</TableHead>
-                      <TableHead className="w-10" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assignments.map((a) => (
-                      <TableRow key={a.MarketingWilayahID}>
-                        <TableCell className="font-medium">{a.MarketingNama}</TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin className="size-3.5 text-muted-foreground" />
-                            {a.Wilayah}
-                          </span>
-                        </TableCell>
-                        <TableCell>{a.Kecamatan ?? <Badge variant="outline">Seluruh Wilayah</Badge>}</TableCell>
-                        <TableCell>
-                          <Button
+              <div className="flex max-h-[40vh] flex-col divide-y overflow-y-auto rounded-lg border">
+                {groupedAssignments.map((g) => (
+                  <div key={g.MarketingUserID} className="flex flex-wrap items-start gap-2 p-2.5">
+                    <span className="flex w-36 shrink-0 items-center gap-1.5 pt-0.5 text-sm font-medium">
+                      <Users className="size-3.5 shrink-0 text-muted-foreground" />
+                      {g.MarketingNama}
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                      {g.items.map((a) => (
+                        <Badge key={a.MarketingWilayahID} variant="secondary" className="gap-1 pr-1 text-xs">
+                          <MapPin className="size-3 shrink-0" />
+                          {a.Wilayah}
+                          {a.Kecamatan ? ` · ${a.Kecamatan}` : " · Seluruh Wilayah"}
+                          <button
                             type="button"
-                            variant="ghost"
-                            size="icon"
                             disabled={pending && removingId === a.MarketingWilayahID}
                             onClick={() => handleRemove(a.MarketingWilayahID)}
+                            className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20"
                           >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                            <X className="size-3 text-destructive" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -289,45 +326,55 @@ export function MarketingWilayahPanel({
               </Button>
             </div>
 
-            {mitraAssignments.length === 0 ? (
+            {groupedMitra.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Belum ada mitra prioritas yang diatur.</p>
             ) : (
-              <div className="max-h-[50vh] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Marketing</TableHead>
-                      <TableHead>Mitra</TableHead>
-                      <TableHead>Wilayah</TableHead>
-                      <TableHead className="w-10" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {mitraAssignments.map((a) => (
-                      <TableRow key={a.MarketingMitraID}>
-                        <TableCell className="font-medium">{a.MarketingNama}</TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-1">
-                            <Star className="size-3.5 shrink-0 fill-primary text-primary" />
-                            {a.MitraName}
+              <div className="flex max-h-[40vh] flex-col divide-y overflow-y-auto rounded-lg border">
+                {groupedMitra.map((g) => (
+                  <div key={g.MarketingUserID} className="p-2.5">
+                    <p className="flex items-center justify-between gap-1.5 text-sm font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <Users className="size-3.5 shrink-0 text-muted-foreground" />
+                        {g.MarketingNama}
+                      </span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        Total Target{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {g.totalCapacity.toLocaleString("id-ID")}
+                        </span>
+                      </span>
+                    </p>
+                    <div className="mt-1.5 flex flex-col gap-1.5 pl-5">
+                      {g.wilayahGroups.map(([wilayah, items]) => (
+                        <div key={wilayah} className="flex flex-wrap items-start gap-2">
+                          <span className="flex w-32 shrink-0 items-center gap-1 pt-0.5 text-xs text-muted-foreground">
+                            <MapPin className="size-3 shrink-0" />
+                            {wilayah}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{a.Wilayah}</TableCell>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            disabled={mitraPending && removingMitraId === a.MarketingMitraID}
-                            onClick={() => handleRemoveMitra(a.MarketingMitraID)}
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                            {items.map((a) => (
+                              <Badge key={a.MarketingMitraID} variant="secondary" className="gap-1 pr-1 text-xs">
+                                <Star className="size-3 shrink-0 fill-primary text-primary" />
+                                {a.MitraName}
+                                <span className="tabular-nums text-muted-foreground">
+                                  · {a.Capacity != null ? a.Capacity.toLocaleString("id-ID") : "-"}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={mitraPending && removingMitraId === a.MarketingMitraID}
+                                  onClick={() => handleRemoveMitra(a.MarketingMitraID)}
+                                  className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20"
+                                >
+                                  <X className="size-3 text-destructive" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

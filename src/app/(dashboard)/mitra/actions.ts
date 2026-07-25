@@ -2,7 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { createMitra, updateMitra, updateMitraCapacity, deleteMitra, type MitraInput } from "@/lib/queries/mitra";
+import {
+  createMitra,
+  updateMitra,
+  updateMitraCapacity,
+  deleteMitra,
+  getMitraDetail,
+  type MitraInput,
+  type MitraRow,
+} from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
 
@@ -49,4 +57,14 @@ export async function setMitraCompetitorAction(input: { businessPartnerId: strin
 
   await setMitraCompetitor({ ...input, userId });
   revalidatePath("/mitra");
+}
+
+// Read-only, fetched on demand (e.g. clicking a mitra name in Kinerja
+// Marketing) — same isAuthenticated-only baseline as the rest of this
+// already-gated (dashboard) route group, no extra role check needed.
+export async function getMitraDetailAction(businessPartnerId: string): Promise<MitraRow | null> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  return getMitraDetail(businessPartnerId);
 }

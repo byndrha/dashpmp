@@ -4,19 +4,24 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, Settings2, Star, ChevronDown } from "lucide-react";
+import { ArrowUp, ArrowDown, Settings2, Star, ChevronDown, Footprints, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
 import { cn } from "@/lib/utils";
 import type { MarketingPerformanceData, MarketingScopeCell } from "@/lib/queries/marketing-performance";
 import type { MarketingKPIRow } from "@/lib/queries/mitra-pengajuan";
 import type { MarketingMitraAssignment } from "@/lib/queries/marketing-wilayah";
-import { setMarketingPeriodSettingAction } from "@/app/(dashboard)/pemasaran/actions";
+import {
+  setMarketingPeriodSettingAction,
+  getMarketingVisitLogAction,
+  saveMarketingVisitLogAction,
+} from "@/app/(dashboard)/pemasaran/actions";
 
 // Absorbed from the old MarketingKPIPanel ("Pencapaian Marketing — Bulan
 // Berjalan", now removed) — Jumlah Kunjungan/Konversi Transaksi live inside
@@ -24,7 +29,10 @@ import { setMarketingPeriodSettingAction } from "@/app/(dashboard)/pemasaran/act
 const TARGET_KUNJUNGAN_BULANAN = 300;
 
 const INFO_COL_CLASS = "w-48 sm:w-56";
-const DAY_COL_CLASS = "h-20 w-14";
+// Taller than before (was h-20) to fit the Log Kunjungan icon row DayCell
+// adds on per-mitra rows — the Marketing-level aggregate cells just end up
+// with a little extra (harmless, still vertically centered) breathing room.
+const DAY_COL_CLASS = "h-24 w-14";
 
 interface AggregatedRow {
   MarketingUserID: string;
@@ -52,19 +60,100 @@ function formatDayMonth(dateISO: string): string {
   return `${dateISO.slice(8, 10)}/${dateISO.slice(5, 7)}`;
 }
 
+// Same lazy-fetch-on-open pattern as Transaksi's ContactLogButton
+// (mitra-do-panel.tsx), but for a Marketing's own visit note rather than an
+// order-negotiation log, and just the one field/channel ("Kunjungan" — no
+// Chat/Telepon split needed here). Only rendered on the per-mitra rows
+// inside a Marketing's collapsed Mitra Prioritas list, never on the
+// Marketing-level aggregate row above it, since a visit is tied to one mitra.
+function VisitLogButton({ businessPartnerId, dateISO }: { businessPartnerId: string; dateISO: string }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [hasEntry, setHasEntry] = useState(false);
+  const [hasilKunjungan, setHasilKunjungan] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) return;
+    setLoading(true);
+    getMarketingVisitLogAction(businessPartnerId, dateISO)
+      .then((entry) => {
+        setHasEntry(!!entry);
+        setHasilKunjungan(entry?.HasilKunjungan ?? "");
+      })
+      .catch(() => toast.error("Gagal memuat catatan kunjungan."))
+      .finally(() => setLoading(false));
+  }
+
+  function handleSave() {
+    startTransition(async () => {
+      try {
+        await saveMarketingVisitLogAction({ businessPartnerId, dateISO, hasilKunjungan: hasilKunjungan.trim() || null });
+        setHasEntry(true);
+        setOpen(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Gagal menyimpan catatan kunjungan.");
+      }
+    });
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
+        render={<button type="button" title="Log Kunjungan" className="rounded p-0.5 transition-colors hover:bg-muted" />}
+      >
+        <Footprints className={cn("size-2.5", hasEntry ? "text-primary" : "text-muted-foreground/40")} />
+      </PopoverTrigger>
+      <PopoverContent className="w-64" align="center">
+        <p className="mb-2 text-xs font-medium">
+          Log Kunjungan &mdash; {dateISO.slice(8, 10)}/{dateISO.slice(5, 7)}/{dateISO.slice(0, 4)}
+        </p>
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            Memuat...
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1">
+              <Label className="text-[10px] text-muted-foreground">Hasil Kunjungan</Label>
+              <Textarea
+                value={hasilKunjungan}
+                onChange={(e) => setHasilKunjungan(e.target.value)}
+                rows={3}
+                className="text-xs"
+                placeholder="Apa hasil kunjungan ke mitra ini..."
+              />
+            </div>
+            <Button size="sm" disabled={pending} onClick={handleSave} className="mt-1">
+              {pending ? "Menyimpan..." : "Simpan"}
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // Two-line cell: calendar date above, qty + explicit +/- delta against the
 // immediately preceding day below — per explicit request ("sebutkan, misal
 // +20 atau -4"), not just an arrow like mitra-do-panel.tsx's DayChip.
+// businessPartnerId is only passed on per-mitra rows (MitraPrioritasRow) —
+// that's what adds the Log Kunjungan icon; the Marketing-level aggregate row
+// above stays plain since it isn't tied to a single mitra.
 function DayCell({
   dateISO,
   qty,
   prevQty,
   isPast,
+  businessPartnerId,
 }: {
   dateISO: string;
   qty: number;
   prevQty: number | null;
   isPast: boolean;
+  businessPartnerId?: string;
 }) {
   const delta = isPast && prevQty != null ? qty - prevQty : null;
   return (
@@ -92,6 +181,58 @@ function DayCell({
       ) : (
         <span className="text-[9px] text-muted-foreground/30">&mdash;</span>
       )}
+      {businessPartnerId && <VisitLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} />}
+    </div>
+  );
+}
+
+// Priority mitra assigned to this Marketing (see MitraPrioritasSection's old
+// job), collapsed by default — a secondary drill-down, not the primary
+// per-Marketing row above it. Sorted by highest target (Capacity) first.
+function MitraPrioritasRow({
+  mitra,
+  dailyQty,
+  dates,
+  todayISO,
+  onMitraClick,
+}: {
+  mitra: MarketingMitraAssignment;
+  dailyQty: number[];
+  dates: string[];
+  todayISO: string;
+  onMitraClick: (businessPartnerId: string) => void;
+}) {
+  return (
+    <div className="flex items-stretch">
+      <button
+        type="button"
+        onClick={() => onMitraClick(mitra.BusinessPartnerID)}
+        className={cn(
+          "sticky left-0 z-10 flex shrink-0 flex-col justify-center gap-0.5 bg-card py-2 pr-3 pl-6 text-left transition-colors hover:bg-accent/50",
+          INFO_COL_CLASS
+        )}
+      >
+        <p className="flex min-w-0 items-center gap-1 truncate text-xs font-medium">
+          <Star className="size-3 shrink-0 fill-primary text-primary" />
+          <span className="truncate">{mitra.MitraName}</span>
+        </p>
+        <p className="truncate text-[10px] text-muted-foreground">
+          {mitra.Wilayah}
+          {mitra.Kecamatan ? ` · ${mitra.Kecamatan}` : ""} · Target {mitra.Capacity != null ? formatQty(mitra.Capacity) : "-"}
+        </p>
+      </button>
+      <div className="flex border-l">
+        {dates.map((dateISO, i) => (
+          <DayCell
+            key={dateISO}
+            dateISO={dateISO}
+            qty={dailyQty[i] ?? 0}
+            prevQty={i > 0 ? (dailyQty[i - 1] ?? 0) : null}
+            isPast={dateISO <= todayISO}
+            businessPartnerId={mitra.BusinessPartnerID}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -101,54 +242,95 @@ function MarketingCard({
   kpi,
   dates,
   todayISO,
+  mitraPrioritas,
+  mitraDailyQty,
+  onMitraClick,
 }: {
   row: AggregatedRow;
   kpi: MarketingKPIRow | undefined;
   dates: string[];
   todayISO: string;
+  mitraPrioritas: MarketingMitraAssignment[];
+  mitraDailyQty: Record<string, number[]>;
+  onMitraClick: (businessPartnerId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const kunjungan = kpi?.Kunjungan ?? 0;
   const konversiPct = kpi && kpi.Kunjungan > 0 ? (kpi.Konversi / kpi.Kunjungan) * 100 : 0;
+  const sortedMitra = useMemo(() => [...mitraPrioritas].sort(compareCapacityDesc), [mitraPrioritas]);
+
   return (
-    <div className="flex items-stretch">
-      <Link
-        href={`/transaksi?marketing=${encodeURIComponent(row.MarketingNama)}`}
-        className={cn(
-          "sticky left-0 z-10 flex shrink-0 flex-col justify-center gap-1.5 bg-card py-3 pr-3 transition-colors hover:bg-accent/50",
-          INFO_COL_CLASS
-        )}
-        title="Lihat Transaksi DO per Mitra untuk Marketing ini"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <p className="min-w-0 truncate font-medium">{row.MarketingNama}</p>
-          <span className="shrink-0 rounded-md border bg-secondary/50 px-2 py-0.5 text-xs font-semibold tabular-nums">
-            {formatQty(row.TargetHarian)}/hari
-          </span>
+    <div className="flex flex-col">
+      <div className="flex items-stretch">
+        <Link
+          href={`/transaksi?marketing=${encodeURIComponent(row.MarketingNama)}`}
+          className={cn(
+            "sticky left-0 z-10 flex shrink-0 flex-col justify-center gap-1.5 bg-card py-3 pr-3 transition-colors hover:bg-accent/50",
+            INFO_COL_CLASS
+          )}
+          title="Lihat Transaksi DO per Mitra untuk Marketing ini"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate font-medium">{row.MarketingNama}</p>
+            <span className="shrink-0 rounded-md border bg-secondary/50 px-2 py-0.5 text-xs font-semibold tabular-nums">
+              {formatQty(row.TargetHarian)}/hari
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Pencapaian <span className="font-medium text-foreground">{formatQty(row.TotalQty)}</span>{" "}
+            <span className={cn(row.PctAchievement != null && row.PctAchievement >= 100 && "font-medium text-primary")}>
+              ({row.PctAchievement != null ? row.PctAchievement.toFixed(0) : "-"}%)
+            </span>
+          </p>
+          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+            <span>
+              Kunjungan {kunjungan.toLocaleString("id-ID")}/{TARGET_KUNJUNGAN_BULANAN}
+            </span>
+            <span>Konversi {konversiPct.toFixed(0)}%</span>
+          </div>
+        </Link>
+        <div className="flex border-l">
+          {dates.map((dateISO, i) => (
+            <DayCell
+              key={dateISO}
+              dateISO={dateISO}
+              qty={row.DailyQty[i]}
+              prevQty={i > 0 ? row.DailyQty[i - 1] : null}
+              isPast={dateISO <= todayISO}
+            />
+          ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Pencapaian <span className="font-medium text-foreground">{formatQty(row.TotalQty)}</span>{" "}
-          <span className={cn(row.PctAchievement != null && row.PctAchievement >= 100 && "font-medium text-primary")}>
-            ({row.PctAchievement != null ? row.PctAchievement.toFixed(0) : "-"}%)
-          </span>
-        </p>
-        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <span>
-            Kunjungan {kunjungan.toLocaleString("id-ID")}/{TARGET_KUNJUNGAN_BULANAN}
-          </span>
-          <span>Konversi {konversiPct.toFixed(0)}%</span>
-        </div>
-      </Link>
-      <div className="flex border-l">
-        {dates.map((dateISO, i) => (
-          <DayCell
-            key={dateISO}
-            dateISO={dateISO}
-            qty={row.DailyQty[i]}
-            prevQty={i > 0 ? row.DailyQty[i - 1] : null}
-            isPast={dateISO <= todayISO}
-          />
-        ))}
       </div>
+
+      {sortedMitra.length > 0 && (
+        <div className="pb-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 pl-3 text-[11px] text-muted-foreground"
+            onClick={() => setOpen((v) => !v)}
+          >
+            <Star className="size-3 fill-primary text-primary" />
+            {open ? "Sembunyikan" : "Tampilkan"} {sortedMitra.length} mitra prioritas
+            <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
+          </Button>
+          {open && (
+            <div className="flex flex-col divide-y border-t">
+              {sortedMitra.map((m) => (
+                <MitraPrioritasRow
+                  key={m.MarketingMitraID}
+                  mitra={m}
+                  dailyQty={mitraDailyQty[m.BusinessPartnerID] ?? []}
+                  dates={dates}
+                  todayISO={todayISO}
+                  onMitraClick={onMitraClick}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -242,56 +424,6 @@ function compareCapacityDesc(a: MarketingMitraAssignment, b: MarketingMitraAssig
   return b.Capacity - a.Capacity;
 }
 
-// The per-Mitra priority overrides (set via "Kelola Cakupan Wilayah
-// Marketing" → Mitra Prioritas) — collapsed by default since it's a
-// secondary drill-down, not the primary per-Marketing view above. Sorted by
-// highest target first per explicit request.
-function MitraPrioritasSection({ mitraAssignments }: { mitraAssignments: MarketingMitraAssignment[] }) {
-  const [open, setOpen] = useState(false);
-  const sorted = useMemo(() => [...mitraAssignments].sort(compareCapacityDesc), [mitraAssignments]);
-
-  if (mitraAssignments.length === 0) return null;
-
-  return (
-    <div className="mt-3 border-t pt-3">
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
-        <Star className="size-3.5 fill-primary text-primary" />
-        {open ? "Sembunyikan" : "Tampilkan"} {mitraAssignments.length} Mitra Prioritas
-        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
-      </Button>
-      {open && (
-        <div className="mt-2 max-h-[40vh] overflow-y-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mitra</TableHead>
-                <TableHead>Wilayah</TableHead>
-                <TableHead>Marketing Penanggung Jawab</TableHead>
-                <TableHead className="text-right">Target/Hari</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((a) => (
-                <TableRow key={a.MarketingMitraID}>
-                  <TableCell className="font-medium">{a.MitraName}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {a.Wilayah}
-                    {a.Kecamatan ? ` · ${a.Kecamatan}` : ""}
-                  </TableCell>
-                  <TableCell>{a.MarketingNama}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {a.Capacity != null ? formatQty(a.Capacity) : "-"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Per-Marketing counterpart to Transaksi's "Transaksi DO per Mitra — Bulan
 // Berjalan" panel — same day-grid layout, but each row aggregates every
 // mitra resolved to that Marketing's Wilayah/Kecamatan scope (not one row
@@ -311,11 +443,21 @@ export function MarketingPerformancePanel({
   canManageSettings: boolean;
   mitraAssignments: MarketingMitraAssignment[];
 }) {
-  const { cells, periodDays, rangeStartISO, todayISO } = data;
+  const { cells, periodDays, rangeStartISO, todayISO, mitraDailyQty } = data;
   const [wilayahFilter, setWilayahFilter] = useState(ALL);
   const [kecamatanFilter, setKecamatanFilter] = useState(ALL);
+  const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
 
   const kpiByUserId = useMemo(() => new Map(kpiRows.map((r) => [r.UserID, r])), [kpiRows]);
+  const mitraByMarketing = useMemo(() => {
+    const map = new Map<string, MarketingMitraAssignment[]>();
+    for (const a of mitraAssignments) {
+      const list = map.get(a.MarketingUserID);
+      if (list) list.push(a);
+      else map.set(a.MarketingUserID, [a]);
+    }
+    return map;
+  }, [mitraAssignments]);
 
   const dates = useMemo(
     () => Array.from({ length: periodDays }, (_, i) => addDaysISO(rangeStartISO, i)),
@@ -461,13 +603,22 @@ export function MarketingPerformancePanel({
             </div>
             <div className="flex flex-col divide-y">
               {rows.map((r) => (
-                <MarketingCard key={r.MarketingUserID} row={r} kpi={kpiByUserId.get(r.MarketingUserID)} dates={dates} todayISO={todayISO} />
+                <MarketingCard
+                  key={r.MarketingUserID}
+                  row={r}
+                  kpi={kpiByUserId.get(r.MarketingUserID)}
+                  dates={dates}
+                  todayISO={todayISO}
+                  mitraPrioritas={mitraByMarketing.get(r.MarketingUserID) ?? []}
+                  mitraDailyQty={mitraDailyQty}
+                  onMitraClick={setDetailMitraId}
+                />
               ))}
             </div>
           </div>
         )}
-        <MitraPrioritasSection mitraAssignments={mitraAssignments} />
       </CardContent>
+      <MitraDetailDialog businessPartnerId={detailMitraId} onOpenChange={(open) => !open && setDetailMitraId(null)} />
     </Card>
   );
 }

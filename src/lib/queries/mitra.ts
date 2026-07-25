@@ -85,6 +85,56 @@ export async function getMitraList(): Promise<MitraRow[]> {
   }));
 }
 
+// Single-row counterpart to getMitraList() — fetched lazily (on demand, e.g.
+// when a mitra name is clicked elsewhere in the app) rather than bundled
+// into every page that might want to show mitra detail, since most of those
+// call sites only need a handful of fields most of the time.
+export async function getMitraDetail(businessPartnerId: string): Promise<MitraRow | null> {
+  const pool = await getPool();
+  const [result, marketingAssignments, mitraAssignments] = await Promise.all([
+    pool
+      .request()
+      .input("businessPartnerId", sql.VarChar(16), businessPartnerId)
+      .query(`
+        SELECT
+            bp.BusinessPartnerID,
+            bp.Name,
+            bp.MobileNo AS Kontak,
+            bp.Address AS Alamat,
+            bp.NPWPName AS Wilayah,
+            bp.NPWPAddress AS Kecamatan,
+            ${PARTNER_TYPE_CASE} AS PartnerType,
+            bp.Gender,
+            bp.PriceLevel,
+            bp.TermOfPaymentID,
+            top_.TermOfPayment AS TermOfPaymentName,
+            top_.Value AS TermOfPaymentDays,
+            bp.Capacity,
+            ml.Latitude,
+            ml.Longitude,
+            ml.Alamat AS GeoAlamat,
+            mc.Kompetitor,
+            bp.JoinDate
+        FROM BusinessPartner bp
+        LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
+        LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
+        LEFT JOIN DashboardMitraCompetitor mc ON mc.BusinessPartnerID = bp.BusinessPartnerID
+        WHERE ISNULL(bp.IsDeleted, 0) = 0 AND bp.BusinessPartnerID = @businessPartnerId
+      `),
+    getMarketingWilayahAssignments(),
+    getMarketingMitraAssignments(),
+  ]);
+
+  const row = (result.recordset as Omit<MitraRow, "MarketingNama">[])[0];
+  if (!row) return null;
+
+  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  return {
+    ...row,
+    MarketingNama: resolveResponsibleMarketing(row.BusinessPartnerID, row.Wilayah, row.Kecamatan, marketingAssignments, mitraOverrides),
+  };
+}
+
 export interface TermOfPaymentOption {
   TermOfPaymentID: string;
   TermOfPaymentName: string;
