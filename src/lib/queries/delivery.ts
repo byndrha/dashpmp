@@ -203,20 +203,3 @@ export async function getDriverOptions(): Promise<DriverOption[]> {
   return result.recordset;
 }
 
-export async function assignDeliveryDriver(deliveryOrderId: string, salesmanId: string | null): Promise<void> {
-  const pool = await getPool();
-  await pool
-    .request()
-    .input("id", sql.VarChar(16), deliveryOrderId)
-    .input("salesmanId", sql.VarChar(16), salesmanId)
-    .query(`UPDATE DeliveryOrder SET SalesmanID = @salesmanId WHERE DeliveryOrderID = @id`);
-}
-
-export async function assignDeliveryVehicle(deliveryOrderId: string, vehicleName: string | null): Promise<void> {
-  const pool = await getPool();
-  await pool
-    .request()
-    .input("id", sql.VarChar(16), deliveryOrderId)
-    .input("vehicleName", sql.VarChar(50), vehicleName)
-    .query(`UPDATE DeliveryOrder SET VehicleNo = @vehicleName WHERE DeliveryOrderID = @id`);
-}

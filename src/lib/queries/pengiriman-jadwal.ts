@@ -1,5 +1,4 @@
 import { getPool, sql } from "@/lib/db";
-import { assignDeliveryDriver, assignDeliveryVehicle } from "@/lib/queries/delivery";
 import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
@@ -367,6 +366,13 @@ export async function updateJadwalUrutan(jadwalId: number, orderedDetailIds: num
   }
 }
 
+// Once a Jadwal is Terbit, a real DeliveryOrder (and, from a follow-up
+// plan, a real SalesInvoice) already exists off it — nothing about the
+// departure (time, driver, vehicle) may change through this dashboard
+// anymore. This is a hard guard, not a soft warning: there is currently no
+// correction/cancellation flow for an already-released DO, so this
+// function simply refuses outright rather than silently cascading changes
+// onto live documents the way it used to.
 export async function updateJadwalDriverTime(
   jadwalId: number,
   input: { jamJadwal: Date; salesmanId: string | null }
@@ -378,6 +384,7 @@ export async function updateJadwalDriverTime(
     .query(`SELECT Status, ArmadaID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number } | undefined;
   if (!row) throw new Error("Keberangkatan tidak ditemukan.");
+  if (row.Status === "Terbit") throw new Error("Keberangkatan ini sudah rilis — tidak bisa diubah lagi.");
 
   const detailResult = await pool
     .request()
@@ -392,26 +399,6 @@ export async function updateJadwalDriverTime(
     .input("jamJadwal", sql.DateTime, input.jamJadwal)
     .input("salesmanId", sql.VarChar(16), input.salesmanId)
     .query(`UPDATE DashboardPengirimanJadwal SET JamJadwal = @jamJadwal, SalesmanID = @salesmanId, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
-
-  if (row.Status === "Terbit") {
-    const armadaResult = await pool
-      .request()
-      .input("armadaId", sql.Int, row.ArmadaID)
-      .query(`SELECT Nama FROM DashboardArmada WHERE ArmadaID = @armadaId`);
-    const armadaNama = (armadaResult.recordset[0] as { Nama: string } | undefined)?.Nama ?? null;
-
-    const linkedDOs = await pool
-      .request()
-      .input("jadwalId", sql.Int, jadwalId)
-      .query(`
-        SELECT DeliveryOrderID FROM DashboardPengirimanJadwalDetail
-        WHERE JadwalID = @jadwalId AND IsDeleted = 0 AND DeliveryOrderID IS NOT NULL
-      `);
-    for (const r of linkedDOs.recordset as { DeliveryOrderID: string }[]) {
-      await assignDeliveryDriver(r.DeliveryOrderID, input.salesmanId);
-      await assignDeliveryVehicle(r.DeliveryOrderID, armadaNama);
-    }
-  }
 }
 
 export async function startMuat(jadwalId: number): Promise<void> {
