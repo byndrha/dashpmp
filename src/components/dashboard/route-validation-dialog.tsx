@@ -44,7 +44,15 @@ function combineDateAndTime(businessDate: string, timeHHMM: string): Date {
   return new Date(`${businessDate}T${timeHHMM}:00`);
 }
 
-function SortableStopRow({ detail, index }: { detail: JadwalDetailRow; index: number }) {
+function SortableStopRow({
+  detail,
+  index,
+  onEdit,
+}: {
+  detail: JadwalDetailRow;
+  index: number;
+  onEdit: (detail: JadwalDetailRow) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: detail.JadwalDetailID,
   });
@@ -64,14 +72,14 @@ function SortableStopRow({ detail, index }: { detail: JadwalDetailRow; index: nu
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
         {index + 1}
       </span>
-      <div className="min-w-0 flex-1">
+      <button type="button" onClick={() => onEdit(detail)} className="min-w-0 flex-1 text-left hover:underline">
         <p className="truncate font-medium">{detail.CustomerName}</p>
         <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
           <MapPin className="size-3 shrink-0" />
           {detail.Wilayah}
           {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
         </p>
-      </div>
+      </button>
       <span className="shrink-0 tabular-nums text-muted-foreground">{detail.Qty} kantong</span>
       {detail.Latitude == null && (
         <Badge variant="outline" className="shrink-0 border-destructive/30 text-[10px] text-destructive">
@@ -93,6 +101,7 @@ export function RouteValidationDialog({
   biayaBBMPerLiter,
   onOpenChange,
   onDeleted,
+  onEditSalesOrder,
 }: {
   jadwal: JadwalCardData | null;
   businessDate: string;
@@ -113,6 +122,11 @@ export function RouteValidationDialog({
   // Fired after a successful "Batalkan Draft" so the caller can close this
   // dialog (it has no Jadwal left to show once deleted).
   onDeleted?: () => void;
+  // Fired when a stop is clicked — the caller owns closing this dialog and
+  // opening UbahPemesananDialog itself (avoids nesting a second Dialog
+  // inside this one, same "close one, open the other" pattern already
+  // established by ArmadaManager's list-dialog-to-form-dialog handoff).
+  onEditSalesOrder: (detail: JadwalDetailRow) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<JadwalDetailRow[]>([]);
@@ -554,7 +568,7 @@ export function RouteValidationDialog({
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={order.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
                     {order.map((d, i) => (
-                      <SortableStopRow key={d.JadwalDetailID} detail={d} index={i} />
+                      <SortableStopRow key={d.JadwalDetailID} detail={d} index={i} onEdit={onEditSalesOrder} />
                     ))}
                   </SortableContext>
                 </DndContext>

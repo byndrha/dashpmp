@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { ArmadaManager } from "@/components/dashboard/armada-dialog";
 import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
+import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow } from "@/lib/queries/armada";
@@ -361,6 +362,7 @@ export function PengirimanBoard({
   const isToday = businessDate === todayISO;
   const [detailJadwalId, setDetailJadwalId] = useState<number | null>(null);
   const [createArmadaId, setCreateArmadaId] = useState<number | null>(null);
+  const [editingSalesOrder, setEditingSalesOrder] = useState<UbahPemesananTarget | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
@@ -505,6 +507,15 @@ export function PengirimanBoard({
         biayaBBMPerLiter={openArmada?.BiayaBBMPerLiter ?? null}
         onOpenChange={(open) => !open && setDetailJadwalId(null)}
         onDeleted={() => setDetailJadwalId(null)}
+        onEditSalesOrder={(detail) => {
+          setDetailJadwalId(null);
+          setEditingSalesOrder({
+            salesOrderId: detail.SalesOrderID,
+            customerName: detail.CustomerName,
+            wilayah: detail.Wilayah,
+            qty: detail.Qty,
+          });
+        }}
       />
       <CreateJadwalDialog
         open={createArmadaId != null}
@@ -512,6 +523,12 @@ export function PengirimanBoard({
         armadaId={createArmadaId}
         businessDate={businessDate}
         kapasitasMaks={createArmada?.KapasitasMaks ?? null}
+      />
+      <UbahPemesananDialog
+        target={editingSalesOrder}
+        onOpenChange={(open) => !open && setEditingSalesOrder(null)}
+        armadaList={armada}
+        drivers={drivers}
       />
     </Card>
   );

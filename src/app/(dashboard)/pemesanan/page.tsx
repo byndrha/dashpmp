@@ -48,7 +48,7 @@ export default async function PemesananPage({
         />
       </div>
 
-      <PemesananList rows={rows} />
+      <PemesananList rows={rows} armadaList={armadaList} drivers={drivers} />
     </div>
   );
 }
