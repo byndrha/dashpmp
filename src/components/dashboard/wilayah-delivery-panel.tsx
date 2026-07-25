@@ -9,6 +9,10 @@ import type { WilayahDeliverySummary } from "@/lib/queries/delivery";
 // business request.
 const WILAYAH_PRIORITY = ["Ponorogo", "Madiun", "Magetan", "Wonogiri", "Pacitan", "Trenggalek", "Ngawi"];
 
+// Company-wide daily target across all wilayah, per explicit business
+// request — not derived from data, a fixed figure set by management.
+const TARGET_PER_HARI = 4000;
+
 function sortByPriority(data: WilayahDeliverySummary[]): WilayahDeliverySummary[] {
   return [...data].sort((a, b) => {
     const ai = WILAYAH_PRIORITY.indexOf(a.Wilayah);
@@ -32,6 +36,8 @@ export function WilayahDeliveryPanel({
   const grandTotal = data.reduce((sum, w) => sum + w.TotalKantong, 0);
   const grandTotalToday = data.reduce((sum, w) => sum + w.TotalKantongHariIni, 0);
   const sortedData = sortByPriority(data);
+  const ponorogo = data.find((w) => w.Wilayah === "Ponorogo");
+  const deviasiPonorogo = ponorogo?.TargetHarian != null ? TARGET_PER_HARI - ponorogo.TargetHarian : null;
 
   return (
     <Card>
@@ -55,6 +61,29 @@ export function WilayahDeliveryPanel({
                 <p className="text-[11px] text-muted-foreground">Hari Ini</p>
                 <p className="font-display text-sm font-semibold tabular-nums text-primary">
                   {grandTotalToday.toLocaleString("id-ID")} kantong
+                </p>
+              </div>
+            </div>
+
+            {/* Target/deviasi row — directly below the Total Periode/Hari Ini
+                box, same two-column layout. TARGET_PER_HARI is a fixed
+                company-wide figure (not derived from data); the deviation is
+                specifically Ponorogo's own gap against it, starred to match
+                Ponorogo's marker elsewhere in this panel. */}
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card/50 px-3 py-2">
+              <div>
+                <p className="text-[11px] text-muted-foreground">Target / Hari</p>
+                <p className="font-display text-sm font-semibold tabular-nums">
+                  {TARGET_PER_HARI.toLocaleString("id-ID")} kantong
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+                  <Star className="size-3 shrink-0 fill-primary text-primary" />
+                  Deviasi Ponorogo
+                </p>
+                <p className="font-display text-sm font-semibold tabular-nums">
+                  {deviasiPonorogo != null ? deviasiPonorogo.toLocaleString("id-ID") : "-"} kantong
                 </p>
               </div>
             </div>
