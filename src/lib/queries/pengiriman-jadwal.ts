@@ -3,6 +3,7 @@ import { assignDeliveryDriver, assignDeliveryVehicle } from "@/lib/queries/deliv
 import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getMultiPointRoute } from "@/lib/osrm";
+import { formatDate, formatTime } from "@/lib/format";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
 // mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
@@ -202,6 +203,30 @@ async function assertWithinCapacity(pool: sql.ConnectionPool, armadaId: number, 
   }
 }
 
+// Single enforcement point for the rule that a departure can never be
+// scheduled earlier than the Sales Order(s) it's delivering — a Jadwal
+// can't exist before the order that created the need for it. Called from
+// every path that sets or changes JamJadwal (createJadwalDraft,
+// updateJadwalDriverTime, addSalesOrdersToJadwal) so there's exactly one
+// place this rule lives, not one per call site.
+async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrderIds: string[], jamJadwal: Date): Promise<void> {
+  if (salesOrderIds.length === 0) return;
+  const request = pool.request();
+  const placeholders = salesOrderIds.map((id, i) => {
+    request.input(`so${i}`, sql.VarChar(16), id);
+    return `@so${i}`;
+  });
+  const result = await request.query(`
+    SELECT MAX(TransDate) AS MaxTransDate FROM SalesOrder WHERE SalesOrderID IN (${placeholders.join(",")})
+  `);
+  const maxTransDate = (result.recordset[0]?.MaxTransDate as Date | null) ?? null;
+  if (maxTransDate && jamJadwal < maxTransDate) {
+    throw new Error(
+      `Waktu pengiriman (${formatDate(jamJadwal)} ${formatTime(jamJadwal)}) tidak boleh sebelum waktu pemesanan SO terkait (${formatDate(maxTransDate)} ${formatTime(maxTransDate)}).`
+    );
+  }
+}
+
 export async function createJadwalDraft(input: {
   armadaId: number;
   jamJadwal: Date;
@@ -211,6 +236,7 @@ export async function createJadwalDraft(input: {
 
   const totalQty = await sumSalesOrderQty(pool, input.salesOrderIds);
   await assertWithinCapacity(pool, input.armadaId, totalQty);
+  await assertJamJadwalNotBeforeOrders(pool, input.salesOrderIds, input.jamJadwal);
 
   const result = await pool
     .request()
@@ -294,10 +320,11 @@ export async function addSalesOrdersToJadwal(jadwalId: number, salesOrderIds: st
   const header = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
-    .query(`SELECT ArmadaID, Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
-  const headerRow = header.recordset[0] as { ArmadaID: number; Status: JadwalStatus } | undefined;
+    .query(`SELECT ArmadaID, Status, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const headerRow = header.recordset[0] as { ArmadaID: number; Status: JadwalStatus; JamJadwal: Date } | undefined;
   if (!headerRow) throw new Error("Keberangkatan tidak ditemukan.");
   if (headerRow.Status !== "Draft") throw new Error("Keberangkatan ini sudah berangkat, tidak bisa menambah SO.");
+  await assertJamJadwalNotBeforeOrders(pool, salesOrderIds, headerRow.JamJadwal);
 
   const existing = await pool
     .request()
@@ -348,6 +375,13 @@ export async function updateJadwalDriverTime(
     .query(`SELECT Status, ArmadaID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number } | undefined;
   if (!row) throw new Error("Keberangkatan tidak ditemukan.");
+
+  const detailResult = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT SalesOrderID FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const bundledSalesOrderIds = (detailResult.recordset as { SalesOrderID: string }[]).map((r) => r.SalesOrderID);
+  await assertJamJadwalNotBeforeOrders(pool, bundledSalesOrderIds, input.jamJadwal);
 
   await pool
     .request()
