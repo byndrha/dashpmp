@@ -265,6 +265,15 @@ function ArmadaRowBoard({
   onCreateClick: (armadaId: number) => void;
 }) {
   const cardWidth = Math.max(MIN_CARD_WIDTH, hourWidth - 6);
+  const totalKantongHariIni = jadwal.reduce((sum, j) => sum + j.TotalKantong, 0);
+  // "telah ditempuh" (already traveled) — only Jadwal that actually
+  // departed (JamAktualBerangkat set) contribute; a Draft hasn't gone
+  // anywhere yet, so it contributes 0 regardless of its JarakKM (which is
+  // always null for a Draft anyway — JarakKM is only ever set at
+  // startBerangkat).
+  const totalJarakHariIni = jadwal
+    .filter((j) => j.JamAktualBerangkat != null)
+    .reduce((sum, j) => sum + (j.JarakKM ?? 0), 0);
   return (
     <div className="flex items-stretch self-start">
       <div className="sticky left-0 z-10 flex w-56 shrink-0 flex-col gap-1.5 bg-card py-3 pr-3">
@@ -302,6 +311,22 @@ function ArmadaRowBoard({
           >
             <Plus className="size-3.5" />
           </Button>
+        </div>
+        <div className="grid grid-cols-3 gap-1 rounded-md border bg-muted/20 px-1.5 py-1 text-center">
+          <div>
+            <p className="text-[9px] text-muted-foreground">Kapasitas</p>
+            <p className="text-xs font-medium tabular-nums">{armada.KapasitasMaks ?? "-"}</p>
+          </div>
+          <div>
+            <p className="text-[9px] text-muted-foreground">Kantong</p>
+            <p className="text-xs font-medium tabular-nums">{totalKantongHariIni}</p>
+          </div>
+          <div>
+            <p className="text-[9px] text-muted-foreground">Jarak</p>
+            <p className="text-xs font-medium tabular-nums">
+              {totalJarakHariIni.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km
+            </p>
+          </div>
         </div>
       </div>
       <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: 72 }}>
