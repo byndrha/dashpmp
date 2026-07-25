@@ -1,7 +1,21 @@
 import { ArrowRight, Star } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { cn } from "@/lib/utils";
+import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { WilayahDeliverySummary } from "@/lib/queries/delivery";
+
+const EXPORT_COLUMNS: XlsxColumn[] = [
+  { header: "Wilayah", key: "wilayah", width: 16 },
+  { header: "Kantong 10KG", key: "qty10kg", type: "number", width: 13 },
+  { header: "Kantong 5KG", key: "qty5kg", type: "number", width: 12 },
+  { header: "Total Kantong", key: "totalKantong", type: "number", width: 13 },
+  { header: "Kantong Hari Ini", key: "totalKantongHariIni", type: "number", width: 14 },
+  { header: "Target/Hari", key: "targetHarian", type: "number", width: 11 },
+  { header: "Target Periode", key: "targetPeriode", type: "number", width: 13 },
+  { header: "% Pencapaian", key: "pctAchievement", type: "number", numFmt: "0.0%", width: 12 },
+  { header: "Rata-rata/Hari", key: "avgPerHari", type: "number", numFmt: "#,##0.0", width: 13 },
+];
 
 // Priority display order for the tile grid — everything not listed here
 // keeps its existing relative order (TotalKantong DESC, from
@@ -39,11 +53,31 @@ export function WilayahDeliveryPanel({
   const ponorogo = data.find((w) => w.Wilayah === "Ponorogo");
   const deviasiPonorogo = ponorogo?.TargetHarian != null ? TARGET_PER_HARI - ponorogo.TargetHarian : null;
 
+  const exportRows = sortedData.map((w) => ({
+    wilayah: w.Wilayah,
+    qty10kg: w.Qty10KG,
+    qty5kg: w.Qty5KG,
+    totalKantong: w.TotalKantong,
+    totalKantongHariIni: w.TotalKantongHariIni,
+    targetHarian: w.TargetHarian,
+    targetPeriode: w.TargetPeriode,
+    pctAchievement: w.PctAchievement != null ? w.PctAchievement / 100 : null,
+    avgPerHari: w.AvgPerHari,
+  }));
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="font-display">Pengiriman per Wilayah</CardTitle>
-        <CardDescription>Kantong terkirim (DO) tiap wilayah — total periode filter dan hari ini.</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-2">
+        <div>
+          <CardTitle className="font-display">Pengiriman per Wilayah</CardTitle>
+          <CardDescription>Kantong terkirim (DO) tiap wilayah — total periode filter dan hari ini.</CardDescription>
+        </div>
+        <ExportXlsxButton
+          filename="pengiriman-per-wilayah"
+          sheetName="Pengiriman per Wilayah"
+          columns={EXPORT_COLUMNS}
+          rows={exportRows}
+        />
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (

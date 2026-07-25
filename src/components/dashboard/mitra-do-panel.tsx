@@ -20,8 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
 import { updateMitraCapacityAction } from "@/app/(dashboard)/mitra/actions";
 
@@ -368,6 +370,55 @@ export function MitraDOPanel({
     );
   }, [filteredActive, sortMode, elapsedDays]);
 
+  // Export mirrors exactly what's currently on screen: the same
+  // wilayah/marketing/search filters and sort order, plus the inactive
+  // (no-transaction) mitra list only when "Tampilkan ... mitra tanpa
+  // transaksi" is toggled on, since that's the only time they're visible.
+  const exportRows = useMemo(() => {
+    const rowsSource = showAll ? [...sortedActive, ...filteredInactive] : sortedActive;
+    return rowsSource.map((m) => {
+      const avgQty = elapsedDays > 0 ? m.TotalQty / elapsedDays : null;
+      const row: Record<string, unknown> = {
+        mitra: m.Name,
+        tipe: m.PartnerType,
+        wilayah: m.Wilayah,
+        kecamatan: m.Kecamatan ?? "",
+        marketing: m.MarketingNama ?? "",
+        totalKantong: m.TotalQty,
+        pctAchievement: m.PctAchievement != null ? m.PctAchievement / 100 : null,
+        targetHarian: m.TargetHarian,
+        rataRata: avgQty,
+        hargaJual: m.HargaJual,
+      };
+      dates.forEach((dateISO, i) => {
+        row[dateISO] = m.DailyQty[i];
+      });
+      return row;
+    });
+  }, [sortedActive, filteredInactive, showAll, dates, elapsedDays]);
+
+  const exportColumns: XlsxColumn[] = useMemo(
+    () => [
+      { header: "Mitra", key: "mitra", width: 28 },
+      { header: "Tipe", key: "tipe", width: 12 },
+      { header: "Wilayah", key: "wilayah", width: 16 },
+      { header: "Kecamatan", key: "kecamatan", width: 16 },
+      { header: "Marketing", key: "marketing", width: 16 },
+      { header: "Total Kantong", key: "totalKantong", type: "number", width: 14 },
+      { header: "% Pencapaian", key: "pctAchievement", type: "number", numFmt: "0.0%", width: 12 },
+      { header: "Target Harian", key: "targetHarian", type: "number", width: 12 },
+      { header: "Rata-rata/Hari", key: "rataRata", type: "number", numFmt: "#,##0.0", width: 13 },
+      { header: "Harga Jual", key: "hargaJual", type: "number", numFmt: "#,##0", width: 12 },
+      ...dates.map((dateISO): XlsxColumn => ({
+        header: `${dateISO.slice(8, 10)}/${dateISO.slice(5, 7)}`,
+        key: dateISO,
+        type: "number",
+        width: 8,
+      })),
+    ],
+    [dates]
+  );
+
   // One-way mirror: the body's own horizontal scrollbar is what the user
   // actually drags; the header's date-total row has no scrollbar of its
   // own (overflow-x-hidden) and just has its scrollLeft driven to match,
@@ -470,6 +521,12 @@ export function MitraDOPanel({
               <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
             </Button>
           )}
+          <ExportXlsxButton
+            filename={`transaksi-do-per-mitra_${rangeStartISO}`}
+            sheetName="DO per Mitra"
+            columns={exportColumns}
+            rows={exportRows}
+          />
         </div>
         {/* Per-date total row — mirrors the body's horizontal scroll (see
             handleBodyScroll) so it always lines up with the date columns
