@@ -156,12 +156,14 @@ export interface ReschedulePemesananInput {
 // it fresh). Reuses createJadwalDraft/updateJadwalDriverTime exactly as
 // createPemesanan already does, so the same capacity check and
 // JamJadwal-not-before-TransDate validation (pengiriman-jadwal.ts) apply
-// here too — nothing about this path bypasses either rule.
+// here too — nothing about this path bypasses either rule. Deliberately
+// creates the NEW Jadwal draft before removing the SO from its OLD one:
+// if createJadwalDraft/updateJadwalDriverTime throws (capacity exceeded,
+// JamJadwal validation, etc.), the old assignment is still untouched and
+// there's nothing to roll back — removeSalesOrderFromJadwal only runs
+// once the new assignment has fully succeeded.
 export async function reschedulePemesanan(input: ReschedulePemesananInput): Promise<{ jadwalId: number }> {
   const current = await getCurrentAssignment(input.salesOrderId);
-  if (current) {
-    await removeSalesOrderFromJadwal(current.jadwalId, input.salesOrderId);
-  }
 
   const jadwalId = await createJadwalDraft({
     armadaId: input.armadaId,
@@ -174,6 +176,10 @@ export async function reschedulePemesanan(input: ReschedulePemesananInput): Prom
       jamJadwal: input.deliveryDateTime,
       salesmanId: input.salesmanId,
     });
+  }
+
+  if (current) {
+    await removeSalesOrderFromJadwal(current.jadwalId, input.salesOrderId);
   }
 
   return { jadwalId };
