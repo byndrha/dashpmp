@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatTime } from "@/lib/format";
+import { formatDate, formatTime } from "@/lib/format";
 import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
@@ -451,8 +451,8 @@ export function RouteValidationDialog({
 
             {isDraft && isFutureDate && (
               <p className="text-xs text-muted-foreground">
-                Keberangkatan ini dijadwalkan untuk {businessDate} — Mulai Muat dan Berangkat baru bisa dilakukan
-                pada hari itu.
+                Keberangkatan ini dijadwalkan untuk {formatDate(businessDate)} — Mulai Muat dan Berangkat baru bisa
+                dilakukan pada hari itu.
               </p>
             )}
 
