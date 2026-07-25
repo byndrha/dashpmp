@@ -38,12 +38,14 @@ export function PemesananFormDialog({
   drivers,
   priceLevels10kg,
   priceLevels5kg,
+  todayISO,
 }: {
   mitraList: MitraRow[];
   armadaList: ArmadaRow[];
   drivers: DriverOption[];
   priceLevels10kg: PriceLevelOption[];
   priceLevels5kg: PriceLevelOption[];
+  todayISO: string;
 }) {
   const [open, setOpen] = useState(false);
   const [businessPartnerId, setBusinessPartnerId] = useState("");
@@ -205,7 +207,7 @@ export function PemesananFormDialog({
                 <Label htmlFor="tanggal" className="sr-only">
                   Tanggal Kirim
                 </Label>
-                <Input id="tanggal" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                <Input id="tanggal" type="date" min={todayISO} value={date} onChange={(e) => setDate(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="jam" className="sr-only">

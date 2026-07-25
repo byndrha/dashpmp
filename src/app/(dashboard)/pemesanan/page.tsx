@@ -1,4 +1,5 @@
 import { requireModuleAccess } from "@/lib/require-access";
+import { getBusinessDateISO } from "@/lib/business-date";
 import { getSalesOrderList } from "@/lib/queries/pemesanan";
 import { getMitraList, getPriceLevelOptions } from "@/lib/queries/mitra";
 import { getArmadaList } from "@/lib/queries/armada";
@@ -17,6 +18,7 @@ export default async function PemesananPage({
   await requireModuleAccess("pemesanan");
   const params = await searchParams;
   const filter = resolveFilter(params);
+  const todayISO = getBusinessDateISO();
 
   const [rows, mitraList, armadaList, drivers, priceLevels10kg, priceLevels5kg, wilayahList] = await Promise.all([
     getSalesOrderList({ from: filter.startDate, to: filter.endDate, wilayah: filter.wilayah }),
@@ -42,6 +44,7 @@ export default async function PemesananPage({
           drivers={drivers}
           priceLevels10kg={priceLevels10kg}
           priceLevels5kg={priceLevels5kg}
+          todayISO={todayISO}
         />
       </div>
 
