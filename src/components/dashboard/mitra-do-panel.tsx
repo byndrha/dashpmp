@@ -25,9 +25,10 @@ import { cn } from "@/lib/utils";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
 import { updateMitraCapacityAction } from "@/app/(dashboard)/mitra/actions";
 
-type SortMode = "terbanyak" | "tren" | "terbaru";
+type SortMode = "persentase" | "terbanyak" | "tren" | "terbaru";
 
 const SORT_LABEL: Record<SortMode, string> = {
+  persentase: "Persentase Pencapaian",
   terbanyak: "Pengambilan Terbanyak",
   tren: "Tren 3 Hari Terakhir",
   terbaru: "Mitra Terbaru",
@@ -198,6 +199,16 @@ function compareJoinDateDesc(a: MitraDORow, b: MitraDORow): number {
   return new Date(b.JoinDate).getTime() - new Date(a.JoinDate).getTime();
 }
 
+// Highest PctAchievement first; mitra with no TargetHarian set (so no
+// percentage can be computed) sort last rather than clumping at the top as
+// a false "highest".
+function comparePctAchievementDesc(a: MitraDORow, b: MitraDORow): number {
+  if (a.PctAchievement == null && b.PctAchievement == null) return 0;
+  if (a.PctAchievement == null) return 1;
+  if (b.PctAchievement == null) return -1;
+  return b.PctAchievement - a.PctAchievement;
+}
+
 function MitraDOCard({
   m,
   dates,
@@ -292,7 +303,7 @@ export function MitraDOPanel({
   onMarketingFilterChange: (marketing: string) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const [sortMode, setSortMode] = useState<SortMode>("terbanyak");
+  const [sortMode, setSortMode] = useState<SortMode>("persentase");
   const [search, setSearch] = useState("");
   const { active, inactive, daysInRange, rangeStartISO, todayISO } = data;
   const bodyScrollRef = useRef<HTMLDivElement>(null);
@@ -346,11 +357,11 @@ export function MitraDOPanel({
     return totals;
   }, [filteredActive, daysInRange]);
 
-  // filteredActive already arrives sorted by TotalQty desc (the
-  // "Pengambilan Terbanyak" mode) — only re-sort for the other modes, so
-  // the default path stays a no-op.
+  // filteredActive already arrives sorted by TotalQty desc — only the
+  // "Pengambilan Terbanyak" mode can skip re-sorting as a no-op.
   const sortedActive = useMemo(() => {
     if (sortMode === "terbanyak") return filteredActive;
+    if (sortMode === "persentase") return [...filteredActive].sort(comparePctAchievementDesc);
     if (sortMode === "terbaru") return [...filteredActive].sort(compareJoinDateDesc);
     return [...filteredActive].sort(
       (a, b) => getTrend(b.DailyQty, elapsedDays).delta - getTrend(a.DailyQty, elapsedDays).delta
@@ -409,12 +420,13 @@ export function MitraDOPanel({
               className="h-9 pl-8 text-xs"
             />
           </div>
-          <Select value={sortMode} onValueChange={(v) => setSortMode((v as SortMode) ?? "terbanyak")}>
+          <Select value={sortMode} onValueChange={(v) => setSortMode((v as SortMode) ?? "persentase")}>
             <SelectTrigger className="w-56" aria-label="Urutkan">
               <ArrowUpDown className="size-3.5 text-muted-foreground" />
-              <SelectValue>{(v: string) => SORT_LABEL[v as SortMode] ?? SORT_LABEL.terbanyak}</SelectValue>
+              <SelectValue>{(v: string) => SORT_LABEL[v as SortMode] ?? SORT_LABEL.persentase}</SelectValue>
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="persentase">{SORT_LABEL.persentase}</SelectItem>
               <SelectItem value="terbanyak">{SORT_LABEL.terbanyak}</SelectItem>
               <SelectItem value="tren">{SORT_LABEL.tren}</SelectItem>
               <SelectItem value="terbaru">{SORT_LABEL.terbaru}</SelectItem>
