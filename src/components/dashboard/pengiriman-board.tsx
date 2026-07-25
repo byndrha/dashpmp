@@ -216,11 +216,12 @@ function DraggableJadwalCard({
   cardWidth: number;
   onCardClick: (jadwalId: number) => void;
 }) {
+  const isDraft = j.Status === "Draft";
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `jadwal-${j.JadwalID}`,
     data: { jadwalId: j.JadwalID },
+    disabled: !isDraft,
   });
-  const isDraft = j.Status === "Draft";
 
   return (
     <button

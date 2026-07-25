@@ -48,10 +48,12 @@ function SortableStopRow({
   detail,
   index,
   onEdit,
+  disabled,
 }: {
   detail: JadwalDetailRow;
   index: number;
   onEdit: (detail: JadwalDetailRow) => void;
+  disabled: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: detail.JadwalDetailID,
@@ -72,7 +74,12 @@ function SortableStopRow({
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
         {index + 1}
       </span>
-      <button type="button" onClick={() => onEdit(detail)} className="min-w-0 flex-1 text-left hover:underline">
+      <button
+        type="button"
+        onClick={() => !disabled && onEdit(detail)}
+        disabled={disabled}
+        className="min-w-0 flex-1 text-left hover:underline disabled:cursor-default disabled:hover:no-underline"
+      >
         <p className="truncate font-medium">{detail.CustomerName}</p>
         <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
           <MapPin className="size-3 shrink-0" />
@@ -424,26 +431,35 @@ export function RouteValidationDialog({
           </div>
 
           <div className="order-2 -mt-4 flex flex-col gap-3 rounded-t-2xl bg-popover p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] md:order-1 md:mt-0 md:rounded-none md:p-0 md:shadow-none">
-            <div className="flex flex-wrap items-center gap-2">
-              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32 shrink-0" />
-              <Select value={driverId} onValueChange={(v) => setDriverId(v ?? "")}>
-                <SelectTrigger className="min-w-40 flex-1">
-                  <SelectValue placeholder="Driver">
-                    {(v: string) => drivers.find((d) => d.SalesmanID === v)?.Name ?? "Pilih Driver"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {drivers.map((d) => (
-                    <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
-                      {d.Name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="outline" className="shrink-0" disabled={pending} onClick={handleSaveDriverTime}>
-                Simpan
-              </Button>
-            </div>
+            {isDraft ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32 shrink-0" />
+                <Select value={driverId} onValueChange={(v) => setDriverId(v ?? "")}>
+                  <SelectTrigger className="min-w-40 flex-1">
+                    <SelectValue placeholder="Driver">
+                      {(v: string) => drivers.find((d) => d.SalesmanID === v)?.Name ?? "Pilih Driver"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {drivers.map((d) => (
+                      <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
+                        {d.Name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" className="shrink-0" disabled={pending} onClick={handleSaveDriverTime}>
+                  Simpan
+                </Button>
+              </div>
+            ) : (
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium">{time}</span>
+                <span className="text-muted-foreground">
+                  {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Tanpa driver"}
+                </span>
+              </p>
+            )}
 
             {isDraft ? (
               <div className="flex gap-2">
@@ -568,7 +584,7 @@ export function RouteValidationDialog({
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={order.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
                     {order.map((d, i) => (
-                      <SortableStopRow key={d.JadwalDetailID} detail={d} index={i} onEdit={onEditSalesOrder} />
+                      <SortableStopRow key={d.JadwalDetailID} detail={d} index={i} onEdit={onEditSalesOrder} disabled={!isDraft} />
                     ))}
                   </SortableContext>
                 </DndContext>
