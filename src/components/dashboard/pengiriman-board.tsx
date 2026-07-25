@@ -4,6 +4,7 @@ import { DndContext, useDraggable, useSensor, useSensors, PointerSensor, type Dr
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -425,11 +426,15 @@ export function PengirimanBoard({
 
     // Reschedule-by-drag calls the same driver/time update path the
     // validation dialog uses, keeping only the time — driver stays as-is.
-    startTransition(() => {
-      updateJadwalDriverTimeAction(jadwalId, {
-        jamJadwal: combineDateAndTime(businessDate, newTime),
-        salesmanId: current.SalesmanID,
-      });
+    startTransition(async () => {
+      try {
+        await updateJadwalDriverTimeAction(jadwalId, {
+          jamJadwal: combineDateAndTime(businessDate, newTime),
+          salesmanId: current.SalesmanID,
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Gagal mengubah jadwal.");
+      }
     });
   }
 

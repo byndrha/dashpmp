@@ -172,10 +172,15 @@ export async function reschedulePemesanan(input: ReschedulePemesananInput): Prom
   });
 
   if (input.salesmanId) {
-    await updateJadwalDriverTime(jadwalId, {
-      jamJadwal: input.deliveryDateTime,
-      salesmanId: input.salesmanId,
-    });
+    try {
+      await updateJadwalDriverTime(jadwalId, {
+        jamJadwal: input.deliveryDateTime,
+        salesmanId: input.salesmanId,
+      });
+    } catch (err) {
+      await deleteJadwalDraft(jadwalId);
+      throw err;
+    }
   }
 
   if (current) {
