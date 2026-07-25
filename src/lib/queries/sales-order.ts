@@ -169,7 +169,11 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
   if (bp.PriceLevel == null) throw new Error("Mitra belum punya Price Level — atur dulu di modul Mitra.");
 
   const priceLevels = await getPriceLevelOptions(variant.name);
-  const price = priceLevels.find((p) => p.Level === bp.PriceLevel)?.Price ?? 0;
+  const priceLevelEntry = priceLevels.find((p) => p.Level === bp.PriceLevel);
+  if (!priceLevelEntry) {
+    throw new Error(`Harga untuk varian ${variant.name} pada Price Level ${bp.PriceLevel} belum diatur.`);
+  }
+  const price = priceLevelEntry.Price;
   const amount = input.qtyKantong * price;
 
   const termOfPaymentId = bp.TermOfPaymentID?.trim() ? bp.TermOfPaymentID : SO_TERM_OF_PAYMENT_ID;

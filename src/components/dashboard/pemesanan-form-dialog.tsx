@@ -73,7 +73,7 @@ export function PemesananFormDialog({
   const price = mitra?.PriceLevel != null ? (priceLevels.find((p) => p.Level === mitra.PriceLevel)?.Price ?? null) : null;
   const qtyNumber = Number(qty);
   const total = price != null && qtyNumber > 0 ? price * qtyNumber : 0;
-  const canSubmit = !!mitra && mitra.PriceLevel != null && qtyNumber > 0 && !!date && armadaId !== UNSET;
+  const canSubmit = !!mitra && mitra.PriceLevel != null && price != null && qtyNumber > 0 && !!date && armadaId !== UNSET;
 
   function resetForm() {
     setBusinessPartnerId("");

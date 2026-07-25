@@ -9,7 +9,7 @@ import { getMultiPointRoute } from "@/lib/osrm";
 // (not DeliveryOrderDetail) is the uniform source of line-item data for
 // both Draft and Terbit Jadwal rows — a Draft has no DeliveryOrderDetail
 // yet.
-const JADWAL_KANTONG_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END)`;
+export const JADWAL_KANTONG_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END)`;
 
 export type JadwalStatus = "Draft" | "Terbit";
 

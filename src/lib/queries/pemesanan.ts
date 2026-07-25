@@ -1,6 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { createSalesOrderManual, softDeleteSalesOrder, type KantongVariant } from "@/lib/queries/sales-order";
-import { createJadwalDraft, deleteJadwalDraft, updateJadwalDriverTime } from "@/lib/queries/pengiriman-jadwal";
+import { createJadwalDraft, deleteJadwalDraft, updateJadwalDriverTime, JADWAL_KANTONG_EXPR } from "@/lib/queries/pengiriman-jadwal";
 
 export interface CreatePemesananInput {
   businessPartnerId: string;
@@ -111,8 +111,8 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     FROM SalesOrder so
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     LEFT JOIN (
-      SELECT SalesOrderID, SUM(Qty) AS TotalQty, SUM(Amount) AS TotalAmount
-      FROM SalesOrderDetail
+      SELECT SalesOrderID, ${JADWAL_KANTONG_EXPR} AS TotalQty, SUM(Amount) AS TotalAmount
+      FROM SalesOrderDetail sod
       GROUP BY SalesOrderID
     ) sod ON sod.SalesOrderID = so.SalesOrderID
     OUTER APPLY (
