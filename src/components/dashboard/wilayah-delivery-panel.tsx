@@ -50,7 +50,7 @@ export function WilayahDeliveryPanel({
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada pengiriman pada periode ini.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
               <div>
                 <p className="text-[11px] text-muted-foreground">Total Periode Terpilih</p>
                 <p className="font-display text-sm font-semibold tabular-nums">
@@ -62,28 +62,15 @@ export function WilayahDeliveryPanel({
                 <p className="font-display text-sm font-semibold tabular-nums text-primary">
                   {grandTotalToday.toLocaleString("id-ID")} kantong
                 </p>
-              </div>
-            </div>
-
-            {/* Target/deviasi row — directly below the Total Periode/Hari Ini
-                box, same two-column layout. TARGET_PER_HARI is a fixed
-                company-wide figure (not derived from data); the deviation is
-                specifically Ponorogo's own gap against it, starred to match
-                Ponorogo's marker elsewhere in this panel. */}
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card/50 px-3 py-2">
-              <div>
-                <p className="text-[11px] text-muted-foreground">Target / Hari</p>
-                <p className="font-display text-sm font-semibold tabular-nums">
-                  {TARGET_PER_HARI.toLocaleString("id-ID")} kantong
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
-                  <Star className="size-3 shrink-0 fill-primary text-primary" />
-                  Deviasi Ponorogo
-                </p>
-                <p className="font-display text-sm font-semibold tabular-nums">
-                  {deviasiPonorogo != null ? deviasiPonorogo.toLocaleString("id-ID") : "-"} kantong
+                {/* Compact, in-panel instead of a separate box — TARGET_PER_HARI
+                    is a fixed company-wide figure (not derived from data); the
+                    deviation is specifically Ponorogo's own gap against it,
+                    starred to match Ponorogo's marker elsewhere in this panel. */}
+                <p className="mt-1 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">
+                  Target {TARGET_PER_HARI.toLocaleString("id-ID")}
+                  <span className="mx-1">·</span>
+                  <Star className="mb-0.5 inline size-2.5 shrink-0 fill-primary text-primary" /> Deviasi{" "}
+                  {deviasiPonorogo != null ? deviasiPonorogo.toLocaleString("id-ID") : "-"}
                 </p>
               </div>
             </div>
