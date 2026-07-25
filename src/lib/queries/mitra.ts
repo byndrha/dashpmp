@@ -158,16 +158,19 @@ export interface PriceLevelOption {
 
 // BusinessPartner.PriceLevel (1-8) selects which Item.UnitPriceN column
 // applies to that mitra. There's no dedicated price-level lookup table, so
-// this reads the nominal off "Es Tube Jual" — the main product — which is
-// what these levels actually mean in practice (verified: matches the
-// average transacted price per level in SalesInvoiceDetail).
-export async function getPriceLevelOptions(): Promise<PriceLevelOption[]> {
+// this reads the nominal off a specific product Item — "Es Tube Jual" by
+// default, but callers creating a 5KG-variant order (Pemesanan module) pass
+// "Es Tube Jual 5 KG" instead, since that's a wholly separate Item row with
+// its own UnitPriceN values.
+export async function getPriceLevelOptions(itemName: string = "Es Tube Jual"): Promise<PriceLevelOption[]> {
   const pool = await getPool();
-  const result = await pool.request().query(`
-    SELECT TOP 1 UnitPrice1, UnitPrice2, UnitPrice3, UnitPrice4, UnitPrice5, UnitPrice6, UnitPrice7, UnitPrice8
-    FROM Item
-    WHERE Name = 'Es Tube Jual' AND ISNULL(IsDeleted, 0) = 0
-  `);
+  const result = await pool
+    .request()
+    .input("itemName", sql.VarChar(150), itemName).query(`
+      SELECT TOP 1 UnitPrice1, UnitPrice2, UnitPrice3, UnitPrice4, UnitPrice5, UnitPrice6, UnitPrice7, UnitPrice8
+      FROM Item
+      WHERE Name = @itemName AND ISNULL(IsDeleted, 0) = 0
+    `);
   const row = result.recordset[0] as Record<string, number | null> | undefined;
   if (!row) return [];
 
