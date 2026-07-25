@@ -1,6 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { createSalesOrderManual, softDeleteSalesOrder, type KantongVariant } from "@/lib/queries/sales-order";
-import { createJadwalDraft, updateJadwalDriverTime } from "@/lib/queries/pengiriman-jadwal";
+import { createJadwalDraft, deleteJadwalDraft, updateJadwalDriverTime } from "@/lib/queries/pengiriman-jadwal";
 
 export interface CreatePemesananInput {
   businessPartnerId: string;
@@ -33,8 +33,9 @@ export async function createPemesanan(input: CreatePemesananInput): Promise<Crea
     deliveryDateTime: input.deliveryDateTime,
   });
 
+  let jadwalId: number | null = null;
   try {
-    const jadwalId = await createJadwalDraft({
+    jadwalId = await createJadwalDraft({
       armadaId: input.armadaId,
       jamJadwal: input.deliveryDateTime,
       salesOrderIds: [salesOrderId],
@@ -49,6 +50,9 @@ export async function createPemesanan(input: CreatePemesananInput): Promise<Crea
 
     return { salesOrderId, jadwalId };
   } catch (err) {
+    if (jadwalId != null) {
+      await deleteJadwalDraft(jadwalId);
+    }
     await softDeleteSalesOrder(salesOrderId);
     throw err;
   }
