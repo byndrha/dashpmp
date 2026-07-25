@@ -1,14 +1,20 @@
 "use client";
 
-import { Check, ChevronsUpDown, Building2 } from "lucide-react";
+import { Check, ChevronsUpDown, Building2, ExternalLink } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 const ENTITIES = [{ id: "mkesindo", name: "PT Mitra Kelola Esindo" }];
+
+// Standalone static report, not part of this app's module/permission
+// system — opened in a new tab rather than switched into, since it doesn't
+// change what data the rest of the dashboard is showing.
+const STATIC_REPORTS = [{ id: "prima-maesa-putra", name: "PT Prima Maesa Putra (Ponorogo)", href: "/static/prima-maesa-putra" }];
 
 export function PTSwitcher() {
   const active = ENTITIES[0];
@@ -27,6 +33,17 @@ export function PTSwitcher() {
           <DropdownMenuItem key={entity.id} className="justify-between text-xs">
             {entity.name}
             {entity.id === active.id && <Check className="size-3.5 text-primary" />}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        {STATIC_REPORTS.map((report) => (
+          <DropdownMenuItem
+            key={report.id}
+            className="justify-between text-xs"
+            onClick={() => window.open(report.href, "_blank", "noopener,noreferrer")}
+          >
+            {report.name}
+            <ExternalLink className="size-3.5 text-muted-foreground" />
           </DropdownMenuItem>
         ))}
         <DropdownMenuItem disabled className="text-xs text-muted-foreground">
