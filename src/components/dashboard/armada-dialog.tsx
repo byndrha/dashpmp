@@ -16,6 +16,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ARMADA_STATUS, type ArmadaStatus } from "@/lib/armada-status";
+import { FUEL_TYPES, type FuelType } from "@/lib/armada-fuel";
 import { type ArmadaRow, type ArmadaInput } from "@/lib/queries/armada";
 import { createArmadaAction, updateArmadaAction, deleteArmadaAction } from "@/app/(dashboard)/delivery/actions";
 
@@ -36,6 +37,10 @@ function emptyForm(): ArmadaInput {
     kapasitasMaks: null,
     status: "Baik",
     fotoPath: null,
+    jenisBBM: null,
+    biayaBBMPerLiter: null,
+    pajakLimaTahunan: null,
+    biayaPajakLimaTahunan: null,
   };
 }
 
@@ -49,6 +54,10 @@ function rowToForm(row: ArmadaRow): ArmadaInput {
     kapasitasMaks: row.KapasitasMaks,
     status: row.Status,
     fotoPath: row.FotoPath,
+    jenisBBM: row.JenisBBM,
+    biayaBBMPerLiter: row.BiayaBBMPerLiter,
+    pajakLimaTahunan: row.PajakLimaTahunan ? new Date(row.PajakLimaTahunan).toISOString().slice(0, 10) : null,
+    biayaPajakLimaTahunan: row.BiayaPajakLimaTahunan,
   };
 }
 
@@ -71,6 +80,7 @@ function ArmadaFormDialog({
 }) {
   const [fotoPath, setFotoPath] = useState(initial.fotoPath);
   const [status, setStatus] = useState<ArmadaStatus>(initial.status);
+  const [jenisBBM, setJenisBBM] = useState<FuelType | null>(initial.jenisBBM);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -103,6 +113,10 @@ function ArmadaFormDialog({
       kapasitasMaks: formData.get("kapasitasMaks") ? Number(formData.get("kapasitasMaks")) : null,
       status,
       fotoPath,
+      jenisBBM,
+      biayaBBMPerLiter: formData.get("biayaBBMPerLiter") ? Number(formData.get("biayaBBMPerLiter")) : null,
+      pajakLimaTahunan: String(formData.get("pajakLimaTahunan") ?? "") || null,
+      biayaPajakLimaTahunan: formData.get("biayaPajakLimaTahunan") ? Number(formData.get("biayaPajakLimaTahunan")) : null,
     });
   }
 
@@ -114,6 +128,7 @@ function ArmadaFormDialog({
         if (next) {
           setFotoPath(initial.fotoPath);
           setStatus(initial.status);
+          setJenisBBM(initial.jenisBBM);
           setUploadError(null);
         }
       }}
@@ -174,6 +189,49 @@ function ArmadaFormDialog({
               type="number"
               placeholder="Kapasitas Maks (kantong)"
               defaultValue={initial.kapasitasMaks ?? ""}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="sr-only">Jenis BBM</Label>
+            <Select value={jenisBBM ?? ""} onValueChange={(v) => setJenisBBM((v as FuelType) || null)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Jenis BBM">{(v: string) => v || "Jenis BBM"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {FUEL_TYPES.map((f) => (
+                  <SelectItem key={f} value={f}>
+                    {f}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="biayaBBMPerLiter" className="sr-only">Biaya BBM/Liter (Rp)</Label>
+            <Input
+              id="biayaBBMPerLiter"
+              name="biayaBBMPerLiter"
+              type="number"
+              step="1"
+              placeholder="Biaya BBM/Liter (Rp)"
+              defaultValue={initial.biayaBBMPerLiter ?? ""}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pajakLimaTahunan" className="text-xs text-muted-foreground">
+              Jatuh Tempo Pajak 5 Tahunan
+            </Label>
+            <Input id="pajakLimaTahunan" name="pajakLimaTahunan" type="date" defaultValue={initial.pajakLimaTahunan ?? ""} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="biayaPajakLimaTahunan" className="sr-only">Biaya Pajak 5 Tahunan (Rp)</Label>
+            <Input
+              id="biayaPajakLimaTahunan"
+              name="biayaPajakLimaTahunan"
+              type="number"
+              step="1"
+              placeholder="Biaya Pajak 5 Tahunan (Rp)"
+              defaultValue={initial.biayaPajakLimaTahunan ?? ""}
             />
           </div>
           <div className="col-span-2 flex flex-col gap-1.5">
