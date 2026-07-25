@@ -501,6 +501,8 @@ export function PengirimanBoard({
         drivers={drivers}
         konsumsiBBM={openArmada?.KonsumsiBBM ?? null}
         kapasitasMaks={openArmada?.KapasitasMaks ?? null}
+        jenisBBM={openArmada?.JenisBBM ?? null}
+        biayaBBMPerLiter={openArmada?.BiayaBBMPerLiter ?? null}
         onOpenChange={(open) => !open && setDetailJadwalId(null)}
         onDeleted={() => setDetailJadwalId(null)}
       />

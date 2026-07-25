@@ -19,10 +19,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatRupiah, formatTime } from "@/lib/format";
 import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
+import type { FuelType } from "@/lib/armada-fuel";
 import {
   getJadwalDetailAction,
   updateJadwalUrutanAction,
@@ -88,6 +89,8 @@ export function RouteValidationDialog({
   drivers,
   konsumsiBBM,
   kapasitasMaks,
+  jenisBBM,
+  biayaBBMPerLiter,
   onOpenChange,
   onDeleted,
 }: {
@@ -102,6 +105,10 @@ export function RouteValidationDialog({
   // Capacity hard-block input, same resolution path as konsumsiBBM. Null
   // means no limit has been configured, so nothing is blocked.
   kapasitasMaks: number | null;
+  // Same resolution path as konsumsiBBM/kapasitasMaks — both null when
+  // the Armada hasn't had these fields filled in yet.
+  jenisBBM: FuelType | null;
+  biayaBBMPerLiter: number | null;
   onOpenChange: (open: boolean) => void;
   // Fired after a successful "Batalkan Draft" so the caller can close this
   // dialog (it has no Jadwal left to show once deleted).
@@ -355,6 +362,10 @@ export function RouteValidationDialog({
     if (route == null || konsumsiBBM == null) return null;
     return Math.round(route.distanceKm * konsumsiBBM * 10) / 10;
   }, [route, konsumsiBBM]);
+  const totalFuelCost = useMemo(() => {
+    if (totalFuelLiters == null || biayaBBMPerLiter == null) return null;
+    return Math.round(totalFuelLiters * biayaBBMPerLiter);
+  }, [totalFuelLiters, biayaBBMPerLiter]);
 
   return (
     <Dialog open={jadwalId != null} onOpenChange={onOpenChange}>
@@ -565,7 +576,11 @@ export function RouteValidationDialog({
                   <span className="flex items-center gap-1">
                     <Fuel className="size-3.5 text-muted-foreground" />
                     {totalFuelLiters.toLocaleString("id-ID")} L
+                    {jenisBBM && ` (${jenisBBM})`}
                   </span>
+                )}
+                {totalFuelCost != null && (
+                  <span className="flex items-center gap-1 font-medium">{formatRupiah(totalFuelCost)}</span>
                 )}
               </div>
             )}
