@@ -1,5 +1,14 @@
+import type { Metadata } from "next";
 import { getInvoiceByToken } from "@/lib/queries/invoice-public";
 import { formatDate, formatRupiah } from "@/lib/format";
+
+// Public, unguessable-token page — no reason for a search engine to index
+// it, and the generic title avoids leaking the internal dashboard's name
+// on an otherwise customer-facing tab.
+export const metadata: Metadata = {
+  title: "Tagihan",
+  robots: { index: false, follow: false },
+};
 
 export default async function PublicInvoicePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
