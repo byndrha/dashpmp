@@ -2,7 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { assignDeliveryDriver, assignDeliveryVehicle } from "@/lib/queries/delivery";
 import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
-import { getMultiPointRoute } from "@/lib/osrm";
+import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { formatDate, formatTime } from "@/lib/format";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
@@ -28,6 +28,8 @@ export interface JadwalCard {
   // documents (there are none yet). Same count either way since one SO
   // becomes exactly one DO, just a more accurate name.
   TotalStop: number;
+  // Only ever set once, at startBerangkat — null for every Draft.
+  JarakKM: number | null;
 }
 
 export async function getPengirimanBoard(businessDate: string): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[] }> {
@@ -47,14 +49,15 @@ export async function getPengirimanBoard(businessDate: string): Promise<{ armada
             j.JamAktualBerangkat,
             j.Status,
             ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS TotalKantong,
-            COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop
+            COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop,
+            j.JarakKM
         FROM DashboardPengirimanJadwal j
         LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
         LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
         LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
         WHERE j.IsDeleted = 0
           AND j.JamJadwal >= DATEADD(HOUR, -7, CAST(@businessDate AS DATETIME)) AND j.JamJadwal < DATEADD(HOUR, -7, DATEADD(DAY, 1, CAST(@businessDate AS DATETIME)))
-        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status
+        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status, j.JarakKM
         ORDER BY j.JamJadwal
       `),
   ]);
@@ -500,8 +503,9 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
     throw new Error("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
   }
   const pabrik = await getPabrikLocation();
+  let validatedRoute: MultiPointRoute;
   try {
-    await getMultiPointRoute([
+    validatedRoute = await getMultiPointRoute([
       { lat: pabrik.latitude, lng: pabrik.longitude },
       ...stopsForRouteCheck.map((s) => ({ lat: s.Latitude as number, lng: s.Longitude as number })),
       { lat: pabrik.latitude, lng: pabrik.longitude },
@@ -524,8 +528,9 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
   const claim = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
+    .input("jarakKM", sql.Decimal(10, 2), validatedRoute.distanceKm)
     .query(
-      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamAktualBerangkat = GETDATE(), ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
+      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamAktualBerangkat = GETDATE(), JarakKM = @jarakKM, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
     );
   if (claim.rowsAffected[0] === 0) {
     throw new Error("Keberangkatan ini sudah berangkat atau sedang diproses.");
@@ -654,7 +659,7 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
       .request()
       .input("jadwalId", sql.Int, jadwalId)
       .query(
-        `UPDATE DashboardPengirimanJadwal SET Status = 'Draft', JamAktualBerangkat = NULL, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`
+        `UPDATE DashboardPengirimanJadwal SET Status = 'Draft', JamAktualBerangkat = NULL, JarakKM = NULL, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`
       );
     throw err;
   }
