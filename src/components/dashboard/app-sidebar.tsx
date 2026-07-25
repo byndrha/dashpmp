@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
   Zap,
   Truck,
+  ClipboardList,
   Users,
   Megaphone,
   ShieldCheck,
@@ -37,6 +38,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
   { href: "/transaksi", label: "Transaksi", icon: ArrowLeftRight, moduleKey: "transaksi" },
   { href: "/electricity", label: "Biaya Listrik", icon: Zap, moduleKey: "electricity" },
   { href: "/delivery", label: "Pengiriman", icon: Truck, moduleKey: "delivery" },
+  { href: "/pemesanan", label: "Pemesanan", icon: ClipboardList, moduleKey: "pemesanan" },
   { href: "/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
   { href: "/pemasaran", label: "Pemasaran", icon: Megaphone, moduleKey: "pemasaran" },
 ];
