@@ -67,7 +67,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="gap-2">
-        <div className="flex items-center gap-2 px-2 py-2">
+        <div className="flex items-center gap-2 py-2">
           {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand asset, no next/image usage elsewhere in this codebase */}
           <img
             src="/brand/logo-pmp-group.png"
