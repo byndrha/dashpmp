@@ -5,6 +5,7 @@
 // reference them without pulling server-only code into the client bundle.
 export const MARKETING_ROLE_ID = 1003;
 export const APPROVER_ROLE_IDS = [3, 4];
+export const STAFF_ROLE_ID = 2;
 
 // Supervisor, Accounting, Manager — who can manage the Cakupan Wilayah
 // Marketing assignment (and, going forward, the Kinerja Marketing period

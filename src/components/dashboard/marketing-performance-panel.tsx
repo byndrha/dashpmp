@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, Settings2, Star, Users, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowUp, ArrowDown, Settings2, Star, Users, ChevronDown, Loader2, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -328,6 +328,7 @@ function MarketingCard({
   allMitra,
   mitraDailyQty,
   onMitraClick,
+  forceOpen,
 }: {
   row: AggregatedRow;
   kpi: MarketingKPIRow | undefined;
@@ -337,6 +338,11 @@ function MarketingCard({
   allMitra: MarketingScopeAllMitra[];
   mitraDailyQty: Record<string, number[]>;
   onMitraClick: (businessPartnerId: string) => void;
+  // True while a mitra search is active and matched at least one mitra in
+  // this Marketing's roster — forces both collapses open regardless of
+  // their manually-toggled state, so a match is never hidden behind a
+  // collapsed section the searcher would have to know to click open.
+  forceOpen: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [openAll, setOpenAll] = useState(false);
@@ -344,6 +350,8 @@ function MarketingCard({
   const konversiPct = kpi && kpi.Kunjungan > 0 ? (kpi.Konversi / kpi.Kunjungan) * 100 : 0;
   const sortedMitra = useMemo(() => [...mitraPrioritas].sort(compareCapacityDesc), [mitraPrioritas]);
   const sortedAllMitra = useMemo(() => [...allMitra].sort(compareCapacityDesc), [allMitra]);
+  const showPrioritas = open || forceOpen;
+  const showAll = openAll || forceOpen;
 
   return (
     <div className="flex flex-col">
@@ -396,12 +404,13 @@ function MarketingCard({
             size="sm"
             className="h-6 pl-3 text-[11px] text-muted-foreground"
             onClick={() => setOpen((v) => !v)}
+            disabled={forceOpen}
           >
             <Star className="size-3 fill-primary text-primary" />
-            {open ? "Sembunyikan" : "Tampilkan"} {sortedMitra.length} mitra prioritas
-            <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
+            {showPrioritas ? "Sembunyikan" : "Tampilkan"} {sortedMitra.length} mitra prioritas
+            <ChevronDown className={cn("size-3 transition-transform", showPrioritas && "rotate-180")} />
           </Button>
-          {open && (
+          {showPrioritas && (
             <div className="flex flex-col divide-y border-t">
               {sortedMitra.map((m) => (
                 <MitraPrioritasRow
@@ -426,12 +435,13 @@ function MarketingCard({
             size="sm"
             className="h-6 pl-3 text-[11px] text-muted-foreground"
             onClick={() => setOpenAll((v) => !v)}
+            disabled={forceOpen}
           >
             <Users className="size-3" />
-            {openAll ? "Sembunyikan" : "Tampilkan"} {sortedAllMitra.length} seluruh mitra
-            <ChevronDown className={cn("size-3 transition-transform", openAll && "rotate-180")} />
+            {showAll ? "Sembunyikan" : "Tampilkan"} {sortedAllMitra.length} seluruh mitra
+            <ChevronDown className={cn("size-3 transition-transform", showAll && "rotate-180")} />
           </Button>
-          {openAll && (
+          {showAll && (
             <div className="flex flex-col divide-y border-t">
               {sortedAllMitra.map((m) => (
                 <AllMitraRow
@@ -563,6 +573,8 @@ export function MarketingPerformancePanel({
   const [wilayahFilter, setWilayahFilter] = useState(ALL);
   const [kecamatanFilter, setKecamatanFilter] = useState(ALL);
   const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
+  const [mitraSearch, setMitraSearch] = useState("");
+  const mitraSearchQuery = mitraSearch.trim().toLowerCase();
 
   const kpiByUserId = useMemo(() => new Map(kpiRows.map((r) => [r.UserID, r])), [kpiRows]);
   const mitraByMarketing = useMemo(() => {
@@ -673,6 +685,24 @@ export function MarketingPerformancePanel({
     return { positive, negative };
   }, [visibleMitraIds, mitraDailyQty, periodDays]);
 
+  // Pre-resolves each row's roster (filtered to the search query, if any)
+  // and drops rows with zero matches entirely while searching — both the
+  // "no results" empty state and the render loop below read from this same
+  // list, so they can never disagree.
+  const visibleRows = useMemo(() => {
+    return rows
+      .map((r) => {
+        const mitraPrioritas = mitraByMarketing.get(r.MarketingUserID) ?? [];
+        const allMitra = allMitraByMarketing[r.MarketingUserID] ?? [];
+        if (!mitraSearchQuery) return { row: r, mitraPrioritas, allMitra, forceOpen: false };
+        const matchedPrioritas = mitraPrioritas.filter((m) => m.MitraName.toLowerCase().includes(mitraSearchQuery));
+        const matchedAll = allMitra.filter((m) => m.Name.toLowerCase().includes(mitraSearchQuery));
+        if (matchedPrioritas.length === 0 && matchedAll.length === 0) return null;
+        return { row: r, mitraPrioritas: matchedPrioritas, allMitra: matchedAll, forceOpen: true };
+      })
+      .filter((v): v is { row: AggregatedRow; mitraPrioritas: MarketingMitraAssignment[]; allMitra: MarketingScopeAllMitra[]; forceOpen: boolean } => v != null);
+  }, [rows, mitraByMarketing, allMitraByMarketing, mitraSearchQuery]);
+
   return (
     <Card>
       <CardHeader>
@@ -687,6 +717,15 @@ export function MarketingPerformancePanel({
           {canManageSettings && <PeriodSettings rangeStartISO={rangeStartISO} periodDays={periodDays} />}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">
+          <div className="relative w-56">
+            <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={mitraSearch}
+              onChange={(e) => setMitraSearch(e.target.value)}
+              placeholder="Cari nama mitra..."
+              className="h-9 pl-8 text-xs"
+            />
+          </div>
           <Select value={wilayahFilter} onValueChange={(v) => handleWilayahChange(v ?? ALL)}>
             <SelectTrigger className="w-44" aria-label="Wilayah">
               <SelectValue>{(v: string) => (v === ALL ? "Semua Wilayah" : v)}</SelectValue>
@@ -719,6 +758,10 @@ export function MarketingPerformancePanel({
         {rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             Belum ada Marketing dengan cakupan wilayah yang diatur.
+          </p>
+        ) : mitraSearchQuery && visibleRows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Tidak ada mitra dengan nama &quot;{mitraSearch.trim()}&quot; ditemukan.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -754,17 +797,18 @@ export function MarketingPerformancePanel({
               </div>
             </div>
             <div className="flex flex-col divide-y">
-              {rows.map((r) => (
+              {visibleRows.map(({ row: r, mitraPrioritas, allMitra, forceOpen }) => (
                 <MarketingCard
                   key={r.MarketingUserID}
                   row={r}
                   kpi={kpiByUserId.get(r.MarketingUserID)}
                   dates={dates}
                   todayISO={todayISO}
-                  mitraPrioritas={mitraByMarketing.get(r.MarketingUserID) ?? []}
-                  allMitra={allMitraByMarketing[r.MarketingUserID] ?? []}
+                  mitraPrioritas={mitraPrioritas}
+                  allMitra={allMitra}
                   mitraDailyQty={mitraDailyQty}
                   onMitraClick={setDetailMitraId}
+                  forceOpen={forceOpen}
                 />
               ))}
             </div>
