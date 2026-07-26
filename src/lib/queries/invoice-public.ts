@@ -37,3 +37,26 @@ export async function getInvoiceByToken(token: string): Promise<PublicInvoice | 
     `);
   return (result.recordset[0] as PublicInvoice | undefined) ?? null;
 }
+
+// One link per invoice — returns the already-issued token if this invoice
+// has one, otherwise mints and persists a new one. Idempotent so a future
+// "salin link" action can call this on every click without minting a fresh
+// token (and thus invalidating any link already shared with the mitra) each
+// time.
+export async function ensureInvoicePublicLink(salesInvoiceId: string): Promise<string> {
+  const pool = await getPool();
+  const existing = await pool
+    .request()
+    .input("salesInvoiceId", sql.VarChar(16), salesInvoiceId)
+    .query(`SELECT Token FROM DashboardInvoicePublicLink WHERE SalesInvoiceID = @salesInvoiceId`);
+  const existingToken = (existing.recordset[0] as { Token: string } | undefined)?.Token;
+  if (existingToken) return existingToken;
+
+  const token = generateInvoiceToken();
+  await pool
+    .request()
+    .input("salesInvoiceId", sql.VarChar(16), salesInvoiceId)
+    .input("token", sql.VarChar(64), token)
+    .query(`INSERT INTO DashboardInvoicePublicLink (SalesInvoiceID, Token) VALUES (@salesInvoiceId, @token)`);
+  return token;
+}
