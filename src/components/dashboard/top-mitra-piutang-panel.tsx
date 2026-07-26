@@ -164,9 +164,6 @@ export function TopMitraPiutangPanel({ rows }: { rows: TopMitraPiutangRow[] }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Catatan &mdash; {editingNote?.CustomerName}</DialogTitle>
-            <DialogDescription>
-              Catatan bebas untuk mitra ini, terlihat oleh siapa saja yang membuka modul Piutang.
-            </DialogDescription>
           </DialogHeader>
           <form action={handleSaveNote} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
