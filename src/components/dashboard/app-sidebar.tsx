@@ -72,7 +72,7 @@ export function AppSidebar({
           <img
             src="/brand/logo-pmp-group.png"
             alt="PMP Group"
-            className="h-7 w-auto shrink-0 dark:brightness-0 dark:invert"
+            className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
           />
           <div className="flex min-w-0 items-center gap-1.5 truncate group-data-[collapsible=icon]:hidden">
             <p className="font-display font-semibold leading-tight">PMP Group</p>
