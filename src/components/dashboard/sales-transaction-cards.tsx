@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Package, Truck, User, ChevronDown } from "lucide-react";
+import { Package, Truck, User, ChevronDown, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,6 +59,24 @@ function StatusBadges({ delivery }: { delivery: DeliveryCard }) {
         <Badge variant="outline" className={cn(badgeBase, "text-warning border-warning/40")}>
           Belum Lunas
         </Badge>
+      )}
+      {delivery.InvoiceToken && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <a
+                href={`/invoice/${delivery.InvoiceToken}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              />
+            }
+          >
+            <ExternalLink className="size-3" />
+          </TooltipTrigger>
+          <TooltipContent>Lihat Invoice</TooltipContent>
+        </Tooltip>
       )}
     </div>
   );

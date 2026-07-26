@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
+import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import type { DateRangeFilter, PartnerType } from "@/types/dashboard";
 
 // Kemasan classification: item names containing "5 KG" are 5KG kantong,
@@ -70,6 +71,10 @@ export interface DeliveryCard {
   SIVoucherNo: string | null;
   PaymentStatus: PaymentStatus;
   SPVoucherNo: string | null;
+  // Set whenever an SI exists, Lunas or not — the public page itself decides
+  // (live, at request time) whether to show billing details or a "sudah
+  // lunas" message, so the token stays valid to open either way.
+  InvoiceToken: string | null;
 }
 
 export async function getDeliveryCardsForOrders(salesOrderIds: string[]): Promise<DeliveryCard[]> {
@@ -91,6 +96,7 @@ export async function getDeliveryCardsForOrders(salesOrderIds: string[]): Promis
         do_.VehicleNo,
         ISNULL(SUM(CASE WHEN ${KEMASAN_5KG("dod.Name")} = 0 THEN dod.Delivered ELSE 0 END), 0) AS Qty10KG,
         ISNULL(SUM(CASE WHEN ${KEMASAN_5KG("dod.Name")} = 1 THEN dod.Delivered ELSE 0 END), 0) AS Qty5KG,
+        si.SalesInvoiceID,
         si.VoucherNo AS SIVoucherNo,
         si.Netto AS SINetto,
         si.Paid AS SIPaid,
@@ -112,7 +118,7 @@ export async function getDeliveryCardsForOrders(salesOrderIds: string[]): Promis
     WHERE do_.IsDeleted = 0
       AND do_.SalesOrderID IN (${placeholders.join(",")})
     GROUP BY do_.DeliveryOrderID, do_.SalesOrderID, do_.VoucherNo, do_.TransDate, do_.PIC, do_.VehicleNo,
-             si.VoucherNo, si.Netto, si.Paid, sp.VoucherNo
+             si.SalesInvoiceID, si.VoucherNo, si.Netto, si.Paid, sp.VoucherNo
     ORDER BY do_.TransDate ASC
   `);
 
@@ -132,6 +138,7 @@ export async function getDeliveryCardsForOrders(salesOrderIds: string[]): Promis
       SIVoucherNo: row.SIVoucherNo,
       PaymentStatus: hasInvoice ? (isPaid ? "Lunas" : "BelumLunas") : null,
       SPVoucherNo: isPaid ? row.SPVoucherNo : null,
+      InvoiceToken: hasInvoice ? encodeInvoiceToken(row.SalesInvoiceID) : null,
     };
   });
 }

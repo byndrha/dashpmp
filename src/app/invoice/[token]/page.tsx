@@ -27,6 +27,23 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     );
   }
 
+  if (invoice.IsPaid) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+        <div className="w-full max-w-sm rounded-xl border bg-card p-6 text-center shadow-sm">
+          <p className="text-xs text-muted-foreground">Tagihan untuk</p>
+          <h1 className="text-lg font-semibold">{invoice.CustomerName}</h1>
+          <p className="mt-3 inline-block rounded-full bg-primary/15 px-3 py-1 text-sm font-medium text-primary">
+            Lunas
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Tagihan No. {invoice.VoucherNo} telah lunas dibayarkan. Terima kasih.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm">
