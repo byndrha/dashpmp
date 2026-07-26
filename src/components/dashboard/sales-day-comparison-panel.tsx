@@ -77,6 +77,34 @@ function HourlyComparisonTable({
   );
 }
 
+// Quick-glance line shown even while a period's row is still collapsed —
+// only the current WIB hour is compared (the "jam yang sama" — same hour —
+// point), never the other 23 hours, which stay inside HourlyComparisonTable
+// until the row is actually expanded.
+function CurrentHourPreview({
+  periodHourly,
+  todayHourly,
+  currentWibHour,
+}: {
+  periodHourly: HourlyPoint[] | null | undefined;
+  todayHourly: HourlyPoint[];
+  currentWibHour: number;
+}) {
+  const periodPoint = periodHourly?.[currentWibHour];
+  const todayPoint = todayHourly[currentWibHour];
+  if (!periodPoint || !todayPoint) return null;
+  const pct = pctChange(todayPoint.NetSales, periodPoint.NetSales);
+  return (
+    <div className="col-span-3 -mt-0.5 mb-1 flex flex-wrap items-center gap-1.5 pl-4 text-[9px] text-muted-foreground">
+      <span className="whitespace-nowrap">Jam {String(currentWibHour).padStart(2, "0")}:00</span>
+      <span className="tabular-nums">{compactRupiahFormatter.format(periodPoint.NetSales)}</span>
+      <span>vs</span>
+      <span className="tabular-nums text-foreground">{compactRupiahFormatter.format(todayPoint.NetSales)}</span>
+      <TrendPill percent={pct} />
+    </div>
+  );
+}
+
 // Day-level counterpart to the Penjualan module's SalesComparisonPanel (which
 // compares whole months) — same "VS Periode" table layout, but rows are
 // Kemarin/Pekan Lalu/Bulan Lalu/Tahun Lalu instead of prior months. "Pekan
@@ -167,6 +195,9 @@ export function SalesDayComparisonPanel({
                       <span className="justify-self-end text-[10px] text-muted-foreground">-</span>
                       <span className="justify-self-end text-[10px] text-muted-foreground">-</span>
                     </>
+                  )}
+                  {!isOpen && (
+                    <CurrentHourPreview periodHourly={c.hourly} todayHourly={todayHourly} currentWibHour={currentWibHour} />
                   )}
                   {isOpen && c.hourly && (
                     <HourlyComparisonTable

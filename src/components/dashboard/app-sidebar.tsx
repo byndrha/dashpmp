@@ -25,6 +25,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { PTSwitcher } from "@/components/dashboard/pt-switcher";
 import { Badge } from "@/components/ui/badge";
@@ -51,9 +52,17 @@ export function AppSidebar({
   isSuperAdmin: boolean;
 }) {
   const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
   const visibleItems = isSuperAdmin
     ? NAV_ITEMS
     : NAV_ITEMS.filter((item) => permissions[item.moduleKey]?.canView);
+
+  // On mobile the sidebar renders as an overlay Sheet — picking a module
+  // should feel like navigating to a new screen, not leave the sheet
+  // hanging open on top of it.
+  function closeOnMobile() {
+    if (isMobile) setOpenMobile(false);
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -84,11 +93,11 @@ export function AppSidebar({
               {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
-                    render={<Link href={item.href} />}
+                    render={<Link href={item.href} onClick={closeOnMobile} />}
                     isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
                     tooltip={item.label}
                   >
-                    <item.icon />
+                    <item.icon className="shrink-0" />
                     <span>{item.label}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -104,11 +113,11 @@ export function AppSidebar({
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/akun" />}
+                    render={<Link href="/akun" onClick={closeOnMobile} />}
                     isActive={pathname.startsWith("/akun")}
                     tooltip="Akun"
                   >
-                    <ShieldCheck />
+                    <ShieldCheck className="shrink-0" />
                     <span>Akun</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

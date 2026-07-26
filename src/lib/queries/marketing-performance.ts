@@ -23,14 +23,34 @@ export interface MarketingScopeCell {
   DailyQty: number[];
 }
 
+// One mitra resolved into a Marketing's Wilayah/Kecamatan coverage — the
+// full roster behind the "seluruh mitra di wilayah tanggung jawab" collapse
+// in Kinerja Marketing, distinct from the small curated "mitra prioritas"
+// list (DashboardMarketingMitra overrides).
+export interface MarketingScopeAllMitra {
+  BusinessPartnerID: string;
+  Name: string;
+  Wilayah: string;
+  Kecamatan: string | null;
+  Capacity: number | null;
+}
+
 export interface MarketingPerformanceData {
   periodDays: number;
   rangeStartISO: string;
   todayISO: string;
   cells: MarketingScopeCell[];
-  // Daily qty per BusinessPartnerID, for priority-mitra (DashboardMarketingMitra)
-  // only — see the collapsed per-Marketing mitra list in Kinerja Marketing.
+  // Daily qty per BusinessPartnerID, for every mitra resolved into ANY
+  // Marketing's scope (priority-override or plain Wilayah/Kecamatan match)
+  // — covers both the "mitra prioritas" and "seluruh mitra" collapses in
+  // Kinerja Marketing. A Wilayah can have hundreds of mitra (e.g. Ponorogo,
+  // ~290 live) — still just one extra in-memory pass over the same
+  // already-fetched dailyResult/mitraResult rows below, not a new query.
   mitraDailyQty: Record<string, number[]>;
+  // Full mitra roster per Marketing (by UserID), for the "seluruh mitra"
+  // collapse — sorted by highest Capacity first at the call site, same as
+  // mitraPrioritas.
+  allMitraByMarketing: Record<string, MarketingScopeAllMitra[]>;
 }
 
 // Kantong here counts a 5KG bag as half a kantong — same KANTONG_QTY_EXPR
@@ -88,6 +108,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     pool.request().query(`
       SELECT
           BusinessPartnerID,
+          Name,
           ISNULL(NULLIF(LTRIM(RTRIM(NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           NPWPAddress AS Kecamatan,
           Capacity
@@ -122,23 +143,41 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     return cell;
   }
 
+  // Full roster per Marketing, for the "seluruh mitra" collapse — built
+  // alongside TargetHarian in the same pass since both need the same
+  // per-mitra Marketing resolution.
+  const allMitraByMarketing = new Map<string, MarketingScopeAllMitra[]>();
+  const resolvedMarketingByMitra = new Map<string, string>();
+
   for (const r of mitraResult.recordset as {
     BusinessPartnerID: string;
+    Name: string;
     Wilayah: string;
     Kecamatan: string | null;
     Capacity: number | null;
   }[]) {
     const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
-    if (cell && r.Capacity) cell.TargetHarian += r.Capacity;
+    if (!cell) continue;
+    if (r.Capacity) cell.TargetHarian += r.Capacity;
+    resolvedMarketingByMitra.set(r.BusinessPartnerID, cell.MarketingUserID);
+    const roster = allMitraByMarketing.get(cell.MarketingUserID) ?? [];
+    roster.push({
+      BusinessPartnerID: r.BusinessPartnerID,
+      Name: r.Name,
+      Wilayah: r.Wilayah,
+      Kecamatan: r.Kecamatan,
+      Capacity: r.Capacity,
+    });
+    allMitraByMarketing.set(cell.MarketingUserID, roster);
   }
 
-  // Per-mitra daily breakdown, but only for mitra with a priority override —
-  // reuses dailyResult (already fetched for the cell aggregation above)
-  // rather than a second query, and is deliberately NOT built for every
-  // mitra in scope (that could be hundreds per Marketing) — just the small
-  // curated priority set shown, collapsed, in Kinerja Marketing.
+  // Per-mitra daily breakdown for every mitra resolved into any Marketing's
+  // scope — covers both the "mitra prioritas" collapse (priority overrides)
+  // and the "seluruh mitra" collapse (every other resolved mitra). Reuses
+  // dailyResult (already fetched for the cell aggregation above) rather than
+  // a second query.
   const mitraDailyQty: Record<string, number[]> = {};
-  for (const id of mitraOverrides.keys()) mitraDailyQty[id] = new Array(period.periodDays).fill(0);
+  for (const id of resolvedMarketingByMitra.keys()) mitraDailyQty[id] = new Array(period.periodDays).fill(0);
 
   for (const r of dailyResult.recordset as {
     BusinessPartnerID: string;
@@ -161,5 +200,6 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     todayISO,
     cells: [...cells.values()],
     mitraDailyQty,
+    allMitraByMarketing: Object.fromEntries(allMitraByMarketing),
   };
 }

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ChevronDown,
-  Users,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -15,6 +14,8 @@ import {
   Search,
   MessageCircle,
   Phone,
+  Eye,
+  EyeOff,
   Loader2,
 } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -412,7 +413,7 @@ function MitraDOCard({
           <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-medium tabular-nums text-foreground">
             {m.HargaJual != null ? formatRupiah(m.HargaJual) : "-"}
           </span>
-          <span className="truncate tabular-nums">Rata-rata {avgQty != null ? formatQty(avgQty) : "-"}</span>
+          <span className="truncate tabular-nums">&plusmn;{avgQty != null ? formatQty(avgQty) : "-"}</span>
           <TargetButton businessPartnerId={m.BusinessPartnerID} target={m.TargetHarian} />
         </div>
       </div>
@@ -652,7 +653,7 @@ export function MitraDOPanel({
           </Select>
           <Select value={wilayahFilter} onValueChange={(v) => onWilayahFilterChange(v ?? "all")}>
             <SelectTrigger className="w-44" aria-label="Wilayah">
-              <SelectValue>{(v: string) => (v === "all" ? "Semua Wilayah" : v)}</SelectValue>
+              <SelectValue>{(v: string) => (v === "all" ? "Wilayah" : v)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Wilayah</SelectItem>
@@ -667,7 +668,7 @@ export function MitraDOPanel({
             <SelectTrigger className="w-44" aria-label="Marketing">
               <SelectValue>
                 {(v: string) =>
-                  v === "all" ? "Semua Marketing" : v === UNASSIGNED_MARKETING ? "Belum Ditentukan" : v
+                  v === "all" ? "Marketing" : v === UNASSIGNED_MARKETING ? "Belum Ditentukan" : v
                 }
               </SelectValue>
             </SelectTrigger>
@@ -683,8 +684,8 @@ export function MitraDOPanel({
           </Select>
           {filteredInactive.length > 0 && (
             <Button variant="outline" size="sm" onClick={() => setShowAll((v) => !v)}>
-              <Users className="size-3.5" />
-              {showAll ? "Sembunyikan" : "Tampilkan"} {filteredInactive.length} mitra tanpa transaksi bulan ini
+              {showAll ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+              {filteredInactive.length} mitra tanpa transaksi
               <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
             </Button>
           )}
@@ -706,7 +707,10 @@ export function MitraDOPanel({
             )}
           >
             <span>{displayedMitra.length} mitra ditampilkan</span>
-            <span className="tabular-nums text-foreground">{formatQty(totalTargetDisplayed)}</span>
+            <span className="flex items-center gap-1 tabular-nums text-foreground">
+              <span className="size-2 shrink-0 rounded-full bg-primary" />
+              {formatQty(totalTargetDisplayed)}
+            </span>
           </div>
           <div ref={headerScrollRef} className="flex min-w-0 flex-1 overflow-x-hidden border-l">
             {dates.map((dateISO, i) => (
