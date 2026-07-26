@@ -514,7 +514,10 @@ export function PengirimanBoard({
         onOpenChange={(open) => !open && setDetailJadwalId(null)}
         onDeleted={() => setDetailJadwalId(null)}
         onEditSalesOrder={(detail) => {
-          setDetailJadwalId(null);
+          // Validasi Rute deliberately stays open underneath — Ubah
+          // Pemesanan is meant to be a quick in-place edit for one stop,
+          // and closing/reopening the route dialog around it would lose
+          // scroll position and re-trigger its own data fetch for no reason.
           setEditingSalesOrder({
             salesOrderId: detail.SalesOrderID,
             customerName: detail.CustomerName,

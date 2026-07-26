@@ -129,10 +129,10 @@ export function RouteValidationDialog({
   // Fired after a successful "Batalkan Draft" so the caller can close this
   // dialog (it has no Jadwal left to show once deleted).
   onDeleted?: () => void;
-  // Fired when a stop is clicked — the caller owns closing this dialog and
-  // opening UbahPemesananDialog itself (avoids nesting a second Dialog
-  // inside this one, same "close one, open the other" pattern already
-  // established by ArmadaManager's list-dialog-to-form-dialog handoff).
+  // Fired when a stop is clicked — the caller opens UbahPemesananDialog as a
+  // sibling Dialog on top of this one, deliberately WITHOUT closing this
+  // dialog first, so it stays visible (and its scroll/route-calc state
+  // intact) underneath once the edit dialog closes again.
   onEditSalesOrder: (detail: JadwalDetailRow) => void;
 }) {
   const [loading, setLoading] = useState(false);
