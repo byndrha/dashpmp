@@ -742,7 +742,7 @@ export function MarketingPerformancePanel({
                   >
                     <span>{formatQty(totalPerDate[i])}</span>
                     {i > 0 && (deltaPerDate.positive[i] > 0 || deltaPerDate.negative[i] < 0) && (
-                      <span className="flex items-center gap-1 text-[9px] font-normal">
+                      <span className="flex flex-col items-center leading-tight text-[9px] font-normal">
                         {deltaPerDate.positive[i] > 0 && <span>(+{formatQty(deltaPerDate.positive[i])})</span>}
                         {deltaPerDate.negative[i] < 0 && (
                           <span className="text-destructive">({formatQty(deltaPerDate.negative[i])})</span>

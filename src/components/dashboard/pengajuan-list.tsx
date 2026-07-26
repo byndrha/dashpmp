@@ -189,6 +189,11 @@ export function PengajuanList({
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
+                  {row.QtyKantong != null && row.QtyKantong > 0 && (
+                    <span className="rounded bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      Potensial
+                    </span>
+                  )}
                   <span className={cn("rounded px-2 py-0.5 text-[11px] font-medium", STATUS_BADGE[row.Status])}>
                     {row.Status}
                   </span>

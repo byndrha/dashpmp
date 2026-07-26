@@ -4,7 +4,7 @@ import { getSalesOverview } from "@/lib/queries/sales-overview";
 import { getRevenueTarget } from "@/lib/queries/revenue-target";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { getBusinessDateISO } from "@/lib/business-date";
-import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
+import { resolveFilter, shiftFilterYears, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { SalesOverviewPanels } from "@/components/dashboard/sales-overview-panels";
 import { RevenueTargetPanel } from "@/components/dashboard/revenue-target-panel";
@@ -20,13 +20,17 @@ export default async function SalesPage({
   await requireModuleAccess("sales");
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [trend, trendMonthly, overview, wilayahList, revenueTarget] = await Promise.all([
-    getSalesTrend(filter),
-    getSalesTrendMonthly(),
-    getSalesOverview(),
-    getWilayahList(),
-    getRevenueTarget(),
-  ]);
+  const filterLastYear = shiftFilterYears(filter, 1);
+  const [trend, trendLastYear, trendMonthly, trendMonthlyLastYear, overview, wilayahList, revenueTarget] =
+    await Promise.all([
+      getSalesTrend(filter),
+      getSalesTrend(filterLastYear),
+      getSalesTrendMonthly(),
+      getSalesTrendMonthly(1),
+      getSalesOverview(),
+      getWilayahList(),
+      getRevenueTarget(),
+    ]);
   const businessTodayISO = getBusinessDateISO();
 
   return (
@@ -55,6 +59,16 @@ export default async function SalesPage({
 
       <Card>
         <CardHeader>
+          <CardTitle className="font-display">Tren Penjualan Harian &mdash; Tahun Lalu</CardTitle>
+          <CardDescription>Periode yang sama dengan filter di atas, digeser satu tahun ke belakang.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SalesTrendChart data={trendLastYear} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="font-display">Tren Penjualan Bulanan</CardTitle>
           <CardDescription>
             12 bulan terakhir — bulan berjalan hingga bulan yang sama tahun lalu.
@@ -62,6 +76,16 @@ export default async function SalesPage({
         </CardHeader>
         <CardContent>
           <SalesTrendChartMonthly data={trendMonthly} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display">Tren Penjualan Bulanan &mdash; Tahun Lalu</CardTitle>
+          <CardDescription>12 bulan yang sama, digeser satu tahun ke belakang.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SalesTrendChartMonthly data={trendMonthlyLastYear} />
         </CardContent>
       </Card>
     </div>

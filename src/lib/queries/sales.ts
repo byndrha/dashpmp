@@ -185,11 +185,16 @@ export interface SalesTrendMonthPoint {
 // 12-month array in JS. Month boundaries still come from monthBoundary()'s
 // UTC-safe arithmetic (see sales-overview.ts for why raw date-fns/local-time
 // boundaries are unsafe once sent to SQL Server as DATE params).
-export async function getSalesTrendMonthly(): Promise<SalesTrendMonthPoint[]> {
+// `yearsAgo` shifts the whole 12-month window back by that many years (e.g.
+// yearsAgo=1 returns the same month-of-year through 12 months earlier,
+// exactly one year before the default yearsAgo=0 window) — used to render a
+// "tahun lalu" version of this same chart alongside the current one.
+export async function getSalesTrendMonthly(yearsAgo: number = 0): Promise<SalesTrendMonthPoint[]> {
   const pool = await getPool();
   const businessToday = getBusinessDate();
-  const rangeStart = monthBoundary(businessToday, -11);
-  const rangeEnd = monthBoundary(businessToday, 1);
+  const monthOffset = -12 * yearsAgo;
+  const rangeStart = monthBoundary(businessToday, monthOffset - 11);
+  const rangeEnd = monthBoundary(businessToday, monthOffset + 1);
 
   const monthBucket = (column: string) => `DATEFROMPARTS(YEAR(${column}), MONTH(${column}), 1)`;
 
@@ -258,7 +263,7 @@ export async function getSalesTrendMonthly(): Promise<SalesTrendMonthPoint[]> {
 
   const points: SalesTrendMonthPoint[] = [];
   for (let i = 11; i >= 0; i--) {
-    const monthStart = monthBoundary(businessToday, -i);
+    const monthStart = monthBoundary(businessToday, monthOffset - i);
     const key = monthKey(monthStart);
     points.push({
       Month: key,
