@@ -57,21 +57,26 @@ function formatDayMonth(dateISO: string): string {
   return `${dateISO.slice(8, 10)}/${dateISO.slice(5, 7)}`;
 }
 
-// Calendar date + qty + explicit +/- delta against the immediately
-// preceding day — used for the Marketing-level aggregate row, which isn't
-// tied to a single mitra so has no visit-log affordance.
+// Calendar date + qty + naik(+)/turun(-) sums on separate lines — used for
+// the Marketing-level aggregate row, which isn't tied to a single mitra so
+// has no visit-log affordance. positiveDelta/negativeDelta are SUMS across
+// every mitra under this Marketing (not a single net delta) — a Marketing
+// with mitra A +60 and mitra B -20 shows both (+60) and (-20), never a
+// netted "+40" that hides the underlying movement in either direction.
 function DayCell({
   dateISO,
   qty,
-  prevQty,
+  positiveDelta,
+  negativeDelta,
   isPast,
 }: {
   dateISO: string;
   qty: number;
-  prevQty: number | null;
+  positiveDelta: number;
+  negativeDelta: number;
   isPast: boolean;
 }) {
-  const delta = isPast && prevQty != null ? qty - prevQty : null;
+  const hasDelta = isPast && (positiveDelta > 0 || negativeDelta < 0);
   return (
     <div
       className={cn(
@@ -81,18 +86,10 @@ function DayCell({
     >
       <span className="text-[9px] text-muted-foreground/60">{formatDayMonth(dateISO)}</span>
       <span className="font-semibold">{isPast ? formatQty(qty) : "-"}</span>
-      {delta != null ? (
-        <span
-          className={cn(
-            "flex items-center gap-0.5 text-[9px]",
-            delta > 0 && "text-primary",
-            delta < 0 && "text-destructive",
-            delta === 0 && "text-muted-foreground/50"
-          )}
-        >
-          {delta > 0 && <ArrowUp className="size-2.5 shrink-0" />}
-          {delta < 0 && <ArrowDown className="size-2.5 shrink-0" />}
-          {delta > 0 ? `+${formatQty(delta)}` : formatQty(delta)}
+      {hasDelta ? (
+        <span className="flex flex-col items-center leading-tight text-[9px]">
+          {positiveDelta > 0 && <span className="text-primary">(+{formatQty(positiveDelta)})</span>}
+          {negativeDelta < 0 && <span className="text-destructive">({formatQty(negativeDelta)})</span>}
         </span>
       ) : (
         <span className="text-[9px] text-muted-foreground/30">&mdash;</span>
@@ -329,6 +326,7 @@ function MarketingCard({
   mitraDailyQty,
   onMitraClick,
   forceOpen,
+  dailyDelta,
 }: {
   row: AggregatedRow;
   kpi: MarketingKPIRow | undefined;
@@ -343,6 +341,11 @@ function MarketingCard({
   // their manually-toggled state, so a match is never hidden behind a
   // collapsed section the searcher would have to know to click open.
   forceOpen: boolean;
+  // Sum of positive and negative day-over-day deltas across every mitra
+  // under this Marketing (unaffected by the mitra name search — always the
+  // true total for the row, search only narrows which mitra rows are shown
+  // below it).
+  dailyDelta: { positive: number[]; negative: number[] };
 }) {
   const [open, setOpen] = useState(false);
   const [openAll, setOpenAll] = useState(false);
@@ -389,7 +392,8 @@ function MarketingCard({
               key={dateISO}
               dateISO={dateISO}
               qty={row.DailyQty[i]}
-              prevQty={i > 0 ? row.DailyQty[i - 1] : null}
+              positiveDelta={i > 0 ? dailyDelta.positive[i] : 0}
+              negativeDelta={i > 0 ? dailyDelta.negative[i] : 0}
               isPast={dateISO <= todayISO}
             />
           ))}
@@ -657,33 +661,47 @@ export function MarketingPerformancePanel({
     return totals;
   }, [rows, periodDays]);
 
-  // Only mitra belonging to a Marketing currently shown (respects the
-  // Wilayah/Kecamatan filters same as totalPerDate/rows above).
-  const visibleMitraIds = useMemo(() => {
-    const ids = new Set<string>();
+  // Sum of positive and negative day-over-day deltas across every mitra
+  // under each Marketing currently shown (respects the Wilayah/Kecamatan
+  // filters same as totalPerDate/rows above, but deliberately NOT the mitra
+  // name search — that only narrows which mitra rows are displayed below a
+  // card, it must never change the card's own totals). A SUM of per-mitra
+  // swings, not a net — e.g. mitra A +60, B -20, C +30 vs the day before
+  // shows both (+90) and (-20) for that date, never a netted "+70".
+  const deltaPerDateByMarketing = useMemo(() => {
+    const map = new Map<string, { positive: number[]; negative: number[] }>();
     for (const r of rows) {
-      for (const m of allMitraByMarketing[r.MarketingUserID] ?? []) ids.add(m.BusinessPartnerID);
+      const positive = new Array(periodDays).fill(0);
+      const negative = new Array(periodDays).fill(0);
+      for (const m of allMitraByMarketing[r.MarketingUserID] ?? []) {
+        const arr = mitraDailyQty[m.BusinessPartnerID];
+        if (!arr) continue;
+        for (let i = 1; i < periodDays; i++) {
+          const delta = (arr[i] ?? 0) - (arr[i - 1] ?? 0);
+          if (delta > 0) positive[i] += delta;
+          else if (delta < 0) negative[i] += delta;
+        }
+      }
+      map.set(r.MarketingUserID, { positive, negative });
     }
-    return ids;
-  }, [rows, allMitraByMarketing]);
+    return map;
+  }, [rows, allMitraByMarketing, mitraDailyQty, periodDays]);
 
-  // Sum of positive and negative day-over-day deltas across every visible
-  // mitra individually — a SUM of per-mitra swings, not a row count. E.g.
-  // mitra A +60, B -20, C +30 vs the day before -> (+90) (-20) for that date.
+  const EMPTY_DELTA = useMemo(() => ({ positive: new Array(periodDays).fill(0), negative: new Array(periodDays).fill(0) }), [periodDays]);
+
+  // Grand total across every Marketing row currently shown — derived from
+  // the per-Marketing sums above rather than a separate pass over mitra.
   const deltaPerDate = useMemo(() => {
     const positive = new Array(periodDays).fill(0);
     const negative = new Array(periodDays).fill(0);
-    for (const id of visibleMitraIds) {
-      const arr = mitraDailyQty[id];
-      if (!arr) continue;
-      for (let i = 1; i < periodDays; i++) {
-        const delta = (arr[i] ?? 0) - (arr[i - 1] ?? 0);
-        if (delta > 0) positive[i] += delta;
-        else if (delta < 0) negative[i] += delta;
+    for (const { positive: p, negative: n } of deltaPerDateByMarketing.values()) {
+      for (let i = 0; i < periodDays; i++) {
+        positive[i] += p[i];
+        negative[i] += n[i];
       }
     }
     return { positive, negative };
-  }, [visibleMitraIds, mitraDailyQty, periodDays]);
+  }, [deltaPerDateByMarketing, periodDays]);
 
   // Pre-resolves each row's roster (filtered to the search query, if any)
   // and drops rows with zero matches entirely while searching — both the
@@ -809,6 +827,7 @@ export function MarketingPerformancePanel({
                   mitraDailyQty={mitraDailyQty}
                   onMitraClick={setDetailMitraId}
                   forceOpen={forceOpen}
+                  dailyDelta={deltaPerDateByMarketing.get(r.MarketingUserID) ?? EMPTY_DELTA}
                 />
               ))}
             </div>
