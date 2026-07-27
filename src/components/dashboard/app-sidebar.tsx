@@ -31,6 +31,7 @@ import {
 import { PTSwitcher } from "@/components/dashboard/pt-switcher";
 import { Badge } from "@/components/ui/badge";
 import type { ModuleKey, PermissionMap } from "@/lib/permissions";
+import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
 const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?: boolean; moduleKey: ModuleKey }[] = [
   { href: "/", label: "Beranda", icon: LayoutGrid, exact: true, moduleKey: "beranda" },
@@ -48,9 +49,11 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
 export function AppSidebar({
   permissions,
   isSuperAdmin,
+  perusahaanList,
 }: {
   permissions: PermissionMap;
   isSuperAdmin: boolean;
+  perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -83,7 +86,7 @@ export function AppSidebar({
           </div>
         </div>
         <div className="px-2 group-data-[collapsible=icon]:px-0">
-          <PTSwitcher />
+          <PTSwitcher list={perusahaanList} />
         </div>
       </SidebarHeader>
       <SidebarContent>

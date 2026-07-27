@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
+import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { AutoRefresh } from "@/components/dashboard/auto-refresh";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
@@ -11,11 +12,18 @@ import { Separator } from "@/components/ui/separator";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  const profile = session?.user?.id ? await getUserById(Number(session.user.id)) : null;
+  const [profile, perusahaanList] = await Promise.all([
+    session?.user?.id ? getUserById(Number(session.user.id)) : Promise.resolve(null),
+    listPerusahaanForSwitcher(),
+  ]);
 
   return (
     <SidebarProvider>
-      <AppSidebar permissions={session?.user?.permissions ?? {}} isSuperAdmin={session?.user?.isSuperAdmin ?? false} />
+      <AppSidebar
+        permissions={session?.user?.permissions ?? {}}
+        isSuperAdmin={session?.user?.isSuperAdmin ?? false}
+        perusahaanList={perusahaanList}
+      />
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
           <div className="flex items-center gap-2">
