@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { PALETTE_INIT_SCRIPT } from "@/components/palette-provider";
+import { getSiteSettings } from "@/lib/queries/site-settings";
 
 const display = Space_Grotesk({
   variable: "--font-display",
@@ -23,10 +24,23 @@ const data = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-export const metadata: Metadata = {
-  title: "Dashboard PMP Group",
-  description: "Dashboard operasional PT Mitra Kelola Esindo (Ponorogo)",
-};
+// Async (not the static `metadata` export) specifically so Title/Description/
+// Favicon/OG-image can come from DashboardSiteSettings and take effect
+// without a redeploy — see docs/superpowers/specs/2026-07-27-pengaturan-situs-design.md.
+// A route segment can't export both `metadata` and `generateMetadata`.
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings();
+  return {
+    title: settings.title,
+    description: settings.description ?? undefined,
+    icons: { icon: settings.faviconPath || "/brand/default-favicon.png" },
+    openGraph: {
+      title: settings.title,
+      description: settings.description ?? undefined,
+      images: settings.ogImagePath ? [settings.ogImagePath] : undefined,
+    },
+  };
+}
 
 export default function RootLayout({
   children,

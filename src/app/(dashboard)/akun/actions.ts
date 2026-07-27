@@ -11,6 +11,7 @@ import {
   listRoles,
 } from "@/lib/queries/akun";
 import { getPabrikLocation, setPabrikLocation } from "@/lib/queries/pabrik-location";
+import { getSiteSettings, setSiteSettings, type SiteSettings } from "@/lib/queries/site-settings";
 
 export async function createUserAction(input: {
   nama: string;
@@ -90,4 +91,21 @@ export async function setPabrikLocationAction(input: { latitude: number; longitu
   await requireSuperAdmin();
   await setPabrikLocation(input);
   revalidatePath("/akun");
+}
+
+export async function getSiteSettingsAction() {
+  await requireSuperAdmin();
+  return getSiteSettings();
+}
+
+export async function setSiteSettingsAction(input: SiteSettings): Promise<void> {
+  await requireSuperAdmin();
+  if (!input.title.trim()) throw new Error("Title tidak boleh kosong.");
+  await setSiteSettings(input);
+  revalidatePath("/akun");
+  // Title/favicon/OG values are read by the root layout's generateMetadata()
+  // on every route (including /login and public token pages) — revalidate
+  // the whole layout tree, not just /akun, so the change takes effect
+  // immediately instead of only after that route is next visited fresh.
+  revalidatePath("/", "layout");
 }
