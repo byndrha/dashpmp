@@ -745,11 +745,11 @@ export function MarketingPerformancePanel({
             />
           </div>
           <Select value={wilayahFilter} onValueChange={(v) => handleWilayahChange(v ?? ALL)}>
-            <SelectTrigger className="w-44" aria-label="Wilayah">
-              <SelectValue>{(v: string) => (v === ALL ? "Semua Wilayah" : v)}</SelectValue>
+            <SelectTrigger className="w-32" aria-label="Wilayah">
+              <SelectValue>{(v: string) => (v === ALL ? "Wilayah" : v)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>Semua Wilayah</SelectItem>
+              <SelectItem value={ALL}>Wilayah</SelectItem>
               {wilayahOptions.map((w) => (
                 <SelectItem key={w} value={w}>
                   {w}
@@ -758,11 +758,11 @@ export function MarketingPerformancePanel({
             </SelectContent>
           </Select>
           <Select value={kecamatanFilter} onValueChange={(v) => setKecamatanFilter(v ?? ALL)} disabled={kecamatanOptions.length === 0}>
-            <SelectTrigger className="w-44" aria-label="Kecamatan">
-              <SelectValue>{(v: string) => (v === ALL ? "Semua Kecamatan" : v)}</SelectValue>
+            <SelectTrigger className="w-32" aria-label="Kecamatan">
+              <SelectValue>{(v: string) => (v === ALL ? "Kecamatan" : v)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>Semua Kecamatan</SelectItem>
+              <SelectItem value={ALL}>Kecamatan</SelectItem>
               {kecamatanOptions.map((k) => (
                 <SelectItem key={k} value={k}>
                   {k}

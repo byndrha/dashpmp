@@ -10,13 +10,15 @@ import {
   Minus,
   ArrowUp,
   ArrowDown,
-  ArrowUpDown,
+  Percent,
+  Plus,
   Search,
   MessageCircle,
   Phone,
   Eye,
   EyeOff,
   Loader2,
+  type LucideIcon,
 } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,12 +39,12 @@ import { getMitraContactLogAction, saveMitraContactLogAction } from "@/app/(dash
 
 type SortMode = "target" | "persentase" | "terbanyak" | "tren" | "terbaru";
 
-const SORT_LABEL: Record<SortMode, string> = {
-  target: "Target Terbanyak",
-  persentase: "Persentase Pencapaian",
-  terbanyak: "Pengambilan Terbanyak",
-  tren: "Tren 3 Hari Terakhir",
-  terbaru: "Mitra Terbaru",
+const SORT_OPTIONS: Record<SortMode, { label: string; icon: LucideIcon }> = {
+  target: { label: "Target", icon: ArrowUp },
+  persentase: { label: "Capaian", icon: Percent },
+  terbanyak: { label: "Kuantitas", icon: ArrowUp },
+  tren: { label: "Tren Terkini", icon: TrendingUp },
+  terbaru: { label: "Mitra Terbaru", icon: Plus },
 };
 
 // Fixed width for the sticky-left info column, shared between the header
@@ -595,6 +597,8 @@ export function MitraDOPanel({
     if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
   }
 
+  const CurrentSortIcon = SORT_OPTIONS[sortMode].icon;
+
   return (
     // Plain div standing in for <Card> here, minus `overflow-hidden` — Card
     // sets that for rounded-corner clipping, but it also turns Card into a
@@ -639,20 +643,26 @@ export function MitraDOPanel({
             />
           </div>
           <Select value={sortMode} onValueChange={(v) => setSortMode((v as SortMode) ?? "target")}>
-            <SelectTrigger className="w-56" aria-label="Urutkan">
-              <ArrowUpDown className="size-3.5 text-muted-foreground" />
-              <SelectValue>{(v: string) => SORT_LABEL[v as SortMode] ?? SORT_LABEL.target}</SelectValue>
+            <SelectTrigger className="w-40" aria-label="Urutkan">
+              <CurrentSortIcon className="size-3.5 text-muted-foreground" />
+              <SelectValue>{(v: string) => SORT_OPTIONS[v as SortMode]?.label ?? SORT_OPTIONS.target.label}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="target">{SORT_LABEL.target}</SelectItem>
-              <SelectItem value="persentase">{SORT_LABEL.persentase}</SelectItem>
-              <SelectItem value="terbanyak">{SORT_LABEL.terbanyak}</SelectItem>
-              <SelectItem value="tren">{SORT_LABEL.tren}</SelectItem>
-              <SelectItem value="terbaru">{SORT_LABEL.terbaru}</SelectItem>
+              {(Object.keys(SORT_OPTIONS) as SortMode[]).map((mode) => {
+                const Icon = SORT_OPTIONS[mode].icon;
+                return (
+                  <SelectItem key={mode} value={mode}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Icon className="size-3.5 text-muted-foreground" />
+                      {SORT_OPTIONS[mode].label}
+                    </span>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
           <Select value={wilayahFilter} onValueChange={(v) => onWilayahFilterChange(v ?? "all")}>
-            <SelectTrigger className="w-44" aria-label="Wilayah">
+            <SelectTrigger className="w-32" aria-label="Wilayah">
               <SelectValue>{(v: string) => (v === "all" ? "Wilayah" : v)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -665,7 +675,7 @@ export function MitraDOPanel({
             </SelectContent>
           </Select>
           <Select value={marketingFilter} onValueChange={(v) => onMarketingFilterChange(v ?? "all")}>
-            <SelectTrigger className="w-44" aria-label="Marketing">
+            <SelectTrigger className="w-32" aria-label="Marketing">
               <SelectValue>
                 {(v: string) =>
                   v === "all" ? "Marketing" : v === UNASSIGNED_MARKETING ? "Belum Ditentukan" : v
