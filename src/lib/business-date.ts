@@ -1,5 +1,5 @@
 const WIB_TIME_ZONE = "Asia/Jakarta";
-const ROLLOVER_HOUR = 14; // 14:00 WIB — after this, "today's" transactions mean tomorrow's date.
+export const ROLLOVER_HOUR = 14; // 14:00 WIB — after this, "today's" transactions mean tomorrow's date.
 
 /**
  * Returns the parts of the current instant as seen in WIB (Asia/Jakarta),
@@ -43,6 +43,28 @@ export function getBusinessDate(now: Date = new Date()): Date {
 
 export function getBusinessDateISO(now: Date = new Date()): string {
   return getBusinessDate(now).toISOString().slice(0, 10);
+}
+
+// Calendar-safe (UTC math, no local-timezone drift) day shift on a plain
+// "YYYY-MM-DD" string.
+export function shiftDateISO(dateISO: string, deltaDays: number): string {
+  const d = new Date(dateISO);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + deltaDays))
+    .toISOString()
+    .slice(0, 10);
+}
+
+// Resolves a business date (the 14:00 WIB rollover label — see getBusinessDate)
+// plus a literal HH:MM wall-clock time into the actual calendar-date Date it
+// falls on. Business date "28 Juli" spans 27 Juli 14:00 through 28 Juli
+// 13:59, so a hour >= ROLLOVER_HOUR under that label means the day BEFORE
+// it, not the label's own date. Used by the Papan Pengiriman timeline
+// (pengiriman-board.tsx / route-validation-dialog.tsx), whose businessDate
+// prop is this same rollover-based label, not a plain calendar date.
+export function resolveBusinessDateTime(businessDate: string, timeHHMM: string): Date {
+  const hour = Number(timeHHMM.slice(0, 2));
+  const calendarDate = hour >= ROLLOVER_HOUR ? shiftDateISO(businessDate, -1) : businessDate;
+  return new Date(`${calendarDate}T${timeHHMM}:00`);
 }
 
 /**

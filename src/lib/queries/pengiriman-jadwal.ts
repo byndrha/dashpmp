@@ -40,6 +40,12 @@ export interface JadwalCard {
   TotalStop: number;
   // Only ever set once, at startBerangkat — null for every Draft.
   JarakKM: number | null;
+  // Estimated round-trip duration (OSRM), set alongside JarakKM at
+  // startBerangkat — null for every Draft, and for any Terbit Jadwal
+  // created before this column existed. Drives the auto-derived "Dalam
+  // Perjalanan" / "Kembali ke Pabrik" segments on the board (see
+  // computeArmadaTimelineSegments).
+  DurasiMenit: number | null;
 }
 
 export async function getPengirimanBoard(businessDate: string): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[] }> {
@@ -60,14 +66,21 @@ export async function getPengirimanBoard(businessDate: string): Promise<{ armada
             j.Status,
             ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS TotalKantong,
             COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop,
-            j.JarakKM
+            j.JarakKM,
+            j.DurasiMenit
         FROM DashboardPengirimanJadwal j
         LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
         LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
         LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
         WHERE j.IsDeleted = 0
-          AND j.JamJadwal >= DATEADD(HOUR, -7, CAST(@businessDate AS DATETIME)) AND j.JamJadwal < DATEADD(HOUR, -7, DATEADD(DAY, 1, CAST(@businessDate AS DATETIME)))
-        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status, j.JarakKM
+          -- businessDate is a 14:00 WIB rollover label, not a plain calendar
+          -- date (see ROLLOVER_HOUR in business-date.ts): it spans 14:00 WIB
+          -- the day before through 13:59 WIB the labeled day itself, so the
+          -- window here shifts by ROLLOVER_HOUR (14) instead of a plain
+          -- midnight-to-midnight day. Kept as WIB->UTC (-7h) on top of that,
+          -- same convention as the rest of this file's businessDate filters.
+          AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status, j.JarakKM, j.DurasiMenit
         ORDER BY j.JamJadwal
       `),
   ]);
@@ -171,8 +184,10 @@ export async function getAvailableSalesOrders(businessDate: string): Promise<Ava
       LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
       WHERE so.IsDeleted = 0
         AND so.IsClosed = 0
-        AND so.DueDate >= DATEADD(DAY, -@lookbackDays, DATEADD(HOUR, -7, CAST(@businessDate AS DATETIME)))
-        AND so.DueDate < DATEADD(HOUR, -7, DATEADD(DAY, 1, CAST(@businessDate AS DATETIME)))
+        -- Same 14:00-WIB-rollover window as getPengirimanBoard's businessDate
+        -- (not plain midnight-to-midnight) — see the comment there.
+        AND so.DueDate >= DATEADD(DAY, -@lookbackDays, DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))))
+        AND so.DueDate < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
         AND NOT EXISTS (
           SELECT 1 FROM DeliveryOrder do_ WHERE do_.SalesOrderID = so.SalesOrderID AND do_.IsDeleted = 0
         )
@@ -550,8 +565,9 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .input("jarakKM", sql.Decimal(10, 2), validatedRoute.distanceKm)
+    .input("durasiMenit", sql.Int, Math.round(validatedRoute.durationMinutes))
     .query(
-      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamAktualBerangkat = GETDATE(), JarakKM = @jarakKM, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
+      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamAktualBerangkat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
     );
   if (claim.rowsAffected[0] === 0) {
     throw new Error("Keberangkatan ini sudah berangkat atau sedang diproses.");
@@ -680,7 +696,7 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
       .request()
       .input("jadwalId", sql.Int, jadwalId)
       .query(
-        `UPDATE DashboardPengirimanJadwal SET Status = 'Draft', JamAktualBerangkat = NULL, JarakKM = NULL, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`
+        `UPDATE DashboardPengirimanJadwal SET Status = 'Draft', JamAktualBerangkat = NULL, JarakKM = NULL, DurasiMenit = NULL, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`
       );
     throw err;
   }

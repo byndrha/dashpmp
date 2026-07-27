@@ -3,12 +3,13 @@
 import { DndContext, useDraggable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Wrench, User } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -18,18 +19,25 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ArmadaManager, ArmadaFormDialog, STATUS_BADGE, rowToForm } from "@/components/dashboard/armada-dialog";
+import { DriverManager } from "@/components/dashboard/driver-manager";
 import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime } from "@/lib/format";
+import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
 import type { JadwalCard as JadwalCardData, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
+import type { ArmadaActivity, ArmadaActivityType } from "@/lib/armada-activity-types";
+import { ARMADA_ACTIVITY_TYPES, ARMADA_ACTIVITY_LABEL } from "@/lib/armada-activity-types";
+import type { DriverProfileRow } from "@/lib/queries/driver-profile";
 import {
   createJadwalDraftAction,
   getAvailableSalesOrdersAction,
   updateJadwalDriverTimeAction,
   updateArmadaAction,
+  createArmadaActivityAction,
+  deleteArmadaActivityAction,
 } from "@/app/(dashboard)/delivery/actions";
 
 // 24-hour axis, but the per-hour width is now derived from the available
@@ -46,49 +54,62 @@ const MIN_HOUR_WIDTH = 28;
 // lanes (assignLanes) instead of overlapping.
 const MIN_CARD_WIDTH = 92;
 const INFO_COL_WIDTH = 224;
+const DATE_SEGMENT_HEIGHT = 20;
 const HOUR_RULER_HEIGHT = 20;
 const CARD_HEIGHT = 56;
 const CARD_GAP = 4;
 const ROW_TOP_PADDING = 8;
 
+// Timeline-relative hour (0-24), not the actual wall-clock hour — the axis
+// starts at ROLLOVER_HOUR (14:00 WIB) and wraps to ROLLOVER_HOUR the next
+// day, matching the business-date label the board is keyed on (see
+// ROLLOVER_HOUR in business-date.ts). An actual 15:00 departure lands at
+// timeline position 1, actual 02:00 lands at position 12, etc.
 function hourFraction(value: string | Date): number {
   const d = new Date(value);
-  return d.getHours() + d.getMinutes() / 60;
+  const hour = d.getHours() + d.getMinutes() / 60;
+  return (hour - ROLLOVER_HOUR + 24) % 24;
 }
 
-// Multiple Jadwal can legitimately share the same Armada + JamJadwal (e.g.
-// two Pemesanan submitted separately for the same departure slot) — without
-// lane assignment they'd all render at the exact same absolute {left, top},
-// perfectly overlapping so only the topmost one is visible/clickable even
-// though every row still exists in the DB. Greedy interval-graph-coloring:
-// sort by horizontal position, place each card in the first lane whose
-// previous occupant doesn't overlap it, else open a new lane.
-function assignLanes(
-  list: JadwalCardData[],
-  hourWidth: number,
-  cardWidth: number
-): { laneOf: Map<number, number>; laneCount: number } {
-  const withPos = list
-    .map((j) => ({ j, left: hourFraction(j.JamJadwal) * hourWidth }))
-    .sort((a, b) => a.left - b.left);
+interface TimelineBlock {
+  key: string;
+  left: number;
+  width: number;
+}
+
+// Multiple cards can legitimately share the same Armada + time slot (e.g.
+// two Pemesanan submitted for the same departure, or a Pengiriman that
+// overlaps a manually-logged Perawatan) — without lane assignment they'd
+// all render at the exact same absolute {left, top}, perfectly overlapping
+// so only the topmost one is visible/clickable even though every one of
+// them still exists. Greedy interval-graph-coloring: sort by horizontal
+// position, place each block in the first lane whose previous occupant
+// doesn't overlap it, else open a new lane. Generic over pixel-space
+// blocks so the same function lanes Jadwal cards, ArmadaActivity cards,
+// and the auto-derived Memuat/Perjalanan/Kembali segments together.
+function assignLanes(blocks: TimelineBlock[]): { laneOf: Map<string, number>; laneCount: number } {
+  const sorted = [...blocks].sort((a, b) => a.left - b.left);
   const laneEnds: number[] = [];
-  const laneOf = new Map<number, number>();
-  for (const { j, left } of withPos) {
-    const right = left + cardWidth;
-    let lane = laneEnds.findIndex((end) => end <= left);
+  const laneOf = new Map<string, number>();
+  for (const b of sorted) {
+    const right = b.left + b.width;
+    let lane = laneEnds.findIndex((end) => end <= b.left);
     if (lane === -1) {
       lane = laneEnds.length;
       laneEnds.push(right);
     } else {
       laneEnds[lane] = right;
     }
-    laneOf.set(j.JadwalID, lane);
+    laneOf.set(b.key, lane);
   }
   return { laneOf, laneCount: laneEnds.length };
 }
 
-function combineDateAndTime(businessDate: string, timeHHMM: string): Date {
-  return new Date(`${businessDate}T${timeHHMM}:00`);
+// Real-time duration in hours between two datetimes — timezone-agnostic
+// (epoch difference), unlike hourFraction which is only meaningful for a
+// single point on the ROLLOVER_HOUR-based axis.
+function durationHours(start: string | Date, end: string | Date): number {
+  return (new Date(end).getTime() - new Date(start).getTime()) / 3_600_000;
 }
 
 // Measures the scroll container's own clientWidth on mount and on resize,
@@ -168,7 +189,7 @@ function CreateJadwalDialog({
       try {
         await createJadwalDraftAction({
           armadaId,
-          jamJadwal: combineDateAndTime(businessDate, time),
+          jamJadwal: resolveBusinessDateTime(businessDate, time),
           salesOrderIds: [...selected],
         });
         onOpenChange(false);
@@ -304,27 +325,274 @@ function DraggableJadwalCard({
   );
 }
 
+const ACTIVITY_COLOR: Record<ArmadaActivityType, string> = {
+  Perawatan: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  Pencucian: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400",
+  IsiBBM: "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-400",
+  Menganggur: "border-muted-foreground/30 bg-muted/40 text-muted-foreground",
+};
+
+// Manually-logged, non-delivery armada states (Perawatan/Pencucian/Isi
+// BBM/Menganggur) — clickable only to delete (confirm-and-remove), no
+// drag/edit-in-place for v1 since these are simple fixed blocks a
+// dispatcher logs after the fact, not something that needs rescheduling
+// the way a Pengiriman draft does.
+function ArmadaActivityCard({
+  activity,
+  hourWidth,
+  width,
+  top,
+  onDelete,
+}: {
+  activity: ArmadaActivity;
+  hourWidth: number;
+  width: number;
+  top: number;
+  onDelete: (activityId: number) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (confirm(`Hapus aktivitas ${ARMADA_ACTIVITY_LABEL[activity.ActivityType]}?`)) onDelete(activity.ActivityID);
+      }}
+      className={cn(
+        "absolute flex flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1 text-left text-[9px]",
+        ACTIVITY_COLOR[activity.ActivityType]
+      )}
+      style={{ left: hourFraction(activity.StartTime) * hourWidth, top, width, height: CARD_HEIGHT }}
+    >
+      <span className="truncate font-semibold">{ARMADA_ACTIVITY_LABEL[activity.ActivityType]}</span>
+      <span className="truncate tabular-nums opacity-80">
+        {formatTime(activity.StartTime)}&ndash;{formatTime(activity.EndTime)}
+      </span>
+      {activity.Notes && <span className="truncate opacity-70">{activity.Notes}</span>}
+    </button>
+  );
+}
+
+// Auto-derived (never stored) segments for a Terbit Jadwal's own lifecycle
+// — Sedang Memuat (JamMulaiMuat -> JamAktualBerangkat) and Dalam Perjalanan
+// + Kembali ke Pabrik (JamAktualBerangkat -> +DurasiMenit, then a short
+// arrival marker). Read-only visual context, not its own record — clicking
+// one opens the same Validasi Rute the Pengiriman card itself opens, since
+// they describe the same trip.
+function AutoSegmentCard({
+  label,
+  left,
+  width,
+  top,
+  onClick,
+}: {
+  label: string;
+  left: number;
+  width: number;
+  top: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute flex items-center justify-center overflow-hidden rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-1 text-[9px] text-muted-foreground"
+      style={{ left, width, top, height: CARD_HEIGHT }}
+    >
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+// Mirrors whichever driver is on whatever's happening in the Armada row
+// directly above it, at the same horizontal position — not an independent
+// schedule, just a second read of the same Jadwal-derived segments with
+// the driver's name instead of delivery details (per design decision: no
+// separate driver-shift data model backs this row).
+function DriverBlock({ name, left, width, top }: { name: string; left: number; width: number; top: number }) {
+  return (
+    <div
+      className="absolute flex items-center gap-1 overflow-hidden rounded-md border border-primary/20 bg-primary/5 px-1.5 text-[9px] text-primary"
+      style={{ left, width, top, height: CARD_HEIGHT }}
+    >
+      <User className="size-3 shrink-0" />
+      <span className="truncate font-medium">{name}</span>
+    </div>
+  );
+}
+
+function ArmadaActivityFormDialog({
+  open,
+  onOpenChange,
+  armadaId,
+  businessDate,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  armadaId: number | null;
+  businessDate: string;
+}) {
+  const [activityType, setActivityType] = useState<ArmadaActivityType>("Perawatan");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("10:00");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    // Resets the form on each open — not derivable from render since these
+    // are user-editable fields with no server-sourced initial value.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActivityType("Perawatan");
+    setStartTime("08:00");
+    setEndTime("10:00");
+    setNotes("");
+    setError(null);
+  }, [open]);
+
+  function handleSubmit() {
+    if (armadaId == null) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await createArmadaActivityAction({
+          armadaId,
+          activityType,
+          startTime: resolveBusinessDateTime(businessDate, startTime),
+          endTime: resolveBusinessDateTime(businessDate, endTime),
+          notes: notes.trim() || null,
+        });
+        onOpenChange(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menyimpan aktivitas.");
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Aktivitas Armada</DialogTitle>
+          <DialogDescription>
+            Catat kondisi armada di luar pengiriman — Perawatan, Pencucian, Isi BBM, atau Menganggur.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <Select value={activityType} onValueChange={(v) => setActivityType((v as ArmadaActivityType) ?? "Perawatan")}>
+            <SelectTrigger className="w-full">
+              <SelectValue>{(v: string) => ARMADA_ACTIVITY_LABEL[v as ArmadaActivityType]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {ARMADA_ACTIVITY_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {ARMADA_ACTIVITY_LABEL[t]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="grid grid-cols-2 gap-2">
+            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+          </div>
+          <Input placeholder="Catatan (opsional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button disabled={pending} onClick={handleSubmit}>
+            {pending ? "Menyimpan..." : "Simpan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Fixed width for the auto-derived segments and the "Kembali ke Pabrik"
+// arrival marker — these don't ride on cardWidth (that's sized for the
+// Jadwal card's own 4 lines of text) since they only need to show a short
+// label, and a real Perjalanan span can be much shorter than a hover slot.
+const MIN_AUTO_WIDTH = 56;
+const RETURN_MARKER_WIDTH = 64;
+
 function ArmadaRowBoard({
   armada,
   jadwal,
+  activities,
   hourWidth,
   dayWidth,
   onCardClick,
   onCreateClick,
+  onCreateActivityClick,
+  onDeleteActivity,
 }: {
   armada: ArmadaRow;
   jadwal: JadwalCardData[];
+  activities: ArmadaActivity[];
   hourWidth: number;
   dayWidth: number;
   onCardClick: (jadwalId: number) => void;
   onCreateClick: (armadaId: number) => void;
+  onCreateActivityClick: (armadaId: number) => void;
+  onDeleteActivity: (activityId: number) => void;
 }) {
   const cardWidth = Math.max(MIN_CARD_WIDTH, hourWidth - 6);
-  const { laneOf, laneCount } = useMemo(
-    () => assignLanes(jadwal, hourWidth, cardWidth),
-    [jadwal, hourWidth, cardWidth]
-  );
-  const rowHeight = ROW_TOP_PADDING + Math.max(1, laneCount) * CARD_HEIGHT + Math.max(0, laneCount - 1) * CARD_GAP;
+
+  // Auto-derived Memuat/Perjalanan/Kembali segments — only for Jadwal that
+  // have actually departed (Terbit) with the timestamps needed to compute
+  // them; a Draft has no real duration yet, and older Terbit rows created
+  // before DurasiMenit existed simply skip the Perjalanan/Kembali pair.
+  const autoSegments = useMemo(() => {
+    type AutoSegment = { key: string; jadwalId: number; label: string; start: Date; end: Date };
+    const segments: AutoSegment[] = [];
+    for (const j of jadwal) {
+      if (j.Status !== "Terbit") continue;
+      if (j.JamMulaiMuat && j.JamAktualBerangkat) {
+        segments.push({
+          key: `memuat-${j.JadwalID}`,
+          jadwalId: j.JadwalID,
+          label: "Sedang Memuat",
+          start: new Date(j.JamMulaiMuat),
+          end: new Date(j.JamAktualBerangkat),
+        });
+      }
+      if (j.JamAktualBerangkat && j.DurasiMenit != null) {
+        const start = new Date(j.JamAktualBerangkat);
+        const end = new Date(start.getTime() + j.DurasiMenit * 60_000);
+        segments.push({ key: `jalan-${j.JadwalID}`, jadwalId: j.JadwalID, label: "Dalam Perjalanan", start, end });
+        segments.push({
+          key: `kembali-${j.JadwalID}`,
+          jadwalId: j.JadwalID,
+          label: "Kembali ke Pabrik",
+          start: end,
+          end: new Date(end.getTime() + 15 * 60_000),
+        });
+      }
+    }
+    return segments;
+  }, [jadwal]);
+
+  const { laneOf, laneCount } = useMemo(() => {
+    const blocks: TimelineBlock[] = [
+      ...jadwal.map((j) => ({ key: `j-${j.JadwalID}`, left: hourFraction(j.JamJadwal) * hourWidth, width: cardWidth })),
+      ...activities.map((a) => ({
+        key: `a-${a.ActivityID}`,
+        left: hourFraction(a.StartTime) * hourWidth,
+        width: Math.max(MIN_AUTO_WIDTH, durationHours(a.StartTime, a.EndTime) * hourWidth),
+      })),
+      ...autoSegments.map((s) => ({
+        key: s.key,
+        left: hourFraction(s.start) * hourWidth,
+        width:
+          s.label === "Kembali ke Pabrik"
+            ? RETURN_MARKER_WIDTH
+            : Math.max(MIN_AUTO_WIDTH, durationHours(s.start, s.end) * hourWidth),
+      })),
+    ];
+    return assignLanes(blocks);
+  }, [jadwal, activities, autoSegments, hourWidth, cardWidth]);
+
+  const laneCountSafe = Math.max(1, laneCount);
+  const rowHeight = ROW_TOP_PADDING + laneCountSafe * CARD_HEIGHT + Math.max(0, laneCountSafe - 1) * CARD_GAP;
   const totalKantongHariIni = jadwal.reduce((sum, j) => sum + j.TotalKantong, 0);
   // "telah ditempuh" (already traveled) — only Jadwal that actually
   // departed (JamAktualBerangkat set) contribute; a Draft hasn't gone
@@ -352,6 +620,7 @@ function ArmadaRowBoard({
   }
 
   return (
+    <div className="flex flex-col">
     <div className="flex items-stretch self-start">
       {/* Whole box opens the edit form — the "+" button below is the one
           exception, since it's its own action (start a new Draft here),
@@ -388,12 +657,26 @@ function ArmadaRowBoard({
             <p className="truncate text-xs text-muted-foreground">{armada.PlatNomor ?? "-"}</p>
           </div>
         </div>
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-1">
           <Button
             variant="outline"
             size="icon"
             className="size-6"
             disabled={armada.Status !== "Baik"}
+            title="Aktivitas Armada"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateActivityClick(armada.ArmadaID);
+            }}
+          >
+            <Wrench className="size-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-6"
+            disabled={armada.Status !== "Baik"}
+            title="Pengiriman Baru"
             onClick={(e) => {
               e.stopPropagation();
               onCreateClick(armada.ArmadaID);
@@ -438,11 +721,57 @@ function ArmadaRowBoard({
             jadwal={j}
             hourWidth={hourWidth}
             cardWidth={cardWidth}
-            top={ROW_TOP_PADDING + (laneOf.get(j.JadwalID) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+            top={ROW_TOP_PADDING + (laneOf.get(`j-${j.JadwalID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
             onCardClick={onCardClick}
           />
         ))}
+        {activities.map((a) => (
+          <ArmadaActivityCard
+            key={a.ActivityID}
+            activity={a}
+            hourWidth={hourWidth}
+            width={Math.max(MIN_AUTO_WIDTH, durationHours(a.StartTime, a.EndTime) * hourWidth)}
+            top={ROW_TOP_PADDING + (laneOf.get(`a-${a.ActivityID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+            onDelete={onDeleteActivity}
+          />
+        ))}
+        {autoSegments.map((s) => (
+          <AutoSegmentCard
+            key={s.key}
+            label={s.label}
+            left={hourFraction(s.start) * hourWidth}
+            width={s.label === "Kembali ke Pabrik" ? RETURN_MARKER_WIDTH : Math.max(MIN_AUTO_WIDTH, durationHours(s.start, s.end) * hourWidth)}
+            top={ROW_TOP_PADDING + (laneOf.get(s.key) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+            onClick={() => onCardClick(s.jadwalId)}
+          />
+        ))}
       </div>
+    </div>
+    {/* Driver row — mirrors whichever Jadwal card (only ones that carry a
+        driver) sits in the row above, at the exact same lane, so the two
+        rows read as one vertically-aligned strip per trip. No independent
+        driver-schedule data model backs this (see driver-manager.tsx). */}
+    <div className="flex items-stretch self-start border-t border-dashed">
+      <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center bg-card py-1 pr-3 text-[10px] text-muted-foreground">
+        Driver
+      </div>
+      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
+        {Array.from({ length: 24 }, (_, h) => (
+          <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
+        ))}
+        {jadwal
+          .filter((j) => j.DriverName)
+          .map((j) => (
+            <DriverBlock
+              key={j.JadwalID}
+              name={j.DriverName as string}
+              left={hourFraction(j.JamJadwal) * hourWidth}
+              width={cardWidth}
+              top={ROW_TOP_PADDING + (laneOf.get(`j-${j.JadwalID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+            />
+          ))}
+      </div>
+    </div>
     </div>
   );
 }
@@ -450,12 +779,16 @@ function ArmadaRowBoard({
 export function PengirimanBoard({
   armada,
   jadwal,
+  activities,
+  driverProfiles,
   drivers,
   businessDate,
   todayISO,
 }: {
   armada: ArmadaRow[];
   jadwal: JadwalCardData[];
+  activities: ArmadaActivity[];
+  driverProfiles: DriverProfileRow[];
   drivers: DriverOption[];
   businessDate: string;
   todayISO: string;
@@ -467,11 +800,22 @@ export function PengirimanBoard({
   const isToday = businessDate === todayISO;
   const [detailJadwalId, setDetailJadwalId] = useState<number | null>(null);
   const [createArmadaId, setCreateArmadaId] = useState<number | null>(null);
+  const [createActivityArmadaId, setCreateActivityArmadaId] = useState<number | null>(null);
   const [editingSalesOrder, setEditingSalesOrder] = useState<UbahPemesananTarget | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
   const dayWidth = hourWidth * 24;
+
+  function handleDeleteActivity(activityId: number) {
+    startTransition(async () => {
+      try {
+        await deleteArmadaActivityAction(activityId);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Gagal menghapus aktivitas.");
+      }
+    });
+  }
 
   const jadwalByArmada = useMemo(() => {
     const map = new Map<number, JadwalCardData[]>();
@@ -482,6 +826,16 @@ export function PengirimanBoard({
     }
     return map;
   }, [jadwal]);
+
+  const activitiesByArmada = useMemo(() => {
+    const map = new Map<number, ArmadaActivity[]>();
+    for (const a of activities) {
+      const list = map.get(a.ArmadaID) ?? [];
+      list.push(a);
+      map.set(a.ArmadaID, list);
+    }
+    return map;
+  }, [activities]);
 
   const sortedArmada = useMemo(() => {
     function nextPendingHour(armadaId: number): number {
@@ -509,9 +863,7 @@ export function PengirimanBoard({
   }
 
   function shiftDate(deltaDays: number) {
-    const d = new Date(businessDate);
-    const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + deltaDays));
-    goToDate(next.toISOString().slice(0, 10));
+    goToDate(shiftDateISO(businessDate, deltaDays));
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -521,11 +873,15 @@ export function PengirimanBoard({
     const current = jadwal.find((j) => j.JadwalID === jadwalId);
     if (!current) return;
 
-    const currentHour = hourFraction(current.JamJadwal);
+    const currentHour = hourFraction(current.JamJadwal); // timeline-relative
     const deltaHours = event.delta.x / hourWidth;
-    const newHour = Math.min(23.75, Math.max(0, Math.round((currentHour + deltaHours) * 4) / 4));
-    const hour = Math.floor(newHour);
-    const minute = Math.round((newHour - hour) * 60);
+    const newTimelineHour = Math.min(23.75, Math.max(0, Math.round((currentHour + deltaHours) * 4) / 4));
+    // Convert back to an actual wall-clock hour before formatting/resolving
+    // the calendar day — hourFraction/newTimelineHour are both relative to
+    // the ROLLOVER_HOUR-based axis, not the real hour of day.
+    const actualHour = (newTimelineHour + ROLLOVER_HOUR) % 24;
+    const hour = Math.floor(actualHour);
+    const minute = Math.round((actualHour - hour) * 60);
     const newTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 
     // Reschedule-by-drag calls the same driver/time update path the
@@ -533,7 +889,7 @@ export function PengirimanBoard({
     startTransition(async () => {
       try {
         await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: combineDateAndTime(businessDate, newTime),
+          jamJadwal: resolveBusinessDateTime(businessDate, newTime),
           salesmanId: current.SalesmanID,
         });
       } catch (err) {
@@ -558,6 +914,7 @@ export function PengirimanBoard({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ArmadaManager armada={armada} />
+          <DriverManager drivers={driverProfiles} />
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
               <ChevronLeft className="size-4" />
@@ -587,10 +944,33 @@ export function PengirimanBoard({
         ) : (
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <div ref={containerRef} className="overflow-x-auto">
-              {/* Hour ruler — one shared row instead of repeating labels per
-                  armada, aligned to the exact same hourWidth grid every
-                  ArmadaRowBoard draws its own gridlines against, so it stays
-                  lined up while scrolling horizontally with the rows below. */}
+              {/* Date segment bar + hour ruler — shared rows instead of
+                  repeating labels per armada, aligned to the exact same
+                  hourWidth grid every ArmadaRowBoard draws its own
+                  gridlines against, so both stay lined up while scrolling
+                  horizontally with the rows below. The axis starts at
+                  ROLLOVER_HOUR (14:00 WIB), not midnight, matching the
+                  business-date label this board is keyed on (see
+                  ROLLOVER_HOUR in business-date.ts) — so it spans two
+                  actual calendar dates, called out here since the hour
+                  numbers alone (14..23, 00..13) don't make that obvious. */}
+              <div className="flex items-stretch">
+                <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
+                <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: DATE_SEGMENT_HEIGHT }}>
+                  <div
+                    className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
+                    style={{ left: 0, width: (24 - ROLLOVER_HOUR) * hourWidth }}
+                  >
+                    {formatDate(shiftDateISO(businessDate, -1))}
+                  </div>
+                  <div
+                    className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
+                    style={{ left: (24 - ROLLOVER_HOUR) * hourWidth, width: ROLLOVER_HOUR * hourWidth }}
+                  >
+                    {formatDate(businessDate)}
+                  </div>
+                </div>
+              </div>
               <div className="flex items-stretch">
                 <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
                 <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: HOUR_RULER_HEIGHT }}>
@@ -600,7 +980,7 @@ export function PengirimanBoard({
                       className="absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums text-muted-foreground"
                       style={{ left: h * hourWidth, width: hourWidth }}
                     >
-                      {String(h).padStart(2, "0")}
+                      {String((h + ROLLOVER_HOUR) % 24).padStart(2, "0")}
                     </div>
                   ))}
                 </div>
@@ -611,10 +991,13 @@ export function PengirimanBoard({
                     key={a.ArmadaID}
                     armada={a}
                     jadwal={jadwalByArmada.get(a.ArmadaID) ?? []}
+                    activities={activitiesByArmada.get(a.ArmadaID) ?? []}
                     hourWidth={hourWidth}
                     dayWidth={dayWidth}
                     onCardClick={setDetailJadwalId}
                     onCreateClick={setCreateArmadaId}
+                    onCreateActivityClick={setCreateActivityArmadaId}
+                    onDeleteActivity={handleDeleteActivity}
                   />
                 ))}
               </div>
@@ -653,6 +1036,12 @@ export function PengirimanBoard({
         armadaId={createArmadaId}
         businessDate={businessDate}
         kapasitasMaks={createArmada?.KapasitasMaks ?? null}
+      />
+      <ArmadaActivityFormDialog
+        open={createActivityArmadaId != null}
+        onOpenChange={(open) => !open && setCreateActivityArmadaId(null)}
+        armadaId={createActivityArmadaId}
+        businessDate={businessDate}
       />
       <UbahPemesananDialog
         target={editingSalesOrder}

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireModuleAccess } from "@/lib/require-access";
 import { createArmada, updateArmada, deleteArmada, type ArmadaInput } from "@/lib/queries/armada";
 import {
   createJadwalDraft,
@@ -15,6 +16,14 @@ import {
   type JadwalDetailRow,
   type AvailableSalesOrder,
 } from "@/lib/queries/pengiriman-jadwal";
+import {
+  getArmadaActivities,
+  createArmadaActivity,
+  deleteArmadaActivity,
+  type ArmadaActivity,
+  type ArmadaActivityType,
+} from "@/lib/queries/armada-activity";
+import { getDriverProfiles, saveDriverProfile, type DriverProfileRow, type SaveDriverProfileInput } from "@/lib/queries/driver-profile";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<number> {
   const id = await createArmada(input);
@@ -83,4 +92,38 @@ export async function getJadwalDetailAction(jadwalId: number): Promise<JadwalDet
 
 export async function getAvailableSalesOrdersAction(businessDate: string): Promise<AvailableSalesOrder[]> {
   return getAvailableSalesOrders(businessDate);
+}
+
+export async function getArmadaActivitiesAction(businessDate: string): Promise<ArmadaActivity[]> {
+  return getArmadaActivities(businessDate);
+}
+
+export async function createArmadaActivityAction(input: {
+  armadaId: number;
+  activityType: ArmadaActivityType;
+  startTime: Date;
+  endTime: Date;
+  notes: string | null;
+}): Promise<number> {
+  const session = await requireModuleAccess("delivery");
+  const id = await createArmadaActivity({ ...input, createdByUserId: String(session.user.id) });
+  revalidatePath("/delivery");
+  return id;
+}
+
+export async function deleteArmadaActivityAction(activityId: number): Promise<void> {
+  await requireModuleAccess("delivery");
+  await deleteArmadaActivity(activityId);
+  revalidatePath("/delivery");
+}
+
+export async function getDriverProfilesAction(): Promise<DriverProfileRow[]> {
+  await requireModuleAccess("delivery");
+  return getDriverProfiles();
+}
+
+export async function saveDriverProfileAction(input: SaveDriverProfileInput): Promise<void> {
+  await requireModuleAccess("delivery");
+  await saveDriverProfile(input);
+  revalidatePath("/delivery");
 }

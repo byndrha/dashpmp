@@ -190,15 +190,21 @@ export interface DriverOption {
 
 // Excludes '0127' ("Ambil Sendiri"/TakeAway, see PARTNER_TYPE_CASE in
 // aging.ts) — not a real driver, so it must never show up as an
-// assignable option.
+// assignable option. Also excludes anyone flagged
+// IsHiddenFromDropdown in DashboardDriverProfile (Kelola Driver) — e.g. a
+// driver who's left or is on long leave, kept out of the picker without
+// touching their historical Jadwal rows (DriverName there is a JOIN, not
+// wiped by this).
 export async function getDriverOptions(): Promise<DriverOption[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT SalesmanID, Name
-    FROM Salesman
-    WHERE ISNULL(IsDeleted, 0) = 0
-      AND SalesmanID <> '0127'
-    ORDER BY Name
+    SELECT sm.SalesmanID, sm.Name
+    FROM Salesman sm
+    LEFT JOIN DashboardDriverProfile dp ON dp.SalesmanID = sm.SalesmanID
+    WHERE ISNULL(sm.IsDeleted, 0) = 0
+      AND sm.SalesmanID <> '0127'
+      AND ISNULL(dp.IsHiddenFromDropdown, 0) = 0
+    ORDER BY sm.Name
   `);
   return result.recordset;
 }
