@@ -4,10 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CollapsibleCard } from "@/components/dashboard/collapsible-card";
 import { formatPercentPoints } from "@/lib/format";
 import type { PemasaranWilayahDeliveryRow } from "@/lib/queries/pemasaran-wilayah-delivery";
 import { setWilayahPotentialTargetAction } from "@/app/(dashboard)/pemasaran/actions";
@@ -138,33 +138,33 @@ function WilayahTile({ row, canEditTarget }: { row: PemasaranWilayahDeliveryRow;
 // Transaksi's WilayahDeliveryPanel, but the metrics are a month-over-month
 // average-per-day comparison plus a manually adjustable capacity target,
 // not a period/target-achievement view. Wilayah with no transaction this
-// month or last month don't get a card at all.
+// month or last month don't get a card at all. Collapsed by default for
+// everyone except Super Admin — every other role still gets the toggle to
+// open it themselves, they just don't start there on every page load.
 export function PemasaranWilayahDeliveryPanel({
   data,
   canEditTarget,
+  isSuperAdmin,
 }: {
   data: PemasaranWilayahDeliveryRow[];
   canEditTarget: boolean;
+  isSuperAdmin: boolean;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-display">Pengiriman per Wilayah</CardTitle>
-        <CardDescription>
-          Rata-rata kantong terkirim per hari, bulan berjalan dibanding bulan lalu, per wilayah dengan transaksi.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {data.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Belum ada pengiriman bulan ini atau bulan lalu.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {data.map((row) => (
-              <WilayahTile key={row.Wilayah} row={row} canEditTarget={canEditTarget} />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <CollapsibleCard
+      title="Pengiriman per Wilayah"
+      description="Rata-rata kantong terkirim per hari, bulan berjalan dibanding bulan lalu, per wilayah dengan transaksi."
+      defaultOpen={isSuperAdmin}
+    >
+      {data.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Belum ada pengiriman bulan ini atau bulan lalu.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {data.map((row) => (
+            <WilayahTile key={row.Wilayah} row={row} canEditTarget={canEditTarget} />
+          ))}
+        </div>
+      )}
+    </CollapsibleCard>
   );
 }

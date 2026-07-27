@@ -81,7 +81,11 @@ export default async function PemasaranPage() {
         />
       )}
 
-      <PemasaranWilayahDeliveryPanel data={wilayahDelivery} canEditTarget={canManageWilayah} />
+      <PemasaranWilayahDeliveryPanel
+        data={wilayahDelivery}
+        canEditTarget={canManageWilayah}
+        isSuperAdmin={session.user.isSuperAdmin}
+      />
 
       <PemasaranSection
         rows={rows}
