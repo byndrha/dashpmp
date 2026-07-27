@@ -7,6 +7,8 @@ import {
   JADWAL_KANTONG_EXPR,
   getCurrentAssignment,
   removeSalesOrderFromJadwal,
+  findDraftJadwalByArmadaAndTime,
+  addSalesOrdersToJadwal,
 } from "@/lib/queries/pengiriman-jadwal";
 
 export interface CreatePemesananInput {
@@ -24,14 +26,20 @@ export interface CreatePemesananResult {
 }
 
 // Orchestrates the Pemesanan module's single-submit flow: create the real
-// SalesOrder, then immediately schedule it as a Draft keberangkatan on the
-// Papan Pengiriman board (createJadwalDraft already enforces Armada
-// capacity). Deliberately stops at Draft, not a real DeliveryOrder — the
-// existing route-validation gate in startBerangkat (pengiriman-jadwal.ts)
-// stays the only path from Draft to Terbit, so this doesn't add a second,
-// unvalidated way to create a real DeliveryOrder. If scheduling fails after
-// the SO was already created, the SO is soft-deleted so it doesn't linger
-// as an unscheduled orphan the user never asked for.
+// SalesOrder, then immediately schedule it on the Papan Pengiriman board.
+// If a Draft already exists for the exact same Armada + departure time
+// (e.g. a second mitra's order aimed at the same trip), the new SO joins
+// that Draft as another stop via addSalesOrdersToJadwal instead of
+// spawning a sibling Jadwal — otherwise both would render on top of each
+// other on the board and only one route validation would exist per trip
+// where the user expects one. createJadwalDraft/addSalesOrdersToJadwal
+// already enforce Armada capacity either way. Deliberately stops at Draft,
+// not a real DeliveryOrder — the existing route-validation gate in
+// startBerangkat (pengiriman-jadwal.ts) stays the only path from Draft to
+// Terbit, so this doesn't add a second, unvalidated way to create a real
+// DeliveryOrder. If scheduling fails after the SO was already created, the
+// SO is soft-deleted so it doesn't linger as an unscheduled orphan the
+// user never asked for.
 export async function createPemesanan(input: CreatePemesananInput): Promise<CreatePemesananResult> {
   const salesOrderId = await createSalesOrderManual({
     businessPartnerId: input.businessPartnerId,
@@ -40,25 +48,31 @@ export async function createPemesanan(input: CreatePemesananInput): Promise<Crea
     deliveryDateTime: input.deliveryDateTime,
   });
 
-  let jadwalId: number | null = null;
+  let createdJadwalId: number | null = null;
   try {
-    jadwalId = await createJadwalDraft({
+    const existingJadwalId = await findDraftJadwalByArmadaAndTime(input.armadaId, input.deliveryDateTime);
+    if (existingJadwalId != null) {
+      await addSalesOrdersToJadwal(existingJadwalId, [salesOrderId]);
+      return { salesOrderId, jadwalId: existingJadwalId };
+    }
+
+    createdJadwalId = await createJadwalDraft({
       armadaId: input.armadaId,
       jamJadwal: input.deliveryDateTime,
       salesOrderIds: [salesOrderId],
     });
 
     if (input.salesmanId) {
-      await updateJadwalDriverTime(jadwalId, {
+      await updateJadwalDriverTime(createdJadwalId, {
         jamJadwal: input.deliveryDateTime,
         salesmanId: input.salesmanId,
       });
     }
 
-    return { salesOrderId, jadwalId };
+    return { salesOrderId, jadwalId: createdJadwalId };
   } catch (err) {
-    if (jadwalId != null) {
-      await deleteJadwalDraft(jadwalId);
+    if (createdJadwalId != null) {
+      await deleteJadwalDraft(createdJadwalId);
     }
     await softDeleteSalesOrder(salesOrderId);
     throw err;
@@ -153,33 +167,55 @@ export interface ReschedulePemesananInput {
 // touching whatever other SOs are still bundled in its current Draft (if
 // it's currently assigned to one at all — a never-scheduled SO, status
 // "Belum Dijadwalkan", has no current assignment and this just schedules
-// it fresh). Reuses createJadwalDraft/updateJadwalDriverTime exactly as
-// createPemesanan already does, so the same capacity check and
-// JamJadwal-not-before-TransDate validation (pengiriman-jadwal.ts) apply
-// here too — nothing about this path bypasses either rule. Deliberately
-// creates the NEW Jadwal draft before removing the SO from its OLD one:
-// if createJadwalDraft/updateJadwalDriverTime throws (capacity exceeded,
-// JamJadwal validation, etc.), the old assignment is still untouched and
-// there's nothing to roll back — removeSalesOrderFromJadwal only runs
-// once the new assignment has fully succeeded.
+// it fresh). Same join-existing-Draft rule as createPemesanan: if another
+// Draft already sits at the target Armada + departure time, this SO joins
+// it as another stop instead of spawning a sibling Jadwal that would
+// overlap it on the board. Reuses createJadwalDraft/addSalesOrdersToJadwal/
+// updateJadwalDriverTime exactly as createPemesanan does, so the same
+// capacity check and JamJadwal-not-before-TransDate validation
+// (pengiriman-jadwal.ts) apply here too. Deliberately resolves/creates the
+// NEW assignment before removing the SO from its OLD one: if that step
+// throws (capacity exceeded, JamJadwal validation, etc.), the old
+// assignment is still untouched and there's nothing to roll back —
+// removeSalesOrderFromJadwal only runs once the new assignment has fully
+// succeeded.
 export async function reschedulePemesanan(input: ReschedulePemesananInput): Promise<{ jadwalId: number }> {
   const current = await getCurrentAssignment(input.salesOrderId);
+  const existingJadwalId = await findDraftJadwalByArmadaAndTime(input.armadaId, input.deliveryDateTime);
 
-  const jadwalId = await createJadwalDraft({
-    armadaId: input.armadaId,
-    jamJadwal: input.deliveryDateTime,
-    salesOrderIds: [input.salesOrderId],
-  });
-
-  if (input.salesmanId) {
-    try {
-      await updateJadwalDriverTime(jadwalId, {
+  // Target is the Jadwal the SO is already sitting in (armada/time
+  // unchanged) — nothing to move, just let a driver change (if any) apply.
+  if (existingJadwalId != null && current && existingJadwalId === current.jadwalId) {
+    if (input.salesmanId) {
+      await updateJadwalDriverTime(existingJadwalId, {
         jamJadwal: input.deliveryDateTime,
         salesmanId: input.salesmanId,
       });
-    } catch (err) {
-      await deleteJadwalDraft(jadwalId);
-      throw err;
+    }
+    return { jadwalId: existingJadwalId };
+  }
+
+  let jadwalId: number;
+  if (existingJadwalId != null) {
+    await addSalesOrdersToJadwal(existingJadwalId, [input.salesOrderId]);
+    jadwalId = existingJadwalId;
+  } else {
+    jadwalId = await createJadwalDraft({
+      armadaId: input.armadaId,
+      jamJadwal: input.deliveryDateTime,
+      salesOrderIds: [input.salesOrderId],
+    });
+
+    if (input.salesmanId) {
+      try {
+        await updateJadwalDriverTime(jadwalId, {
+          jamJadwal: input.deliveryDateTime,
+          salesmanId: input.salesmanId,
+        });
+      } catch (err) {
+        await deleteJadwalDraft(jadwalId);
+        throw err;
+      }
     }
   }
 

@@ -229,6 +229,26 @@ async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrd
   }
 }
 
+// Finds a still-open Draft already scheduled for the exact same Armada +
+// departure time, so a second (or third...) Pemesanan aimed at the same
+// trip joins it as another stop instead of spawning a sibling Jadwal that
+// would otherwise render exactly on top of it on the Papan Pengiriman
+// timeline. Only Draft matters here — a Terbit Jadwal already has real
+// DeliveryOrder documents and addSalesOrdersToJadwal refuses those anyway.
+export async function findDraftJadwalByArmadaAndTime(armadaId: number, jamJadwal: Date): Promise<number | null> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("armadaId", sql.Int, armadaId)
+    .input("jamJadwal", sql.DateTime, jamJadwal).query(`
+      SELECT TOP 1 JadwalID FROM DashboardPengirimanJadwal
+      WHERE ArmadaID = @armadaId AND JamJadwal = @jamJadwal AND Status = 'Draft' AND IsDeleted = 0
+      ORDER BY JadwalID
+    `);
+  const row = result.recordset[0] as { JadwalID: number } | undefined;
+  return row?.JadwalID ?? null;
+}
+
 export async function createJadwalDraft(input: {
   armadaId: number;
   jamJadwal: Date;

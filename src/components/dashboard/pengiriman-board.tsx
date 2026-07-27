@@ -42,10 +42,44 @@ import {
 const MIN_HOUR_WIDTH = 28;
 const MIN_CARD_WIDTH = 40;
 const INFO_COL_WIDTH = 224;
+const CARD_HEIGHT = 56;
+const CARD_GAP = 4;
+const ROW_TOP_PADDING = 8;
 
 function hourFraction(value: string | Date): number {
   const d = new Date(value);
   return d.getHours() + d.getMinutes() / 60;
+}
+
+// Multiple Jadwal can legitimately share the same Armada + JamJadwal (e.g.
+// two Pemesanan submitted separately for the same departure slot) — without
+// lane assignment they'd all render at the exact same absolute {left, top},
+// perfectly overlapping so only the topmost one is visible/clickable even
+// though every row still exists in the DB. Greedy interval-graph-coloring:
+// sort by horizontal position, place each card in the first lane whose
+// previous occupant doesn't overlap it, else open a new lane.
+function assignLanes(
+  list: JadwalCardData[],
+  hourWidth: number,
+  cardWidth: number
+): { laneOf: Map<number, number>; laneCount: number } {
+  const withPos = list
+    .map((j) => ({ j, left: hourFraction(j.JamJadwal) * hourWidth }))
+    .sort((a, b) => a.left - b.left);
+  const laneEnds: number[] = [];
+  const laneOf = new Map<number, number>();
+  for (const { j, left } of withPos) {
+    const right = left + cardWidth;
+    let lane = laneEnds.findIndex((end) => end <= left);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(right);
+    } else {
+      laneEnds[lane] = right;
+    }
+    laneOf.set(j.JadwalID, lane);
+  }
+  return { laneOf, laneCount: laneEnds.length };
 }
 
 function combineDateAndTime(businessDate: string, timeHHMM: string): Date {
@@ -209,11 +243,13 @@ function DraggableJadwalCard({
   jadwal: j,
   hourWidth,
   cardWidth,
+  top,
   onCardClick,
 }: {
   jadwal: JadwalCardData;
   hourWidth: number;
   cardWidth: number;
+  top: number;
   onCardClick: (jadwalId: number) => void;
 }) {
   const isDraft = j.Status === "Draft";
@@ -231,13 +267,15 @@ function DraggableJadwalCard({
       type="button"
       onClick={() => !isDragging && onCardClick(j.JadwalID)}
       className={cn(
-        "absolute top-2 flex flex-col gap-0.5 rounded-md border p-1 text-left text-[9px] shadow-sm",
+        "absolute flex flex-col gap-0.5 overflow-hidden rounded-md border p-1 text-left text-[9px] shadow-sm",
         isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30 bg-primary/10",
         isDragging && "z-20 opacity-70 shadow-lg"
       )}
       style={{
         left: hourFraction(j.JamJadwal) * hourWidth,
+        top,
         width: cardWidth,
+        height: CARD_HEIGHT,
         transform: transform ? `translateX(${transform.x}px)` : undefined,
       }}
     >
@@ -268,6 +306,11 @@ function ArmadaRowBoard({
   onCreateClick: (armadaId: number) => void;
 }) {
   const cardWidth = Math.max(MIN_CARD_WIDTH, hourWidth - 6);
+  const { laneOf, laneCount } = useMemo(
+    () => assignLanes(jadwal, hourWidth, cardWidth),
+    [jadwal, hourWidth, cardWidth]
+  );
+  const rowHeight = ROW_TOP_PADDING + Math.max(1, laneCount) * CARD_HEIGHT + Math.max(0, laneCount - 1) * CARD_GAP;
   const totalKantongHariIni = jadwal.reduce((sum, j) => sum + j.TotalKantong, 0);
   // "telah ditempuh" (already traveled) — only Jadwal that actually
   // departed (JamAktualBerangkat set) contribute; a Draft hasn't gone
@@ -332,12 +375,19 @@ function ArmadaRowBoard({
           </div>
         </div>
       </div>
-      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: 72 }}>
+      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
         ))}
         {jadwal.map((j) => (
-          <DraggableJadwalCard key={j.JadwalID} jadwal={j} hourWidth={hourWidth} cardWidth={cardWidth} onCardClick={onCardClick} />
+          <DraggableJadwalCard
+            key={j.JadwalID}
+            jadwal={j}
+            hourWidth={hourWidth}
+            cardWidth={cardWidth}
+            top={ROW_TOP_PADDING + (laneOf.get(j.JadwalID) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+            onCardClick={onCardClick}
+          />
         ))}
       </div>
     </div>
