@@ -15,7 +15,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
-import { PERUSAHAAN_STATUSES, type PerusahaanRow, type PerusahaanInput, type PerusahaanStatus } from "@/lib/queries/perusahaan";
+import { PERUSAHAAN_STATUSES, type PerusahaanStatus } from "@/lib/perusahaan-status";
+import type { PerusahaanRow, PerusahaanInput } from "@/lib/queries/perusahaan";
 
 const STATUS_LABEL: Record<PerusahaanStatus, string> = {
   Draft: "Draft",

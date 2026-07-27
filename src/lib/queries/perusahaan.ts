@@ -1,8 +1,8 @@
 import { getPool, sql } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto-secret";
+import { PERUSAHAAN_STATUSES, type PerusahaanStatus } from "@/lib/perusahaan-status";
 
-export const PERUSAHAAN_STATUSES = ["Draft", "StandaloneHTML", "AktifPenuh"] as const;
-export type PerusahaanStatus = (typeof PERUSAHAAN_STATUSES)[number];
+export { PERUSAHAAN_STATUSES, type PerusahaanStatus };
 
 export interface PerusahaanRow {
   PerusahaanID: number;
