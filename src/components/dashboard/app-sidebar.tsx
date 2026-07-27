@@ -14,6 +14,7 @@ import {
   Users,
   Megaphone,
   ShieldCheck,
+  Building2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -119,6 +120,16 @@ export function AppSidebar({
                   >
                     <ShieldCheck className="shrink-0" />
                     <span>Akun</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/perusahaan" onClick={closeOnMobile} />}
+                    isActive={pathname.startsWith("/perusahaan")}
+                    tooltip="Perusahaan"
+                  >
+                    <Building2 className="shrink-0" />
+                    <span>Perusahaan</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
