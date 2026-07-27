@@ -144,6 +144,10 @@ export interface CreateSalesOrderManualInput {
   // in pengiriman-jadwal.ts for why that column, not a new one).
   bonusQty: number;
   deliveryDateTime: Date;
+  // '0127' for TakeAway (see PARTNER_TYPE_CASE in aging.ts and
+  // lib/queries/takeaway.ts) — omitted (stored as '') for the normal
+  // scheduled-delivery flow, matching every existing SO row's SalesmanID.
+  salesmanId?: string;
 }
 
 // Manual Sales Order creation for the Pemesanan module (mitra already
@@ -206,7 +210,8 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
     .input("termOfPaymentId", sql.VarChar(16), termOfPaymentId)
     .input("addressInvoice", sql.VarChar(128), addressInvoice)
     .input("amount", sql.Decimal(23, 4), amount)
-    .input("netto", sql.Decimal(23, 4), amount).query(`
+    .input("netto", sql.Decimal(23, 4), amount)
+    .input("salesmanId", sql.VarChar(16), input.salesmanId ?? "").query(`
       INSERT INTO SalesOrder
         (SalesOrderID, VoucherNo, ReferenceNo, TransDate, DueDate, BranchID, DepartmentID, BusinessPartnerID,
          TermOfPaymentID, AddressInvoice, AddressDelivery, AddressDeliveryID, CurrencyID, IsClosed, Notes,
@@ -217,7 +222,7 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
         (@id, @voucherNo, '', GETDATE(), @dueDate, @branchId, @departmentId, @bpId,
          @termOfPaymentId, @addressInvoice, '', '', '', 0, '',
          @amount, 0, 0, 0, 0, 0, @netto, 0, 0, GETDATE(), 1,
-         1, '', 0, 0, 0, '', 1, 0,
+         1, @salesmanId, 0, 0, 0, '', 1, 0,
          '', '', '', '', '')
     `);
 

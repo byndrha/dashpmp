@@ -229,3 +229,26 @@ export async function reschedulePemesanan(input: ReschedulePemesananInput): Prom
 
   return { jadwalId };
 }
+
+// Soft-deletes an SO from the Pemesanan list — only for orders that haven't
+// actually shipped. getCurrentAssignment only resolves a Draft-status
+// Jadwal (its own query filters on that), so a directly-linked, non-Draft
+// DeliveryOrder (Status='Terbit', or one created outside the Jadwal flow
+// entirely) wouldn't be caught by it — checked separately here so this
+// can't silently soft-delete an SO a real DO already exists against.
+export async function deletePemesanan(salesOrderId: string): Promise<void> {
+  const pool = await getPool();
+  const doCheck = await pool
+    .request()
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .query(`SELECT COUNT(*) AS Cnt FROM DeliveryOrder WHERE SalesOrderID = @soId AND IsDeleted = 0`);
+  if ((doCheck.recordset[0] as { Cnt: number }).Cnt > 0) {
+    throw new Error("Pesanan ini sudah terkirim (DO sudah terbit) — tidak bisa dihapus.");
+  }
+
+  const current = await getCurrentAssignment(salesOrderId);
+  if (current) {
+    await removeSalesOrderFromJadwal(current.jadwalId, salesOrderId);
+  }
+  await softDeleteSalesOrder(salesOrderId);
+}

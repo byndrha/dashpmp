@@ -25,7 +25,7 @@ import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { KantongVariant } from "@/lib/queries/sales-order";
-import { createPemesananAction } from "@/app/(dashboard)/pemesanan/actions";
+import { createPemesananAction, createTakeAwayPemesananAction } from "@/app/(dashboard)/pemesanan/actions";
 
 // Sentinel for "not chosen yet" — Select items can't use an empty string as
 // a value (established convention, see the "all" sentinel in
@@ -56,6 +56,7 @@ export function PemesananFormDialog({
   const [time, setTime] = useState("08:00");
   const [armadaId, setArmadaId] = useState<string>(UNSET);
   const [salesmanId, setSalesmanId] = useState<string>(UNSET);
+  const [isTakeAway, setIsTakeAway] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -84,7 +85,7 @@ export function PemesananFormDialog({
     qtyNumber > 0 &&
     bonusQtyNumber >= 0 &&
     !!date &&
-    armadaId !== UNSET;
+    (isTakeAway || armadaId !== UNSET);
 
   function resetForm() {
     setBusinessPartnerId("");
@@ -95,6 +96,7 @@ export function PemesananFormDialog({
     setTime("08:00");
     setArmadaId(UNSET);
     setSalesmanId(UNSET);
+    setIsTakeAway(false);
     setError(null);
   }
 
@@ -108,15 +110,29 @@ export function PemesananFormDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await createPemesananAction({
-          businessPartnerId: mitra.BusinessPartnerID,
-          variant,
-          qtyKantong: qtyNumber,
-          bonusQty: bonusQtyNumber,
-          deliveryDateTime: new Date(`${date}T${time}:00`),
-          armadaId: Number(armadaId),
-          salesmanId: salesmanId === UNSET ? null : salesmanId,
-        });
+        if (isTakeAway) {
+          const result = await createTakeAwayPemesananAction({
+            businessPartnerId: mitra.BusinessPartnerID,
+            variant,
+            qtyKantong: qtyNumber,
+            bonusQty: bonusQtyNumber,
+            deliveryDateTime: new Date(`${date}T${time}:00`),
+          });
+          // "langsung Cetak PDF" — opens the freshly-issued DO's print
+          // endpoint right away, inside this same click's user-gesture
+          // window so the browser doesn't treat it as an unrequested popup.
+          window.open(`/api/print/delivery-order/${result.deliveryOrderId}`, "_blank");
+        } else {
+          await createPemesananAction({
+            businessPartnerId: mitra.BusinessPartnerID,
+            variant,
+            qtyKantong: qtyNumber,
+            bonusQty: bonusQtyNumber,
+            deliveryDateTime: new Date(`${date}T${time}:00`),
+            armadaId: Number(armadaId),
+            salesmanId: salesmanId === UNSET ? null : salesmanId,
+          });
+        }
         handleOpenChange(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal membuat pemesanan.");
@@ -245,54 +261,72 @@ export function PemesananFormDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <Label className="sr-only">Armada</Label>
-                <Select value={armadaId} onValueChange={(v) => setArmadaId(v ?? UNSET)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih armada">
-                      {(v: string) =>
-                        v === UNSET ? "Pilih armada" : (armadaList.find((a) => String(a.ArmadaID) === v)?.Nama ?? "Pilih armada")
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {armadaList.map((a) => (
-                      <SelectItem key={a.ArmadaID} value={String(a.ArmadaID)} disabled={a.Status !== "Baik"}>
-                        {a.Nama} {a.Status !== "Baik" && `(${a.Status})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <label className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={isTakeAway}
+                onChange={(e) => setIsTakeAway(e.target.checked)}
+                className="mt-0.5 size-4"
+              />
+              <span>
+                <span className="font-medium">TakeAway (Ambil Sendiri)</span>
+                <span className="block text-xs text-muted-foreground">
+                  Mitra ambil sendiri di pabrik — SO, DO, dan Invoice langsung terbit tanpa armada/driver, lalu PDF
+                  Surat Jalan langsung dibuka untuk dicetak.
+                </span>
+              </span>
+            </label>
+
+            {!isTakeAway && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="sr-only">Armada</Label>
+                  <Select value={armadaId} onValueChange={(v) => setArmadaId(v ?? UNSET)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Pilih armada">
+                        {(v: string) =>
+                          v === UNSET ? "Pilih armada" : (armadaList.find((a) => String(a.ArmadaID) === v)?.Nama ?? "Pilih armada")
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {armadaList.map((a) => (
+                        <SelectItem key={a.ArmadaID} value={String(a.ArmadaID)} disabled={a.Status !== "Baik"}>
+                          {a.Nama} {a.Status !== "Baik" && `(${a.Status})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="sr-only">Driver</Label>
+                  <Select value={salesmanId} onValueChange={(v) => setSalesmanId(v ?? UNSET)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Belum ditentukan">
+                        {(v: string) =>
+                          v === UNSET ? "Belum ditentukan" : (drivers.find((d) => d.SalesmanID === v)?.Name ?? "Belum ditentukan")
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNSET}>Belum ditentukan</SelectItem>
+                      {drivers.map((d) => (
+                        <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
+                          {d.Name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="sr-only">Driver</Label>
-                <Select value={salesmanId} onValueChange={(v) => setSalesmanId(v ?? UNSET)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Belum ditentukan">
-                      {(v: string) =>
-                        v === UNSET ? "Belum ditentukan" : (drivers.find((d) => d.SalesmanID === v)?.Name ?? "Belum ditentukan")
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={UNSET}>Belum ditentukan</SelectItem>
-                    {drivers.map((d) => (
-                      <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
-                        {d.Name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            )}
 
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
 
           <DialogFooter>
             <Button disabled={!canSubmit || pending} onClick={handleSubmit}>
-              {pending ? "Menyimpan..." : "Buat Pemesanan"}
+              {pending ? "Menyimpan..." : isTakeAway ? "Terbitkan TakeAway" : "Buat Pemesanan"}
             </Button>
           </DialogFooter>
         </DialogContent>
