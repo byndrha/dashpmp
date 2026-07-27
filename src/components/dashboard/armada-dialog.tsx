@@ -20,7 +20,7 @@ import { FUEL_TYPES, type FuelType } from "@/lib/armada-fuel";
 import { type ArmadaRow, type ArmadaInput } from "@/lib/queries/armada";
 import { createArmadaAction, updateArmadaAction, deleteArmadaAction } from "@/app/(dashboard)/delivery/actions";
 
-const STATUS_BADGE: Record<ArmadaStatus, string> = {
+export const STATUS_BADGE: Record<ArmadaStatus, string> = {
   Baik: "bg-primary/15 text-primary",
   Rusak: "bg-destructive/15 text-destructive",
   Perbaikan: "bg-warning/15 text-warning",
@@ -44,7 +44,7 @@ function emptyForm(): ArmadaInput {
   };
 }
 
-function rowToForm(row: ArmadaRow): ArmadaInput {
+export function rowToForm(row: ArmadaRow): ArmadaInput {
   return {
     nama: row.Nama,
     platNomor: row.PlatNomor,
@@ -61,7 +61,7 @@ function rowToForm(row: ArmadaRow): ArmadaInput {
   };
 }
 
-function ArmadaFormDialog({
+export function ArmadaFormDialog({
   open,
   onOpenChange,
   initial,

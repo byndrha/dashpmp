@@ -17,18 +17,19 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ArmadaManager } from "@/components/dashboard/armada-dialog";
+import { ArmadaManager, ArmadaFormDialog, STATUS_BADGE, rowToForm } from "@/components/dashboard/armada-dialog";
 import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { ArmadaRow } from "@/lib/queries/armada";
+import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
 import type { JadwalCard as JadwalCardData, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import {
   createJadwalDraftAction,
   getAvailableSalesOrdersAction,
   updateJadwalDriverTimeAction,
+  updateArmadaAction,
 } from "@/app/(dashboard)/delivery/actions";
 
 // 24-hour axis, but the per-hour width is now derived from the available
@@ -40,8 +41,12 @@ import {
 // into its width — omitting it here previously left a residual ~224px of
 // overflow no matter how wide the screen was.
 const MIN_HOUR_WIDTH = 28;
-const MIN_CARD_WIDTH = 40;
+// Wide enough that Draft/Terbit cards keep their 4 lines of text legible
+// even when several land in the same hour and get pushed into separate
+// lanes (assignLanes) instead of overlapping.
+const MIN_CARD_WIDTH = 92;
 const INFO_COL_WIDTH = 224;
+const HOUR_RULER_HEIGHT = 20;
 const CARD_HEIGHT = 56;
 const CARD_GAP = 4;
 const ROW_TOP_PADDING = 8;
@@ -267,7 +272,7 @@ function DraggableJadwalCard({
       type="button"
       onClick={() => !isDragging && onCardClick(j.JadwalID)}
       className={cn(
-        "absolute flex flex-col gap-0.5 overflow-hidden rounded-md border p-1 text-left text-[9px] shadow-sm",
+        "absolute flex flex-col justify-between overflow-hidden rounded-md border p-1.5 text-left shadow-sm",
         isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30 bg-primary/10",
         isDragging && "z-20 opacity-70 shadow-lg"
       )}
@@ -279,13 +284,22 @@ function DraggableJadwalCard({
         transform: transform ? `translateX(${transform.x}px)` : undefined,
       }}
     >
-      <span className="font-semibold tabular-nums">{formatTime(j.JamJadwal)}</span>
-      <span className="tabular-nums text-muted-foreground">{j.TotalKantong} kantong</span>
-      <span className="tabular-nums text-muted-foreground">
-        {j.TotalStop} {isDraft ? "SO" : "DO"}
-      </span>
-      {isDraft && <span className="text-muted-foreground">Draft</span>}
-      {j.JamAktualBerangkat && <span className="text-primary">Berangkat</span>}
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[10px] font-semibold tabular-nums">{formatTime(j.JamJadwal)}</span>
+        <span
+          className={cn(
+            "rounded px-1 py-px text-[8px] font-medium",
+            isDraft ? "bg-muted-foreground/20 text-muted-foreground" : "bg-primary/20 text-primary"
+          )}
+        >
+          {isDraft ? "Draf" : "Berangkat"}
+        </span>
+      </div>
+      <div className="flex flex-col items-center leading-none">
+        <span className="text-sm font-bold tabular-nums">{j.TotalKantong}</span>
+        <span className="text-[8px] text-muted-foreground">kantong</span>
+      </div>
+      <p className="text-center text-[9px] tabular-nums text-muted-foreground">{j.TotalStop} tujuan</p>
     </button>
   );
 }
@@ -320,9 +334,41 @@ function ArmadaRowBoard({
   const totalJarakHariIni = jadwal
     .filter((j) => j.JamAktualBerangkat != null)
     .reduce((sum, j) => sum + (j.JarakKM ?? 0), 0);
+
+  const [editing, setEditing] = useState(false);
+  const [editPending, startEditTransition] = useTransition();
+  const [editError, setEditError] = useState<string | null>(null);
+
+  function handleUpdateArmada(input: ArmadaInput) {
+    setEditError(null);
+    startEditTransition(async () => {
+      try {
+        await updateArmadaAction(armada.ArmadaID, input);
+        setEditing(false);
+      } catch (err) {
+        setEditError(err instanceof Error ? err.message : "Gagal menyimpan armada.");
+      }
+    });
+  }
+
   return (
     <div className="flex items-stretch self-start">
-      <div className="sticky left-0 z-10 flex w-56 shrink-0 flex-col gap-1.5 bg-card py-3 pr-3">
+      {/* Whole box opens the edit form — the "+" button below is the one
+          exception, since it's its own action (start a new Draft here),
+          not "edit this armada"; it stops propagation so a click there
+          doesn't also pop the edit dialog open underneath it. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setEditing(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setEditing(true);
+          }
+        }}
+        className="sticky left-0 z-10 flex w-56 shrink-0 cursor-pointer flex-col gap-1.5 bg-card py-3 pr-3 text-left transition-colors hover:bg-muted/30"
+      >
         <div className="flex items-center gap-2">
           {armada.FotoPath ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -332,28 +378,26 @@ function ArmadaRowBoard({
               Foto
             </div>
           )}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{armada.Nama}</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-1">
+              <p className="truncate text-sm font-medium">{armada.Nama}</p>
+              <Badge className={cn("h-5 shrink-0 px-1.5 text-[10px]", STATUS_BADGE[armada.Status])}>
+                {armada.Status}
+              </Badge>
+            </div>
             <p className="truncate text-xs text-muted-foreground">{armada.PlatNomor ?? "-"}</p>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-1">
-          <Badge
-            variant="outline"
-            className={cn(
-              "h-5 px-1.5 text-[10px]",
-              armada.Status === "Baik" && "border-primary/30 text-primary",
-              armada.Status !== "Baik" && "border-destructive/30 text-destructive"
-            )}
-          >
-            {armada.Status}
-          </Badge>
+        <div className="flex items-center justify-end">
           <Button
             variant="outline"
             size="icon"
             className="size-6"
             disabled={armada.Status !== "Baik"}
-            onClick={() => onCreateClick(armada.ArmadaID)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateClick(armada.ArmadaID);
+            }}
           >
             <Plus className="size-3.5" />
           </Button>
@@ -375,6 +419,15 @@ function ArmadaRowBoard({
           </div>
         </div>
       </div>
+      <ArmadaFormDialog
+        open={editing}
+        onOpenChange={setEditing}
+        initial={rowToForm(armada)}
+        title={`Edit Armada — ${armada.Nama}`}
+        onSubmit={handleUpdateArmada}
+        pending={editPending}
+        error={editError}
+      />
       <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
@@ -534,6 +587,24 @@ export function PengirimanBoard({
         ) : (
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <div ref={containerRef} className="overflow-x-auto">
+              {/* Hour ruler — one shared row instead of repeating labels per
+                  armada, aligned to the exact same hourWidth grid every
+                  ArmadaRowBoard draws its own gridlines against, so it stays
+                  lined up while scrolling horizontally with the rows below. */}
+              <div className="flex items-stretch">
+                <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
+                <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: HOUR_RULER_HEIGHT }}>
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <div
+                      key={h}
+                      className="absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums text-muted-foreground"
+                      style={{ left: h * hourWidth, width: hourWidth }}
+                    >
+                      {String(h).padStart(2, "0")}
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="flex flex-col divide-y">
                 {sortedArmada.map((a) => (
                   <ArmadaRowBoard
