@@ -51,6 +51,7 @@ export function PemesananFormDialog({
   const [businessPartnerId, setBusinessPartnerId] = useState("");
   const [variant, setVariant] = useState<KantongVariant>("10kg");
   const [qty, setQty] = useState("");
+  const [bonusQty, setBonusQty] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("08:00");
   const [armadaId, setArmadaId] = useState<string>(UNSET);
@@ -74,13 +75,22 @@ export function PemesananFormDialog({
   const priceLevels = variant === "10kg" ? priceLevels10kg : priceLevels5kg;
   const price = mitra?.PriceLevel != null ? (priceLevels.find((p) => p.Level === mitra.PriceLevel)?.Price ?? null) : null;
   const qtyNumber = Number(qty);
+  const bonusQtyNumber = bonusQty ? Number(bonusQty) : 0;
   const total = price != null && qtyNumber > 0 ? price * qtyNumber : 0;
-  const canSubmit = !!mitra && mitra.PriceLevel != null && price != null && qtyNumber > 0 && !!date && armadaId !== UNSET;
+  const canSubmit =
+    !!mitra &&
+    mitra.PriceLevel != null &&
+    price != null &&
+    qtyNumber > 0 &&
+    bonusQtyNumber >= 0 &&
+    !!date &&
+    armadaId !== UNSET;
 
   function resetForm() {
     setBusinessPartnerId("");
     setVariant("10kg");
     setQty("");
+    setBonusQty("");
     setDate("");
     setTime("08:00");
     setArmadaId(UNSET);
@@ -102,6 +112,7 @@ export function PemesananFormDialog({
           businessPartnerId: mitra.BusinessPartnerID,
           variant,
           qtyKantong: qtyNumber,
+          bonusQty: bonusQtyNumber,
           deliveryDateTime: new Date(`${date}T${time}:00`),
           armadaId: Number(armadaId),
           salesmanId: salesmanId === UNSET ? null : salesmanId,
@@ -166,7 +177,7 @@ export function PemesananFormDialog({
               </p>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div className="flex flex-col gap-1.5">
                 <Label className="sr-only">Varian Kantong</Label>
                 <Select value={variant} onValueChange={(v) => setVariant((v as KantongVariant) ?? "10kg")}>
@@ -193,11 +204,28 @@ export function PemesananFormDialog({
                   onChange={(e) => setQty(e.target.value)}
                 />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="bonusQty" className="sr-only">
+                  Bonus (kantong)
+                </Label>
+                <Input
+                  id="bonusQty"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Bonus (kantong)"
+                  value={bonusQty}
+                  onChange={(e) => setBonusQty(e.target.value)}
+                />
+              </div>
             </div>
 
             {price != null && (
               <div className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                <span className="text-muted-foreground">{formatRupiah(price)} / kantong</span>
+                <span className="text-muted-foreground">
+                  {formatRupiah(price)} / kantong
+                  {bonusQtyNumber > 0 && <span className="ml-1 text-primary">+{bonusQtyNumber} bonus</span>}
+                </span>
                 <span className="font-semibold">Total {formatRupiah(total)}</span>
               </div>
             )}

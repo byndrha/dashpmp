@@ -138,6 +138,11 @@ export interface CreateSalesOrderManualInput {
   businessPartnerId: string;
   variant: KantongVariant;
   qtyKantong: number;
+  // Free/bonus kantong bundled into this order — physically shipped and
+  // recorded (added into the stored Qty) but excluded from Amount, i.e. not
+  // billed. Stored in SalesOrderDetail.Custom1 (see JADWAL_BONUS_QTY_EXPR
+  // in pengiriman-jadwal.ts for why that column, not a new one).
+  bonusQty: number;
   deliveryDateTime: Date;
 }
 
@@ -152,6 +157,7 @@ export interface CreateSalesOrderManualInput {
 // same moment by construction.
 export async function createSalesOrderManual(input: CreateSalesOrderManualInput): Promise<string> {
   if (input.qtyKantong <= 0) throw new Error("Qty pemesanan harus lebih dari 0.");
+  if (input.bonusQty < 0) throw new Error("Bonus qty tidak boleh negatif.");
 
   const pool = await getPool();
   const variant = KANTONG_VARIANTS[input.variant];
@@ -174,7 +180,10 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
     throw new Error(`Harga untuk varian ${variant.name} pada Price Level ${bp.PriceLevel} belum diatur.`);
   }
   const price = priceLevelEntry.Price;
+  // Billed only on the ordered qty — bonus rides along in the stored Qty
+  // (see totalQtyKantong below) but never enters Amount/Netto.
   const amount = input.qtyKantong * price;
+  const totalQtyKantong = input.qtyKantong + input.bonusQty;
 
   const termOfPaymentId = bp.TermOfPaymentID?.trim() ? bp.TermOfPaymentID : SO_TERM_OF_PAYMENT_ID;
   const addressInvoice = bp.Address?.slice(0, 128) ?? "";
@@ -218,16 +227,17 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
     .input("soId", sql.VarChar(16), salesOrderId)
     .input("itemId", sql.VarChar(150), variant.itemId)
     .input("name", sql.VarChar(150), variant.name)
-    .input("qty", sql.Float, input.qtyKantong)
+    .input("qty", sql.Float, totalQtyKantong)
     .input("unit", sql.VarChar(16), variant.unit)
     .input("price", sql.Float, price)
-    .input("amount", sql.Float, amount).query(`
+    .input("amount", sql.Float, amount)
+    .input("bonusQty", sql.VarChar(16), String(input.bonusQty)).query(`
       INSERT INTO SalesOrderDetail
         (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp,
-         Ratio, Amount, FlagClosed)
+         Ratio, Amount, FlagClosed, Custom1)
       VALUES
         (@id, @soId, @itemId, @name, @qty, @unit, @price, 0, 0, 0,
-         1, @amount, '')
+         1, @amount, '', @bonusQty)
     `);
 
   return salesOrderId;

@@ -87,7 +87,10 @@ function SortableStopRow({
           {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
         </p>
       </button>
-      <span className="shrink-0 tabular-nums text-muted-foreground">{detail.Qty} kantong</span>
+      <span className="shrink-0 tabular-nums text-muted-foreground">
+        {detail.Qty} kantong
+        {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
+      </span>
       {detail.Latitude == null && (
         <Badge variant="outline" className="shrink-0 border-destructive/30 text-[10px] text-destructive">
           Tanpa lokasi
@@ -154,6 +157,7 @@ export function RouteValidationDialog({
   const jadwalId = jadwal?.JadwalID ?? null;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const totalQty = useMemo(() => order.reduce((sum, o) => sum + o.Qty, 0), [order]);
+  const totalBonusQty = useMemo(() => order.reduce((sum, o) => sum + o.BonusQty, 0), [order]);
   const selectedToAddQty = useMemo(
     () => availableToAdd.filter((so) => selectedToAdd.has(so.SalesOrderID)).reduce((sum, so) => sum + so.Qty, 0),
     [availableToAdd, selectedToAdd]
@@ -511,7 +515,15 @@ export function RouteValidationDialog({
             )}
 
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground">Daftar Tujuan ({order.length})</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Daftar Tujuan ({order.length})
+                {order.length > 0 && (
+                  <span className="ml-2 tabular-nums">
+                    {totalQty} kantong
+                    {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
+                  </span>
+                )}
+              </p>
               {isDraft && !adding && (
                 <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-xs" disabled={pending} onClick={handleOpenAdd}>
                   <Plus className="size-3.5" />

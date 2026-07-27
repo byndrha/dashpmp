@@ -15,6 +15,9 @@ export interface CreatePemesananInput {
   businessPartnerId: string;
   variant: KantongVariant;
   qtyKantong: number;
+  // Free/bonus kantong on top of qtyKantong — not billed, see
+  // createSalesOrderManual for how it's stored.
+  bonusQty: number;
   deliveryDateTime: Date;
   armadaId: number;
   salesmanId: string | null;
@@ -45,6 +48,7 @@ export async function createPemesanan(input: CreatePemesananInput): Promise<Crea
     businessPartnerId: input.businessPartnerId,
     variant: input.variant,
     qtyKantong: input.qtyKantong,
+    bonusQty: input.bonusQty,
     deliveryDateTime: input.deliveryDateTime,
   });
 

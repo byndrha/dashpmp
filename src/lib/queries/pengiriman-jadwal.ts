@@ -11,6 +11,17 @@ import { formatDate, formatTime } from "@/lib/format";
 // yet.
 export const JADWAL_KANTONG_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END)`;
 
+// Bonus kantong (free goods bundled into an order, not billed) piggyback on
+// SalesOrderDetail.Custom1 — confirmed via a live query that this column
+// (a generic POS leftover, alongside Custom2/Custom3/WaiterName) is 100%
+// unused across the whole table (always '' or NULL), so this avoids any
+// schema change to a live ERP table the separate desktop app also reads.
+// Qty itself already includes the bonus (createSalesOrderManual stores
+// ordered+bonus as one number) — this expression exists only so the bonus
+// portion can be called out separately in the UI. Same 5KG-halving and
+// SUM-across-detail-rows shape as JADWAL_KANTONG_EXPR for consistency.
+export const JADWAL_BONUS_QTY_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) / 2.0 ELSE ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) END)`;
+
 export type JadwalStatus = "Draft" | "Terbit";
 
 export interface JadwalCard {
@@ -70,6 +81,8 @@ export interface JadwalDetailRow {
   Urutan: number;
   CustomerName: string;
   Qty: number;
+  // Portion of Qty that's free/bonus (not billed) — always <= Qty.
+  BonusQty: number;
   Wilayah: string;
   Kecamatan: string | null;
   Alamat: string | null;
@@ -95,6 +108,7 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
           jd.Urutan,
           bp.Name AS CustomerName,
           ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty,
+          ISNULL(${JADWAL_BONUS_QTY_EXPR}, 0) AS BonusQty,
           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           bp.NPWPAddress AS Kecamatan,
           bp.Address AS Alamat,
