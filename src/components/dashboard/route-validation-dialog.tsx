@@ -5,7 +5,7 @@ import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type D
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah, formatTime } from "@/lib/format";
+import { resolveBusinessDateTime } from "@/lib/business-date";
 import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
@@ -40,20 +41,20 @@ const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((
   loading: () => <Skeleton className="h-full w-full rounded-lg" />,
 });
 
-function combineDateAndTime(businessDate: string, timeHHMM: string): Date {
-  return new Date(`${businessDate}T${timeHHMM}:00`);
-}
-
 function SortableStopRow({
   detail,
   index,
   onEdit,
   disabled,
+  printChecked,
+  onTogglePrint,
 }: {
   detail: JadwalDetailRow;
   index: number;
   onEdit: (detail: JadwalDetailRow) => void;
   disabled: boolean;
+  printChecked: boolean;
+  onTogglePrint: (deliveryOrderId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: detail.JadwalDetailID,
@@ -95,6 +96,17 @@ function SortableStopRow({
         <Badge variant="outline" className="shrink-0 border-destructive/30 text-[10px] text-destructive">
           Tanpa lokasi
         </Badge>
+      )}
+      {detail.DeliveryOrderID && (
+        <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={printChecked}
+            onChange={() => onTogglePrint(detail.DeliveryOrderID as string)}
+            className="size-3.5"
+          />
+          Cetak
+        </label>
       )}
     </div>
   );
@@ -153,6 +165,27 @@ export function RouteValidationDialog({
   const [availableToAdd, setAvailableToAdd] = useState<AvailableSalesOrder[]>([]);
   const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
+  const [printSelected, setPrintSelected] = useState<Set<string>>(new Set());
+
+  function togglePrint(deliveryOrderId: string) {
+    setPrintSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(deliveryOrderId)) next.delete(deliveryOrderId);
+      else next.add(deliveryOrderId);
+      return next;
+    });
+  }
+
+  function handlePrintSelected() {
+    // One PDF per DeliveryOrder, each opened in its own tab — simplest
+    // correct behavior for v1 (no merged multi-page endpoint yet). Browsers
+    // may block more than a couple of simultaneous window.open() calls
+    // outside a direct click handler, but this runs synchronously inside
+    // one, so it's within the same user-gesture window for all of them.
+    for (const id of printSelected) {
+      window.open(`/api/print/delivery-order/${id}`, "_blank");
+    }
+  }
 
   const jadwalId = jadwal?.JadwalID ?? null;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -171,6 +204,7 @@ export function RouteValidationDialog({
     setAdding(false);
     setSelectedToAdd(new Set());
     setAddError(null);
+    setPrintSelected(new Set());
 
     if (jadwalId == null) {
       setOrder([]);
@@ -286,7 +320,7 @@ export function RouteValidationDialog({
     startTransition(async () => {
       try {
         await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: combineDateAndTime(businessDate, time),
+          jamJadwal: resolveBusinessDateTime(businessDate, time),
           salesmanId: driverId || null,
         });
       } catch (err) {
@@ -333,7 +367,7 @@ export function RouteValidationDialog({
     startTransition(async () => {
       try {
         await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: combineDateAndTime(businessDate, time),
+          jamJadwal: resolveBusinessDateTime(businessDate, time),
           salesmanId: driverId || null,
         });
         await startBerangkatAction(jadwalId);
@@ -596,12 +630,27 @@ export function RouteValidationDialog({
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={order.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
                     {order.map((d, i) => (
-                      <SortableStopRow key={d.JadwalDetailID} detail={d} index={i} onEdit={onEditSalesOrder} disabled={!isDraft} />
+                      <SortableStopRow
+                        key={d.JadwalDetailID}
+                        detail={d}
+                        index={i}
+                        onEdit={onEditSalesOrder}
+                        disabled={!isDraft}
+                        printChecked={d.DeliveryOrderID != null && printSelected.has(d.DeliveryOrderID)}
+                        onTogglePrint={togglePrint}
+                      />
                     ))}
                   </SortableContext>
                 </DndContext>
               )}
             </div>
+
+            {!isDraft && printSelected.size > 0 && (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={handlePrintSelected}>
+                <Printer className="size-3.5" />
+                Cetak DO Terpilih ({printSelected.size})
+              </Button>
+            )}
 
             {routeError && <p className="text-xs text-destructive">{routeError}</p>}
             {route && (

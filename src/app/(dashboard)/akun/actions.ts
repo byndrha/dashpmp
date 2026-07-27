@@ -12,6 +12,7 @@ import {
 } from "@/lib/queries/akun";
 import { getPabrikLocation, setPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getSiteSettings, setSiteSettings, type SiteSettings } from "@/lib/queries/site-settings";
+import { getDocTemplate, saveDocTemplate, type DocTemplate, type DocType } from "@/lib/queries/doc-template";
 
 export async function createUserAction(input: {
   nama: string;
@@ -108,4 +109,16 @@ export async function setSiteSettingsAction(input: SiteSettings): Promise<void> 
   // the whole layout tree, not just /akun, so the change takes effect
   // immediately instead of only after that route is next visited fresh.
   revalidatePath("/", "layout");
+}
+
+export async function getDocTemplateAction(docType: DocType): Promise<DocTemplate> {
+  await requireSuperAdmin();
+  return getDocTemplate(docType);
+}
+
+export async function saveDocTemplateAction(input: DocTemplate): Promise<void> {
+  await requireSuperAdmin();
+  if (!input.headerTitle.trim()) throw new Error("Judul kop surat tidak boleh kosong.");
+  await saveDocTemplate(input);
+  revalidatePath("/akun");
 }

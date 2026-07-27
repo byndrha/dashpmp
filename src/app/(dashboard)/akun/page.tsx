@@ -4,18 +4,21 @@ import { requireSuperAdmin } from "@/lib/require-access";
 import { listUsers, listRoles } from "@/lib/queries/akun";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getSiteSettings } from "@/lib/queries/site-settings";
+import { getDocTemplate } from "@/lib/queries/doc-template";
 import { AkunList } from "@/components/dashboard/akun-list";
 import { PabrikLocationSettings } from "@/components/dashboard/pabrik-location-settings";
 import { SiteSettingsPanel } from "@/components/dashboard/site-settings-panel";
+import { DocTemplatePanel } from "@/components/dashboard/doc-template-panel";
 import { Button } from "@/components/ui/button";
 
 export default async function AkunPage() {
   await requireSuperAdmin();
-  const [users, roles, pabrikLocation, siteSettings] = await Promise.all([
+  const [users, roles, pabrikLocation, siteSettings, docTemplate] = await Promise.all([
     listUsers(),
     listRoles(),
     getPabrikLocation(),
     getSiteSettings(),
+    getDocTemplate("DeliveryOrder"),
   ]);
 
   return (
@@ -33,6 +36,7 @@ export default async function AkunPage() {
       <AkunList users={users} roles={roles} />
       <PabrikLocationSettings initial={pabrikLocation} />
       <SiteSettingsPanel initial={siteSettings} />
+      <DocTemplatePanel initial={docTemplate} />
     </div>
   );
 }
