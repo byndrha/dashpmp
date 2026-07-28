@@ -56,7 +56,7 @@ export function MitraLocationsMap({ points }: { points: MitraLocationPoint[] }) 
       zoom={11}
       scrollWheelZoom
       attributionControl={false}
-      style={{ height: 320, width: "100%", borderRadius: "var(--radius-lg)" }}
+      style={{ height: 320, width: "100%" }}
     >
       <TileLayer
         url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
