@@ -4,9 +4,10 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
-import { Search, LocateFixed, X, Plus, Minus, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, LocateFixed, X, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TILE_SOURCES, STYLE_OPTIONS, type MapStyle } from "@/lib/map-styles";
+import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 import type { MitraGrowthRow } from "@/lib/queries/mitra-growth";
 
 // Same CDN-hosted marker icon workaround as mitra-location-map.tsx — Leaflet's
@@ -54,55 +55,6 @@ function FitToPoints({ points }: { points: MitraLocationPoint[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
-}
-
-function MapStyleSwitcher({ mapStyle, onChange }: { mapStyle: MapStyle; onChange: (style: MapStyle) => void }) {
-  return (
-    <div className="absolute top-2 right-2 z-1000 flex gap-1 rounded-md bg-card/90 p-1 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
-      {STYLE_OPTIONS.map((opt) => (
-        <button
-          key={opt.key}
-          type="button"
-          title={opt.label}
-          onClick={() => onChange(opt.key)}
-          className={cn(
-            "flex size-7 items-center justify-center rounded transition-colors",
-            mapStyle === opt.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
-          )}
-        >
-          <opt.icon className="size-3.5" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// Replaces Leaflet's own default zoom control (disabled via
-// zoomControl={false} on MapContainer) so it matches the rest of this map's
-// floating-pill style instead of Leaflet's plain white boxes. Must live
-// inside <MapContainer> since it needs useMap().
-function ZoomControl() {
-  const map = useMap();
-  return (
-    <div className="absolute top-2 left-2 z-1000 flex flex-col gap-1 rounded-md bg-card/90 p-1 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
-      <button
-        type="button"
-        title="Perbesar"
-        onClick={() => map.zoomIn()}
-        className="flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent"
-      >
-        <Plus className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        title="Perkecil"
-        onClick={() => map.zoomOut()}
-        className="flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent"
-      >
-        <Minus className="size-3.5" />
-      </button>
-    </div>
-  );
 }
 
 const RANKING_PAGE_SIZE = 5;
@@ -155,18 +107,6 @@ function WilayahRankingOverlay({ rows }: { rows: MitraGrowthRow[] }) {
       >
         <ChevronDown className="size-3" />
       </button>
-    </div>
-  );
-}
-
-// Custom credit line in the map's own corner, standing in for Leaflet's
-// disabled default AttributionControl (attributionControl={false} above) —
-// bottom-center so it doesn't collide with the search box (bottom-left) or
-// GPS button (bottom-right).
-function MapAttribution() {
-  return (
-    <div className="pointer-events-none absolute bottom-1 left-1/2 z-1000 -translate-x-1/2 rounded bg-card/70 px-1.5 py-0.5 text-[9px] text-muted-foreground backdrop-blur-sm">
-      &copy; OSRM &middot; byndrha
     </div>
   );
 }
@@ -323,7 +263,7 @@ export function MitraLocationsMap({
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
-        <ZoomControl />
+        <MapZoomControl className="top-2 left-2" />
         {points.map((p) => (
           <Marker
             key={p.BusinessPartnerID}
@@ -350,10 +290,13 @@ export function MitraLocationsMap({
       </MapContainer>
 
       <MitraSearchBox points={points} onSelect={handleSelectMitra} />
-      <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} />
+      <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="top-2 right-2" />
       <WilayahRankingOverlay rows={growthRows} />
       <GpsButton onLocate={handleLocate} />
-      <MapAttribution />
+      {/* Left of the GPS button (which is size-9 at right-3, i.e. spans to
+          48px from the edge) rather than bottom-center, so it doesn't
+          collide with either the search box (bottom-left) or GPS. */}
+      <MapAttribution className="bottom-3 right-14" />
     </div>
   );
 }

@@ -4,8 +4,8 @@ import "leaflet/dist/leaflet.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { cn } from "@/lib/utils";
-import { TILE_SOURCES, STYLE_OPTIONS, type MapStyle } from "@/lib/map-styles";
+import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 
 // Leaflet's default marker icon paths resolve relative to the bundler's
 // asset pipeline and break under Next.js/Webpack unless overridden -- point
@@ -60,8 +60,9 @@ export interface MitraLocationMapProps {
   // (MitraLocationField), not hardcoded here anymore. Omitted entirely in
   // readOnly view contexts that don't need the Pabrik reference marker.
   pabrikPosition?: [number, number];
-  // Plain display — no drag, no click-to-move, no style switcher clutter.
-  // Used by MitraDetailDialog's default (non-editing) view.
+  // Plain display — no drag, no click-to-move. Style switcher/zoom/
+  // attribution still render either way. Used by MitraDetailDialog's
+  // default (non-editing) view.
   readOnly?: boolean;
 }
 
@@ -78,11 +79,12 @@ export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, p
   }, [onChange]);
 
   return (
-    <div className="relative">
+    <div className="relative z-0">
       <MapContainer
         center={[latitude, longitude]}
         zoom={15}
         scrollWheelZoom
+        zoomControl={false}
         attributionControl={false}
         style={{ height: 260, width: "100%", borderRadius: "var(--radius-lg)" }}
       >
@@ -90,6 +92,7 @@ export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, p
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <MapZoomControl className="top-2 left-2" />
         {pabrikPosition && <Marker position={pabrikPosition} icon={pabrikIcon} />}
         <Marker
           position={[latitude, longitude]}
@@ -102,22 +105,11 @@ export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, p
         <RecenterOnTrigger lat={latitude} lng={longitude} triggerKey={recenterKey} />
       </MapContainer>
 
-      <div className="absolute top-2 right-2 z-1000 flex gap-1 rounded-md bg-card/90 p-1 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
-        {STYLE_OPTIONS.map((opt) => (
-          <button
-            key={opt.key}
-            type="button"
-            title={opt.label}
-            onClick={() => setMapStyle(opt.key)}
-            className={cn(
-              "flex size-7 items-center justify-center rounded transition-colors",
-              mapStyle === opt.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
-            )}
-          >
-            <opt.icon className="size-3.5" />
-          </button>
-        ))}
-      </div>
+      <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="top-2 right-2" />
+      {/* Top-center — bottom-left/right are already claimed by
+          MitraLocationField's own search box + "Pakai Lokasi Saya" button
+          whenever this map is used in its editable (non-readOnly) context. */}
+      <MapAttribution className="top-2 left-1/2 -translate-x-1/2" />
     </div>
   );
 }
