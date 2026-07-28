@@ -1025,14 +1025,19 @@ function ArmadaRowBoard({
       </div>
     </div>
     {/* Driver row — mirrors whichever Jadwal card (only ones that carry a
-        driver) sits in the row above, at the exact same lane, so the two
-        rows read as one vertically-aligned strip per trip. No independent
-        driver-schedule data model backs this (see driver-manager.tsx). */}
+        driver) sits in the row above, at the same horizontal position, so
+        the two rows read as one strip per trip. Fixed to a single card's
+        height rather than inheriting the main row's (possibly multi-lane)
+        rowHeight: one armada can never have two genuinely overlapping
+        departures (same-armada+same-time Jadwal always merge into one, see
+        createPemesanan/reschedulePemesanan), so this row never actually
+        needs more than one lane — no independent driver-schedule data
+        model backs this (see driver-manager.tsx). */}
     <div className="flex items-stretch self-start border-t border-dashed">
       <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center bg-card py-1 pr-3 text-[10px] text-muted-foreground">
         Driver
       </div>
-      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
+      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: ROW_TOP_PADDING + CARD_HEIGHT }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
         ))}
@@ -1044,7 +1049,7 @@ function ArmadaRowBoard({
               name={j.DriverName as string}
               left={hourFraction(j.JamJadwal) * hourWidth}
               width={cardWidth}
-              top={ROW_TOP_PADDING + (laneOf.get(`j-${j.JadwalID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+              top={ROW_TOP_PADDING}
             />
           ))}
       </div>
