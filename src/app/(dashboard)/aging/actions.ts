@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { setCollectionTarget, removeCollectionTarget, setMitraNote } from "@/lib/queries/collection-priority";
+import { getOutstandingInvoicesForMitra, recordPayment } from "@/lib/queries/pelunasan";
+import type { RecordPaymentInput } from "@/lib/pelunasan-types";
 
 export async function saveCollectionTargetAction(input: {
   businessPartnerId: string;
@@ -36,4 +38,21 @@ export async function setMitraNoteAction(input: { businessPartnerId: string; not
   await setMitraNote(input.businessPartnerId, input.note, userId);
   revalidatePath("/aging");
   revalidatePath("/");
+}
+
+export async function getOutstandingInvoicesAction(businessPartnerId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  return getOutstandingInvoicesForMitra(businessPartnerId);
+}
+
+export async function recordPaymentAction(input: RecordPaymentInput) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const result = await recordPayment(input);
+  revalidatePath("/aging");
+  revalidatePath("/");
+  return result;
 }

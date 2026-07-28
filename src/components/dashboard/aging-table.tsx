@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Filter } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Filter, HandCoins } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
+import { PelunasanDialog } from "@/components/dashboard/pelunasan-dialog";
 import { formatDate, formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AgingRow, PiutangStatus } from "@/lib/queries/aging";
@@ -140,10 +141,12 @@ function InvoiceRow({ invoice }: { invoice: AgingRow }) {
 
 function MitraAgingCard({ group }: { group: MitraAgingGroup }) {
   const [expanded, setExpanded] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
   const hasMore = group.invoices.length > COLLAPSED_PREVIEW_COUNT;
   const visibleInvoices = expanded ? group.invoices : group.invoices.slice(0, COLLAPSED_PREVIEW_COUNT);
 
   return (
+    <>
     <Card
       role="button"
       tabIndex={0}
@@ -176,9 +179,23 @@ function MitraAgingCard({ group }: { group: MitraAgingGroup }) {
 
         <div className="flex items-center justify-between border-t pt-1.5">
           <span className="text-xs text-muted-foreground">{group.invoices.length} invoice outstanding</span>
-          <span className="font-display text-base font-semibold tabular-nums">
-            {formatRupiah(group.TotalOutstanding)}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-display text-base font-semibold tabular-nums">
+              {formatRupiah(group.TotalOutstanding)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 gap-1 px-2 text-[11px]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPayOpen(true);
+              }}
+            >
+              <HandCoins className="size-3" />
+              Bayar
+            </Button>
+          </div>
         </div>
 
         <div className="divide-y divide-border border-t">
@@ -195,6 +212,14 @@ function MitraAgingCard({ group }: { group: MitraAgingGroup }) {
         )}
       </CardContent>
     </Card>
+
+    <PelunasanDialog
+      businessPartnerId={group.BusinessPartnerID}
+      customerName={group.CustomerName}
+      open={payOpen}
+      onOpenChange={setPayOpen}
+    />
+    </>
   );
 }
 
