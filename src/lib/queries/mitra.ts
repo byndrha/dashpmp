@@ -42,6 +42,14 @@ export interface MitraRow {
   // Wilayah/Kecamatan — see resolveResponsibleMarketing() in
   // marketing-wilayah.ts. Null when no Marketing covers this area yet.
   MarketingNama: string | null;
+  // Repurposes the ERP's own BusinessPartner.IsSuspended column — verified
+  // 100% false/unset across all 691 live non-deleted rows before reusing it,
+  // same "confirm genuinely unused before repurposing" discipline as
+  // JADWAL_BONUS_QTY_EXPR's Custom1 reuse. Deactivating a mitra hides it
+  // from operational pickers (getMitraOptions, used by Buat Pemesanan and
+  // Cakupan Wilayah) without touching its history — different from Hapus
+  // (IsDeleted), which removes it from the Mitra module entirely.
+  IsSuspended: boolean;
 }
 
 export async function getMitraList(): Promise<MitraRow[]> {
@@ -66,7 +74,8 @@ export async function getMitraList(): Promise<MitraRow[]> {
           ml.Longitude,
           ml.Alamat AS GeoAlamat,
           mc.Kompetitor,
-          bp.JoinDate
+          bp.JoinDate,
+          ISNULL(bp.IsSuspended, 0) AS IsSuspended
       FROM BusinessPartner bp
       LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
       LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
@@ -114,7 +123,8 @@ export async function getMitraDetail(businessPartnerId: string): Promise<MitraRo
             ml.Longitude,
             ml.Alamat AS GeoAlamat,
             mc.Kompetitor,
-            bp.JoinDate
+            bp.JoinDate,
+            ISNULL(bp.IsSuspended, 0) AS IsSuspended
         FROM BusinessPartner bp
         LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
         LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
@@ -348,4 +358,17 @@ export async function deleteMitra(id: string): Promise<void> {
     .request()
     .input("id", sql.VarChar(16), id)
     .query(`UPDATE BusinessPartner SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE BusinessPartnerID = @id`);
+}
+
+// Reversible, unlike deleteMitra — sets/clears BusinessPartner.IsSuspended.
+// The mitra stays fully intact and visible in the Mitra module (with a
+// "Nonaktif" badge), it just drops out of getMitraOptions() so it can't be
+// picked for a new Pemesanan or Cakupan Wilayah assignment going forward.
+export async function setMitraSuspended(id: string, suspended: boolean): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), id)
+    .input("suspended", sql.Bit, suspended)
+    .query(`UPDATE BusinessPartner SET IsSuspended = @suspended, ModifiedDate = GETDATE() WHERE BusinessPartnerID = @id`);
 }

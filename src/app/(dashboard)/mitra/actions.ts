@@ -7,6 +7,7 @@ import {
   updateMitra,
   updateMitraCapacity,
   deleteMitra,
+  setMitraSuspended,
   getMitraDetail,
   type MitraInput,
   type MitraRow,
@@ -34,6 +35,12 @@ export async function updateMitraCapacityAction(id: string, capacity: number | n
 export async function deleteMitraAction(id: string) {
   await deleteMitra(id);
   revalidatePath("/mitra");
+}
+
+export async function setMitraSuspendedAction(id: string, suspended: boolean) {
+  await setMitraSuspended(id, suspended);
+  revalidatePath("/mitra");
+  revalidatePath("/pemesanan");
 }
 
 export async function setMitraLocationAction(input: {

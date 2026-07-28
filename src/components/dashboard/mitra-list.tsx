@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Phone, MapPin, Package, Filter } from "lucide-react";
+import { Plus, Pencil, Trash2, Phone, MapPin, Package, Filter, Ban, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ import {
   createMitraAction,
   updateMitraAction,
   deleteMitraAction,
+  setMitraSuspendedAction,
   setMitraLocationAction,
   setMitraCompetitorAction,
 } from "@/app/(dashboard)/mitra/actions";
@@ -325,6 +326,11 @@ const PIN_OPTIONS = [
   { value: "yes", label: "Sudah Pin" },
   { value: "no", label: "Belum Pin" },
 ] as const;
+const STATUS_OPTIONS = [
+  { value: "all", label: "Status" },
+  { value: "active", label: "Aktif" },
+  { value: "suspended", label: "Nonaktif" },
+] as const;
 
 export function MitraList({
   mitra,
@@ -342,6 +348,7 @@ export function MitraList({
   const [harga, setHarga] = useState("all");
   const [kapasitas, setKapasitas] = useState("all");
   const [pin, setPin] = useState("all");
+  const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MitraRow | null>(null);
@@ -372,11 +379,13 @@ export function MitraList({
       const hasPin = m.Latitude != null && m.Longitude != null;
       if (pin === "yes" && !hasPin) return false;
       if (pin === "no" && hasPin) return false;
+      if (status === "active" && m.IsSuspended) return false;
+      if (status === "suspended" && !m.IsSuspended) return false;
       return true;
     });
-  }, [mitra, search, tipe, wilayah, kecamatan, harga, kapasitas, pin]);
+  }, [mitra, search, tipe, wilayah, kecamatan, harga, kapasitas, pin, status]);
 
-  const filterKey = `${search}|${tipe}|${wilayah}|${kecamatan}|${harga}|${kapasitas}|${pin}`;
+  const filterKey = `${search}|${tipe}|${wilayah}|${kecamatan}|${harga}|${kapasitas}|${pin}|${status}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
@@ -415,6 +424,18 @@ export function MitraList({
     if (!confirm(`Hapus mitra "${row.Name}"? Data akan disembunyikan (bisa dipulihkan lewat database).`)) return;
     startTransition(async () => {
       await deleteMitraAction(row.BusinessPartnerID);
+    });
+  }
+
+  function handleToggleSuspend(row: MitraRow) {
+    const next = !row.IsSuspended;
+    if (
+      next &&
+      !confirm(`Nonaktifkan mitra "${row.Name}"? Mitra ini tidak akan bisa dipilih untuk Pemesanan baru sampai diaktifkan kembali.`)
+    )
+      return;
+    startTransition(async () => {
+      await setMitraSuspendedAction(row.BusinessPartnerID, next);
     });
   }
 
@@ -531,6 +552,20 @@ export function MitraList({
               ))}
             </SelectContent>
           </Select>
+          <Select value={status} onValueChange={(v) => setStatus(v ?? "all")}>
+            <SelectTrigger className="w-28">
+              <SelectValue placeholder="Status">
+                {(v: string) => STATUS_OPTIONS.find((s) => s.value === v)?.label ?? "Status"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           </div>
         </div>
         <Button onClick={() => setCreating(true)}>
@@ -545,7 +580,7 @@ export function MitraList({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {pageRows.map((m) => (
-          <Card key={m.BusinessPartnerID} className="py-3.5">
+          <Card key={m.BusinessPartnerID} className={cn("py-3.5", m.IsSuspended && "opacity-60")}>
             <CardContent className="flex flex-col gap-2 px-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -557,9 +592,27 @@ export function MitraList({
                     <Badge variant={m.MarketingNama ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
                       {m.MarketingNama ?? "Belum Ditentukan"}
                     </Badge>
+                    {m.IsSuspended && (
+                      <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                        Nonaktif
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    title={m.IsSuspended ? "Aktifkan" : "Nonaktifkan"}
+                    onClick={() => handleToggleSuspend(m)}
+                  >
+                    {m.IsSuspended ? (
+                      <RotateCcw className="size-3.5" />
+                    ) : (
+                      <Ban className="size-3.5 text-muted-foreground" />
+                    )}
+                  </Button>
                   <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditing(m)}>
                     <Pencil className="size-3.5" />
                   </Button>

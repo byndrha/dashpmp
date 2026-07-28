@@ -127,13 +127,17 @@ export async function getMarketingMitraAssignments(): Promise<MarketingMitraAssi
 // Lightweight list for the "assign a specific Mitra" search combobox — not
 // the full getMitraList() (which also resolves Marketing/growth data this
 // picker doesn't need).
+// Excludes deactivated mitra (BusinessPartner.IsSuspended, toggled via the
+// Mitra module's "Nonaktifkan" action) — this is the operational picker
+// used to create a new Pemesanan and to assign Cakupan Wilayah, both of
+// which a deactivated mitra shouldn't be selectable for.
 export async function getMitraOptions(): Promise<MitraOption[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT BusinessPartnerID, Name,
            ISNULL(NULLIF(LTRIM(RTRIM(NPWPName)), ''), 'Tidak Diketahui') AS Wilayah
     FROM BusinessPartner
-    WHERE ISNULL(IsDeleted, 0) = 0
+    WHERE ISNULL(IsDeleted, 0) = 0 AND ISNULL(IsSuspended, 0) = 0
     ORDER BY Name
   `);
   return result.recordset;
