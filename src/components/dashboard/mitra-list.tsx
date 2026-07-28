@@ -42,13 +42,13 @@ import {
 const PAGE_SIZE = 12;
 
 const CAPACITY_BUCKETS = [
-  { value: "all", label: "Semua Kapasitas" },
+  { value: "all", label: "Kapasitas" },
   { value: "unset", label: "Belum Diisi" },
-  { value: "0-50", label: "1 - 50 kantong/hari" },
-  { value: "50-100", label: "51 - 100 kantong/hari" },
-  { value: "100-250", label: "101 - 250 kantong/hari" },
-  { value: "250-500", label: "251 - 500 kantong/hari" },
-  { value: "500-999999", label: "> 500 kantong/hari" },
+  { value: "0-50", label: "1 - 50 /hari" },
+  { value: "50-100", label: "51 - 100 /hari" },
+  { value: "100-250", label: "101 - 250 /hari" },
+  { value: "250-500", label: "251 - 500 /hari" },
+  { value: "500-999999", label: "> 500 /hari" },
 ] as const;
 
 function matchesCapacityBucket(capacity: number | null, bucket: string): boolean {
@@ -319,6 +319,12 @@ function MitraFormDialog({
 }
 
 const PARTNER_TYPES = ["Agen", "Retail", "TakeAway", "Lainnya"] as const;
+const WILAYAH_UNKNOWN = "__unknown__";
+const PIN_OPTIONS = [
+  { value: "all", label: "Pin" },
+  { value: "yes", label: "Sudah Pin" },
+  { value: "no", label: "Belum Pin" },
+] as const;
 
 export function MitraList({
   mitra,
@@ -335,6 +341,7 @@ export function MitraList({
   const [kecamatan, setKecamatan] = useState("all");
   const [harga, setHarga] = useState("all");
   const [kapasitas, setKapasitas] = useState("all");
+  const [pin, setPin] = useState("all");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MitraRow | null>(null);
@@ -356,15 +363,20 @@ export function MitraList({
     return mitra.filter((m) => {
       if (search && !m.Name?.toLowerCase().includes(search.toLowerCase())) return false;
       if (tipe !== "all" && m.PartnerType !== tipe) return false;
-      if (wilayah !== "all" && m.Wilayah !== wilayah) return false;
+      if (wilayah === WILAYAH_UNKNOWN) {
+        if (m.Wilayah) return false;
+      } else if (wilayah !== "all" && m.Wilayah !== wilayah) return false;
       if (kecamatan !== "all" && m.Kecamatan !== kecamatan) return false;
       if (harga !== "all" && String(m.PriceLevel ?? "") !== harga) return false;
       if (!matchesCapacityBucket(m.Capacity, kapasitas)) return false;
+      const hasPin = m.Latitude != null && m.Longitude != null;
+      if (pin === "yes" && !hasPin) return false;
+      if (pin === "no" && hasPin) return false;
       return true;
     });
-  }, [mitra, search, tipe, wilayah, kecamatan, harga, kapasitas]);
+  }, [mitra, search, tipe, wilayah, kecamatan, harga, kapasitas, pin]);
 
-  const filterKey = `${search}|${tipe}|${wilayah}|${kecamatan}|${harga}|${kapasitas}`;
+  const filterKey = `${search}|${tipe}|${wilayah}|${kecamatan}|${harga}|${kapasitas}|${pin}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
@@ -427,13 +439,13 @@ export function MitraList({
             className="w-56"
           />
           <Select value={tipe} onValueChange={(v) => setTipe(v ?? "all")}>
-            <SelectTrigger className="w-36">
+            <SelectTrigger className="w-28">
               <SelectValue placeholder="Tipe Mitra">
-                {(v: string) => (v === "all" ? "Semua Tipe" : v)}
+                {(v: string) => (v === "all" ? "Tipe" : v)}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Tipe</SelectItem>
+              <SelectItem value="all">Tipe</SelectItem>
               {PARTNER_TYPES.map((t) => (
                 <SelectItem key={t} value={t}>
                   {t}
@@ -442,13 +454,14 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={wilayah} onValueChange={(v) => { setWilayah(v ?? "all"); setKecamatan("all"); }}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-32">
               <SelectValue placeholder="Wilayah">
-                {(v: string) => (v === "all" ? "Semua Wilayah" : v)}
+                {(v: string) => (v === "all" ? "Wilayah" : v === WILAYAH_UNKNOWN ? "Tidak Diketahui" : v)}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Wilayah</SelectItem>
+              <SelectItem value="all">Wilayah</SelectItem>
+              <SelectItem value={WILAYAH_UNKNOWN}>Tidak Diketahui</SelectItem>
               {wilayahOptions.map((w) => (
                 <SelectItem key={w} value={w}>
                   {w}
@@ -457,13 +470,13 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={kecamatan} onValueChange={(v) => setKecamatan(v ?? "all")}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-32">
               <SelectValue placeholder="Kecamatan">
-                {(v: string) => (v === "all" ? "Semua Kecamatan" : v)}
+                {(v: string) => (v === "all" ? "Kecamatan" : v)}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Kecamatan</SelectItem>
+              <SelectItem value="all">Kecamatan</SelectItem>
               {kecamatanOptions.map((k) => (
                 <SelectItem key={k} value={k}>
                   {k}
@@ -472,17 +485,17 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={harga} onValueChange={(v) => setHarga(v ?? "all")}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-32">
               <SelectValue placeholder="Harga">
                 {(v: string) => {
-                  if (v === "all") return "Semua Harga";
+                  if (v === "all") return "Harga";
                   const p = priceLevels.find((pl) => String(pl.Level) === v);
-                  return p ? formatRupiah(p.Price) : "Semua Harga";
+                  return p ? formatRupiah(p.Price) : "Harga";
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Harga</SelectItem>
+              <SelectItem value="all">Harga</SelectItem>
               {priceLevels.map((p) => (
                 <SelectItem key={p.Level} value={String(p.Level)}>
                   {formatRupiah(p.Price)}
@@ -491,15 +504,29 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={kapasitas} onValueChange={(v) => setKapasitas(v ?? "all")}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-36">
               <SelectValue placeholder="Kapasitas">
-                {(v: string) => CAPACITY_BUCKETS.find((b) => b.value === v)?.label ?? "Semua Kapasitas"}
+                {(v: string) => CAPACITY_BUCKETS.find((b) => b.value === v)?.label ?? "Kapasitas"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {CAPACITY_BUCKETS.map((b) => (
                 <SelectItem key={b.value} value={b.value}>
                   {b.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={pin} onValueChange={(v) => setPin(v ?? "all")}>
+            <SelectTrigger className="w-28">
+              <SelectValue placeholder="Pin">
+                {(v: string) => PIN_OPTIONS.find((p) => p.value === v)?.label ?? "Pin"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {PIN_OPTIONS.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
                 </SelectItem>
               ))}
             </SelectContent>
