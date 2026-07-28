@@ -48,9 +48,25 @@ export interface JadwalCard {
   DurasiMenit: number | null;
 }
 
-export async function getPengirimanBoard(businessDate: string): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[] }> {
+// A real DeliveryOrder created directly in the desktop ERP app (not through
+// this dashboard's Buat Pemesanan -> Validasi Rute -> Berangkat flow) — see
+// [[armada-expeditiondetail-linkage]] memory. Shown on the board as a
+// read-only marker so an armada's real workload isn't invisible just
+// because it was dispatched outside this dashboard.
+export interface ExternalDelivery {
+  DeliveryOrderID: string;
+  VoucherNo: string;
+  CustomerName: string;
+  TransDate: string | Date;
+  ArmadaID: number;
+  TotalKantong: number;
+}
+
+export async function getPengirimanBoard(
+  businessDate: string
+): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[]; externalDeliveries: ExternalDelivery[] }> {
   const pool = await getPool();
-  const [armada, jadwalResult] = await Promise.all([
+  const [armada, jadwalResult, externalResult] = await Promise.all([
     getArmadaList(),
     pool
       .request()
@@ -83,8 +99,52 @@ export async function getPengirimanBoard(businessDate: string): Promise<{ armada
         GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status, j.JarakKM, j.DurasiMenit
         ORDER BY j.JamJadwal
       `),
+    pool
+      .request()
+      .input("businessDate", sql.Date, businessDate).query(`
+        -- VehicleMap resolves an armada three different ways because
+        -- DeliveryOrder.VehicleNo's real-world convention has drifted over
+        -- the years: the desktop ERP app writes the linked
+        -- ExpeditionDetailID (e.g. "0120", confirmed live), this dashboard
+        -- used to write the armada's own nickname (DashboardArmada.Nama,
+        -- e.g. "GM 14"), and now writes the real plate
+        -- (ExpeditionDetail.VehicleNo, e.g. "AE 9874 SH") once linked — see
+        -- [[armada-expeditiondetail-linkage]].
+        WITH VehicleMap AS (
+            SELECT a.ArmadaID, a.ExpeditionDetailID AS Key1, ed.VehicleNo AS Key2, a.Nama AS Key3
+            FROM DashboardArmada a
+            LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+            WHERE a.IsDeleted = 0
+        ),
+        DoQty AS (
+            SELECT DeliveryOrderID, SUM(CASE WHEN Name LIKE '%5 KG%' THEN Qty / 2.0 ELSE Qty END) AS TotalKantong
+            FROM DeliveryOrderDetail
+            GROUP BY DeliveryOrderID
+        )
+        SELECT
+            do_.DeliveryOrderID,
+            do_.VoucherNo,
+            ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName,
+            do_.TransDate,
+            vm.ArmadaID,
+            ISNULL(dq.TotalKantong, 0) AS TotalKantong
+        FROM DeliveryOrder do_
+        JOIN VehicleMap vm ON do_.VehicleNo <> '' AND (do_.VehicleNo = vm.Key1 OR do_.VehicleNo = vm.Key2 OR do_.VehicleNo = vm.Key3)
+        LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
+        LEFT JOIN DoQty dq ON dq.DeliveryOrderID = do_.DeliveryOrderID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) AND do_.TransDate < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+          -- Excludes any DO already scheduled through this dashboard's own
+          -- Jadwal flow, so it renders as a real Jadwal card instead of
+          -- being double-counted here as an "external" one.
+          AND NOT EXISTS (
+              SELECT 1 FROM DashboardPengirimanJadwalDetail jd
+              WHERE jd.DeliveryOrderID = do_.DeliveryOrderID AND jd.IsDeleted = 0
+          )
+        ORDER BY do_.TransDate
+      `),
   ]);
-  return { armada, jadwal: jadwalResult.recordset };
+  return { armada, jadwal: jadwalResult.recordset, externalDeliveries: externalResult.recordset };
 }
 
 export interface JadwalDetailRow {
@@ -314,6 +374,92 @@ export async function createJadwalDraft(input: {
   } catch (err) {
     // Same compensating-cleanup discipline as the rest of this file's
     // multi-step writes: don't leave a half-created draft visible.
+    await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .query(`UPDATE DashboardPengirimanJadwalDetail SET IsDeleted = 1 WHERE JadwalID = @jadwalId`);
+    await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .query(`UPDATE DashboardPengirimanJadwal SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+    throw err;
+  }
+
+  return jadwalId;
+}
+
+// Backfills a real Draft Jadwal from DeliveryOrder rows that already exist
+// (created directly in the desktop ERP, never scheduled through this
+// dashboard — see ExternalDelivery / [[papan-pengiriman-external-do]]).
+// Deliberately created as Status='Draft', NOT 'Terbit', even though real
+// DeliveryOrder documents already exist for every stop — this is what
+// unlocks full editing (JamJadwal, driver, stop order) through the
+// existing Validasi Rute UI, since updateJadwalDriverTime hard-refuses any
+// change once Status='Terbit'. The cosmetic cost: the card reads "Draft"
+// for shipments that, in reality, already happened. Each JadwalDetail row
+// gets a real DeliveryOrderID (unlike a normal Draft, where it's always
+// NULL until startBerangkat) — this is intentional and safe: startBerangkat's
+// per-row loop already skips creating a new DO whenever DeliveryOrderID is
+// already set, so clicking "Berangkat" on this backfilled Draft later just
+// transitions Status -> Terbit and computes a real OSRM route, without
+// attempting to re-issue any of the already-real DOs.
+export async function mergeExternalDeliveriesIntoJadwal(
+  armadaId: number,
+  deliveryOrderIds: string[],
+  jamJadwal: Date
+): Promise<number> {
+  if (deliveryOrderIds.length === 0) throw new Error("Tidak ada DO yang dipilih.");
+  const pool = await getPool();
+
+  const request = pool.request();
+  const placeholders = deliveryOrderIds.map((id, i) => {
+    request.input(`do${i}`, sql.VarChar(16), id);
+    return `@do${i}`;
+  });
+  const doResult = await request.query(`
+    SELECT do_.DeliveryOrderID, do_.SalesOrderID, do_.TransDate
+    FROM DeliveryOrder do_
+    WHERE do_.DeliveryOrderID IN (${placeholders.join(",")}) AND do_.IsDeleted = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM DashboardPengirimanJadwalDetail jd
+          WHERE jd.DeliveryOrderID = do_.DeliveryOrderID AND jd.IsDeleted = 0
+      )
+  `);
+  const doRows = (doResult.recordset as { DeliveryOrderID: string; SalesOrderID: string; TransDate: Date }[]).sort(
+    (a, b) => a.TransDate.getTime() - b.TransDate.getTime()
+  );
+  if (doRows.length === 0) throw new Error("DO yang dipilih tidak ditemukan atau sudah masuk Jadwal lain.");
+
+  await assertJamJadwalNotBeforeOrders(
+    pool,
+    doRows.map((r) => r.SalesOrderID),
+    jamJadwal
+  );
+
+  const result = await pool
+    .request()
+    .input("armadaId", sql.Int, armadaId)
+    .input("jamJadwal", sql.DateTime, jamJadwal).query(`
+      INSERT INTO DashboardPengirimanJadwal (ArmadaID, SalesmanID, JamJadwal, Status, IsDeleted, ModifiedDate)
+      OUTPUT inserted.JadwalID
+      VALUES (@armadaId, NULL, @jamJadwal, 'Draft', 0, GETDATE())
+    `);
+  const jadwalId = (result.recordset[0] as { JadwalID: number }).JadwalID;
+
+  try {
+    for (let i = 0; i < doRows.length; i++) {
+      await pool
+        .request()
+        .input("jadwalId", sql.Int, jadwalId)
+        .input("soId", sql.VarChar(16), doRows[i].SalesOrderID)
+        .input("doId", sql.VarChar(16), doRows[i].DeliveryOrderID)
+        .input("urutan", sql.Int, i)
+        .query(`
+          INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, SalesOrderID, DeliveryOrderID, Urutan, IsDeleted)
+          VALUES (@jadwalId, @soId, @doId, @urutan, 0)
+        `);
+    }
+  } catch (err) {
     await pool
       .request()
       .input("jadwalId", sql.Int, jadwalId)
@@ -580,15 +726,28 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
   try {
     const armadaResult = await pool
       .request()
-      .input("armadaId", sql.Int, headerRow.ArmadaID)
-      .query(`SELECT Nama FROM DashboardArmada WHERE ArmadaID = @armadaId AND IsDeleted = 0`);
-    const armadaRow = armadaResult.recordset[0] as { Nama: string } | undefined;
+      .input("armadaId", sql.Int, headerRow.ArmadaID).query(`
+        SELECT a.Nama, ed.ExpeditionID, ed.VehicleNo
+        FROM DashboardArmada a
+        LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+        WHERE a.ArmadaID = @armadaId AND a.IsDeleted = 0
+      `);
+    const armadaRow = armadaResult.recordset[0] as
+      | { Nama: string; ExpeditionID: string | null; VehicleNo: string | null }
+      | undefined;
     // Departure assigns a real vehicle to a real ERP document — a
     // soft-deleted Armada (deleted after this Draft was created, before it
     // departed) must block departure rather than silently write a stale or
     // blank VehicleNo onto a permanent DeliveryOrder.
     if (!armadaRow) throw new Error("Armada sudah dihapus, tidak bisa berangkat.");
-    const armadaNama = armadaRow.Nama;
+    // Prefers the real ERP plate (ExpeditionDetail.VehicleNo, linked via
+    // Kelola Armada) over the dashboard's own nickname (DashboardArmada.Nama,
+    // e.g. "GM 14") — this is what ends up on the printed DO, so it needs to
+    // be the actual plate whenever the link exists. Falls back to Nama
+    // (previous behavior) for any armada not yet linked, rather than
+    // blocking departure over an incomplete data-linking task.
+    const doVehicleNo = armadaRow.VehicleNo ?? armadaRow.Nama;
+    const doExpeditionId = armadaRow.ExpeditionID ?? "";
 
     const details = await pool
       .request()
@@ -605,8 +764,20 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
       // Idempotent-retry guard: if a previous startBerangkat attempt already
       // created a DeliveryOrder for this detail row (and only failed later,
       // e.g. partway through this same loop), skip it instead of creating a
-      // duplicate DO for the same SO.
-      if (detail.DeliveryOrderID) continue;
+      // duplicate DO for the same SO. Also covers the merged-external-DO
+      // case (mergeExternalDeliveriesIntoJadwal): that DO was already
+      // issued by the desktop ERP, so it must never be re-created — but its
+      // TransDate gets corrected to this now-confirmed departure moment
+      // (same GETDATE() reference as JamAktualBerangkat above), since the
+      // desktop app's original TransDate was just whenever the document was
+      // typed in, not a real departure time.
+      if (detail.DeliveryOrderID) {
+        await pool
+          .request()
+          .input("doId", sql.VarChar(16), detail.DeliveryOrderID)
+          .query(`UPDATE DeliveryOrder SET TransDate = GETDATE(), ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
+        continue;
+      }
 
       const soResult = await pool
         .request()
@@ -633,7 +804,8 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
         .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
         .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
         .input("soId", sql.VarChar(16), detail.SalesOrderID)
-        .input("vehicleNo", sql.VarChar(50), armadaNama)
+        .input("vehicleNo", sql.VarChar(50), doVehicleNo)
+        .input("expeditionId", sql.VarChar(16), doExpeditionId)
         .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID)
         .input("dueDate", sql.DateTime, so.DueDate).query(`
           INSERT INTO DeliveryOrder
@@ -643,7 +815,7 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
              ReferenceNo, DueDate, ProjectID, AddressDeliveryID, IsDOReturn)
           VALUES
             (@id, @voucherNo, GETDATE(), @branchId, @departmentId, @bpId, '', @soId,
-             0, '', @vehicleNo, '', 0, GETDATE(), '', NULL,
+             0, @expeditionId, @vehicleNo, '', 0, GETDATE(), '', NULL,
              NULL, 0, '', 1, 1, @salesmanId, 0,
              '', @dueDate, '', '', NULL)
         `);

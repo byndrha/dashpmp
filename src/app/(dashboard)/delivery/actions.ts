@@ -13,6 +13,7 @@ import {
   startBerangkat,
   getJadwalDetail,
   getAvailableSalesOrders,
+  mergeExternalDeliveriesIntoJadwal,
   type JadwalDetailRow,
   type AvailableSalesOrder,
 } from "@/lib/queries/pengiriman-jadwal";
@@ -72,6 +73,16 @@ export async function updateJadwalDriverTimeAction(
 ): Promise<void> {
   await updateJadwalDriverTime(jadwalId, input);
   revalidatePath("/delivery");
+}
+
+export async function mergeExternalDeliveriesAction(
+  armadaId: number,
+  deliveryOrderIds: string[],
+  jamJadwal: Date
+): Promise<number> {
+  const id = await mergeExternalDeliveriesIntoJadwal(armadaId, deliveryOrderIds, jamJadwal);
+  revalidatePath("/delivery");
+  return id;
 }
 
 export async function startMuatAction(jadwalId: number): Promise<void> {

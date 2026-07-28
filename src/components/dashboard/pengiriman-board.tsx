@@ -3,7 +3,7 @@
 import { DndContext, useDraggable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Plus, Wrench, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Wrench, User, Combine } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,8 @@ import { formatDate, formatTime } from "@/lib/format";
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
-import type { JadwalCard as JadwalCardData, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
+import type { ExpeditionVehicleOption } from "@/lib/queries/expedition";
+import type { JadwalCard as JadwalCardData, AvailableSalesOrder, ExternalDelivery } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { ArmadaActivity, ArmadaActivityType } from "@/lib/armada-activity-types";
 import { ARMADA_ACTIVITY_TYPES, ARMADA_ACTIVITY_LABEL } from "@/lib/armada-activity-types";
@@ -38,6 +39,7 @@ import {
   updateArmadaAction,
   createArmadaActivityAction,
   deleteArmadaActivityAction,
+  mergeExternalDeliveriesAction,
 } from "@/app/(dashboard)/delivery/actions";
 
 // 24-hour axis, but the per-hour width is now derived from the available
@@ -265,6 +267,95 @@ function CreateJadwalDialog({
   );
 }
 
+// Turns a manually-picked set of external (desktop-ERP) DeliveryOrder cards
+// into one real Draft Jadwal — see mergeExternalDeliveriesIntoJadwal's own
+// comment for why Draft (not Terbit): it's what unlocks full editing
+// (time, driver, stop order) via the existing Validasi Rute UI afterwards.
+function MergeExternalDialog({
+  open,
+  onOpenChange,
+  armadaId,
+  businessDate,
+  deliveries,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  armadaId: number | null;
+  businessDate: string;
+  deliveries: ExternalDelivery[];
+  onDone: () => void;
+}) {
+  const [time, setTime] = useState("08:00");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!open || deliveries.length === 0) return;
+    // Defaults to the earliest selected DO's own time — not derivable from
+    // render since it's only meaningful once the dialog is actually open.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTime(formatTime(deliveries[0].TransDate));
+    setError(null);
+  }, [open, deliveries]);
+
+  const totalKantong = deliveries.reduce((sum, d) => sum + d.TotalKantong, 0);
+
+  function handleSubmit() {
+    if (armadaId == null || deliveries.length === 0) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await mergeExternalDeliveriesAction(
+          armadaId,
+          deliveries.map((d) => d.DeliveryOrderID),
+          resolveBusinessDateTime(businessDate, time)
+        );
+        onOpenChange(false);
+        onDone();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menggabungkan pengiriman.");
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Gabungkan jadi Jadwal</DialogTitle>
+          <DialogDescription>
+            {deliveries.length} DO dari ERP akan digabung jadi satu keberangkatan Draft — bisa diatur ulang jam,
+            driver, dan urutan stop-nya lewat Validasi Rute setelah ini.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32" />
+            <span className="ml-auto text-xs text-muted-foreground">{totalKantong} kantong</span>
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex max-h-64 flex-col divide-y overflow-y-auto rounded-lg border">
+            {deliveries.map((d) => (
+              <div key={d.DeliveryOrderID} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                <span className="min-w-0 truncate">
+                  {d.CustomerName} <span className="text-xs text-muted-foreground">· {formatTime(d.TransDate)}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">{d.TotalKantong} kantong</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button disabled={pending || deliveries.length === 0 || armadaId == null} onClick={handleSubmit} className="ml-auto">
+            {pending ? "Menyimpan..." : `Gabungkan (${deliveries.length} DO)`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DraggableJadwalCard({
   jadwal: j,
   hourWidth,
@@ -402,6 +493,55 @@ function AutoSegmentCard({
   );
 }
 
+const EXTERNAL_DO_WIDTH = 80;
+
+// A DeliveryOrder created directly in the desktop ERP app, resolved to this
+// armada via VehicleNo (see ExternalDelivery in pengiriman-jadwal.ts) —
+// shown as a read-only marker (amber dashed border, distinct from
+// AutoSegmentCard's neutral one) since it was never scheduled through this
+// dashboard. Clickable to select (checkbox) for merging several of these
+// into one real Jadwal via "Gabungkan jadi Jadwal" — see MergeExternalDialog.
+// Positioned at a single point (TransDate) rather than a duration, since a
+// raw DeliveryOrder carries no departure/arrival time.
+function ExternalDoCard({
+  delivery,
+  hourWidth,
+  top,
+  selected,
+  onToggle,
+}: {
+  delivery: ExternalDelivery;
+  hourWidth: number;
+  top: number;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={`${delivery.VoucherNo} — ${delivery.CustomerName} (${delivery.TotalKantong} kantong) — dari ERP, belum dijadwalkan lewat dashboard`}
+      className={cn(
+        "absolute flex flex-col justify-center overflow-hidden rounded-md border border-dashed px-1.5 py-1 text-left text-[9px] transition-colors",
+        selected ? "border-warning bg-warning/25 text-warning" : "border-warning/50 bg-warning/10 text-warning hover:bg-warning/20"
+      )}
+      style={{ left: hourFraction(delivery.TransDate) * hourWidth, top, width: EXTERNAL_DO_WIDTH, height: CARD_HEIGHT }}
+    >
+      <span className="flex items-center gap-1">
+        <span
+          className={cn(
+            "size-2.5 shrink-0 rounded-sm border border-warning",
+            selected && "bg-warning"
+          )}
+        />
+        <span className="truncate font-semibold">{delivery.CustomerName}</span>
+      </span>
+      <span className="truncate tabular-nums opacity-80">{formatTime(delivery.TransDate)} &middot; {delivery.TotalKantong} kantong</span>
+      <span className="truncate opacity-70">ERP &middot; belum terjadwal</span>
+    </button>
+  );
+}
+
 // Mirrors whichever driver is on whatever's happening in the Armada row
 // directly above it, at the same horizontal position — not an independent
 // schedule, just a second read of the same Jadwal-derived segments with
@@ -518,23 +658,43 @@ function ArmadaRowBoard({
   armada,
   jadwal,
   activities,
+  externalDeliveries,
   hourWidth,
   dayWidth,
+  businessDate,
   onCardClick,
   onCreateClick,
   onCreateActivityClick,
   onDeleteActivity,
+  expeditionOptions,
 }: {
   armada: ArmadaRow;
   jadwal: JadwalCardData[];
   activities: ArmadaActivity[];
+  externalDeliveries: ExternalDelivery[];
   hourWidth: number;
   dayWidth: number;
+  businessDate: string;
   onCardClick: (jadwalId: number) => void;
   onCreateClick: (armadaId: number) => void;
   onCreateActivityClick: (armadaId: number) => void;
   onDeleteActivity: (activityId: number) => void;
+  expeditionOptions: ExpeditionVehicleOption[];
 }) {
+  const [selectedExternal, setSelectedExternal] = useState<Set<string>>(new Set());
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+
+  function toggleExternal(deliveryOrderId: string) {
+    setSelectedExternal((prev) => {
+      const next = new Set(prev);
+      if (next.has(deliveryOrderId)) next.delete(deliveryOrderId);
+      else next.add(deliveryOrderId);
+      return next;
+    });
+  }
+
+  const selectedExternalDeliveries = externalDeliveries.filter((d) => selectedExternal.has(d.DeliveryOrderID));
+
   const cardWidth = Math.max(MIN_CARD_WIDTH, hourWidth - 6);
 
   // Auto-derived Memuat/Perjalanan/Kembali segments — only for Jadwal that
@@ -587,13 +747,82 @@ function ArmadaRowBoard({
             ? RETURN_MARKER_WIDTH
             : Math.max(MIN_AUTO_WIDTH, durationHours(s.start, s.end) * hourWidth),
       })),
+      ...externalDeliveries.map((d) => ({
+        key: `ext-${d.DeliveryOrderID}`,
+        left: hourFraction(d.TransDate) * hourWidth,
+        width: EXTERNAL_DO_WIDTH,
+      })),
     ];
     return assignLanes(blocks);
-  }, [jadwal, activities, autoSegments, hourWidth, cardWidth]);
+  }, [jadwal, activities, autoSegments, externalDeliveries, hourWidth, cardWidth]);
+
+  // Drag-to-select (marquee) for external DO cards — an alternative to
+  // clicking each checkbox one by one when several need selecting at once.
+  // Only starts when the mousedown lands on empty timeline background (not
+  // on a card, all of which render as <button>), so it never fights the
+  // existing dnd-kit drag-to-reschedule on Jadwal cards.
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
+
+  function handleTimelineMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    if (externalDeliveries.length === 0) return;
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    setDragStart(point);
+    setDragCurrent(point);
+  }
+
+  useEffect(() => {
+    if (!dragStart) return;
+    function relativePoint(e: MouseEvent) {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      return rect ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : null;
+    }
+    function handleMove(e: MouseEvent) {
+      const point = relativePoint(e);
+      if (point) setDragCurrent(point);
+    }
+    function handleUp(e: MouseEvent) {
+      const end = relativePoint(e);
+      if (end && dragStart) {
+        const minX = Math.min(dragStart.x, end.x);
+        const maxX = Math.max(dragStart.x, end.x);
+        const minY = Math.min(dragStart.y, end.y);
+        const maxY = Math.max(dragStart.y, end.y);
+        // A real drag, not just a click that barely moved — small clicks on
+        // empty background leave the current selection untouched instead of
+        // selecting nothing.
+        if (maxX - minX > 4 || maxY - minY > 4) {
+          const hits = new Set<string>();
+          for (const d of externalDeliveries) {
+            const left = hourFraction(d.TransDate) * hourWidth;
+            const top = ROW_TOP_PADDING + (laneOf.get(`ext-${d.DeliveryOrderID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP);
+            if (left < maxX && left + EXTERNAL_DO_WIDTH > minX && top < maxY && top + CARD_HEIGHT > minY) {
+              hits.add(d.DeliveryOrderID);
+            }
+          }
+          setSelectedExternal(hits);
+        }
+      }
+      setDragStart(null);
+      setDragCurrent(null);
+    }
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [dragStart, externalDeliveries, hourWidth, laneOf]);
 
   const laneCountSafe = Math.max(1, laneCount);
   const rowHeight = ROW_TOP_PADDING + laneCountSafe * CARD_HEIGHT + Math.max(0, laneCountSafe - 1) * CARD_GAP;
-  const totalKantongHariIni = jadwal.reduce((sum, j) => sum + j.TotalKantong, 0);
+  const totalKantongHariIni =
+    jadwal.reduce((sum, j) => sum + j.TotalKantong, 0) + externalDeliveries.reduce((sum, d) => sum + d.TotalKantong, 0);
   // "telah ditempuh" (already traveled) — only Jadwal that actually
   // departed (JamAktualBerangkat set) contribute; a Draft hasn't gone
   // anywhere yet, so it contributes 0 regardless of its JarakKM (which is
@@ -701,6 +930,19 @@ function ArmadaRowBoard({
             </p>
           </div>
         </div>
+        {selectedExternal.size > 0 && (
+          <Button
+            size="sm"
+            className="h-7 gap-1 text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMergeDialogOpen(true);
+            }}
+          >
+            <Combine className="size-3.5" />
+            Gabungkan {selectedExternal.size} jadi Jadwal
+          </Button>
+        )}
       </div>
       <ArmadaFormDialog
         open={editing}
@@ -710,11 +952,36 @@ function ArmadaRowBoard({
         onSubmit={handleUpdateArmada}
         pending={editPending}
         error={editError}
+        expeditionOptions={expeditionOptions}
       />
-      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
+      <MergeExternalDialog
+        open={mergeDialogOpen}
+        onOpenChange={setMergeDialogOpen}
+        armadaId={armada.ArmadaID}
+        businessDate={businessDate}
+        deliveries={selectedExternalDeliveries}
+        onDone={() => setSelectedExternal(new Set())}
+      />
+      <div
+        ref={timelineRef}
+        onMouseDown={handleTimelineMouseDown}
+        className="relative shrink-0 border-l"
+        style={{ width: dayWidth, height: rowHeight }}
+      >
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
         ))}
+        {dragStart && dragCurrent && (
+          <div
+            className="pointer-events-none absolute z-30 rounded border-2 border-primary/60 bg-primary/10"
+            style={{
+              left: Math.min(dragStart.x, dragCurrent.x),
+              top: Math.min(dragStart.y, dragCurrent.y),
+              width: Math.abs(dragCurrent.x - dragStart.x),
+              height: Math.abs(dragCurrent.y - dragStart.y),
+            }}
+          />
+        )}
         {jadwal.map((j) => (
           <DraggableJadwalCard
             key={j.JadwalID}
@@ -743,6 +1010,16 @@ function ArmadaRowBoard({
             width={s.label === "Kembali ke Pabrik" ? RETURN_MARKER_WIDTH : Math.max(MIN_AUTO_WIDTH, durationHours(s.start, s.end) * hourWidth)}
             top={ROW_TOP_PADDING + (laneOf.get(s.key) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
             onClick={() => onCardClick(s.jadwalId)}
+          />
+        ))}
+        {externalDeliveries.map((d) => (
+          <ExternalDoCard
+            key={d.DeliveryOrderID}
+            delivery={d}
+            hourWidth={hourWidth}
+            top={ROW_TOP_PADDING + (laneOf.get(`ext-${d.DeliveryOrderID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+            selected={selectedExternal.has(d.DeliveryOrderID)}
+            onToggle={() => toggleExternal(d.DeliveryOrderID)}
           />
         ))}
       </div>
@@ -779,19 +1056,23 @@ function ArmadaRowBoard({
 export function PengirimanBoard({
   armada,
   jadwal,
+  externalDeliveries,
   activities,
   driverProfiles,
   drivers,
   businessDate,
   todayISO,
+  expeditionOptions,
 }: {
   armada: ArmadaRow[];
   jadwal: JadwalCardData[];
+  externalDeliveries: ExternalDelivery[];
   activities: ArmadaActivity[];
   driverProfiles: DriverProfileRow[];
   drivers: DriverOption[];
   businessDate: string;
   todayISO: string;
+  expeditionOptions: ExpeditionVehicleOption[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -836,6 +1117,16 @@ export function PengirimanBoard({
     }
     return map;
   }, [activities]);
+
+  const externalByArmada = useMemo(() => {
+    const map = new Map<number, ExternalDelivery[]>();
+    for (const d of externalDeliveries) {
+      const list = map.get(d.ArmadaID) ?? [];
+      list.push(d);
+      map.set(d.ArmadaID, list);
+    }
+    return map;
+  }, [externalDeliveries]);
 
   const sortedArmada = useMemo(() => {
     function nextPendingHour(armadaId: number): number {
@@ -913,7 +1204,7 @@ export function PengirimanBoard({
           <CardDescription>{jadwal.length} keberangkatan terjadwal</CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ArmadaManager armada={armada} />
+          <ArmadaManager armada={armada} expeditionOptions={expeditionOptions} />
           <DriverManager drivers={driverProfiles} />
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
@@ -985,19 +1276,27 @@ export function PengirimanBoard({
                   ))}
                 </div>
               </div>
-              <div className="flex flex-col divide-y">
+              {/* gap-y-3 separates one armada's whole block (its own
+                  timeline + its driver row underneath) from the next
+                  armada's block, so they don't visually stick together —
+                  the tight spacing WITHIN one armada's block (timeline to
+                  its own driver row, just a dashed border-t) is untouched. */}
+              <div className="flex flex-col divide-y gap-y-3">
                 {sortedArmada.map((a) => (
                   <ArmadaRowBoard
                     key={a.ArmadaID}
                     armada={a}
                     jadwal={jadwalByArmada.get(a.ArmadaID) ?? []}
                     activities={activitiesByArmada.get(a.ArmadaID) ?? []}
+                    externalDeliveries={externalByArmada.get(a.ArmadaID) ?? []}
                     hourWidth={hourWidth}
                     dayWidth={dayWidth}
+                    businessDate={businessDate}
                     onCardClick={setDetailJadwalId}
                     onCreateClick={setCreateArmadaId}
                     onCreateActivityClick={setCreateActivityArmadaId}
                     onDeleteActivity={handleDeleteActivity}
+                    expeditionOptions={expeditionOptions}
                   />
                 ))}
               </div>

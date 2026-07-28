@@ -3,6 +3,7 @@ import { getOpenDeliveries, getDriverOptions } from "@/lib/queries/delivery";
 import { getPengirimanBoard } from "@/lib/queries/pengiriman-jadwal";
 import { getArmadaActivities } from "@/lib/queries/armada-activity";
 import { getDriverProfiles } from "@/lib/queries/driver-profile";
+import { getExpeditionVehicleOptions } from "@/lib/queries/expedition";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { FilterBar } from "@/components/dashboard/filter-bar";
@@ -26,13 +27,14 @@ export default async function DeliveryPage({
   const boardDate =
     params.pengirimanDate && /^\d{4}-\d{2}-\d{2}$/.test(params.pengirimanDate) ? params.pengirimanDate : todayISO;
 
-  const [rows, wilayahList, board, drivers, activities, driverProfiles] = await Promise.all([
+  const [rows, wilayahList, board, drivers, activities, driverProfiles, expeditionOptions] = await Promise.all([
     getOpenDeliveries(wilayah),
     getWilayahList(),
     getPengirimanBoard(boardDate),
     getDriverOptions(),
     getArmadaActivities(boardDate),
     getDriverProfiles(),
+    getExpeditionVehicleOptions(),
   ]);
 
   return (
@@ -48,11 +50,13 @@ export default async function DeliveryPage({
           <PengirimanBoard
             armada={board.armada}
             jadwal={board.jadwal}
+            externalDeliveries={board.externalDeliveries}
             activities={activities}
             driverProfiles={driverProfiles}
             drivers={drivers}
             businessDate={boardDate}
             todayISO={todayISO}
+            expeditionOptions={expeditionOptions}
           />
         }
       />

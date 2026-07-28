@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { ARMADA_STATUS, type ArmadaStatus } from "@/lib/armada-status";
 import { FUEL_TYPES, type FuelType } from "@/lib/armada-fuel";
 import { type ArmadaRow, type ArmadaInput } from "@/lib/queries/armada";
+import { type ExpeditionVehicleOption } from "@/lib/queries/expedition";
 import { createArmadaAction, updateArmadaAction, deleteArmadaAction } from "@/app/(dashboard)/delivery/actions";
 
 export const STATUS_BADGE: Record<ArmadaStatus, string> = {
@@ -41,6 +42,7 @@ function emptyForm(): ArmadaInput {
     biayaBBMPerLiter: null,
     pajakLimaTahunan: null,
     biayaPajakLimaTahunan: null,
+    expeditionDetailId: null,
   };
 }
 
@@ -58,6 +60,7 @@ export function rowToForm(row: ArmadaRow): ArmadaInput {
     biayaBBMPerLiter: row.BiayaBBMPerLiter,
     pajakLimaTahunan: row.PajakLimaTahunan ? new Date(row.PajakLimaTahunan).toISOString().slice(0, 10) : null,
     biayaPajakLimaTahunan: row.BiayaPajakLimaTahunan,
+    expeditionDetailId: row.ExpeditionDetailID,
   };
 }
 
@@ -69,6 +72,7 @@ export function ArmadaFormDialog({
   onSubmit,
   pending,
   error,
+  expeditionOptions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,10 +81,12 @@ export function ArmadaFormDialog({
   onSubmit: (input: ArmadaInput) => void;
   pending: boolean;
   error: string | null;
+  expeditionOptions: ExpeditionVehicleOption[];
 }) {
   const [fotoPath, setFotoPath] = useState(initial.fotoPath);
   const [status, setStatus] = useState<ArmadaStatus>(initial.status);
   const [jenisBBM, setJenisBBM] = useState<FuelType | null>(initial.jenisBBM);
+  const [expeditionDetailId, setExpeditionDetailId] = useState<string | null>(initial.expeditionDetailId);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -117,6 +123,7 @@ export function ArmadaFormDialog({
       biayaBBMPerLiter: formData.get("biayaBBMPerLiter") ? Number(formData.get("biayaBBMPerLiter")) : null,
       pajakLimaTahunan: String(formData.get("pajakLimaTahunan") ?? "") || null,
       biayaPajakLimaTahunan: formData.get("biayaPajakLimaTahunan") ? Number(formData.get("biayaPajakLimaTahunan")) : null,
+      expeditionDetailId,
     });
   }
 
@@ -129,6 +136,7 @@ export function ArmadaFormDialog({
           setFotoPath(initial.fotoPath);
           setStatus(initial.status);
           setJenisBBM(initial.jenisBBM);
+          setExpeditionDetailId(initial.expeditionDetailId);
           setUploadError(null);
         }
       }}
@@ -235,6 +243,37 @@ export function ArmadaFormDialog({
             />
           </div>
           <div className="col-span-2 flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Kendaraan ERP (Plat Resmi)
+            </Label>
+            <Select
+              value={expeditionDetailId ?? "none"}
+              onValueChange={(v) => setExpeditionDetailId(v === "none" ? null : (v ?? null))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Belum ditautkan">
+                  {(v: string) => {
+                    if (v === "none") return "Belum ditautkan";
+                    const opt = expeditionOptions.find((o) => o.ExpeditionDetailID === v);
+                    return opt ? `${opt.VehicleNo}${opt.Description ? ` — ${opt.Description}` : ""}` : "Belum ditautkan";
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Belum ditautkan</SelectItem>
+                {expeditionOptions.map((o) => (
+                  <SelectItem key={o.ExpeditionDetailID} value={o.ExpeditionDetailID}>
+                    {o.VehicleNo}
+                    {o.Description ? ` — ${o.Description}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Menentukan plat nomor resmi yang tertulis di Surat Jalan (DeliveryOrder) saat armada ini berangkat.
+            </p>
+          </div>
+          <div className="col-span-2 flex flex-col gap-1.5">
             <Label htmlFor="foto" className="text-xs text-muted-foreground">
               Foto Armada
             </Label>
@@ -267,7 +306,7 @@ export function ArmadaFormDialog({
 // "Kelola Armada" list dialog and the add/edit form dialog never open at
 // the same time (no nested Dialog-inside-Dialog) — opening the form closes
 // the list first, and closing the form reopens the list.
-export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
+export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow[]; expeditionOptions: ExpeditionVehicleOption[] }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ArmadaRow | null>(null);
@@ -338,15 +377,26 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
             </Button>
             {error && <p className="text-xs text-destructive">{error}</p>}
             <div className="flex flex-col divide-y rounded-lg border">
-              {armada.map((a) => (
+              {armada.map((a) => {
+                const linked = expeditionOptions.find((o) => o.ExpeditionDetailID === a.ExpeditionDetailID);
+                return (
                 <div key={a.ArmadaID} className="flex items-center justify-between gap-2 px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{a.Nama}</p>
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      {a.PlatNomor ?? "-"}
+                    <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      {/* Real ERP plate (linked ExpeditionDetail.VehicleNo) is
+                          authoritative once linked — it's what's actually
+                          written onto a real DeliveryOrder — so it takes
+                          priority over the dashboard's own PlatNomor field. */}
+                      {linked ? linked.VehicleNo : (a.PlatNomor ?? "-")}
                       <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", STATUS_BADGE[a.Status])}>
                         {a.Status}
                       </span>
+                      {!linked && (
+                        <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">
+                          Belum ditautkan ke ERP
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -366,7 +416,8 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {armada.length === 0 && (
                 <p className="py-6 text-center text-sm text-muted-foreground">Belum ada armada.</p>
               )}
@@ -387,6 +438,7 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
           onSubmit={handleCreate}
           pending={pending}
           error={error}
+          expeditionOptions={expeditionOptions}
         />
       )}
       {editing && (
@@ -403,6 +455,7 @@ export function ArmadaManager({ armada }: { armada: ArmadaRow[] }) {
           onSubmit={handleUpdate}
           pending={pending}
           error={error}
+          expeditionOptions={expeditionOptions}
         />
       )}
     </>
