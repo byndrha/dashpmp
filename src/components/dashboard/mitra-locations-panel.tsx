@@ -33,7 +33,7 @@ export function MitraLocationsPanel({
   return (
     <div className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 shadow-md">
       <div className="relative">
-        <MitraLocationsMap points={points} />
+        <MitraLocationsMap points={points} growthRows={growthRows} />
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <span className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-foreground shadow backdrop-blur">
             {points.length} mitra dengan lokasi tersimpan
@@ -50,7 +50,7 @@ export function MitraLocationsPanel({
           <div>
             <h3 className="font-display text-sm font-semibold">Perkembangan Mitra per Wilayah</h3>
             <p className="text-xs text-muted-foreground">
-              Total mitra per wilayah & tipe, dengan mitra baru bulan ini (vs bulan lalu) di bawahnya.
+              Total mitra per wilayah & tipe, dengan mitra baru bulan ini (vs bulan lalu).
             </p>
           </div>
           <ChevronDown

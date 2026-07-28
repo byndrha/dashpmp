@@ -14,9 +14,14 @@ export default async function MitraPage() {
   ]);
 
   // Reuses getMitraList()'s existing Latitude/Longitude (from
-  // DashboardMitraLocation) — no separate query needed.
+  // DashboardMitraLocation) — no separate query needed. Deactivated
+  // (IsSuspended) mitra are excluded — they've been hidden from operational
+  // pickers already, the map should treat them the same way.
   const locations = mitra
-    .filter((m): m is typeof m & { Latitude: number; Longitude: number } => m.Latitude != null && m.Longitude != null)
+    .filter(
+      (m): m is typeof m & { Latitude: number; Longitude: number } =>
+        m.Latitude != null && m.Longitude != null && !m.IsSuspended
+    )
     .map((m) => ({ BusinessPartnerID: m.BusinessPartnerID, Name: m.Name, Wilayah: m.Wilayah, Latitude: m.Latitude, Longitude: m.Longitude }));
 
   return (
