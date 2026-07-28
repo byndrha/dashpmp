@@ -693,7 +693,10 @@ export function MitraDOPanel({
             </SelectContent>
           </Select>
           {filteredInactive.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => setShowAll((v) => !v)}>
+            // hidden (display:none) rather than removed — kept in the DOM/
+            // logic so `showAll`/`filteredInactive` still work if this is
+            // ever un-hidden again, per explicit request not to delete it.
+            <Button variant="outline" size="sm" className="hidden" onClick={() => setShowAll((v) => !v)}>
               {showAll ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
               {filteredInactive.length} mitra tanpa transaksi
               <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
