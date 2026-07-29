@@ -3,6 +3,8 @@ import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { formatDate, formatTime } from "@/lib/format";
+import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
+import { estimateTravelMinutes, type LatLng } from "@/lib/route-estimate";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
 // mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
@@ -59,9 +61,14 @@ export interface JadwalCard {
   // Perjalanan" / "Kembali ke Pabrik" segments on the board (see
   // computeArmadaTimelineSegments).
   DurasiMenit: number | null;
-  // Sum of each stop's own estimateDeliveryMinutes(qty) — see
-  // delivery-duration.ts. Drives this card's width on the Papan Pengiriman
-  // timeline (a Jadwal with more/bigger stops visually takes longer).
+  // Estimated total busy duration: each stop's own bongkar/unloading time
+  // (estimateDeliveryMinutes, delivery-duration.ts) plus pabrik->stop1->...
+  // ->pabrik travel time — the real OSRM-derived DurasiMenit when already
+  // known (Terbit), otherwise a haversine-distance heuristic (Draft, see
+  // route-estimate.ts). Drives this card's width on the Papan Pengiriman
+  // timeline, and is also what the armada-double-booking overlap check
+  // (findOverlappingJadwalForArmada) uses to size each Jadwal's busy
+  // window.
   EstimasiDurasiMenit: number;
 }
 
@@ -83,7 +90,7 @@ export async function getPengirimanBoard(
   businessDate: string
 ): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[]; externalDeliveries: ExternalDelivery[] }> {
   const pool = await getPool();
-  const [armada, jadwalResult, externalResult] = await Promise.all([
+  const [armada, jadwalResult, externalResult, pabrik] = await Promise.all([
     getArmadaList(),
     pool
       .request()
@@ -191,8 +198,62 @@ export async function getPengirimanBoard(
           )
         ORDER BY do_.TransDate
       `),
+    getPabrikLocation(),
   ]);
-  return { armada, jadwal: jadwalResult.recordset, externalDeliveries: externalResult.recordset };
+
+  const jadwalRows = jadwalResult.recordset as JadwalCard[];
+  const travelByJadwalId = await estimateTravelMinutesForJadwal(pool, pabrik, jadwalRows);
+  const jadwal = jadwalRows.map((jr) => ({
+    ...jr,
+    EstimasiDurasiMenit: jr.EstimasiDurasiMenit + (travelByJadwalId.get(jr.JadwalID) ?? 0),
+  }));
+
+  return { armada, jadwal, externalDeliveries: externalResult.recordset };
+}
+
+// Bulk-resolves the travel-time component of EstimasiDurasiMenit for every
+// Jadwal on the board in a single extra query (rather than one round-trip
+// per Jadwal) — fetches every stop's coordinates grouped by JadwalID
+// (ordered by Urutan, though the haversine estimate is order-sensitive only
+// in aggregate distance, not in a way that matters for a rough estimate),
+// then per Jadwal prefers the real OSRM DurasiMenit (Terbit, already
+// travel-only — see startBerangkat) over the haversine heuristic (Draft, or
+// a legacy Terbit row created before DurasiMenit existed).
+async function estimateTravelMinutesForJadwal(
+  pool: sql.ConnectionPool,
+  pabrik: { latitude: number; longitude: number },
+  jadwalRows: JadwalCard[]
+): Promise<Map<number, number>> {
+  const travelByJadwalId = new Map<number, number>();
+  if (jadwalRows.length === 0) return travelByJadwalId;
+
+  const request = pool.request();
+  const placeholders = jadwalRows.map((jr, i) => {
+    request.input(`jid${i}`, sql.Int, jr.JadwalID);
+    return `@jid${i}`;
+  });
+  const stopsResult = await request.query(`
+    SELECT jd.JadwalID, ml.Latitude, ml.Longitude
+    FROM DashboardPengirimanJadwalDetail jd
+    JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
+    WHERE jd.JadwalID IN (${placeholders.join(",")}) AND jd.IsDeleted = 0
+    ORDER BY jd.JadwalID, jd.Urutan
+  `);
+  const stopsByJadwal = new Map<number, LatLng[]>();
+  for (const row of stopsResult.recordset as { JadwalID: number; Latitude: number | null; Longitude: number | null }[]) {
+    if (row.Latitude == null || row.Longitude == null) continue;
+    const arr = stopsByJadwal.get(row.JadwalID) ?? [];
+    arr.push({ lat: row.Latitude, lng: row.Longitude });
+    stopsByJadwal.set(row.JadwalID, arr);
+  }
+
+  const pabrikLatLng: LatLng = { lat: pabrik.latitude, lng: pabrik.longitude };
+  for (const jr of jadwalRows) {
+    const travel = jr.DurasiMenit ?? estimateTravelMinutes(pabrikLatLng, stopsByJadwal.get(jr.JadwalID) ?? []);
+    travelByJadwalId.set(jr.JadwalID, travel);
+  }
+  return travelByJadwalId;
 }
 
 export interface JadwalDetailRow {
@@ -378,6 +439,121 @@ async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrd
   }
 }
 
+// Resolves lat/lng/qty for an arbitrary set of SalesOrderIDs in one query —
+// shared by the busy-window estimate below. A SO with no saved mitra
+// location maps to null so its bongkar time is still counted (via
+// estimateBusyMinutes) even though it can't contribute to the travel leg.
+async function getStopLocationsForSalesOrders(
+  pool: sql.ConnectionPool,
+  salesOrderIds: string[]
+): Promise<Map<string, { lat: number; lng: number; qty: number } | null>> {
+  const map = new Map<string, { lat: number; lng: number; qty: number } | null>();
+  if (salesOrderIds.length === 0) return map;
+  const request = pool.request();
+  const placeholders = salesOrderIds.map((id, i) => {
+    request.input(`so${i}`, sql.VarChar(16), id);
+    return `@so${i}`;
+  });
+  const result = await request.query(`
+    SELECT so.SalesOrderID, ml.Latitude, ml.Longitude, ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty
+    FROM SalesOrder so
+    LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
+    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
+    WHERE so.SalesOrderID IN (${placeholders.join(",")})
+    GROUP BY so.SalesOrderID, ml.Latitude, ml.Longitude
+  `);
+  for (const row of result.recordset as { SalesOrderID: string; Latitude: number | null; Longitude: number | null; Qty: number }[]) {
+    map.set(row.SalesOrderID, row.Latitude != null && row.Longitude != null ? { lat: row.Latitude, lng: row.Longitude, qty: row.Qty } : null);
+  }
+  return map;
+}
+
+// Estimated total busy duration (bongkar + travel) for an ordered list of
+// SalesOrderIDs — same shape as EstimasiDurasiMenit on the board, usable
+// both for a not-yet-created candidate Jadwal (createJadwalDraft) and for
+// an existing one (getJadwalBusyWindow passes its own SalesOrderIDs in
+// Urutan order). realTravelMinutes overrides the haversine heuristic
+// whenever a real OSRM duration is already known (Terbit) — see
+// estimateTravelMinutesForJadwal for the same convention on the board.
+async function estimateBusyMinutes(
+  pool: sql.ConnectionPool,
+  pabrik: LatLng,
+  orderedSalesOrderIds: string[],
+  realTravelMinutes: number | null
+): Promise<number> {
+  if (orderedSalesOrderIds.length === 0) return 0;
+  const locations = await getStopLocationsForSalesOrders(pool, orderedSalesOrderIds);
+  let bongkarMinutes = 0;
+  const travelStops: LatLng[] = [];
+  for (const id of orderedSalesOrderIds) {
+    const loc = locations.get(id) ?? null;
+    bongkarMinutes += estimateDeliveryMinutes(loc?.qty ?? 0);
+    if (loc) travelStops.push({ lat: loc.lat, lng: loc.lng });
+  }
+  const travelMinutes = realTravelMinutes ?? estimateTravelMinutes(pabrik, travelStops);
+  return bongkarMinutes + travelMinutes;
+}
+
+interface JadwalBusyWindow {
+  jadwalId: number;
+  status: JadwalStatus;
+  start: Date;
+  end: Date;
+}
+
+// An armada's estimated occupied window for one Jadwal: JamJadwal through
+// JamJadwal + its own estimated busy duration (see estimateBusyMinutes).
+async function getJadwalBusyWindow(pool: sql.ConnectionPool, pabrik: LatLng, jadwalId: number): Promise<JadwalBusyWindow | null> {
+  const header = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT Status, JamJadwal, DurasiMenit FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const row = header.recordset[0] as { Status: JadwalStatus; JamJadwal: Date; DurasiMenit: number | null } | undefined;
+  if (!row) return null;
+
+  const detailResult = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT SalesOrderID FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0 ORDER BY Urutan`);
+  const salesOrderIds = (detailResult.recordset as { SalesOrderID: string }[]).map((r) => r.SalesOrderID);
+
+  const minutes = await estimateBusyMinutes(pool, pabrik, salesOrderIds, row.Status === "Terbit" ? row.DurasiMenit : null);
+  const start = row.JamJadwal;
+  return { jadwalId, status: row.Status, start, end: new Date(start.getTime() + minutes * 60 * 1000) };
+}
+
+// Hard rule: one armada cannot have two Jadwal (Draft or Terbit) with
+// overlapping estimated busy windows — see EstimasiDurasiMenit /
+// getJadwalBusyWindow above. Searches a +/-1 day window around the
+// candidate start (a single delivery run never spans longer than that) so
+// this stays a couple of cheap queries instead of scanning the whole table.
+async function findOverlappingJadwalForArmada(
+  pool: sql.ConnectionPool,
+  pabrik: LatLng,
+  armadaId: number,
+  candidateStart: Date,
+  candidateEnd: Date
+): Promise<JadwalBusyWindow | null> {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const result = await pool
+    .request()
+    .input("armadaId", sql.Int, armadaId)
+    .input("from", sql.DateTime, new Date(candidateStart.getTime() - dayMs))
+    .input("to", sql.DateTime, new Date(candidateStart.getTime() + dayMs)).query(`
+      SELECT JadwalID FROM DashboardPengirimanJadwal
+      WHERE ArmadaID = @armadaId AND IsDeleted = 0 AND Status IN ('Draft', 'Terbit')
+        AND JamJadwal >= @from AND JamJadwal <= @to
+      ORDER BY JamJadwal
+    `);
+  for (const row of result.recordset as { JadwalID: number }[]) {
+    const window = await getJadwalBusyWindow(pool, pabrik, row.JadwalID);
+    if (window && window.start < candidateEnd && candidateStart < window.end) {
+      return window;
+    }
+  }
+  return null;
+}
+
 // Finds a still-open Draft already scheduled for the exact same Armada +
 // departure time, so a second (or third...) Pemesanan aimed at the same
 // trip joins it as another stop instead of spawning a sibling Jadwal that
@@ -408,6 +584,28 @@ export async function createJadwalDraft(input: {
   const totalQty = await sumSalesOrderQty(pool, input.salesOrderIds);
   await assertWithinCapacity(pool, input.armadaId, totalQty);
   await assertJamJadwalNotBeforeOrders(pool, input.salesOrderIds, input.jamJadwal);
+
+  // An armada can't have two Jadwal with overlapping estimated busy windows
+  // (see findOverlappingJadwalForArmada) — a new departure whose window
+  // falls inside an already-Draft one for the same armada joins it as more
+  // stops instead of spawning a sibling Jadwal that would otherwise render
+  // on top of it on the Papan Pengiriman timeline. Overlapping an already-
+  // Terbit Jadwal is a hard block instead: real DeliveryOrder documents
+  // already exist for that trip, so there's nothing to merge into.
+  const pabrikLocation = await getPabrikLocation();
+  const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
+  const candidateMinutes = await estimateBusyMinutes(pool, pabrikLatLng, input.salesOrderIds, null);
+  const candidateEnd = new Date(input.jamJadwal.getTime() + candidateMinutes * 60 * 1000);
+  const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, input.armadaId, input.jamJadwal, candidateEnd);
+  if (conflict) {
+    if (conflict.status === "Terbit") {
+      throw new Error(
+        `Armada ini diperkirakan masih dalam perjalanan (berangkat, estimasi kembali ${formatTime(conflict.end)}) — tidak bisa membuat keberangkatan baru yang tumpang tindih waktunya.`
+      );
+    }
+    await addSalesOrdersToJadwal(conflict.jadwalId, input.salesOrderIds);
+    return conflict.jadwalId;
+  }
 
   const result = await pool
     .request()
