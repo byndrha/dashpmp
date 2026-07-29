@@ -196,6 +196,15 @@ export function RouteValidationDialog({
   // useful on a slow connection when all they need is the stop list/totals
   // to check or share, matching what's already in buildShareText.
   const [showMap, setShowMap] = useState(true);
+  // True only while captureDialogImage() is mid-capture — drops the
+  // destinations list's max-height/scroll so every stop renders in the
+  // screenshot instead of only whatever was scrolled into view.
+  const [capturing, setCapturing] = useState(false);
+  // Bumped right before a "Seluruhnya" capture to force RouteMap to
+  // re-fit its bounds to the whole route (un-animated) before the
+  // screenshot, overriding any manual pan/zoom — see FitBounds in
+  // route-map.tsx.
+  const [refitTrigger, setRefitTrigger] = useState(0);
 
   const [adding, setAdding] = useState(false);
   const [availableToAdd, setAvailableToAdd] = useState<AvailableSalesOrder[]>([]);
@@ -534,14 +543,29 @@ export function RouteValidationDialog({
   // Renders captureRef's subtree (dialog title/summary + body) to a PNG
   // Blob — skips any node marked data-capture-hide (action buttons that
   // don't make sense in a shared screenshot, e.g. the Bagikan trigger
-  // itself and "Cetak DO Terpilih").
+  // itself, "Cetak DO Terpilih", and the "Tambahkan" sub-panel). Also:
+  // (a) drops the destinations list's max-height/scroll (capturing state)
+  // so every stop is actually rendered, not clipped to whatever was
+  // scrolled into view, and (b) if the map is showing, forces it to
+  // re-fit the whole route first (refitTrigger) — both would otherwise
+  // let the captured image silently cut off real route data.
   async function captureDialogImage(): Promise<Blob | null> {
     if (!captureRef.current) return null;
-    const { toBlob } = await import("html-to-image");
-    return toBlob(captureRef.current, {
-      pixelRatio: 2,
-      filter: (node) => !(node instanceof HTMLElement && node.dataset.captureHide === "true"),
-    });
+    setCapturing(true);
+    if (showMap) setRefitTrigger((n) => n + 1);
+    // Two frames: one for the capturing-driven layout change (list
+    // max-height removed) to reflow, one more for RouteMap's un-animated
+    // fitBounds to finish repainting tiles at the new view.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    try {
+      const { toBlob } = await import("html-to-image");
+      return await toBlob(captureRef.current, {
+        pixelRatio: 2,
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.captureHide === "true"),
+      });
+    } finally {
+      setCapturing(false);
+    }
   }
 
   async function shareImageBlob(blob: Blob, filename: string, title: string): Promise<void> {
@@ -691,6 +715,7 @@ export function RouteValidationDialog({
                   pabrik={pabrik}
                   stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
                   geometry={route?.geometry ?? null}
+                  refitTrigger={refitTrigger}
                 />
               ) : (
                 <Skeleton className="h-full w-full md:rounded-lg" />
@@ -802,7 +827,7 @@ export function RouteValidationDialog({
             </div>
 
             {isDraft && adding && (
-              <div className="flex flex-col gap-2 rounded-lg border p-2">
+              <div className="flex flex-col gap-2 rounded-lg border p-2" data-capture-hide="true">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">Pilih SO tambahan</span>
                   {kapasitasMaks != null && (
@@ -856,7 +881,7 @@ export function RouteValidationDialog({
               </div>
             )}
 
-            <div className="flex max-h-72 flex-col overflow-y-auto rounded-lg border">
+            <div className={cn("flex flex-col rounded-lg border", capturing ? "max-h-none overflow-visible" : "max-h-72 overflow-y-auto")}>
               {loading && <p className="py-6 text-center text-sm text-muted-foreground">Memuat...</p>}
               {!loading && order.length === 0 && (
                 <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada SO.</p>

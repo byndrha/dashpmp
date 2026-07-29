@@ -1,8 +1,8 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
+import { useEffect, useRef, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Search, X } from "lucide-react";
 import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
@@ -26,6 +26,45 @@ function stopIcon(order: number) {
 }
 
 type Stop = JadwalDetailRow & { Latitude: number; Longitude: number };
+
+// Keeps the map framed on the whole route (pabrik + every stop + the
+// actual road geometry, not just the straight lines between markers) —
+// without this, MapContainer's own fixed center/zoom={12} only happens to
+// show the whole route by coincidence, and a route with far-flung stops
+// (e.g. a Pacitan-area run, ~50-60km from the Ponorogo pabrik) gets several
+// markers cut off past the initial viewport. Re-fits whenever the route's
+// own data changes, plus whenever refitTrigger is bumped — the latter lets
+// a caller (route-validation-dialog.tsx's "Bagikan") force an immediate,
+// un-animated re-fit right before a screenshot, overriding any manual
+// pan/zoom so a shared image always shows the entire route.
+function FitBounds({
+  pabrik,
+  stops,
+  routePoints,
+  refitTrigger,
+}: {
+  pabrik: { latitude: number; longitude: number };
+  stops: Stop[];
+  routePoints: [number, number][] | undefined;
+  refitTrigger: number;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    const points: [number, number][] = [
+      [pabrik.latitude, pabrik.longitude],
+      ...stops.map((s): [number, number] => [s.Latitude, s.Longitude]),
+      ...(routePoints ?? []),
+    ];
+    if (points.length === 0) return;
+    map.fitBounds(L.latLngBounds(points), { padding: [32, 32], maxZoom: 15, animate: false });
+    // stops/routePoints are new array references most renders — keyed on
+    // stop identity + point count instead so this only re-fits when the
+    // route's actual data changes (or refitTrigger is bumped on purpose),
+    // not on every unrelated re-render (which would fight a manual pan/zoom).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pabrik.latitude, pabrik.longitude, stops.map((s) => s.JadwalDetailID).join(","), routePoints?.length, refitTrigger]);
+  return null;
+}
 
 // Searches among this route's own stops (by CustomerName) rather than a
 // general address search — same "find the one I'm looking for and jump to
@@ -94,6 +133,7 @@ export function RouteMap({
   pabrik,
   stops,
   geometry,
+  refitTrigger = 0,
 }: {
   pabrik: { latitude: number; longitude: number };
   stops: (JadwalDetailRow & { Latitude: number; Longitude: number })[];
@@ -101,6 +141,8 @@ export function RouteMap({
   // [lat, lng] here, the only place in this feature that cares about the
   // difference.
   geometry: [number, number][] | null;
+  // Bump to force an immediate, un-animated bounds re-fit — see FitBounds.
+  refitTrigger?: number;
 }) {
   const polylinePositions: [number, number][] | undefined = geometry?.map(([lng, lat]) => [lat, lng]);
   const mapRef = useRef<L.Map | null>(null);
@@ -128,6 +170,7 @@ export function RouteMap({
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <FitBounds pabrik={pabrik} stops={stops} routePoints={polylinePositions} refitTrigger={refitTrigger} />
         <MapZoomControl className="top-2 left-2" />
         <Marker position={[pabrik.latitude, pabrik.longitude]} icon={pabrikIcon} />
         {stops.map((s, i) => (
