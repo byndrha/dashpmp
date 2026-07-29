@@ -87,29 +87,47 @@ export function ArmadaFormDialog({
   const [status, setStatus] = useState<ArmadaStatus>(initial.status);
   const [jenisBBM, setJenisBBM] = useState<FuelType | null>(initial.jenisBBM);
   const [expeditionDetailId, setExpeditionDetailId] = useState<string | null>(initial.expeditionDetailId);
+  // The actual upload is deferred until "Simpan" (see handleSubmit) instead
+  // of firing on file-select — picking a photo then cancelling the dialog
+  // used to POST it to /api/upload/armada-foto immediately, leaving an
+  // orphaned file in public/uploads/armada/ with no ArmadaID ever
+  // referencing it. selectedFile/previewUrl hold the pick locally until a
+  // real save happens.
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
     setUploadError(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload/armada-foto", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah foto");
-      setFotoPath(data.path);
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Gagal mengunggah foto");
-    } finally {
-      setUploading(false);
-    }
+    setSelectedFile(file);
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
   }
 
-  function handleSubmit(formData: FormData) {
+  async function handleSubmit(formData: FormData) {
+    let savedFotoPath = fotoPath;
+    if (selectedFile) {
+      setUploading(true);
+      setUploadError(null);
+      try {
+        const uploadData = new FormData();
+        uploadData.append("file", selectedFile);
+        const res = await fetch("/api/upload/armada-foto", { method: "POST", body: uploadData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah foto");
+        savedFotoPath = data.path;
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : "Gagal mengunggah foto");
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
     onSubmit({
       nama: String(formData.get("nama") ?? ""),
       platNomor: String(formData.get("platNomor") ?? "") || null,
@@ -118,7 +136,7 @@ export function ArmadaFormDialog({
       konsumsiBBM: formData.get("konsumsiBBM") ? Number(formData.get("konsumsiBBM")) : null,
       kapasitasMaks: formData.get("kapasitasMaks") ? Number(formData.get("kapasitasMaks")) : null,
       status,
-      fotoPath,
+      fotoPath: savedFotoPath,
       jenisBBM,
       biayaBBMPerLiter: formData.get("biayaBBMPerLiter") ? Number(formData.get("biayaBBMPerLiter")) : null,
       pajakLimaTahunan: String(formData.get("pajakLimaTahunan") ?? "") || null,
@@ -137,6 +155,11 @@ export function ArmadaFormDialog({
           setStatus(initial.status);
           setJenisBBM(initial.jenisBBM);
           setExpeditionDetailId(initial.expeditionDetailId);
+          setSelectedFile(null);
+          setPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return null;
+          });
           setUploadError(null);
         }
       }}
@@ -284,17 +307,19 @@ export function ArmadaFormDialog({
               onChange={handleFileChange}
               disabled={uploading}
             />
-            {uploading && <p className="text-xs text-muted-foreground">Mengunggah...</p>}
+            {selectedFile && !uploading && (
+              <p className="text-xs text-muted-foreground">Foto baru dipilih — diunggah saat &quot;Simpan&quot; ditekan.</p>
+            )}
             {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
-            {fotoPath && !uploading && (
+            {(previewUrl ?? fotoPath) && !uploading && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={fotoPath} alt="Pratinjau foto armada" className="h-24 w-24 rounded-lg object-cover" />
+              <img src={previewUrl ?? fotoPath ?? undefined} alt="Pratinjau foto armada" className="h-24 w-24 rounded-lg object-cover" />
             )}
           </div>
           {error && <p className="col-span-2 text-xs text-destructive">{error}</p>}
           <DialogFooter className="col-span-2">
             <Button type="submit" disabled={pending || uploading} className="ml-auto">
-              {pending ? "Menyimpan..." : "Simpan"}
+              {uploading ? "Mengunggah..." : pending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
         </form>

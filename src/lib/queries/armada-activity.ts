@@ -55,6 +55,31 @@ export async function createArmadaActivity(input: CreateArmadaActivityInput): Pr
   return (result.recordset[0] as { ActivityID: number }).ActivityID;
 }
 
+export interface UpdateArmadaActivityInput {
+  activityType: ArmadaActivityType;
+  startTime: Date;
+  endTime: Date;
+  notes: string | null;
+}
+
+export async function updateArmadaActivity(activityId: number, input: UpdateArmadaActivityInput): Promise<void> {
+  if (input.endTime <= input.startTime) {
+    throw new Error("Jam selesai harus setelah jam mulai.");
+  }
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("activityId", sql.Int, activityId)
+    .input("activityType", sql.VarChar(20), input.activityType)
+    .input("startTime", sql.DateTime, input.startTime)
+    .input("endTime", sql.DateTime, input.endTime)
+    .input("notes", sql.VarChar(255), input.notes).query(`
+      UPDATE DashboardArmadaActivity
+      SET ActivityType = @activityType, StartTime = @startTime, EndTime = @endTime, Notes = @notes, ModifiedDate = GETDATE()
+      WHERE ActivityID = @activityId AND IsDeleted = 0
+    `);
+}
+
 export async function deleteArmadaActivity(activityId: number): Promise<void> {
   const pool = await getPool();
   await pool

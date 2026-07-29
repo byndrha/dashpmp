@@ -358,10 +358,19 @@ export function RouteValidationDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await updateJadwalDriverTimeAction(jadwalId, {
+        const resultId = await updateJadwalDriverTimeAction(jadwalId, {
           jamJadwal: resolveBusinessDateTime(businessDate, time),
           salesmanId: driverId || null,
         });
+        // The new time landed inside another Draft's estimated busy window
+        // for the same armada — this Jadwal got folded into that one
+        // instead (see updateJadwalDriverTime), so there's nothing left
+        // under jadwalId to keep showing here.
+        if (resultId !== jadwalId) {
+          toast.success(`Digabung dengan keberangkatan lain di jam yang sama untuk armada ini.`);
+          onDeleted?.();
+          onOpenChange(false);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menyimpan driver/waktu.");
       }
@@ -428,10 +437,22 @@ export function RouteValidationDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await updateJadwalDriverTimeAction(jadwalId, {
+        const resultId = await updateJadwalDriverTimeAction(jadwalId, {
           jamJadwal: resolveBusinessDateTime(businessDate, time),
           salesmanId: driverId || null,
         });
+        // If the just-edited time now overlaps another Draft for this
+        // armada, it got merged into that one instead (see
+        // updateJadwalDriverTime) — jadwalId no longer exists, so
+        // departing on it would fail. Stop here and send the user back to
+        // the board to reopen the now-combined Jadwal and review it (its
+        // stop list just changed) before actually departing.
+        if (resultId !== jadwalId) {
+          toast.success("Waktu ini tumpang tindih dengan keberangkatan lain untuk armada ini — sudah digabung. Buka kembali untuk melanjutkan keberangkatan.");
+          onDeleted?.();
+          onOpenChange(false);
+          return;
+        }
         await startBerangkatAction(jadwalId);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal memproses keberangkatan.");

@@ -22,9 +22,11 @@ import {
 import {
   getArmadaActivities,
   createArmadaActivity,
+  updateArmadaActivity,
   deleteArmadaActivity,
   type ArmadaActivity,
   type ArmadaActivityType,
+  type UpdateArmadaActivityInput,
 } from "@/lib/queries/armada-activity";
 import { getDriverProfiles, saveDriverProfile, type DriverProfileRow, type SaveDriverProfileInput } from "@/lib/queries/driver-profile";
 
@@ -74,12 +76,17 @@ export async function updateJadwalUrutanAction(jadwalId: number, orderedDetailId
   revalidatePath("/delivery");
 }
 
+// Returns the JadwalID actually holding the data afterwards — may differ
+// from the one passed in if the new time merged this Jadwal into another
+// Draft (see updateJadwalDriverTime's own comment). Callers must check this
+// before chaining any further action onto the original jadwalId.
 export async function updateJadwalDriverTimeAction(
   jadwalId: number,
   input: { jamJadwal: Date; salesmanId: string | null }
-): Promise<void> {
-  await updateJadwalDriverTime(jadwalId, input);
+): Promise<number> {
+  const resultId = await updateJadwalDriverTime(jadwalId, input);
   revalidatePath("/delivery");
+  return resultId;
 }
 
 // Returns an ISO string (not a Date) — kept as plain serializable data
@@ -135,6 +142,12 @@ export async function createArmadaActivityAction(input: {
   const id = await createArmadaActivity({ ...input, createdByUserId: String(session.user.id) });
   revalidatePath("/delivery");
   return id;
+}
+
+export async function updateArmadaActivityAction(activityId: number, input: UpdateArmadaActivityInput): Promise<void> {
+  await requireModuleAccess("delivery");
+  await updateArmadaActivity(activityId, input);
+  revalidatePath("/delivery");
 }
 
 export async function deleteArmadaActivityAction(activityId: number): Promise<void> {

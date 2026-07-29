@@ -38,6 +38,7 @@ import {
   updateJadwalDriverTimeAction,
   updateArmadaAction,
   createArmadaActivityAction,
+  updateArmadaActivityAction,
   deleteArmadaActivityAction,
   mergeExternalDeliveriesAction,
   getMaxSalesOrderTransDateForDeliveriesAction,
@@ -440,29 +441,29 @@ const ACTIVITY_COLOR: Record<ArmadaActivityType, string> = {
 };
 
 // Manually-logged, non-delivery armada states (Perawatan/Pencucian/Isi
-// BBM/Menganggur) — clickable only to delete (confirm-and-remove), no
-// drag/edit-in-place for v1 since these are simple fixed blocks a
-// dispatcher logs after the fact, not something that needs rescheduling
-// the way a Pengiriman draft does.
+// BBM/Menganggur) — clicking opens ArmadaActivityFormDialog pre-filled for
+// editing (type/time/notes) or deleting, instead of the old v1 behavior of
+// an instant delete-confirm on click. No drag-to-reschedule still, since
+// these remain simple fixed blocks a dispatcher logs after the fact, not
+// something that needs the Pengiriman draft's kind of rescheduling.
 function ArmadaActivityCard({
   activity,
   hourWidth,
   width,
   top,
-  onDelete,
+  onEdit,
 }: {
   activity: ArmadaActivity;
   hourWidth: number;
   width: number;
   top: number;
-  onDelete: (activityId: number) => void;
+  onEdit: (activity: ArmadaActivity) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => {
-        if (confirm(`Hapus aktivitas ${ARMADA_ACTIVITY_LABEL[activity.ActivityType]}?`)) onDelete(activity.ActivityID);
-      }}
+      onClick={() => onEdit(activity)}
+      title="Klik untuk mengedit atau menghapus"
       className={cn(
         "absolute flex flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1 text-left text-[9px]",
         ACTIVITY_COLOR[activity.ActivityType]
@@ -580,11 +581,16 @@ function ArmadaActivityFormDialog({
   onOpenChange,
   armadaId,
   businessDate,
+  editing,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   armadaId: number | null;
   businessDate: string;
+  // Non-null puts the dialog in edit mode (pre-filled from this activity,
+  // Simpan updates it in place, and a Hapus button appears) instead of
+  // create mode.
+  editing: ArmadaActivity | null;
 }) {
   const [activityType, setActivityType] = useState<ArmadaActivityType>("Perawatan");
   const [startTime, setStartTime] = useState("08:00");
@@ -595,31 +601,64 @@ function ArmadaActivityFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    // Resets the form on each open — not derivable from render since these
-    // are user-editable fields with no server-sourced initial value.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActivityType("Perawatan");
-    setStartTime("08:00");
-    setEndTime("10:00");
-    setNotes("");
+    // Pre-fills from the activity being edited, or resets to blank
+    // create-mode defaults — not derivable from render since these are
+    // user-editable fields with no other server-sourced initial value.
+    if (editing) {
+      const s = new Date(editing.StartTime);
+      const e = new Date(editing.EndTime);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActivityType(editing.ActivityType);
+      setStartTime(`${String(s.getHours()).padStart(2, "0")}:${String(s.getMinutes()).padStart(2, "0")}`);
+      setEndTime(`${String(e.getHours()).padStart(2, "0")}:${String(e.getMinutes()).padStart(2, "0")}`);
+      setNotes(editing.Notes ?? "");
+    } else {
+      setActivityType("Perawatan");
+      setStartTime("08:00");
+      setEndTime("10:00");
+      setNotes("");
+    }
     setError(null);
-  }, [open]);
+  }, [open, editing]);
 
   function handleSubmit() {
     if (armadaId == null) return;
     setError(null);
     startTransition(async () => {
       try {
-        await createArmadaActivityAction({
-          armadaId,
-          activityType,
-          startTime: resolveBusinessDateTime(businessDate, startTime),
-          endTime: resolveBusinessDateTime(businessDate, endTime),
-          notes: notes.trim() || null,
-        });
+        if (editing) {
+          await updateArmadaActivityAction(editing.ActivityID, {
+            activityType,
+            startTime: resolveBusinessDateTime(businessDate, startTime),
+            endTime: resolveBusinessDateTime(businessDate, endTime),
+            notes: notes.trim() || null,
+          });
+        } else {
+          await createArmadaActivityAction({
+            armadaId,
+            activityType,
+            startTime: resolveBusinessDateTime(businessDate, startTime),
+            endTime: resolveBusinessDateTime(businessDate, endTime),
+            notes: notes.trim() || null,
+          });
+        }
         onOpenChange(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menyimpan aktivitas.");
+      }
+    });
+  }
+
+  function handleDelete() {
+    if (!editing) return;
+    if (!confirm(`Hapus aktivitas ${ARMADA_ACTIVITY_LABEL[editing.ActivityType]}?`)) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await deleteArmadaActivityAction(editing.ActivityID);
+        onOpenChange(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menghapus aktivitas.");
       }
     });
   }
@@ -628,7 +667,7 @@ function ArmadaActivityFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Aktivitas Armada</DialogTitle>
+          <DialogTitle>{editing ? "Edit Aktivitas Armada" : "Aktivitas Armada"}</DialogTitle>
           <DialogDescription>
             Catat kondisi armada di luar pengiriman — Perawatan, Pencucian, Isi BBM, atau Menganggur.
           </DialogDescription>
@@ -653,7 +692,12 @@ function ArmadaActivityFormDialog({
           <Input placeholder="Catatan (opsional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
-        <DialogFooter>
+        <DialogFooter className={editing ? "sm:justify-between" : undefined}>
+          {editing && (
+            <Button type="button" variant="outline" className="text-destructive" disabled={pending} onClick={handleDelete}>
+              Hapus
+            </Button>
+          )}
           <Button disabled={pending} onClick={handleSubmit}>
             {pending ? "Menyimpan..." : "Simpan"}
           </Button>
@@ -681,7 +725,7 @@ function ArmadaRowBoard({
   onCardClick,
   onCreateClick,
   onCreateActivityClick,
-  onDeleteActivity,
+  onEditActivity,
   expeditionOptions,
 }: {
   armada: ArmadaRow;
@@ -694,7 +738,7 @@ function ArmadaRowBoard({
   onCardClick: (jadwalId: number) => void;
   onCreateClick: (armadaId: number) => void;
   onCreateActivityClick: (armadaId: number) => void;
-  onDeleteActivity: (activityId: number) => void;
+  onEditActivity: (activity: ArmadaActivity) => void;
   expeditionOptions: ExpeditionVehicleOption[];
 }) {
   const [selectedExternal, setSelectedExternal] = useState<Set<string>>(new Set());
@@ -1023,7 +1067,7 @@ function ArmadaRowBoard({
             hourWidth={hourWidth}
             width={Math.max(MIN_AUTO_WIDTH, durationHours(a.StartTime, a.EndTime) * hourWidth)}
             top={ROW_TOP_PADDING + (laneOf.get(`a-${a.ActivityID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
-            onDelete={onDeleteActivity}
+            onEdit={onEditActivity}
           />
         ))}
         {autoSegments.map((s) => (
@@ -1111,21 +1155,12 @@ export function PengirimanBoard({
   const [detailJadwalId, setDetailJadwalId] = useState<number | null>(null);
   const [createArmadaId, setCreateArmadaId] = useState<number | null>(null);
   const [createActivityArmadaId, setCreateActivityArmadaId] = useState<number | null>(null);
+  const [editingActivity, setEditingActivity] = useState<ArmadaActivity | null>(null);
   const [editingSalesOrder, setEditingSalesOrder] = useState<UbahPemesananTarget | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
   const dayWidth = hourWidth * 24;
-
-  function handleDeleteActivity(activityId: number) {
-    startTransition(async () => {
-      try {
-        await deleteArmadaActivityAction(activityId);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menghapus aktivitas.");
-      }
-    });
-  }
 
   const jadwalByArmada = useMemo(() => {
     const map = new Map<number, JadwalCardData[]>();
@@ -1324,7 +1359,7 @@ export function PengirimanBoard({
                     onCardClick={setDetailJadwalId}
                     onCreateClick={setCreateArmadaId}
                     onCreateActivityClick={setCreateActivityArmadaId}
-                    onDeleteActivity={handleDeleteActivity}
+                    onEditActivity={setEditingActivity}
                     expeditionOptions={expeditionOptions}
                   />
                 ))}
@@ -1369,10 +1404,16 @@ export function PengirimanBoard({
         kapasitasMaks={createArmada?.KapasitasMaks ?? null}
       />
       <ArmadaActivityFormDialog
-        open={createActivityArmadaId != null}
-        onOpenChange={(open) => !open && setCreateActivityArmadaId(null)}
-        armadaId={createActivityArmadaId}
+        open={createActivityArmadaId != null || editingActivity != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateActivityArmadaId(null);
+            setEditingActivity(null);
+          }
+        }}
+        armadaId={editingActivity ? editingActivity.ArmadaID : createActivityArmadaId}
         businessDate={businessDate}
+        editing={editingActivity}
       />
       <UbahPemesananDialog
         target={editingSalesOrder}

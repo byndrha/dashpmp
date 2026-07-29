@@ -491,7 +491,15 @@ async function estimateBusyMinutes(
     if (loc) travelStops.push({ lat: loc.lat, lng: loc.lng });
   }
   const travelMinutes = realTravelMinutes ?? estimateTravelMinutes(pabrik, travelStops);
-  return bongkarMinutes + travelMinutes;
+  // Floored to at least 1 minute whenever there's at least one stop: a
+  // SalesOrder with a 0-qty detail line (seen live on a handful of old
+  // "Retail / Direct Sales" adjustment orders) would otherwise produce an
+  // exactly-zero-width window, which the overlap check's strict `<`
+  // comparison (findOverlappingJadwalForArmada) never flags as conflicting
+  // with anything — not even another Jadwal starting at that exact same
+  // instant. A departure always occupies at least a moment of the armada's
+  // time, degenerate cargo or not.
+  return Math.max(1, bongkarMinutes + travelMinutes);
 }
 
 interface JadwalBusyWindow {
@@ -532,17 +540,21 @@ async function findOverlappingJadwalForArmada(
   pabrik: LatLng,
   armadaId: number,
   candidateStart: Date,
-  candidateEnd: Date
+  candidateEnd: Date,
+  excludeJadwalId: number | null
 ): Promise<JadwalBusyWindow | null> {
   const dayMs = 24 * 60 * 60 * 1000;
-  const result = await pool
+  const request = pool
     .request()
     .input("armadaId", sql.Int, armadaId)
     .input("from", sql.DateTime, new Date(candidateStart.getTime() - dayMs))
-    .input("to", sql.DateTime, new Date(candidateStart.getTime() + dayMs)).query(`
+    .input("to", sql.DateTime, new Date(candidateStart.getTime() + dayMs));
+  if (excludeJadwalId != null) request.input("excludeJadwalId", sql.Int, excludeJadwalId);
+  const result = await request.query(`
       SELECT JadwalID FROM DashboardPengirimanJadwal
       WHERE ArmadaID = @armadaId AND IsDeleted = 0 AND Status IN ('Draft', 'Terbit')
         AND JamJadwal >= @from AND JamJadwal <= @to
+        ${excludeJadwalId != null ? "AND JadwalID <> @excludeJadwalId" : ""}
       ORDER BY JamJadwal
     `);
   for (const row of result.recordset as { JadwalID: number }[]) {
@@ -552,6 +564,117 @@ async function findOverlappingJadwalForArmada(
     }
   }
   return null;
+}
+
+// Moves every JadwalDetail row from `sourceJadwalId` onto `targetJadwalId`
+// (continuing target's own Urutan) and soft-deletes the now-empty source
+// header — used when updateJadwalDriverTime retimes a Draft into another
+// Draft's estimated busy window (see findOverlappingJadwalForArmada). Rows
+// keep their own JadwalDetailID and DeliveryOrderID untouched (only JadwalID
+// + Urutan change), so a source Draft that was itself backfilled from real
+// ERP DOs (mergeExternalDeliveriesIntoJadwal) carries its real
+// DeliveryOrderID across the merge correctly.
+async function mergeJadwalInto(pool: sql.ConnectionPool, sourceJadwalId: number, targetJadwalId: number): Promise<void> {
+  const targetHeader = await pool
+    .request()
+    .input("jadwalId", sql.Int, targetJadwalId)
+    .query(`SELECT ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const targetRow = targetHeader.recordset[0] as { ArmadaID: number; JamJadwal: Date } | undefined;
+  if (!targetRow) throw new Error("Keberangkatan tujuan penggabungan tidak ditemukan.");
+
+  const sourceDetails = await pool
+    .request()
+    .input("jadwalId", sql.Int, sourceJadwalId)
+    .query(`SELECT JadwalDetailID, SalesOrderID FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0 ORDER BY Urutan`);
+  const sourceRows = sourceDetails.recordset as { JadwalDetailID: number; SalesOrderID: string }[];
+  if (sourceRows.length === 0) return;
+
+  await assertJamJadwalNotBeforeOrders(
+    pool,
+    sourceRows.map((r) => r.SalesOrderID),
+    targetRow.JamJadwal
+  );
+
+  const existing = await pool
+    .request()
+    .input("jadwalId", sql.Int, targetJadwalId)
+    .query(`SELECT SalesOrderID, Urutan FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const existingRows = existing.recordset as { SalesOrderID: string; Urutan: number }[];
+  const maxUrutan = existingRows.reduce((max, r) => Math.max(max, r.Urutan), -1);
+
+  const totalQty = await sumSalesOrderQty(pool, [...existingRows.map((r) => r.SalesOrderID), ...sourceRows.map((r) => r.SalesOrderID)]);
+  await assertWithinCapacity(pool, targetRow.ArmadaID, totalQty);
+
+  for (let i = 0; i < sourceRows.length; i++) {
+    await pool
+      .request()
+      .input("detailId", sql.Int, sourceRows[i].JadwalDetailID)
+      .input("targetJadwalId", sql.Int, targetJadwalId)
+      .input("urutan", sql.Int, maxUrutan + 1 + i)
+      .query(`UPDATE DashboardPengirimanJadwalDetail SET JadwalID = @targetJadwalId, Urutan = @urutan WHERE JadwalDetailID = @detailId`);
+  }
+
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, sourceJadwalId)
+    .query(`UPDATE DashboardPengirimanJadwal SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+}
+
+// Appends fresh JadwalDetail rows (each optionally carrying an already-real
+// DeliveryOrderID) onto an existing Draft — the mergeExternalDeliveriesIntoJadwal
+// counterpart to mergeJadwalInto above: there the rows already exist and get
+// moved, here they don't exist yet and get inserted. Kept separate from
+// addSalesOrdersToJadwal (which always inserts DeliveryOrderID = NULL) since
+// external DOs already have a real one that must be preserved.
+async function appendRowsToDraft(
+  pool: sql.ConnectionPool,
+  targetJadwalId: number,
+  rows: { salesOrderId: string; deliveryOrderId: string | null }[]
+): Promise<void> {
+  const header = await pool
+    .request()
+    .input("jadwalId", sql.Int, targetJadwalId)
+    .query(`SELECT ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const headerRow = header.recordset[0] as { ArmadaID: number; JamJadwal: Date } | undefined;
+  if (!headerRow) throw new Error("Keberangkatan tujuan penggabungan tidak ditemukan.");
+
+  const newSalesOrderIds = rows.map((r) => r.salesOrderId);
+  await assertJamJadwalNotBeforeOrders(pool, newSalesOrderIds, headerRow.JamJadwal);
+
+  const existing = await pool
+    .request()
+    .input("jadwalId", sql.Int, targetJadwalId)
+    .query(`SELECT SalesOrderID, Urutan FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const existingRows = existing.recordset as { SalesOrderID: string; Urutan: number }[];
+  const maxUrutan = existingRows.reduce((max, r) => Math.max(max, r.Urutan), -1);
+
+  const totalQty = await sumSalesOrderQty(pool, [...existingRows.map((r) => r.SalesOrderID), ...newSalesOrderIds]);
+  await assertWithinCapacity(pool, headerRow.ArmadaID, totalQty);
+
+  await insertJadwalDetailRows(pool, targetJadwalId, rows, maxUrutan + 1);
+}
+
+// Shared insert loop for JadwalDetail rows that already know their
+// DeliveryOrderID (or explicitly have none) — used both when
+// mergeExternalDeliveriesIntoJadwal creates a brand new Draft and when it
+// appends onto an existing one (appendRowsToDraft above).
+async function insertJadwalDetailRows(
+  pool: sql.ConnectionPool,
+  jadwalId: number,
+  rows: { salesOrderId: string; deliveryOrderId: string | null }[],
+  startUrutan: number
+): Promise<void> {
+  for (let i = 0; i < rows.length; i++) {
+    await pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId)
+      .input("soId", sql.VarChar(16), rows[i].salesOrderId)
+      .input("doId", sql.VarChar(16), rows[i].deliveryOrderId)
+      .input("urutan", sql.Int, startUrutan + i).query(`
+        INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, SalesOrderID, DeliveryOrderID, Urutan, IsDeleted)
+        VALUES (@jadwalId, @soId, @doId, @urutan, 0)
+      `);
+  }
 }
 
 // Finds a still-open Draft already scheduled for the exact same Armada +
@@ -596,7 +719,7 @@ export async function createJadwalDraft(input: {
   const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
   const candidateMinutes = await estimateBusyMinutes(pool, pabrikLatLng, input.salesOrderIds, null);
   const candidateEnd = new Date(input.jamJadwal.getTime() + candidateMinutes * 60 * 1000);
-  const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, input.armadaId, input.jamJadwal, candidateEnd);
+  const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, input.armadaId, input.jamJadwal, candidateEnd, null);
   if (conflict) {
     if (conflict.status === "Terbit") {
       throw new Error(
@@ -718,6 +841,35 @@ export async function mergeExternalDeliveriesIntoJadwal(
     jamJadwal
   );
 
+  // Same armada-overlap rule as createJadwalDraft (see there for the full
+  // rationale) — a backfilled Draft from real ERP DOs is still a Jadwal
+  // like any other, so it can't sit on top of an existing one for the same
+  // armada either. Appends onto the conflicting Draft (appendRowsToDraft)
+  // instead of creating a header at all when that's the outcome.
+  const pabrikLocation = await getPabrikLocation();
+  const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
+  const candidateMinutes = await estimateBusyMinutes(
+    pool,
+    pabrikLatLng,
+    doRows.map((r) => r.SalesOrderID),
+    null
+  );
+  const candidateEnd = new Date(jamJadwal.getTime() + candidateMinutes * 60 * 1000);
+  const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, armadaId, jamJadwal, candidateEnd, null);
+  if (conflict) {
+    if (conflict.status === "Terbit") {
+      throw new Error(
+        `Armada ini diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa menggabungkan DO ke keberangkatan baru yang tumpang tindih waktunya.`
+      );
+    }
+    await appendRowsToDraft(
+      pool,
+      conflict.jadwalId,
+      doRows.map((r) => ({ salesOrderId: r.SalesOrderID, deliveryOrderId: r.DeliveryOrderID }))
+    );
+    return conflict.jadwalId;
+  }
+
   const result = await pool
     .request()
     .input("armadaId", sql.Int, armadaId)
@@ -729,18 +881,12 @@ export async function mergeExternalDeliveriesIntoJadwal(
   const jadwalId = (result.recordset[0] as { JadwalID: number }).JadwalID;
 
   try {
-    for (let i = 0; i < doRows.length; i++) {
-      await pool
-        .request()
-        .input("jadwalId", sql.Int, jadwalId)
-        .input("soId", sql.VarChar(16), doRows[i].SalesOrderID)
-        .input("doId", sql.VarChar(16), doRows[i].DeliveryOrderID)
-        .input("urutan", sql.Int, i)
-        .query(`
-          INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, SalesOrderID, DeliveryOrderID, Urutan, IsDeleted)
-          VALUES (@jadwalId, @soId, @doId, @urutan, 0)
-        `);
-    }
+    await insertJadwalDetailRows(
+      pool,
+      jadwalId,
+      doRows.map((r) => ({ salesOrderId: r.SalesOrderID, deliveryOrderId: r.DeliveryOrderID })),
+      0
+    );
   } catch (err) {
     await pool
       .request()
@@ -850,16 +996,22 @@ export async function updateJadwalUrutan(jadwalId: number, orderedDetailIds: num
 // correction/cancellation flow for an already-released DO, so this
 // function simply refuses outright rather than silently cascading changes
 // onto live documents the way it used to.
+// Returns the JadwalID that now holds this data — normally the same
+// jadwalId passed in, but if the new jamJadwal lands inside another Draft's
+// estimated busy window for the same armada, this Jadwal gets merged into
+// that one instead (see mergeJadwalInto) and the OTHER id comes back.
+// Callers that chain more calls onto jadwalId afterwards (handleBerangkat)
+// must use the returned id, not the one they passed in.
 export async function updateJadwalDriverTime(
   jadwalId: number,
   input: { jamJadwal: Date; salesmanId: string | null }
-): Promise<void> {
+): Promise<number> {
   const pool = await getPool();
   const current = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
-    .query(`SELECT Status, ArmadaID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
-  const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number } | undefined;
+    .query(`SELECT Status, ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number; JamJadwal: Date } | undefined;
   if (!row) throw new Error("Keberangkatan tidak ditemukan.");
   if (row.Status === "Terbit") throw new Error("Keberangkatan ini sudah rilis — tidak bisa diubah lagi.");
 
@@ -870,12 +1022,38 @@ export async function updateJadwalDriverTime(
   const bundledSalesOrderIds = (detailResult.recordset as { SalesOrderID: string }[]).map((r) => r.SalesOrderID);
   await assertJamJadwalNotBeforeOrders(pool, bundledSalesOrderIds, input.jamJadwal);
 
+  // Only re-check the armada-overlap rule when the departure time is
+  // actually moving — an unchanged time can't newly create an overlap that
+  // wasn't already there (createJadwalDraft/mergeExternalDeliveriesIntoJadwal
+  // already prevent one from existing in the first place), and this same
+  // function also runs as a save-before-departing guard (handleBerangkat)
+  // where the time is normally unchanged — skipping the check there avoids
+  // a spurious self-lookup on every single departure.
+  if (input.jamJadwal.getTime() !== row.JamJadwal.getTime()) {
+    const pabrikLocation = await getPabrikLocation();
+    const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
+    const candidateMinutes = await estimateBusyMinutes(pool, pabrikLatLng, bundledSalesOrderIds, null);
+    const candidateEnd = new Date(input.jamJadwal.getTime() + candidateMinutes * 60 * 1000);
+    const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, row.ArmadaID, input.jamJadwal, candidateEnd, jadwalId);
+    if (conflict) {
+      if (conflict.status === "Terbit") {
+        throw new Error(
+          `Waktu baru ini tumpang tindih dengan armada yang diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa diubah ke waktu tersebut.`
+        );
+      }
+      await mergeJadwalInto(pool, jadwalId, conflict.jadwalId);
+      return conflict.jadwalId;
+    }
+  }
+
   await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .input("jamJadwal", sql.DateTime, input.jamJadwal)
     .input("salesmanId", sql.VarChar(16), input.salesmanId)
     .query(`UPDATE DashboardPengirimanJadwal SET JamJadwal = @jamJadwal, SalesmanID = @salesmanId, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+
+  return jadwalId;
 }
 
 export async function startMuat(jadwalId: number): Promise<void> {
