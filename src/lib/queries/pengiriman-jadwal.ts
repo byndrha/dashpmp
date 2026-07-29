@@ -1056,6 +1056,73 @@ export async function updateJadwalDriverTime(
   return jadwalId;
 }
 
+// Reassigns a Draft Jadwal to a different Armada — Papan Pengiriman's
+// drag-and-drop-between-rows feature. jamJadwal is optional since a drag
+// can move purely vertically (armada only, time unchanged) or diagonally
+// (armada + time together in one drop); omitted, the existing JamJadwal
+// carries over unchanged. Same overlap rule as the other write paths
+// applies, but against the TARGET armada: a resulting window that lands
+// inside an existing Draft there merges into it (mergeJadwalInto);
+// overlapping a Terbit Jadwal on the target armada blocks the move
+// outright. Returns the JadwalID that now holds the data — may differ
+// from the one passed in if merged, same convention as
+// updateJadwalDriverTime.
+export async function updateJadwalArmada(jadwalId: number, newArmadaId: number, jamJadwal?: Date): Promise<number> {
+  const pool = await getPool();
+  const current = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT Status, ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number; JamJadwal: Date } | undefined;
+  if (!row) throw new Error("Keberangkatan tidak ditemukan.");
+  if (row.Status === "Terbit") throw new Error("Keberangkatan ini sudah rilis — tidak bisa diubah lagi.");
+
+  const finalJamJadwal = jamJadwal ?? row.JamJadwal;
+  if (row.ArmadaID === newArmadaId && finalJamJadwal.getTime() === row.JamJadwal.getTime()) {
+    return jadwalId;
+  }
+
+  const targetArmada = await pool
+    .request()
+    .input("armadaId", sql.Int, newArmadaId)
+    .query(`SELECT ArmadaID FROM DashboardArmada WHERE ArmadaID = @armadaId AND IsDeleted = 0`);
+  if (!targetArmada.recordset[0]) throw new Error("Armada tujuan tidak ditemukan.");
+
+  const detailResult = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT SalesOrderID FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const bundledSalesOrderIds = (detailResult.recordset as { SalesOrderID: string }[]).map((r) => r.SalesOrderID);
+  await assertJamJadwalNotBeforeOrders(pool, bundledSalesOrderIds, finalJamJadwal);
+
+  const totalQty = await sumSalesOrderQty(pool, bundledSalesOrderIds);
+  await assertWithinCapacity(pool, newArmadaId, totalQty);
+
+  const pabrikLocation = await getPabrikLocation();
+  const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
+  const candidateMinutes = await estimateBusyMinutes(pool, pabrikLatLng, bundledSalesOrderIds, null);
+  const candidateEnd = new Date(finalJamJadwal.getTime() + candidateMinutes * 60 * 1000);
+  const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, newArmadaId, finalJamJadwal, candidateEnd, jadwalId);
+  if (conflict) {
+    if (conflict.status === "Terbit") {
+      throw new Error(
+        `Armada tujuan diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa dipindah ke sana pada waktu ini.`
+      );
+    }
+    await mergeJadwalInto(pool, jadwalId, conflict.jadwalId);
+    return conflict.jadwalId;
+  }
+
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .input("armadaId", sql.Int, newArmadaId)
+    .input("jamJadwal", sql.DateTime, finalJamJadwal)
+    .query(`UPDATE DashboardPengirimanJadwal SET ArmadaID = @armadaId, JamJadwal = @jamJadwal, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+
+  return jadwalId;
+}
+
 export async function startMuat(jadwalId: number): Promise<void> {
   const pool = await getPool();
   await pool

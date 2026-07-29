@@ -10,6 +10,7 @@ import {
   removeSalesOrderFromJadwal,
   updateJadwalUrutan,
   updateJadwalDriverTime,
+  updateJadwalArmada,
   startMuat,
   startBerangkat,
   getJadwalDetail,
@@ -85,6 +86,16 @@ export async function updateJadwalDriverTimeAction(
   input: { jamJadwal: Date; salesmanId: string | null }
 ): Promise<number> {
   const resultId = await updateJadwalDriverTime(jadwalId, input);
+  revalidatePath("/delivery");
+  return resultId;
+}
+
+// Papan Pengiriman's drag-and-drop-between-armada-rows feature. Returns
+// the JadwalID actually holding the data afterwards — may differ from the
+// one passed in if the move merged into an existing Draft on the target
+// armada (see updateJadwalArmada's own comment).
+export async function updateJadwalArmadaAction(jadwalId: number, newArmadaId: number, jamJadwal?: Date): Promise<number> {
+  const resultId = await updateJadwalArmada(jadwalId, newArmadaId, jamJadwal);
   revalidatePath("/delivery");
   return resultId;
 }

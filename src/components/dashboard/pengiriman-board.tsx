@@ -1,6 +1,7 @@
 "use client";
 
-import { DndContext, useDraggable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Plus, Wrench, User, Combine } from "lucide-react";
@@ -36,6 +37,7 @@ import {
   createJadwalDraftAction,
   getAvailableSalesOrdersAction,
   updateJadwalDriverTimeAction,
+  updateJadwalArmadaAction,
   updateArmadaAction,
   createArmadaActivityAction,
   updateArmadaActivityAction,
@@ -410,7 +412,11 @@ function DraggableJadwalCard({
         top,
         width: cardWidth,
         height: CARD_HEIGHT,
-        transform: transform ? `translateX(${transform.x}px)` : undefined,
+        // Both axes now (was X-only): dragging vertically into a different
+        // armada's row is how a card gets reassigned (see handleDragEnd /
+        // useDroppable on ArmadaRowBoard) — the card needs to visually
+        // follow the cursor there too, not just slide sideways.
+        transform: CSS.Translate.toString(transform),
       }}
     >
       <div className="flex items-center justify-between gap-1">
@@ -904,6 +910,15 @@ function ArmadaRowBoard({
   const [editPending, startEditTransition] = useTransition();
   const [editError, setEditError] = useState<string | null>(null);
 
+  // Drop target for reassigning a dragged Jadwal card to this armada — see
+  // handleDragEnd in PengirimanBoard, which reads event.over.id back out.
+  // Disabled for a non-"Baik" armada, matching "Aktivitas Armada"/
+  // "Pengiriman Baru" already refusing new dispatch work there.
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: `armada-${armada.ArmadaID}`,
+    disabled: armada.Status !== "Baik",
+  });
+
   function handleUpdateArmada(input: ArmadaInput) {
     setEditError(null);
     startEditTransition(async () => {
@@ -917,7 +932,10 @@ function ArmadaRowBoard({
   }
 
   return (
-    <div className="flex flex-col">
+    <div
+      ref={setDroppableRef}
+      className={cn("flex flex-col rounded-lg transition-colors", isOver && "bg-primary/5 ring-2 ring-primary/40")}
+    >
     <div className="flex items-stretch self-start">
       {/* Whole box opens the edit form — the "+" button below is the one
           exception, since it's its own action (start a new Draft here),
@@ -1223,30 +1241,54 @@ export function PengirimanBoard({
 
   function handleDragEnd(event: DragEndEvent) {
     const jadwalId = event.active.data.current?.jadwalId as number | undefined;
-    if (jadwalId == null || event.delta.x === 0) return;
+    if (jadwalId == null) return;
 
     const current = jadwal.find((j) => j.JadwalID === jadwalId);
     if (!current) return;
 
-    const currentHour = hourFraction(current.JamJadwal); // timeline-relative
-    const deltaHours = event.delta.x / hourWidth;
-    const newTimelineHour = Math.min(23.75, Math.max(0, Math.round((currentHour + deltaHours) * 4) / 4));
-    // Convert back to an actual wall-clock hour before formatting/resolving
-    // the calendar day — hourFraction/newTimelineHour are both relative to
-    // the ROLLOVER_HOUR-based axis, not the real hour of day.
-    const actualHour = (newTimelineHour + ROLLOVER_HOUR) % 24;
-    const hour = Math.floor(actualHour);
-    const minute = Math.round((actualHour - hour) * 60);
-    const newTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    // Which armada row (if any) the card was released over — see the
+    // useDroppable({id: `armada-${ArmadaID}`}) on each ArmadaRowBoard.
+    // Falls back to the card's own current armada when dropped somewhere
+    // that isn't a valid row (e.g. released over the date/hour ruler, or
+    // over a non-"Baik" armada whose droppable is disabled).
+    const overId = event.over?.id;
+    const targetArmadaId =
+      typeof overId === "string" && overId.startsWith("armada-") ? Number(overId.slice("armada-".length)) : current.ArmadaID;
 
-    // Reschedule-by-drag calls the same driver/time update path the
-    // validation dialog uses, keeping only the time — driver stays as-is.
+    let newTime: string | null = null;
+    if (event.delta.x !== 0) {
+      const currentHour = hourFraction(current.JamJadwal); // timeline-relative
+      const deltaHours = event.delta.x / hourWidth;
+      const newTimelineHour = Math.min(23.75, Math.max(0, Math.round((currentHour + deltaHours) * 4) / 4));
+      // Convert back to an actual wall-clock hour before formatting/resolving
+      // the calendar day — hourFraction/newTimelineHour are both relative to
+      // the ROLLOVER_HOUR-based axis, not the real hour of day.
+      const actualHour = (newTimelineHour + ROLLOVER_HOUR) % 24;
+      const hour = Math.floor(actualHour);
+      const minute = Math.round((actualHour - hour) * 60);
+      newTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+
+    if (targetArmadaId === current.ArmadaID && newTime == null) return; // dropped back where it started
+
     startTransition(async () => {
       try {
-        await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: resolveBusinessDateTime(businessDate, newTime),
-          salesmanId: current.SalesmanID,
-        });
+        if (targetArmadaId !== current.ArmadaID) {
+          // Dropped on a different armada's row — reassigns the Jadwal
+          // there, carrying the new time along too if the drag also moved
+          // horizontally (a diagonal drag changes both at once).
+          await updateJadwalArmadaAction(
+            jadwalId,
+            targetArmadaId,
+            newTime != null ? resolveBusinessDateTime(businessDate, newTime) : undefined
+          );
+        } else if (newTime != null) {
+          // Same armada, time-only reschedule-by-drag — driver stays as-is.
+          await updateJadwalDriverTimeAction(jadwalId, {
+            jamJadwal: resolveBusinessDateTime(businessDate, newTime),
+            salesmanId: current.SalesmanID,
+          });
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Gagal mengubah jadwal.");
       }
