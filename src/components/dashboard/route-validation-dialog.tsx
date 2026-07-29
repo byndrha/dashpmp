@@ -5,7 +5,8 @@ import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type D
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer } from "lucide-react";
+import { toast } from "sonner";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer, X, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +31,7 @@ import {
   updateJadwalUrutanAction,
   updateJadwalDriverTimeAction,
   addSalesOrdersToJadwalAction,
+  removeSalesOrderFromJadwalAction,
   getAvailableSalesOrdersAction,
   deleteJadwalDraftAction,
   startMuatAction,
@@ -48,6 +50,7 @@ function SortableStopRow({
   disabled,
   printChecked,
   onTogglePrint,
+  onRemove,
 }: {
   detail: JadwalDetailRow;
   index: number;
@@ -55,6 +58,9 @@ function SortableStopRow({
   disabled: boolean;
   printChecked: boolean;
   onTogglePrint: (deliveryOrderId: string) => void;
+  // Only usable while the Jadwal is still Draft (matches
+  // removeSalesOrderFromJadwal's own guard) — omitted/hidden once Terbit.
+  onRemove?: (detail: JadwalDetailRow) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: detail.JadwalDetailID,
@@ -108,6 +114,16 @@ function SortableStopRow({
           Cetak
         </label>
       )}
+      {onRemove && (
+        <button
+          type="button"
+          title="Keluarkan dari draft"
+          onClick={() => onRemove(detail)}
+          className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -117,6 +133,7 @@ export function RouteValidationDialog({
   businessDate,
   todayISO,
   drivers,
+  armadaNama,
   konsumsiBBM,
   kapasitasMaks,
   jenisBBM,
@@ -129,6 +146,9 @@ export function RouteValidationDialog({
   businessDate: string;
   todayISO: string;
   drivers: DriverOption[];
+  // Display-only, for the Share summary text — same ArmadaRow the caller
+  // already resolved for konsumsiBBM/kapasitasMaks below.
+  armadaNama: string | null;
   // Fuel estimate input — the Armada the open Jadwal belongs to, resolved
   // by the caller (JadwalCard itself doesn't carry KonsumsiBBM, ArmadaRow
   // does).
@@ -329,6 +349,29 @@ export function RouteValidationDialog({
     });
   }
 
+  // Removing the last remaining stop also deletes the now-empty Jadwal
+  // itself (removeSalesOrderFromJadwal's own cleanup) — nothing left to
+  // show, so this closes the dialog the same way "Batalkan Draft" does.
+  function handleRemoveStop(detail: JadwalDetailRow) {
+    if (jadwalId == null) return;
+    if (!confirm(`Keluarkan "${detail.CustomerName}" dari draft ini?`)) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await removeSalesOrderFromJadwalAction(jadwalId, detail.SalesOrderID);
+        if (order.length <= 1) {
+          onDeleted?.();
+          onOpenChange(false);
+          return;
+        }
+        const rows = await getJadwalDetailAction(jadwalId);
+        setOrder(rows);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal mengeluarkan tujuan.");
+      }
+    });
+  }
+
   function handleDeleteDraft() {
     if (jadwalId == null) return;
     setError(null);
@@ -426,6 +469,50 @@ export function RouteValidationDialog({
     return Math.round(totalFuelLiters * biayaBBMPerLiter);
   }, [totalFuelLiters, biayaBBMPerLiter]);
 
+  // Plain-text summary — no public link/token exists for this dialog, so
+  // sharing means handing off a readable recap (e.g. to a WhatsApp group)
+  // rather than a URL. Pulls only from state already loaded here.
+  function buildShareText(): string {
+    if (!jadwal) return "";
+    const lines = [
+      `Validasi Rute — ${armadaNama ?? "Armada"}`,
+      `${formatDate(businessDate)} ${time}${driverId ? ` · ${drivers.find((d) => d.SalesmanID === driverId)?.Name ?? ""}` : ""}`,
+      "",
+      ...order.map((o, i) => `${i + 1}. ${o.CustomerName} — ${o.Wilayah} (${o.Qty} kantong)`),
+      "",
+      `Total: ${totalQty} kantong${totalBonusQty > 0 ? ` (+${totalBonusQty} bonus)` : ""}`,
+    ];
+    if (route) {
+      lines.push(`Rute: ${route.distanceKm.toLocaleString("id-ID")} km · ${route.durationMinutes} menit`);
+    }
+    if (totalFuelLiters != null) {
+      lines.push(`BBM: ${totalFuelLiters.toLocaleString("id-ID")} L${totalFuelCost != null ? ` · ${formatRupiah(totalFuelCost)}` : ""}`);
+    }
+    return lines.join("\n");
+  }
+
+  async function handleShare() {
+    const text = buildShareText();
+    if (!text) return;
+    // navigator.share (mobile/modern browsers) opens the OS share sheet
+    // directly; older/desktop browsers without it fall back to copying the
+    // same text to the clipboard instead.
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Validasi Rute", text });
+      } catch {
+        // User cancelled the share sheet — not an error worth surfacing.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Ringkasan rute disalin ke clipboard.");
+    } catch {
+      toast.error("Gagal menyalin ringkasan rute.");
+    }
+  }
+
   return (
     <Dialog open={jadwalId != null} onOpenChange={onOpenChange}>
       {/* Widened past the base Dialog's sm:max-w-sm — a bare max-w-4xl loses
@@ -437,14 +524,22 @@ export function RouteValidationDialog({
           landscape screen's extra width, unlike a plain form dialog. */}
       <DialogContent className="max-w-lg p-0 sm:max-w-3xl lg:max-w-6xl">
         <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="flex items-center gap-2">
-            Validasi Rute
-            {jadwal && (
-              <Badge variant="outline" className={cn("text-[10px]", isDraft ? "border-dashed" : "border-primary/30 text-primary")}>
-                {jadwal.Status}
-              </Badge>
+          <div className="flex items-center justify-between gap-2 pr-8">
+            <DialogTitle className="flex items-center gap-2">
+              Validasi Rute
+              {jadwal && (
+                <Badge variant="outline" className={cn("text-[10px]", isDraft ? "border-dashed" : "border-primary/30 text-primary")}>
+                  {jadwal.Status}
+                </Badge>
+              )}
+            </DialogTitle>
+            {jadwal && order.length > 0 && (
+              <Button size="sm" variant="outline" className="h-7 shrink-0 gap-1.5 text-xs" onClick={handleShare}>
+                <Share2 className="size-3.5" />
+                Share
+              </Button>
             )}
-          </DialogTitle>
+          </div>
           <DialogDescription>Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum berangkat.</DialogDescription>
         </DialogHeader>
 
@@ -638,6 +733,7 @@ export function RouteValidationDialog({
                         disabled={!isDraft}
                         printChecked={d.DeliveryOrderID != null && printSelected.has(d.DeliveryOrderID)}
                         onTogglePrint={togglePrint}
+                        onRemove={isDraft ? handleRemoveStop : undefined}
                       />
                     ))}
                   </SortableContext>

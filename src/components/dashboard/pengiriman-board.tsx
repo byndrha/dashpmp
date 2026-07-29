@@ -1315,6 +1315,7 @@ export function PengirimanBoard({
         businessDate={businessDate}
         todayISO={todayISO}
         drivers={drivers}
+        armadaNama={openArmada?.Nama ?? null}
         konsumsiBBM={openArmada?.KonsumsiBBM ?? null}
         kapasitasMaks={openArmada?.KapasitasMaks ?? null}
         jenisBBM={openArmada?.JenisBBM ?? null}

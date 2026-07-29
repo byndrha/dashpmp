@@ -7,6 +7,7 @@ import {
   createJadwalDraft,
   deleteJadwalDraft,
   addSalesOrdersToJadwal,
+  removeSalesOrderFromJadwal,
   updateJadwalUrutan,
   updateJadwalDriverTime,
   startMuat,
@@ -59,6 +60,11 @@ export async function deleteJadwalDraftAction(jadwalId: number): Promise<void> {
 
 export async function addSalesOrdersToJadwalAction(jadwalId: number, salesOrderIds: string[]): Promise<void> {
   await addSalesOrdersToJadwal(jadwalId, salesOrderIds);
+  revalidatePath("/delivery");
+}
+
+export async function removeSalesOrderFromJadwalAction(jadwalId: number, salesOrderId: string): Promise<void> {
+  await removeSalesOrderFromJadwal(jadwalId, salesOrderId);
   revalidatePath("/delivery");
 }
 
