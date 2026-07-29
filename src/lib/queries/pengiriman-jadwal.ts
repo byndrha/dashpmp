@@ -188,7 +188,27 @@ export async function getPengirimanBoard(
         LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
         LEFT JOIN DoQty dq ON dq.DeliveryOrderID = do_.DeliveryOrderID
         WHERE do_.IsDeleted = 0
-          AND do_.TransDate >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) AND do_.TransDate < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+          -- Plain WIB-calendar-date match, NOT the 14:00-WIB-rollover window
+          -- used elsewhere in this file (JamJadwal) — deliberately
+          -- different. Every row reaching this query is, by construction,
+          -- desktop-ERP-originated (the NOT EXISTS below excludes anything
+          -- this dashboard itself created), and confirmed live that the
+          -- desktop app writes TransDate as a NAIVE WIB wall-clock value
+          -- (no UTC shift), NOT true UTC like this dashboard's own
+          -- GETDATE()/resolveBusinessDateTime writes. The rollover window
+          -- (originally used here too) was designed for true-UTC values
+          -- AND additionally re-interprets any time-of-day >= 14:00 WIB as
+          -- "belongs to the next business day" — appropriate for a
+          -- dispatcher actively picking a JamJadwal, wrong for an
+          -- already-dated ERP document where the time-of-day is often just
+          -- incidental (e.g. a DO manually dated a day ahead for regulatory
+          -- reasons keeps whatever time-of-day the desktop app auto-filled,
+          -- with no intent to shift days). Confirmed live: DO
+          -- MKE/DO/003707/2026-07/003/001, TransDate '2026-07-30 15:17:39'
+          -- (WIB), was showing under businessDate 2026-07-31 with the old
+          -- window — this plain date match correctly shows it under
+          -- 2026-07-30 instead.
+          AND CAST(do_.TransDate AS DATE) = @businessDate
           -- Excludes any DO already scheduled through this dashboard's own
           -- Jadwal flow, so it renders as a real Jadwal card instead of
           -- being double-counted here as an "external" one.
