@@ -5,6 +5,8 @@ import {
   deleteJadwalDraft,
   updateJadwalDriverTime,
   JADWAL_KANTONG_EXPR,
+  JADWAL_KANTONG_10KG_EXPR,
+  JADWAL_KANTONG_5KG_EXPR,
   getCurrentAssignment,
   removeSalesOrderFromJadwal,
   findDraftJadwalByArmadaAndTime,
@@ -93,6 +95,10 @@ export interface SalesOrderListRow {
   CustomerName: string;
   Wilayah: string;
   Qty: number;
+  // Raw (un-halved) per-kemasan bag counts — see formatKemasanQty in
+  // lib/format.ts.
+  Qty10KG: number;
+  Qty5KG: number;
   Amount: number;
   Status: SalesOrderStatus;
 }
@@ -127,6 +133,8 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
         bp.Name AS CustomerName,
         ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
         ISNULL(sod.TotalQty, 0) AS Qty,
+        ISNULL(sod.TotalQty10KG, 0) AS Qty10KG,
+        ISNULL(sod.TotalQty5KG, 0) AS Qty5KG,
         ISNULL(sod.TotalAmount, 0) AS Amount,
         CASE
           WHEN j.Status IS NOT NULL THEN j.Status
@@ -136,7 +144,9 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     FROM SalesOrder so
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     LEFT JOIN (
-      SELECT SalesOrderID, ${JADWAL_KANTONG_EXPR} AS TotalQty, SUM(Amount) AS TotalAmount
+      SELECT SalesOrderID, ${JADWAL_KANTONG_EXPR} AS TotalQty,
+             ${JADWAL_KANTONG_10KG_EXPR} AS TotalQty10KG, ${JADWAL_KANTONG_5KG_EXPR} AS TotalQty5KG,
+             SUM(Amount) AS TotalAmount
       FROM SalesOrderDetail sod
       GROUP BY SalesOrderID
     ) sod ON sod.SalesOrderID = so.SalesOrderID

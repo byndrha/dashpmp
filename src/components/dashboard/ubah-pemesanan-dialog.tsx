@@ -22,6 +22,7 @@ import {
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
 import { getCurrentAssignmentAction, reschedulePemesananAction } from "@/app/(dashboard)/pemesanan/actions";
+import { formatKemasanQty } from "@/lib/format";
 
 const UNSET = "__unset__";
 
@@ -30,6 +31,10 @@ export interface UbahPemesananTarget {
   customerName: string;
   wilayah: string;
   qty: number;
+  // Raw (un-halved) per-kemasan bag counts — see formatKemasanQty in
+  // lib/format.ts.
+  qty10KG: number;
+  qty5KG: number;
 }
 
 // Controlled by the caller (target === null means closed), same pattern as
@@ -116,7 +121,7 @@ export function UbahPemesananDialog({
             <div className="rounded-lg border bg-muted/30 p-3 text-xs">
               <p className="font-medium">{target.customerName}</p>
               <p className="text-muted-foreground">
-                {target.wilayah} &middot; {target.qty} kantong
+                {target.wilayah} &middot; {formatKemasanQty(target.qty10KG, target.qty5KG)}
               </p>
             </div>
 

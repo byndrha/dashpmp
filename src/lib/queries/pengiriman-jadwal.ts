@@ -11,16 +11,29 @@ import { formatDate, formatTime } from "@/lib/format";
 // yet.
 export const JADWAL_KANTONG_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END)`;
 
-// Bonus kantong (free goods bundled into an order, not billed) piggyback on
-// SalesOrderDetail.Custom1 — confirmed via a live query that this column
-// (a generic POS leftover, alongside Custom2/Custom3/WaiterName) is 100%
-// unused across the whole table (always '' or NULL), so this avoids any
-// schema change to a live ERP table the separate desktop app also reads.
-// Qty itself already includes the bonus (createSalesOrderManual stores
-// ordered+bonus as one number) — this expression exists only so the bonus
-// portion can be called out separately in the UI. Same 5KG-halving and
-// SUM-across-detail-rows shape as JADWAL_KANTONG_EXPR for consistency.
-export const JADWAL_BONUS_QTY_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) / 2.0 ELSE ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) END)`;
+// Bonus kantong (free goods bundled into an order, not billed) now get
+// their own SalesOrderDetail row under a dedicated "Es Tube Bonus"/"Es Tube
+// Bonus 5 KG" ItemID (see BONUS_ITEM_VARIANTS in sales-order.ts) — that
+// row's own (5KG-halved) Qty is entirely bonus. Older orders created before
+// this change instead piggyback the bonus qty on the main row's
+// SalesOrderDetail.Custom1 (a generic POS leftover column, confirmed
+// unused elsewhere) — kept as a fallback so historical orders still show
+// their bonus split correctly. Qty in those older rows already includes
+// the bonus (JADWAL_KANTONG_EXPR sums the raw Qty either way, so total
+// kantong is correct under both schemes without change).
+export const JADWAL_BONUS_QTY_EXPR = `SUM(CASE
+  WHEN sod.Name LIKE '%Bonus%' THEN (CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END)
+  ELSE (CASE WHEN sod.Name LIKE '%5 KG%' THEN ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) / 2.0 ELSE ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) END)
+END)`;
+
+// Raw (un-halved) per-kemasan bag counts — unlike JADWAL_KANTONG_EXPR these
+// are never converted to a 10KG-equivalent, so a reader sees exactly how
+// many 10KG bags and how many 5KG bags without doing the /2 conversion
+// themselves. Same '%5 KG%' name classification as everywhere else in this
+// file (see sales-overview.ts's KemasanQty for the same Qty10KG/Qty5KG
+// shape used elsewhere in the app).
+export const JADWAL_KANTONG_10KG_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN 0 ELSE sod.Qty END)`;
+export const JADWAL_KANTONG_5KG_EXPR = `SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty ELSE 0 END)`;
 
 export type JadwalStatus = "Draft" | "Terbit";
 
@@ -46,6 +59,10 @@ export interface JadwalCard {
   // Perjalanan" / "Kembali ke Pabrik" segments on the board (see
   // computeArmadaTimelineSegments).
   DurasiMenit: number | null;
+  // Sum of each stop's own estimateDeliveryMinutes(qty) — see
+  // delivery-duration.ts. Drives this card's width on the Papan Pengiriman
+  // timeline (a Jadwal with more/bigger stops visually takes longer).
+  EstimasiDurasiMenit: number;
 }
 
 // A real DeliveryOrder created directly in the desktop ERP app (not through
@@ -71,6 +88,35 @@ export async function getPengirimanBoard(
     pool
       .request()
       .input("businessDate", sql.Date, businessDate).query(`
+        -- StopDuration estimates each stop's on-site delivery time from its
+        -- own kantong qty — mirrors estimateDeliveryMinutes in
+        -- delivery-duration.ts exactly (qty<=5: 5 min; 5<qty<=40: 5 + 2.5
+        -- min per 5-kantong block past the first; qty>40: 22.5 min, the
+        -- value at exactly 40, + 10 min per 5-kantong block past 40) — and
+        -- sums it per JadwalID, so a Jadwal's timeline card width reflects
+        -- the total time its stops need. Needs its own per-stop
+        -- (JadwalDetailID) grouping first — applying the formula to the
+        -- Jadwal's already-combined TotalKantong instead would treat e.g.
+        -- two 3-kantong stops as one 6-kantong block.
+        WITH StopQty AS (
+            SELECT jd.JadwalID, jd.JadwalDetailID,
+                   ISNULL(SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END), 0) AS Qty
+            FROM DashboardPengirimanJadwalDetail jd
+            LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+            WHERE jd.IsDeleted = 0
+            GROUP BY jd.JadwalID, jd.JadwalDetailID
+        ),
+        StopDuration AS (
+            SELECT JadwalID,
+                   SUM(CASE
+                     WHEN Qty <= 0 THEN 0
+                     WHEN Qty <= 5 THEN 5
+                     WHEN Qty <= 40 THEN 5 + 2.5 * CEILING((Qty - 5) / 5.0)
+                     ELSE 22.5 + 10 * CEILING((Qty - 40) / 5.0)
+                   END) AS EstimasiDurasiMenit
+            FROM StopQty
+            GROUP BY JadwalID
+        )
         SELECT
             j.JadwalID,
             j.ArmadaID,
@@ -83,11 +129,13 @@ export async function getPengirimanBoard(
             ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS TotalKantong,
             COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop,
             j.JarakKM,
-            j.DurasiMenit
+            j.DurasiMenit,
+            ISNULL(sdur.EstimasiDurasiMenit, 0) AS EstimasiDurasiMenit
         FROM DashboardPengirimanJadwal j
         LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
         LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
         LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+        LEFT JOIN StopDuration sdur ON sdur.JadwalID = j.JadwalID
         WHERE j.IsDeleted = 0
           -- businessDate is a 14:00 WIB rollover label, not a plain calendar
           -- date (see ROLLOVER_HOUR in business-date.ts): it spans 14:00 WIB
@@ -96,7 +144,7 @@ export async function getPengirimanBoard(
           -- midnight-to-midnight day. Kept as WIB->UTC (-7h) on top of that,
           -- same convention as the rest of this file's businessDate filters.
           AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
-        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status, j.JarakKM, j.DurasiMenit
+        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status, j.JarakKM, j.DurasiMenit, sdur.EstimasiDurasiMenit
         ORDER BY j.JamJadwal
       `),
     pool
@@ -156,6 +204,10 @@ export interface JadwalDetailRow {
   Qty: number;
   // Portion of Qty that's free/bonus (not billed) — always <= Qty.
   BonusQty: number;
+  // Raw (un-halved) per-kemasan bag counts — see formatKemasanQty in
+  // lib/format.ts. Qty10KG + Qty5KG/2 == Qty (the 10KG-equivalent total).
+  Qty10KG: number;
+  Qty5KG: number;
   Wilayah: string;
   Kecamatan: string | null;
   Alamat: string | null;
@@ -182,6 +234,8 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
           bp.Name AS CustomerName,
           ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty,
           ISNULL(${JADWAL_BONUS_QTY_EXPR}, 0) AS BonusQty,
+          ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
+          ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG,
           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           bp.NPWPAddress AS Kecamatan,
           bp.Address AS Alamat,
@@ -207,6 +261,10 @@ export interface AvailableSalesOrder {
   CustomerName: string;
   Wilayah: string;
   Qty: number;
+  // Raw (un-halved) per-kemasan bag counts — see formatKemasanQty in
+  // lib/format.ts.
+  Qty10KG: number;
+  Qty5KG: number;
   DueDate: string | Date | null;
 }
 
@@ -238,6 +296,8 @@ export async function getAvailableSalesOrders(businessDate: string): Promise<Ava
           bp.Name AS CustomerName,
           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty,
+          ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
+          ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG,
           so.DueDate
       FROM SalesOrder so
       LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
@@ -386,6 +446,30 @@ export async function createJadwalDraft(input: {
   }
 
   return jadwalId;
+}
+
+// Lets the merge dialog default its departure-time input to a value that's
+// guaranteed to satisfy assertJamJadwalNotBeforeOrders, instead of guessing
+// from a DeliveryOrder's own TransDate (which isn't reliably >= its own
+// SalesOrder's TransDate — confirmed live, ~11% of DO/SO pairs disagree).
+// Caller is expected to ceil-round the result to the next full minute
+// before using it as an "HH:MM" input default, since that validation does a
+// strict `<` compare against the full-precision SalesOrder.TransDate.
+export async function getMaxSalesOrderTransDateForDeliveries(deliveryOrderIds: string[]): Promise<Date | null> {
+  if (deliveryOrderIds.length === 0) return null;
+  const pool = await getPool();
+  const request = pool.request();
+  const placeholders = deliveryOrderIds.map((id, i) => {
+    request.input(`do${i}`, sql.VarChar(16), id);
+    return `@do${i}`;
+  });
+  const result = await request.query(`
+    SELECT MAX(so.TransDate) AS MaxTransDate
+    FROM DeliveryOrder do_
+    JOIN SalesOrder so ON so.SalesOrderID = do_.SalesOrderID
+    WHERE do_.DeliveryOrderID IN (${placeholders.join(",")})
+  `);
+  return (result.recordset[0]?.MaxTransDate as Date | null) ?? null;
 }
 
 // Backfills a real Draft Jadwal from DeliveryOrder rows that already exist

@@ -134,14 +134,26 @@ const KANTONG_VARIANTS: Record<KantongVariant, { itemId: string; name: string; u
   "5kg": { itemId: "0111", name: "Es Tube Jual 5 KG", unit: KANTONG_UNIT },
 };
 
+// Same "Es Tube Bonus" / "Es Tube Bonus 5 KG" items already used elsewhere
+// in the ERP (SalesInvoiceDetail — see sales-overview.ts/sales-cards.ts's
+// kemasan-classification comments) to record free goods as their own line,
+// distinct from the sold item — confirmed live against the Item table.
+// Bonus qty rides in its own SalesOrderDetail row under one of these
+// ItemIDs instead of being folded into the sold row's Qty, so any query
+// that filters/sums by the sold ItemID (KANTONG_ITEM_ID/"0111") naturally
+// excludes it without special-casing.
+const BONUS_ITEM_VARIANTS: Record<KantongVariant, { itemId: string; name: string }> = {
+  "10kg": { itemId: "0110", name: "Es Tube Bonus" },
+  "5kg": { itemId: "0112", name: "Es Tube Bonus 5 KG" },
+};
+
 export interface CreateSalesOrderManualInput {
   businessPartnerId: string;
   variant: KantongVariant;
   qtyKantong: number;
-  // Free/bonus kantong bundled into this order — physically shipped and
-  // recorded (added into the stored Qty) but excluded from Amount, i.e. not
-  // billed. Stored in SalesOrderDetail.Custom1 (see JADWAL_BONUS_QTY_EXPR
-  // in pengiriman-jadwal.ts for why that column, not a new one).
+  // Free/bonus kantong bundled into this order — physically shipped but
+  // not billed. Recorded as its own SalesOrderDetail row under the
+  // dedicated bonus ItemID (see BONUS_ITEM_VARIANTS), Amount=0.
   bonusQty: number;
   deliveryDateTime: Date;
   // '0127' for TakeAway (see PARTNER_TYPE_CASE in aging.ts and
@@ -184,10 +196,9 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
     throw new Error(`Harga untuk varian ${variant.name} pada Price Level ${bp.PriceLevel} belum diatur.`);
   }
   const price = priceLevelEntry.Price;
-  // Billed only on the ordered qty — bonus rides along in the stored Qty
-  // (see totalQtyKantong below) but never enters Amount/Netto.
+  // Billed only on the ordered qty — the bonus row (below) is its own line
+  // at Amount=0, so it never enters SalesOrder.Amount/Netto.
   const amount = input.qtyKantong * price;
-  const totalQtyKantong = input.qtyKantong + input.bonusQty;
 
   const termOfPaymentId = bp.TermOfPaymentID?.trim() ? bp.TermOfPaymentID : SO_TERM_OF_PAYMENT_ID;
   const addressInvoice = bp.Address?.slice(0, 128) ?? "";
@@ -232,18 +243,41 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
     .input("soId", sql.VarChar(16), salesOrderId)
     .input("itemId", sql.VarChar(150), variant.itemId)
     .input("name", sql.VarChar(150), variant.name)
-    .input("qty", sql.Float, totalQtyKantong)
+    .input("qty", sql.Float, input.qtyKantong)
     .input("unit", sql.VarChar(16), variant.unit)
     .input("price", sql.Float, price)
-    .input("amount", sql.Float, amount)
-    .input("bonusQty", sql.VarChar(16), String(input.bonusQty)).query(`
+    .input("amount", sql.Float, amount).query(`
       INSERT INTO SalesOrderDetail
         (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp,
-         Ratio, Amount, FlagClosed, Custom1)
+         Ratio, Amount, FlagClosed)
       VALUES
         (@id, @soId, @itemId, @name, @qty, @unit, @price, 0, 0, 0,
-         1, @amount, '', @bonusQty)
+         1, @amount, '')
     `);
+
+  if (input.bonusQty > 0) {
+    const bonusVariant = BONUS_ITEM_VARIANTS[input.variant];
+    // Called only after the row above is inserted — nextSalesOrderDetailId
+    // is a plain MAX+1 lookup (same convention as nextSalesOrderId/
+    // nextVoucherSeq in this file), so it only sees the right next ID once
+    // that insert has actually landed.
+    const bonusDetailId = await nextSalesOrderDetailId(pool);
+    await pool
+      .request()
+      .input("id", sql.VarChar(16), bonusDetailId)
+      .input("soId", sql.VarChar(16), salesOrderId)
+      .input("itemId", sql.VarChar(150), bonusVariant.itemId)
+      .input("name", sql.VarChar(150), bonusVariant.name)
+      .input("qty", sql.Float, input.bonusQty)
+      .input("unit", sql.VarChar(16), variant.unit).query(`
+        INSERT INTO SalesOrderDetail
+          (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp,
+           Ratio, Amount, FlagClosed)
+        VALUES
+          (@id, @soId, @itemId, @name, @qty, @unit, 0, 0, 0, 0,
+           1, 0, '')
+      `);
+  }
 
   return salesOrderId;
 }

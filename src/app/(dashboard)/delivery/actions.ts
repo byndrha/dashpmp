@@ -15,6 +15,7 @@ import {
   getJadwalDetail,
   getAvailableSalesOrders,
   mergeExternalDeliveriesIntoJadwal,
+  getMaxSalesOrderTransDateForDeliveries,
   type JadwalDetailRow,
   type AvailableSalesOrder,
 } from "@/lib/queries/pengiriman-jadwal";
@@ -79,6 +80,14 @@ export async function updateJadwalDriverTimeAction(
 ): Promise<void> {
   await updateJadwalDriverTime(jadwalId, input);
   revalidatePath("/delivery");
+}
+
+// Returns an ISO string (not a Date) — kept as plain serializable data
+// across the server action boundary, same reasoning as the other
+// read-only actions below.
+export async function getMaxSalesOrderTransDateForDeliveriesAction(deliveryOrderIds: string[]): Promise<string | null> {
+  const date = await getMaxSalesOrderTransDateForDeliveries(deliveryOrderIds);
+  return date ? date.toISOString() : null;
 }
 
 export async function mergeExternalDeliveriesAction(

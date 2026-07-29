@@ -24,11 +24,13 @@ export interface DeliveryOrderPrintData {
 }
 
 // Everything a printed DO needs: header (voucher/date/vehicle/driver/
-// customer) plus line items with the bonus portion split out (same
-// SalesOrderDetail.Custom1 source as JADWAL_BONUS_QTY_EXPR in
-// pengiriman-jadwal.ts — DeliveryOrderDetail itself never stores bonus
-// directly, it's always resolved by joining back to the SO line it was
-// copied from at startBerangkat).
+// customer) plus line items with the bonus portion split out — same dual
+// scheme as JADWAL_BONUS_QTY_EXPR in pengiriman-jadwal.ts: a dedicated
+// "Bonus"-named row (see BONUS_ITEM_VARIANTS in sales-order.ts) is entirely
+// bonus, while an older order's bonus rides on the main row's
+// SalesOrderDetail.Custom1 instead (DeliveryOrderDetail itself never
+// stores bonus directly either way — always resolved by joining back to
+// the SO line it was copied from at startBerangkat).
 export async function getDeliveryOrderPrintData(deliveryOrderId: string): Promise<DeliveryOrderPrintData | null> {
   const pool = await getPool();
   const headerResult = await pool
@@ -54,9 +56,12 @@ export async function getDeliveryOrderPrintData(deliveryOrderId: string): Promis
           dod.Name,
           dod.Qty,
           dod.Unit,
-          CASE WHEN dod.Name LIKE '%5 KG%'
-            THEN ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) / 2.0
-            ELSE ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0)
+          CASE
+            WHEN dod.Name LIKE '%Bonus%' THEN (CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Qty / 2.0 ELSE dod.Qty END)
+            ELSE (CASE WHEN dod.Name LIKE '%5 KG%'
+              THEN ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0) / 2.0
+              ELSE ISNULL(TRY_CAST(NULLIF(sod.Custom1, '') AS FLOAT), 0)
+            END)
           END AS BonusQty
       FROM DeliveryOrderDetail dod
       LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderDetailID = dod.SalesOrderDetailID

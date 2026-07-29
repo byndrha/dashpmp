@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer, X, Share2 } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,11 +17,18 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatDate, formatRupiah, formatTime } from "@/lib/format";
+import { formatDate, formatRupiah, formatTime, formatKemasanQty } from "@/lib/format";
 import { resolveBusinessDateTime } from "@/lib/business-date";
+import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
 import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
@@ -94,9 +101,12 @@ function SortableStopRow({
           {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
         </p>
       </button>
-      <span className="shrink-0 tabular-nums text-muted-foreground">
-        {detail.Qty} kantong
-        {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
+      <span className="shrink-0 text-right tabular-nums text-muted-foreground">
+        <span className="block">
+          {formatKemasanQty(detail.Qty10KG, detail.Qty5KG)}
+          {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
+        </span>
+        <span className="block text-[10px]">~{estimateDeliveryMinutes(detail.Qty)} menit</span>
       </span>
       {detail.Latitude == null && (
         <Badge variant="outline" className="shrink-0 border-destructive/30 text-[10px] text-destructive">
@@ -104,15 +114,17 @@ function SortableStopRow({
         </Badge>
       )}
       {detail.DeliveryOrderID && (
-        <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={printChecked}
-            onChange={() => onTogglePrint(detail.DeliveryOrderID as string)}
-            className="size-3.5"
-          />
-          Cetak
-        </label>
+        <button
+          type="button"
+          title={printChecked ? "Batal cetak DO ini" : "Tandai untuk dicetak"}
+          onClick={() => onTogglePrint(detail.DeliveryOrderID as string)}
+          className={cn(
+            "shrink-0 rounded border p-1 transition-colors",
+            printChecked ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:border-border"
+          )}
+        >
+          <Printer className="size-3.5" />
+        </button>
       )}
       {onRemove && (
         <button
@@ -180,6 +192,10 @@ export function RouteValidationDialog({
   const [routeLoading, setRouteLoading] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Lets staff drop the map panel entirely (no Leaflet init, no OSRM wait) —
+  // useful on a slow connection when all they need is the stop list/totals
+  // to check or share, matching what's already in buildShareText.
+  const [showMap, setShowMap] = useState(true);
 
   const [adding, setAdding] = useState(false);
   const [availableToAdd, setAvailableToAdd] = useState<AvailableSalesOrder[]>([]);
@@ -211,6 +227,8 @@ export function RouteValidationDialog({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const totalQty = useMemo(() => order.reduce((sum, o) => sum + o.Qty, 0), [order]);
   const totalBonusQty = useMemo(() => order.reduce((sum, o) => sum + o.BonusQty, 0), [order]);
+  const totalQty10KG = useMemo(() => order.reduce((sum, o) => sum + o.Qty10KG, 0), [order]);
+  const totalQty5KG = useMemo(() => order.reduce((sum, o) => sum + o.Qty5KG, 0), [order]);
   const selectedToAddQty = useMemo(
     () => availableToAdd.filter((so) => selectedToAdd.has(so.SalesOrderID)).reduce((sum, so) => sum + so.Qty, 0),
     [availableToAdd, selectedToAdd]
@@ -225,6 +243,7 @@ export function RouteValidationDialog({
     setSelectedToAdd(new Set());
     setAddError(null);
     setPrintSelected(new Set());
+    setShowMap(true);
 
     if (jadwalId == null) {
       setOrder([]);
@@ -469,37 +488,77 @@ export function RouteValidationDialog({
     return Math.round(totalFuelLiters * biayaBBMPerLiter);
   }, [totalFuelLiters, biayaBBMPerLiter]);
 
-  // Plain-text summary — no public link/token exists for this dialog, so
-  // sharing means handing off a readable recap (e.g. to a WhatsApp group)
-  // rather than a URL. Pulls only from state already loaded here.
-  function buildShareText(): string {
+  // "Detail Rute" — plain-text destination list only (no route/fuel
+  // figures, those are visual-only info covered by the image share
+  // options below). No public link/token exists for this dialog, so
+  // sharing means handing off a readable recap rather than a URL.
+  function buildStopListText(): string {
     if (!jadwal) return "";
     const lines = [
-      `Validasi Rute — ${armadaNama ?? "Armada"}`,
+      `Daftar Tujuan — ${armadaNama ?? "Armada"}`,
       `${formatDate(businessDate)} ${time}${driverId ? ` · ${drivers.find((d) => d.SalesmanID === driverId)?.Name ?? ""}` : ""}`,
       "",
-      ...order.map((o, i) => `${i + 1}. ${o.CustomerName} — ${o.Wilayah} (${o.Qty} kantong)`),
+      ...order.map(
+        (o, i) =>
+          `${i + 1}. ${o.CustomerName} — ${o.Wilayah} (${formatKemasanQty(o.Qty10KG, o.Qty5KG)}${o.BonusQty > 0 ? ` +${o.BonusQty} bonus` : ""})`
+      ),
       "",
-      `Total: ${totalQty} kantong${totalBonusQty > 0 ? ` (+${totalBonusQty} bonus)` : ""}`,
+      `Total: ${formatKemasanQty(totalQty10KG, totalQty5KG)}${totalBonusQty > 0 ? ` (+${totalBonusQty} bonus)` : ""}`,
     ];
-    if (route) {
-      lines.push(`Rute: ${route.distanceKm.toLocaleString("id-ID")} km · ${route.durationMinutes} menit`);
-    }
-    if (totalFuelLiters != null) {
-      lines.push(`BBM: ${totalFuelLiters.toLocaleString("id-ID")} L${totalFuelCost != null ? ` · ${formatRupiah(totalFuelCost)}` : ""}`);
-    }
     return lines.join("\n");
   }
 
-  async function handleShare() {
-    const text = buildShareText();
+  const captureRef = useRef<HTMLDivElement>(null);
+
+  // Renders captureRef's subtree (dialog title/summary + body) to a PNG
+  // Blob — skips any node marked data-capture-hide (action buttons that
+  // don't make sense in a shared screenshot, e.g. the Bagikan trigger
+  // itself and "Cetak DO Terpilih").
+  async function captureDialogImage(): Promise<Blob | null> {
+    if (!captureRef.current) return null;
+    const { toBlob } = await import("html-to-image");
+    return toBlob(captureRef.current, {
+      pixelRatio: 2,
+      filter: (node) => !(node instanceof HTMLElement && node.dataset.captureHide === "true"),
+    });
+  }
+
+  async function shareImageBlob(blob: Blob, filename: string, title: string): Promise<void> {
+    const file = new File([blob], filename, { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title });
+      } catch {
+        // User cancelled the share sheet — not an error worth surfacing.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      toast.success("Gambar disalin ke clipboard.");
+    } catch {
+      // Clipboard image write isn't universally supported (e.g. Firefox) —
+      // final fallback is a plain download.
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function handleShareSeluruhnya() {
+    const blob = await captureDialogImage();
+    if (blob) await shareImageBlob(blob, "validasi-rute.png", "Validasi Rute");
+  }
+
+  async function handleShareDetailRute() {
+    const text = buildStopListText();
     if (!text) return;
-    // navigator.share (mobile/modern browsers) opens the OS share sheet
-    // directly; older/desktop browsers without it fall back to copying the
-    // same text to the clipboard instead.
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Validasi Rute", text });
+        await navigator.share({ title: "Detail Rute", text });
       } catch {
         // User cancelled the share sheet — not an error worth surfacing.
       }
@@ -507,9 +566,27 @@ export function RouteValidationDialog({
     }
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Ringkasan rute disalin ke clipboard.");
+      toast.success("Detail rute disalin ke clipboard.");
     } catch {
-      toast.error("Gagal menyalin ringkasan rute.");
+      toast.error("Gagal menyalin detail rute.");
+    }
+  }
+
+  async function handleShareDataRute() {
+    // Reuses the same map-hiding layout the dialog already has (see
+    // showMap) instead of a separate capture-time DOM filter — guarantees
+    // the config panel reflows to full width exactly like the user-facing
+    // "no map" layout already does, with no leftover gap where the map was.
+    const wasShowingMap = showMap;
+    if (wasShowingMap) {
+      setShowMap(false);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+    try {
+      const blob = await captureDialogImage();
+      if (blob) await shareImageBlob(blob, "data-rute.png", "Data Rute");
+    } finally {
+      if (wasShowingMap) setShowMap(true);
     }
   }
 
@@ -523,6 +600,7 @@ export function RouteValidationDialog({
           holds a map + list side by side and genuinely benefits from a
           landscape screen's extra width, unlike a plain form dialog. */}
       <DialogContent className="max-w-lg p-0 sm:max-w-3xl lg:max-w-6xl">
+        <div ref={captureRef}>
         <DialogHeader className="p-4 pb-0">
           <div className="flex items-center justify-between gap-2 pr-8">
             <DialogTitle className="flex items-center gap-2">
@@ -534,12 +612,46 @@ export function RouteValidationDialog({
               )}
             </DialogTitle>
             {jadwal && order.length > 0 && (
-              <Button size="sm" variant="outline" className="h-7 shrink-0 gap-1.5 text-xs" onClick={handleShare}>
-                <Share2 className="size-3.5" />
-                Share
-              </Button>
+              <div data-capture-hide="true" className="shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" />}>
+                    <Share2 className="size-3.5" />
+                    Bagikan
+                    <ChevronDown className="size-3 opacity-60" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleShareSeluruhnya}>
+                      <ImageIcon className="size-4" />
+                      Seluruhnya
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleShareDetailRute}>
+                      <List className="size-4" />
+                      Detail Rute
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleShareDataRute}>
+                      <ImageIcon className="size-4" />
+                      Data Rute
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
           </div>
+          {jadwal && (
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Truck className="size-3.5" />
+                {armadaNama ?? "Armada"}
+              </span>
+              {order.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <Package className="size-3.5" />
+                  {formatKemasanQty(totalQty10KG, totalQty5KG)}
+                  {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
+                </span>
+              )}
+            </p>
+          )}
           <DialogDescription>Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum berangkat.</DialogDescription>
         </DialogHeader>
 
@@ -550,20 +662,27 @@ export function RouteValidationDialog({
             drag-to-resize sheet (out of scope here).
             md and up: reverts to config-left / map-right side by side,
             matching how a desktop map + form split is usually laid out. */}
-        <div className="flex flex-col md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]">
-          <div className="order-1 h-[34vh] min-h-[220px] w-full overflow-hidden md:order-2 md:h-auto md:min-h-[440px] md:rounded-lg">
-            {pabrik && order.length > 0 ? (
-              <RouteMap
-                pabrik={pabrik}
-                stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
-                geometry={route?.geometry ?? null}
-              />
-            ) : (
-              <Skeleton className="h-full w-full md:rounded-lg" />
-            )}
-          </div>
+        <div className={cn("flex flex-col", showMap ? "md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]" : "md:p-4 md:pt-2")}>
+          {showMap && (
+            <div className="order-1 h-[34vh] min-h-[220px] w-full overflow-hidden md:order-2 md:h-auto md:min-h-[440px] md:rounded-lg">
+              {pabrik && order.length > 0 ? (
+                <RouteMap
+                  pabrik={pabrik}
+                  stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
+                  geometry={route?.geometry ?? null}
+                />
+              ) : (
+                <Skeleton className="h-full w-full md:rounded-lg" />
+              )}
+            </div>
+          )}
 
-          <div className="order-2 -mt-4 flex flex-col gap-3 rounded-t-2xl bg-popover p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] md:order-1 md:mt-0 md:rounded-none md:p-0 md:shadow-none">
+          <div
+            className={cn(
+              "flex flex-col gap-3 p-4",
+              showMap && "order-2 -mt-4 rounded-t-2xl bg-popover shadow-[0_-4px_12px_rgba(0,0,0,0.08)] md:order-1 md:mt-0 md:rounded-none md:p-0 md:shadow-none"
+            )}
+          >
             {isDraft ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32 shrink-0" />
@@ -648,7 +767,7 @@ export function RouteValidationDialog({
                 Daftar Tujuan ({order.length})
                 {order.length > 0 && (
                   <span className="ml-2 tabular-nums">
-                    {totalQty} kantong
+                    {formatKemasanQty(totalQty10KG, totalQty5KG)}
                     {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
                   </span>
                 )}
@@ -697,7 +816,7 @@ export function RouteValidationDialog({
                         <span className="min-w-0 truncate">
                           {so.CustomerName} <span className="text-muted-foreground">· {so.Wilayah}</span>
                         </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">{so.Qty} kantong</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">{formatKemasanQty(so.Qty10KG, so.Qty5KG)}</span>
                       </button>
                     );
                   })}
@@ -742,7 +861,7 @@ export function RouteValidationDialog({
             </div>
 
             {!isDraft && printSelected.size > 0 && (
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handlePrintSelected}>
+              <Button size="sm" variant="outline" className="gap-1.5" data-capture-hide="true" onClick={handlePrintSelected}>
                 <Printer className="size-3.5" />
                 Cetak DO Terpilih ({printSelected.size})
               </Button>
@@ -774,6 +893,7 @@ export function RouteValidationDialog({
 
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
+        </div>
         </div>
       </DialogContent>
     </Dialog>

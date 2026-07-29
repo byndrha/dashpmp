@@ -22,6 +22,19 @@ export function formatQty(value: number | null): string {
   return `±${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}`;
 }
 
+// Labels the kemasan (packaging size) a kantong count is in, so the reader
+// never has to convert — raw bag counts per kemasan, not a 10KG-equivalent
+// normalized total. Most orders are single-kemasan (one row); a mixed
+// order (rare — only possible from desktop-ERP-entered SOs with multiple
+// line items) shows both counts joined with "+".
+export function formatKemasanQty(qty10KG: number, qty5KG: number): string {
+  const parts: string[] = [];
+  if (qty10KG > 0) parts.push(`${qty10KG.toLocaleString("id-ID")} kantong (10 KG)`);
+  if (qty5KG > 0) parts.push(`${qty5KG.toLocaleString("id-ID")} kantong (5 KG)`);
+  if (parts.length === 0) return "0 kantong";
+  return parts.join(" + ");
+}
+
 export function formatRupiahAvg(value: number): string {
   return `±${formatRupiah(value)}`;
 }

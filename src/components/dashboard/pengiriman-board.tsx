@@ -2,7 +2,7 @@
 
 import { DndContext, useDraggable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Plus, Wrench, User, Combine } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ import { ArmadaManager, ArmadaFormDialog, STATUS_BADGE, rowToForm } from "@/comp
 import { DriverManager } from "@/components/dashboard/driver-manager";
 import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatTime, formatKemasanQty } from "@/lib/format";
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
@@ -40,6 +40,7 @@ import {
   createArmadaActivityAction,
   deleteArmadaActivityAction,
   mergeExternalDeliveriesAction,
+  getMaxSalesOrderTransDateForDeliveriesAction,
 } from "@/app/(dashboard)/delivery/actions";
 
 // 24-hour axis, but the per-hour width is now derived from the available
@@ -247,7 +248,8 @@ function CreateJadwalDialog({
                     {so.CustomerName} <span className="text-xs text-muted-foreground">· {so.Wilayah}</span>
                   </span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {so.Qty} kantong{overCapacity && " · kapasitas penuh"}
+                    {formatKemasanQty(so.Qty10KG, so.Qty5KG)}
+                    {overCapacity && " · kapasitas penuh"}
                   </span>
                 </button>
               );
@@ -292,11 +294,25 @@ function MergeExternalDialog({
 
   useEffect(() => {
     if (!open || deliveries.length === 0) return;
-    // Defaults to the earliest selected DO's own time — not derivable from
-    // render since it's only meaningful once the dialog is actually open.
+    // Resets stale state from a previous open — not derivable from render.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTime(formatTime(deliveries[0].TransDate));
     setError(null);
+    const ids = deliveries.map((d) => d.DeliveryOrderID);
+    // Defaults to the latest underlying SalesOrder's own TransDate (not a
+    // DeliveryOrder's own TransDate — confirmed live those don't reliably
+    // move together), ceil-rounded to the next minute so the <input
+    // type="time"> minute-precision default never trips
+    // assertJamJadwalNotBeforeOrders's strict "departure can't be earlier
+    // than the order it's delivering" check. Built as "HH:MM" by hand
+    // (never via formatTime(), whose id-ID locale output uses "." as the
+    // separator and silently produces an Invalid Date once fed into
+    // resolveBusinessDateTime/the time input) — same pattern already used
+    // correctly in route-validation-dialog.tsx.
+    getMaxSalesOrderTransDateForDeliveriesAction(ids).then((iso) => {
+      if (iso == null) return;
+      const ceiled = new Date(Math.ceil(new Date(iso).getTime() / 60000) * 60000);
+      setTime(`${String(ceiled.getHours()).padStart(2, "0")}:${String(ceiled.getMinutes()).padStart(2, "0")}`);
+    });
   }, [open, deliveries]);
 
   const totalKantong = deliveries.reduce((sum, d) => sum + d.TotalKantong, 0);
@@ -695,7 +711,15 @@ function ArmadaRowBoard({
 
   const selectedExternalDeliveries = externalDeliveries.filter((d) => selectedExternal.has(d.DeliveryOrderID));
 
-  const cardWidth = Math.max(MIN_CARD_WIDTH, hourWidth - 6);
+  // Card width now scales with the summed per-stop delivery-time estimate
+  // (see delivery-duration.ts) instead of a fixed hourWidth-derived size —
+  // a Jadwal with more/bigger stops visibly takes longer on the timeline.
+  // useCallback so the lane-layout useMemo below can depend on it directly
+  // instead of missing-dep warnings from redefining it every render.
+  const cardWidthFor = useCallback(
+    (j: JadwalCardData) => Math.max(MIN_CARD_WIDTH, (j.EstimasiDurasiMenit / 60) * hourWidth),
+    [hourWidth]
+  );
 
   // Auto-derived Memuat/Perjalanan/Kembali segments — only for Jadwal that
   // have actually departed (Terbit) with the timestamps needed to compute
@@ -733,7 +757,7 @@ function ArmadaRowBoard({
 
   const { laneOf, laneCount } = useMemo(() => {
     const blocks: TimelineBlock[] = [
-      ...jadwal.map((j) => ({ key: `j-${j.JadwalID}`, left: hourFraction(j.JamJadwal) * hourWidth, width: cardWidth })),
+      ...jadwal.map((j) => ({ key: `j-${j.JadwalID}`, left: hourFraction(j.JamJadwal) * hourWidth, width: cardWidthFor(j) })),
       ...activities.map((a) => ({
         key: `a-${a.ActivityID}`,
         left: hourFraction(a.StartTime) * hourWidth,
@@ -754,7 +778,7 @@ function ArmadaRowBoard({
       })),
     ];
     return assignLanes(blocks);
-  }, [jadwal, activities, autoSegments, externalDeliveries, hourWidth, cardWidth]);
+  }, [jadwal, activities, autoSegments, externalDeliveries, hourWidth, cardWidthFor]);
 
   // Drag-to-select (marquee) for external DO cards — an alternative to
   // clicking each checkbox one by one when several need selecting at once.
@@ -987,7 +1011,7 @@ function ArmadaRowBoard({
             key={j.JadwalID}
             jadwal={j}
             hourWidth={hourWidth}
-            cardWidth={cardWidth}
+            cardWidth={cardWidthFor(j)}
             top={ROW_TOP_PADDING + (laneOf.get(`j-${j.JadwalID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
             onCardClick={onCardClick}
           />
@@ -1048,7 +1072,7 @@ function ArmadaRowBoard({
               key={j.JadwalID}
               name={j.DriverName as string}
               left={hourFraction(j.JamJadwal) * hourWidth}
-              width={cardWidth}
+              width={cardWidthFor(j)}
               top={ROW_TOP_PADDING}
             />
           ))}
@@ -1332,6 +1356,8 @@ export function PengirimanBoard({
             customerName: detail.CustomerName,
             wilayah: detail.Wilayah,
             qty: detail.Qty,
+            qty10KG: detail.Qty10KG,
+            qty5KG: detail.Qty5KG,
           });
         }}
       />

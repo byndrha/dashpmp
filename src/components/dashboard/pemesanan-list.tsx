@@ -6,7 +6,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatRupiah } from "@/lib/format";
+import { formatDate, formatRupiah, formatKemasanQty } from "@/lib/format";
 import type { SalesOrderListRow, SalesOrderStatus } from "@/lib/queries/pemesanan";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
@@ -73,7 +73,7 @@ function PemesananRow({
       </div>
       <div className="shrink-0 text-right">
         <p className="font-medium tabular-nums">{formatRupiah(row.Amount)}</p>
-        <p className="text-xs tabular-nums text-muted-foreground">{row.Qty} kantong</p>
+        <p className="text-xs tabular-nums text-muted-foreground">{formatKemasanQty(row.Qty10KG, row.Qty5KG)}</p>
       </div>
       {canModify && (
         <div className="flex shrink-0 items-center gap-1">
@@ -114,6 +114,8 @@ export function PemesananList({
                 customerName: r.CustomerName,
                 wilayah: r.Wilayah,
                 qty: r.Qty,
+                qty10KG: r.Qty10KG,
+                qty5KG: r.Qty5KG,
               })
             }
             onDeleted={() => router.refresh()}
