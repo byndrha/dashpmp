@@ -22,3 +22,30 @@ export async function requireSuperAdmin() {
   if (!session.user.isSuperAdmin) redirect("/akses-ditolak");
   return session;
 }
+
+// Page-level defense-in-depth for /grup (and everything nested under it,
+// including Akun/Perusahaan/Akun Direktori administration — see
+// docs/superpowers/specs/2026-07-30-postgres-directory-multi-company.md) —
+// proxy.ts already redirects by accountScope on every navigation, but a
+// page component shouldn't rely on that alone.
+//
+// Deliberately a hybrid: a real Postgres "direktur" account, OR today's
+// MSSQL superadmin (accountScope "mkesindo" + isSuperAdmin). Without the
+// second branch, moving Administrasi under /grup would lock out the only
+// admin account that exists until someone creates a direktur account
+// through /grup/akun/direktori — which itself lives under /grup. The
+// superadmin bridge is what makes that first-account bootstrap possible.
+export async function requireGrupAccess() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const isBridgedSuperAdmin = session.user.accountScope === "mkesindo" && session.user.isSuperAdmin;
+  if (session.user.accountScope !== "direktur" && !isBridgedSuperAdmin) redirect("/akses-ditolak");
+  return session;
+}
+
+export async function requirePmputra() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (session.user.accountScope !== "pmputra") redirect("/akses-ditolak");
+  return session;
+}

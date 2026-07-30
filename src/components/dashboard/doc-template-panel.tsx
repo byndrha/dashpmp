@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { saveDocTemplateAction } from "@/app/(dashboard)/akun/actions";
+import { saveDocTemplateAction } from "@/app/grup/akun/actions";
 import { PAPER_SIZES, type DocTemplate, type PaperSize } from "@/lib/doc-template-types";
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {

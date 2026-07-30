@@ -13,8 +13,6 @@ import {
   ClipboardList,
   Users,
   Megaphone,
-  ShieldCheck,
-  Building2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -86,7 +84,11 @@ export function AppSidebar({
           </div>
         </div>
         <div className="px-2 group-data-[collapsible=icon]:px-0">
-          <PTSwitcher list={perusahaanList} />
+          {/* "PMP Group" (holding-level Administrasi: Akun/Perusahaan/Akun
+              Direktori) lives inside this dropdown, not as its own sidebar
+              group — see PTSwitcher. requireGrupAccess on the /grup side
+              still enforces who's actually let through. */}
+          <PTSwitcher list={perusahaanList} isSuperAdmin={isSuperAdmin} />
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -109,36 +111,6 @@ export function AppSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        {isSuperAdmin && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Administrasi</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/akun" onClick={closeOnMobile} />}
-                    isActive={pathname.startsWith("/akun")}
-                    tooltip="Akun"
-                  >
-                    <ShieldCheck className="shrink-0" />
-                    <span>Akun</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/perusahaan" onClick={closeOnMobile} />}
-                    isActive={pathname.startsWith("/perusahaan")}
-                    tooltip="Perusahaan"
-                  >
-                    <Building2 className="shrink-0" />
-                    <span>Perusahaan</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
       </SidebarContent>
     </Sidebar>
   );

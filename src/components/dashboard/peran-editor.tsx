@@ -16,7 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MODULE_KEYS, MODULE_LABEL, type ModuleKey, type PermissionMap } from "@/lib/permissions";
 import type { DashboardRoleRow } from "@/lib/queries/akun";
-import { createRoleAction, deleteRoleAction, setRolePermissionAction } from "@/app/(dashboard)/akun/peran/actions";
+import { createRoleAction, deleteRoleAction, setRolePermissionAction } from "@/app/grup/akun/peran/actions";
 
 interface RolePermissionRow {
   roleId: number;

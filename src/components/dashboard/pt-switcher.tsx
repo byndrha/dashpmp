@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, ChevronsUpDown, Building2, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronsUpDown, Building2, ExternalLink, LayoutGrid } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +19,7 @@ import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 // the previous hardcoded STATIC_REPORTS list: open a new tab, don't change
 // what this dashboard is showing. "Draft" entries are never in `list` —
 // listPerusahaanForSwitcher() already excludes them.
-export function PTSwitcher({ list }: { list: PerusahaanSwitcherEntry[] }) {
+export function PTSwitcher({ list, isSuperAdmin }: { list: PerusahaanSwitcherEntry[]; isSuperAdmin: boolean }) {
   const aktif = list.filter((p) => p.Status === "AktifPenuh");
   const standalone = list.filter((p) => p.Status === "StandaloneHTML");
   const active = aktif[0];
@@ -33,6 +34,15 @@ export function PTSwitcher({ list }: { list: PerusahaanSwitcherEntry[] }) {
         <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
+        {isSuperAdmin && (
+          <>
+            <DropdownMenuItem render={<Link href="/grup" />} className="text-xs">
+              <LayoutGrid className="size-3.5 text-muted-foreground" />
+              PMP Group
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {aktif.map((entity) => (
           <DropdownMenuItem key={entity.PerusahaanID} className="justify-between text-xs">
             {entity.Nama}

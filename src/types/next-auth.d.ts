@@ -1,6 +1,11 @@
 import type { DefaultSession } from "next-auth";
 import type { PermissionMap } from "@/lib/permissions";
 
+// "mkesindo" = every account that exists today (MSSQL DashboardUser,
+// unchanged). "direktur"/"pmputra" are new Postgres-directory accounts —
+// see docs/superpowers/specs/2026-07-30-postgres-directory-multi-company.md.
+type AccountScope = "mkesindo" | "direktur" | "pmputra";
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -9,6 +14,8 @@ declare module "next-auth" {
       roleId: number;
       isSuperAdmin: boolean;
       permissions: PermissionMap;
+      accountScope: AccountScope;
+      perusahaanId: number | null;
     } & DefaultSession["user"];
   }
 
@@ -17,6 +24,8 @@ declare module "next-auth" {
     roleId: number;
     isSuperAdmin: boolean;
     permissions: PermissionMap;
+    accountScope: AccountScope;
+    perusahaanId: number | null;
   }
 }
 
@@ -27,5 +36,7 @@ declare module "next-auth/jwt" {
     roleId: number;
     isSuperAdmin: boolean;
     permissions: PermissionMap;
+    accountScope: AccountScope;
+    perusahaanId: number | null;
   }
 }

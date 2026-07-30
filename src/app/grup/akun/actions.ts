@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/require-access";
+import { requireGrupAccess } from "@/lib/require-access";
 import {
   createUser,
   updateUser,
@@ -22,7 +22,7 @@ export async function createUserAction(input: {
   email: string | null;
   roleId: number;
 }) {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   if (!input.nama.trim() || !input.username.trim() || input.password.length < 6) {
     throw new Error("Nama, username wajib diisi dan password minimal 6 karakter.");
   }
@@ -34,7 +34,7 @@ export async function createUserAction(input: {
     }
     throw err;
   }
-  revalidatePath("/akun");
+  revalidatePath("/grup/akun");
 }
 
 export async function updateUserAction(input: {
@@ -45,7 +45,7 @@ export async function updateUserAction(input: {
   roleId: number;
   isActive: boolean;
 }) {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   if (!input.nama.trim()) throw new Error("Nama wajib diisi.");
 
   const roles = await listRoles();
@@ -60,18 +60,18 @@ export async function updateUserAction(input: {
   }
 
   await updateUser(input);
-  revalidatePath("/akun");
+  revalidatePath("/grup/akun");
 }
 
 export async function resetUserPasswordAction(userId: number, newPassword: string) {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   if (newPassword.length < 6) throw new Error("Password minimal 6 karakter.");
   await resetUserPassword(userId, newPassword);
-  revalidatePath("/akun");
+  revalidatePath("/grup/akun");
 }
 
 export async function deleteUserAction(userId: number) {
-  const session = await requireSuperAdmin();
+  const session = await requireGrupAccess();
   if (Number(session.user.id) === userId) {
     throw new Error("Tidak bisa menghapus akun Anda sendiri yang sedang digunakan untuk login.");
   }
@@ -80,30 +80,30 @@ export async function deleteUserAction(userId: number) {
     throw new Error("Tidak bisa menghapus akun ini — minimal harus ada satu Super Administrator aktif.");
   }
   await deleteUser(userId);
-  revalidatePath("/akun");
+  revalidatePath("/grup/akun");
 }
 
 export async function getPabrikLocationAction() {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   return getPabrikLocation();
 }
 
 export async function setPabrikLocationAction(input: { latitude: number; longitude: number; alamat: string | null }): Promise<void> {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   await setPabrikLocation(input);
-  revalidatePath("/akun");
+  revalidatePath("/grup/akun");
 }
 
 export async function getSiteSettingsAction() {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   return getSiteSettings();
 }
 
 export async function setSiteSettingsAction(input: SiteSettings): Promise<void> {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   if (!input.title.trim()) throw new Error("Title tidak boleh kosong.");
   await setSiteSettings(input);
-  revalidatePath("/akun");
+  revalidatePath("/grup/akun");
   // Title/favicon/OG values are read by the root layout's generateMetadata()
   // on every route (including /login and public token pages) — revalidate
   // the whole layout tree, not just /akun, so the change takes effect
@@ -112,13 +112,13 @@ export async function setSiteSettingsAction(input: SiteSettings): Promise<void> 
 }
 
 export async function getDocTemplateAction(docType: DocType): Promise<DocTemplate> {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   return getDocTemplate(docType);
 }
 
 export async function saveDocTemplateAction(input: DocTemplate): Promise<void> {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   if (!input.headerTitle.trim()) throw new Error("Judul kop surat tidak boleh kosong.");
   await saveDocTemplate(input);
-  revalidatePath("/akun");
+  revalidatePath("/grup/akun");
 }

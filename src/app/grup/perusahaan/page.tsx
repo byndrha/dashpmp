@@ -1,9 +1,9 @@
-import { requireSuperAdmin } from "@/lib/require-access";
+import { requireGrupAccess } from "@/lib/require-access";
 import { listPerusahaan } from "@/lib/queries/perusahaan";
 import { PerusahaanList } from "@/components/dashboard/perusahaan-list";
 
 export default async function PerusahaanPage() {
-  await requireSuperAdmin();
+  await requireGrupAccess();
   const rows = await listPerusahaan();
 
   return (

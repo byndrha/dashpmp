@@ -11,7 +11,7 @@ import {
   createPerusahaanAction,
   updatePerusahaanAction,
   deletePerusahaanAction,
-} from "@/app/(dashboard)/perusahaan/actions";
+} from "@/app/grup/perusahaan/actions";
 
 const STATUS_BADGE: Record<PerusahaanStatus, string> = {
   Draft: "bg-muted text-muted-foreground",
@@ -120,7 +120,15 @@ export function PerusahaanList({ rows }: { rows: PerusahaanRow[] }) {
         )}
       </div>
 
+      {/* Keyed on target identity — PerusahaanFormDialog's status/jenisBisnis/
+          location useState hooks only read their initial value once on mount;
+          without this key, switching straight from editing one PT to another
+          reuses the same component instance and keeps showing the first PT's
+          values. The key must live here (the call site) rather than on an
+          element inside the dialog, since remounting a child doesn't reset
+          hooks declared in this component's own function body. */}
       <PerusahaanFormDialog
+        key={target === "new" ? "new" : target ? target.PerusahaanID : "closed"}
         target={target}
         onOpenChange={(open) => !open && setTarget(null)}
         onSubmit={handleSubmit}

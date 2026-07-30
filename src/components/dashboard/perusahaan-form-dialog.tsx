@@ -15,7 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
-import { PERUSAHAAN_STATUSES, type PerusahaanStatus } from "@/lib/perusahaan-status";
+import { PERUSAHAAN_STATUSES, type PerusahaanStatus, PERUSAHAAN_JENIS_BISNIS, type PerusahaanJenisBisnis } from "@/lib/perusahaan-status";
 import type { PerusahaanRow, PerusahaanInput } from "@/lib/queries/perusahaan";
 
 const STATUS_LABEL: Record<PerusahaanStatus, string> = {
@@ -27,7 +27,7 @@ const STATUS_LABEL: Record<PerusahaanStatus, string> = {
 function emptyForm(): PerusahaanInput {
   return {
     nama: "",
-    jenisBisnis: null,
+    jenisBisnis: "Es Kristal",
     wilayah: null,
     pabrikLatitude: null,
     pabrikLongitude: null,
@@ -80,6 +80,7 @@ export function PerusahaanFormDialog({
 }) {
   const initial = target === "new" ? emptyForm() : target ? rowToForm(target) : emptyForm();
   const [status, setStatus] = useState<PerusahaanStatus>(initial.status);
+  const [jenisBisnis, setJenisBisnis] = useState<PerusahaanJenisBisnis>(initial.jenisBisnis ?? "Es Kristal");
   const [location, setLocation] = useState<MitraLocationValue | null>(
     initial.pabrikLatitude != null && initial.pabrikLongitude != null
       ? { latitude: initial.pabrikLatitude, longitude: initial.pabrikLongitude, alamat: initial.pabrikAlamat }
@@ -89,7 +90,7 @@ export function PerusahaanFormDialog({
   function handleSubmit(formData: FormData) {
     onSubmit({
       nama: String(formData.get("nama") ?? ""),
-      jenisBisnis: String(formData.get("jenisBisnis") ?? "") || null,
+      jenisBisnis,
       wilayah: String(formData.get("wilayah") ?? "") || null,
       pabrikLatitude: location?.latitude ?? null,
       pabrikLongitude: location?.longitude ?? null,
@@ -106,20 +107,7 @@ export function PerusahaanFormDialog({
   }
 
   return (
-    <Dialog
-      open={target != null}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (next) {
-          setStatus(initial.status);
-          setLocation(
-            initial.pabrikLatitude != null && initial.pabrikLongitude != null
-              ? { latitude: initial.pabrikLatitude, longitude: initial.pabrikLongitude, alamat: initial.pabrikAlamat }
-              : null
-          );
-        }
-      }}
-    >
+    <Dialog open={target != null} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{target === "new" ? "Tambah PT" : `Ubah PT — ${initial.nama}`}</DialogTitle>
@@ -134,8 +122,19 @@ export function PerusahaanFormDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="jenisBisnis">Jenis Bisnis</Label>
-              <Input id="jenisBisnis" name="jenisBisnis" placeholder="mis. Es Kristal" defaultValue={initial.jenisBisnis ?? ""} />
+              <Label>Jenis Bisnis</Label>
+              <Select value={jenisBisnis} onValueChange={(v) => setJenisBisnis((v as PerusahaanJenisBisnis) ?? "Es Kristal")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{(v: string) => v}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {PERUSAHAAN_JENIS_BISNIS.map((jb) => (
+                    <SelectItem key={jb} value={jb}>
+                      {jb}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="wilayah">Wilayah</Label>

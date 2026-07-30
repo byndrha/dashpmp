@@ -1,13 +1,16 @@
 import { getPool, sql } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto-secret";
-import { PERUSAHAAN_STATUSES, type PerusahaanStatus } from "@/lib/perusahaan-status";
+import { PERUSAHAAN_STATUSES, type PerusahaanStatus, type PerusahaanJenisBisnis } from "@/lib/perusahaan-status";
 
 export { PERUSAHAAN_STATUSES, type PerusahaanStatus };
 
 export interface PerusahaanRow {
   PerusahaanID: number;
   Nama: string;
-  JenisBisnis: string | null;
+  // Stored as plain VARCHAR in MSSQL (no CHECK constraint), but every write
+  // path (perusahaan/actions.ts's assertValid) rejects anything outside
+  // PERUSAHAAN_JENIS_BISNIS — treat it as the locked enum, not free text.
+  JenisBisnis: PerusahaanJenisBisnis | null;
   Wilayah: string | null;
   PabrikLatitude: number | null;
   PabrikLongitude: number | null;
@@ -24,7 +27,7 @@ export interface PerusahaanRow {
 
 export interface PerusahaanInput {
   nama: string;
-  jenisBisnis: string | null;
+  jenisBisnis: PerusahaanJenisBisnis | null;
   wilayah: string | null;
   pabrikLatitude: number | null;
   pabrikLongitude: number | null;

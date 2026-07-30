@@ -5,7 +5,7 @@ import { Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
-import { setPabrikLocationAction } from "@/app/(dashboard)/akun/actions";
+import { setPabrikLocationAction } from "@/app/grup/akun/actions";
 
 // Reuses MitraLocationField's generic lat/lng/alamat editing UI (search,
 // "use my location", reverse geocode, draggable pin) for the single global
