@@ -16,6 +16,13 @@ const config = {
   max: 10,
   idleTimeoutMillis: 600000,
   connectionTimeoutMillis: 15000,
+  // Bounds an individual query, not just connection acquisition — db.ts's
+  // getPool() now calls resolveKoneksi() against this pool before it can
+  // even attempt the MSSQL connection, so a hung Postgres query here would
+  // otherwise hang every request in the app indefinitely. 10s is generous
+  // for what this pool actually runs (single-row akun_direktori/perusahaan/
+  // perusahaan_koneksi lookups), never anything expensive.
+  statement_timeout: 10000,
 };
 
 declare global {

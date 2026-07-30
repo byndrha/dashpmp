@@ -81,6 +81,7 @@ function rowToForm(row: PerusahaanRow): PerusahaanInput {
 // user left every block untouched).
 export function PerusahaanFormDialog({
   target,
+  allRows,
   perusahaanDirektoriOptions,
   existingKoneksi,
   onOpenChange,
@@ -89,6 +90,7 @@ export function PerusahaanFormDialog({
   error,
 }: {
   target: PerusahaanRow | "new" | null;
+  allRows: PerusahaanRow[];
   perusahaanDirektoriOptions: PerusahaanDirektoriOption[];
   existingKoneksi: KoneksiRow[];
   onOpenChange: (open: boolean) => void;
@@ -110,6 +112,21 @@ export function PerusahaanFormDialog({
 
   const koneksiLabels = KONEKSI_LABELS_BY_JENIS[jenisBisnis];
   const linkedKoneksi = direktoriId != null ? existingKoneksi.filter((k) => k.perusahaanId === direktoriId) : [];
+
+  // Kode has no unique constraint on DashboardPerusahaan (MSSQL) — only
+  // perusahaan.kode itself is unique in Postgres — so without this filter
+  // two PT rows could independently claim the same Postgres company and
+  // silently share its perusahaan_koneksi rows. Exclude any kode already
+  // claimed by a DIFFERENT PerusahaanRow, but keep the currently-edited
+  // row's own existing link selectable.
+  const targetId = target !== "new" && target !== null ? target.PerusahaanID : null;
+  const takenKodes = new Set(
+    allRows
+      .filter((r) => r.PerusahaanID !== targetId)
+      .map((r) => r.Kode)
+      .filter((k): k is string => k != null)
+  );
+  const availableDirektoriOptions = perusahaanDirektoriOptions.filter((o) => !takenKodes.has(o.kode));
 
   function handleSubmit(formData: FormData) {
     const kode = perusahaanDirektoriOptions.find((o) => o.id === direktoriId)?.kode ?? null;
@@ -240,7 +257,7 @@ export function PerusahaanFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Belum ditautkan</SelectItem>
-                  {perusahaanDirektoriOptions.map((o) => (
+                  {availableDirektoriOptions.map((o) => (
                     <SelectItem key={o.id} value={String(o.id)}>
                       {o.nama}
                     </SelectItem>

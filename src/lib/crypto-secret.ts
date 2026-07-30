@@ -8,6 +8,18 @@ const AUTH_TAG_LENGTH = 16;
 // purpose-specific prefix, independent from src/lib/crypto-token.ts's own
 // derived keys (invoice/payment public links) — a leaked value from one
 // purpose can't be used to derive another.
+//
+// IMPORTANT — rotating AUTH_SECRET now breaks live dashboard connectivity,
+// not just the admin credential UI: src/lib/db.ts's getPool() calls
+// resolveKoneksi() on every fresh connection, which decrypts the live
+// MKEsindo perusahaan_koneksi row using this same key. Rotate AUTH_SECRET
+// without first re-encrypting that row under the new secret, and the next
+// getPool() call throws and the whole live app goes down. Safe rotation
+// order: (1) deploy the NEW AUTH_SECRET, (2) immediately re-enter every
+// perusahaan_koneksi password via the /grup/perusahaan admin UI so it gets
+// re-encrypted under the new secret (or re-seed the rows directly) — do
+// this before any getPool() call is made against the new secret, i.e.
+// before/at the same deploy, not as a follow-up.
 function getKey(): Buffer {
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET is not configured — cannot encrypt/decrypt stored secrets");

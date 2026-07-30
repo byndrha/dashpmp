@@ -141,6 +141,7 @@ export function PerusahaanList({
       <PerusahaanFormDialog
         key={target === "new" ? "new" : target ? target.PerusahaanID : "closed"}
         target={target}
+        allRows={rows}
         perusahaanDirektoriOptions={perusahaanDirektoriOptions}
         existingKoneksi={koneksi}
         onOpenChange={(open) => !open && setTarget(null)}
