@@ -15,13 +15,42 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
+import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { formatRupiah, formatDate, formatQty, formatDays, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { CollectionPriorityRow } from "@/lib/queries/collection-priority";
 import type { PiutangStatus } from "@/lib/queries/aging";
 import { saveCollectionTargetAction, removeCollectionTargetAction } from "@/app/(dashboard)/aging/actions";
 
 const PAGE_SIZE = 9;
+
+// Full CollectionPriorityRow field set. rows is already the complete,
+// unfiltered set — the headline/rest split below is a display-priority
+// concern (every row shows up somewhere, either in headline or across
+// rest's pages), not a user filter, so nothing needs to be honored/ignored
+// here the way Kartu Transaksi's own search filter does.
+const EXPORT_COLUMNS: XlsxColumn[] = [
+  { header: "ID Mitra", key: "businessPartnerId", type: "text", width: 12 },
+  { header: "Mitra", key: "customerName", width: 26 },
+  { header: "Tipe", key: "partnerType", width: 12 },
+  { header: "Wilayah", key: "wilayah", width: 16 },
+  { header: "Kecamatan", key: "kecamatan", width: 16 },
+  { header: "Piutang Awal", key: "piutangAwal", type: "number", width: 14 },
+  { header: "Piutang Berjalan", key: "piutangBerjalan", type: "number", width: 14 },
+  { header: "Hari Terlambat Maks", key: "maxDaysOverdue", type: "number", width: 14 },
+  { header: "Target Nominal", key: "targetAmount", type: "number", width: 14 },
+  { header: "Target Tanggal", key: "targetDate", type: "text", width: 14 },
+  { header: "Catatan Target", key: "targetNote", width: 24 },
+  { header: "Rata-rata Qty/Hari", key: "avgQtyPerOrderDay", type: "number", width: 14 },
+  { header: "Terakhir Pesan", key: "terakhirPesan", type: "text", width: 14 },
+  { header: "Terakhir Bayar", key: "terakhirBayar", type: "text", width: 14 },
+  { header: "Omzet", key: "omzet", type: "number", width: 14 },
+  { header: "Status", key: "status", type: "text", width: 12 },
+  { header: "Tren", key: "tren", type: "text", width: 10 },
+  { header: "Rotasi (Hari)", key: "rotasi", type: "number", width: 12 },
+  { header: "Target Aktif", key: "isTarget", type: "text", width: 12 },
+];
 
 const STATUS_BADGE: Record<PiutangStatus, string> = {
   Sehat: "bg-primary/15 text-primary",
@@ -137,6 +166,32 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
   const headlineIds = useMemo(() => new Set(headline.map((r) => r.BusinessPartnerID)), [headline]);
   const rest = useMemo(() => rows.filter((r) => !headlineIds.has(r.BusinessPartnerID)), [rows, headlineIds]);
 
+  const exportRows = useMemo(
+    () =>
+      rows.map((r) => ({
+        businessPartnerId: r.BusinessPartnerID,
+        customerName: r.CustomerName,
+        partnerType: r.PartnerType,
+        wilayah: r.Wilayah,
+        kecamatan: r.Kecamatan ?? "",
+        piutangAwal: r.PiutangAwal,
+        piutangBerjalan: r.PiutangBerjalan,
+        maxDaysOverdue: r.MaxDaysOverdue,
+        targetAmount: r.TargetAmount,
+        targetDate: r.TargetDate ? formatDate(r.TargetDate) : "",
+        targetNote: r.TargetNote ?? "",
+        avgQtyPerOrderDay: r.AvgQtyPerOrderDay,
+        terakhirPesan: r.TerakhirPesan ? formatDate(r.TerakhirPesan) : "",
+        terakhirBayar: r.TerakhirBayar ? formatDate(r.TerakhirBayar) : "",
+        omzet: r.Omzet,
+        status: r.Status,
+        tren: r.Tren,
+        rotasi: r.Rotasi,
+        isTarget: r.IsTarget ? "Ya" : "Tidak",
+      })),
+    [rows]
+  );
+
   const [prevRows, setPrevRows] = useState(rows);
   if (rows !== prevRows) {
     setPrevRows(rows);
@@ -173,11 +228,19 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="font-display">Prioritas Pemulihan Mitra</CardTitle>
-        <CardDescription>
-          Target dari manajemen, ditambah mitra dengan piutang terbesar berstatus Perhatian/Kritis.
-        </CardDescription>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+        <div>
+          <CardTitle className="font-display">Prioritas Pemulihan Mitra</CardTitle>
+          <CardDescription>
+            Target dari manajemen, ditambah mitra dengan piutang terbesar berstatus Perhatian/Kritis.
+          </CardDescription>
+        </div>
+        <ExportXlsxButton
+          filename="prioritas-pemulihan"
+          sheetName="Prioritas Pemulihan"
+          columns={EXPORT_COLUMNS}
+          rows={exportRows}
+        />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">

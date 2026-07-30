@@ -46,35 +46,58 @@ export async function getCollectionPriority(): Promise<CollectionPriorityRow[]> 
   const thisMonthStart = monthBoundary(businessToday);
   const lastMonthStart = monthBoundary(businessToday, -1);
 
-  const result = await pool
-    .request()
+  // A genuinely heavy report query even after optimization (multi-CTE
+  // aggregation over vCustomerStatement/SalesOrder/SalesPayment, ~35-40s
+  // measured against real production data) — routinely bumps into the
+  // pool's global 40s requestTimeout (db.ts). Overridden here rather than
+  // raising the global default, so every OTHER (fast) query in the app
+  // keeps failing fast on a genuine hang instead of waiting 90s too.
+  // ConnectionPool.request(conf) DOES accept a per-request
+  // {requestTimeout} override at runtime (confirmed in the installed
+  // mssql package's own source/JSDoc) — the @types/mssql version bundled
+  // here just hasn't caught up to declare it, hence the cast. .call(pool, …)
+  // — not a bare invocation — since request() relies on `this` internally.
+  const requestWithTimeout = pool.request as unknown as (conf?: { requestTimeout?: number }) => sql.Request;
+  const result = await requestWithTimeout
+    .call(pool, { requestTimeout: 90000 })
     .input("periodStart", sql.Date, thisMonthStart)
     .input("thisMonthStart", sql.Date, thisMonthStart)
     .input("lastMonthStart", sql.Date, lastMonthStart)
     .query(`
+    -- vCustomerStatement is expensive to scan (~6-7s alone, confirmed via
+    -- isolated timing). The original version scanned it TWICE (once
+    -- unfiltered for the current balance, once filtered by TransDate for
+    -- the period-start balance) — combined with OrderStats/PaymentStats
+    -- below, that regularly exceeded this app's 40s DB request timeout.
+    -- Folding both balances into one conditional-SUM pass as a CTE was NOT
+    -- enough on its own (confirmed by timing: isolated pieces summed to
+    -- ~13s, but the full combined query still took ~40s) — SQL Server
+    -- doesn't guarantee a CTE referenced from two different downstream CTEs
+    -- gets materialized only once, so the scan could still effectively
+    -- happen twice once inlined into the bigger query. A real #temp table
+    -- forces a single, genuine materialization instead.
+    SELECT SalesInvoiceID,
+           SUM(Netto) AS Netto, SUM(Deposit) AS Deposit, SUM(Paid) AS Paid, SUM(OtherPayment) AS OtherPayment,
+           SUM(CASE WHEN TransDate < @periodStart THEN Netto ELSE 0 END) AS NettoAwal,
+           SUM(CASE WHEN TransDate < @periodStart THEN Deposit ELSE 0 END) AS DepositAwal,
+           SUM(CASE WHEN TransDate < @periodStart THEN Paid ELSE 0 END) AS PaidAwal,
+           SUM(CASE WHEN TransDate < @periodStart THEN OtherPayment ELSE 0 END) AS OtherPaymentAwal
+    INTO #StatementAgg
+    FROM vCustomerStatement
+    GROUP BY SalesInvoiceID;
+
     WITH InvoiceBalance AS (
         SELECT si.SalesInvoiceID, si.BusinessPartnerID, si.DueDate,
-               (cb.Netto - cb.Paid - cb.Deposit - cb.OtherPayment) AS Outstanding
-        FROM (
-            SELECT SalesInvoiceID, SUM(Netto) AS Netto, SUM(Deposit) AS Deposit,
-                   SUM(Paid) AS Paid, SUM(OtherPayment) AS OtherPayment
-            FROM vCustomerStatement
-            GROUP BY SalesInvoiceID
-        ) cb
-        JOIN SalesInvoice si ON si.SalesInvoiceID = cb.SalesInvoiceID
+               (sa.Netto - sa.Paid - sa.Deposit - sa.OtherPayment) AS Outstanding
+        FROM #StatementAgg sa
+        JOIN SalesInvoice si ON si.SalesInvoiceID = sa.SalesInvoiceID
         WHERE si.IsDeleted = 0
     ),
     InvoiceBalanceAsOfPeriodStart AS (
         SELECT si.SalesInvoiceID, si.BusinessPartnerID,
-               (cb.Netto - cb.Paid - cb.Deposit - cb.OtherPayment) AS Outstanding
-        FROM (
-            SELECT SalesInvoiceID, SUM(Netto) AS Netto, SUM(Deposit) AS Deposit,
-                   SUM(Paid) AS Paid, SUM(OtherPayment) AS OtherPayment
-            FROM vCustomerStatement
-            WHERE TransDate < @periodStart
-            GROUP BY SalesInvoiceID
-        ) cb
-        JOIN SalesInvoice si ON si.SalesInvoiceID = cb.SalesInvoiceID
+               (sa.NettoAwal - sa.PaidAwal - sa.DepositAwal - sa.OtherPaymentAwal) AS Outstanding
+        FROM #StatementAgg sa
+        JOIN SalesInvoice si ON si.SalesInvoiceID = sa.SalesInvoiceID
         WHERE si.IsDeleted = 0
     ),
     MitraBalance AS (
@@ -147,7 +170,9 @@ export async function getCollectionPriority(): Promise<CollectionPriorityRow[]> 
     LEFT JOIN PaymentStats ps ON ps.BusinessPartnerID = mb.BusinessPartnerID
     LEFT JOIN DashboardCollectionTarget ct ON ct.BusinessPartnerID = mb.BusinessPartnerID
     WHERE mb.PiutangBerjalan > 0
-    ORDER BY mb.PiutangBerjalan DESC
+    ORDER BY mb.PiutangBerjalan DESC;
+
+    DROP TABLE #StatementAgg;
   `);
 
   return result.recordset.map((r) => ({ ...r, IsTarget: Boolean(r.IsTarget) }));

@@ -15,9 +15,31 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
 import { PelunasanDialog } from "@/components/dashboard/pelunasan-dialog";
+import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { formatDate, formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { AgingRow, PiutangStatus } from "@/lib/queries/aging";
+
+// Full AgingRow field set (per-invoice grain) — more complete than the
+// ~5 fields shown per invoice row on screen (VoucherNo/TransDate/DueDate/
+// AgingBucket/Outstanding), per explicit "seluruh data lengkap" request.
+const EXPORT_COLUMNS: XlsxColumn[] = [
+  { header: "ID Mitra", key: "businessPartnerId", type: "text", width: 12 },
+  { header: "Mitra", key: "customerName", width: 26 },
+  { header: "Tipe", key: "partnerType", width: 12 },
+  { header: "Wilayah", key: "wilayah", width: 16 },
+  { header: "Kecamatan", key: "kecamatan", width: 16 },
+  { header: "Kontak", key: "kontak", type: "text", width: 16 },
+  { header: "ID Invoice", key: "salesInvoiceId", type: "text", width: 12 },
+  { header: "No Invoice", key: "voucherNo", type: "text", width: 20 },
+  { header: "Tanggal Invoice", key: "transDate", type: "text", width: 14 },
+  { header: "Jatuh Tempo", key: "dueDate", type: "text", width: 14 },
+  { header: "Outstanding", key: "outstanding", type: "number", width: 14 },
+  { header: "Hari Terlambat", key: "daysOverdue", type: "number", width: 12 },
+  { header: "Kategori Umur", key: "agingBucket", type: "text", width: 14 },
+  { header: "Status", key: "status", type: "text", width: 12 },
+];
 
 type SortKey = "CustomerName" | "DueDate" | "Outstanding" | "DaysOverdue";
 
@@ -261,6 +283,33 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
     return result;
   }, [groups, search, partnerType, status, sortKey, sortDir]);
 
+  // Per-invoice, not per-mitra-card — flattens the filtered (not paginated)
+  // groups back into AgingRow[] so the export always has one row per
+  // invoice, matching Kartu Transaksi's own "export the filtered set"
+  // precedent (ignores pagination, honors search/tipe/status).
+  const exportRows = useMemo(
+    () =>
+      filtered
+        .flatMap((g) => g.invoices)
+        .map((inv) => ({
+          businessPartnerId: inv.BusinessPartnerID,
+          customerName: inv.CustomerName,
+          partnerType: inv.PartnerType,
+          wilayah: inv.Wilayah ?? "",
+          kecamatan: inv.Kecamatan ?? "",
+          kontak: inv.Kontak ?? "",
+          salesInvoiceId: inv.SalesInvoiceID,
+          voucherNo: inv.VoucherNo,
+          transDate: formatDate(inv.TransDate),
+          dueDate: formatDate(inv.DueDate),
+          outstanding: inv.Outstanding,
+          daysOverdue: inv.DaysOverdue,
+          agingBucket: inv.AgingBucket,
+          status: inv.Status,
+        })),
+    [filtered]
+  );
+
   const filterKey = `${search}|${partnerType}|${status}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
@@ -321,9 +370,17 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Menampilkan {pageRows.length} dari {filtered.length} mitra ({totalInvoices} invoice outstanding).
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Menampilkan {pageRows.length} dari {filtered.length} mitra ({totalInvoices} invoice outstanding).
+        </p>
+        <ExportXlsxButton
+          filename="invoice-outstanding"
+          sheetName="Invoice Outstanding"
+          columns={EXPORT_COLUMNS}
+          rows={exportRows}
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @4xl:grid-cols-3">
         {pageRows.map((g) => (

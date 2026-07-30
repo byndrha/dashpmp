@@ -1,14 +1,16 @@
 "use client";
 
+import { useMemo, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { formatRupiah, formatDate, formatTime, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { TodayReceivablePayment } from "@/lib/queries/piutang-payments";
 import type { PiutangStatus } from "@/lib/queries/aging";
 
@@ -17,6 +19,23 @@ const STATUS_BADGE: Record<PiutangStatus, string> = {
   Perhatian: "bg-warning/15 text-warning",
   Kritis: "bg-destructive/15 text-destructive",
 };
+
+// Full TodayReceivablePayment field set — no filter/search exists on this
+// panel (only the date-nav, which re-fetches a different rows set
+// entirely), so the export is simply every row currently loaded.
+const EXPORT_COLUMNS: XlsxColumn[] = [
+  { header: "ID Mitra", key: "businessPartnerId", type: "text", width: 12 },
+  { header: "Mitra", key: "customerName", width: 26 },
+  { header: "Tipe", key: "partnerType", width: 12 },
+  { header: "Wilayah", key: "wilayah", width: 16 },
+  { header: "Kecamatan", key: "kecamatan", width: 16 },
+  { header: "No Pembayaran", key: "salesPaymentId", type: "text", width: 20 },
+  { header: "Tanggal", key: "transDate", type: "text", width: 18 },
+  { header: "Rata-rata Qty/Hari", key: "avgQtyPerOrderDay", type: "number", width: 14 },
+  { header: "Sisa Piutang", key: "sisaPiutang", type: "number", width: 14 },
+  { header: "Nominal Bayar", key: "amount", type: "number", width: 14 },
+  { header: "Status", key: "status", type: "text", width: 12 },
+];
 
 // businessDate/todayISO are both "YYYY-MM-DD" business-date strings (WIB,
 // see business-date.ts) — plain string comparison/arithmetic is safe since
@@ -36,6 +55,24 @@ export function PiutangPaymentsPanel({
   const [isPending, startTransition] = useTransition();
   const isToday = businessDate === todayISO;
   const totalAmount = rows.reduce((sum, r) => sum + r.Amount, 0);
+
+  const exportRows = useMemo(
+    () =>
+      rows.map((r) => ({
+        businessPartnerId: r.BusinessPartnerID,
+        customerName: r.CustomerName,
+        partnerType: r.PartnerType,
+        wilayah: r.Wilayah,
+        kecamatan: r.Kecamatan ?? "",
+        salesPaymentId: r.SalesPaymentID,
+        transDate: `${formatDate(r.TransDate)} ${formatTime(r.TransDate)}`,
+        avgQtyPerOrderDay: r.AvgQtyPerOrderDay,
+        sisaPiutang: r.SisaPiutang,
+        amount: r.Amount,
+        status: r.Status,
+      })),
+    [rows]
+  );
 
   function goToDate(newDate: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -73,27 +110,35 @@ export function PiutangPaymentsPanel({
             {rows.length} dokumen SP &middot; total {formatRupiah(totalAmount)}
           </CardDescription>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Input
-            type="date"
-            value={businessDate}
-            max={todayISO}
-            disabled={isPending}
-            onChange={(e) => e.target.value && goToDate(e.target.value)}
-            className="h-8 w-40 text-xs"
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportXlsxButton
+            filename="pembayaran-piutang"
+            sheetName="Pembayaran"
+            columns={EXPORT_COLUMNS}
+            rows={exportRows}
           />
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            disabled={isToday || isPending}
-            onClick={() => shiftDate(1)}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Input
+              type="date"
+              value={businessDate}
+              max={todayISO}
+              disabled={isPending}
+              onChange={(e) => e.target.value && goToDate(e.target.value)}
+              className="h-8 w-40 text-xs"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8"
+              disabled={isToday || isPending}
+              onClick={() => shiftDate(1)}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
