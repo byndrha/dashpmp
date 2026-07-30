@@ -119,11 +119,13 @@ export function PerusahaanFormDialog({
       for (const label of koneksiLabels) {
         const host = String(formData.get(`koneksi_${label}_host`) ?? "").trim();
         if (!host) continue; // untouched block — nothing to save
+        const portRaw = formData.get(`koneksi_${label}_port`);
+        const port = portRaw && String(portRaw).trim() ? Number(portRaw) : 1433;
         koneksiBlocks.push({
           perusahaanId: direktoriId,
           label,
           host,
-          port: Number(formData.get(`koneksi_${label}_port`) ?? 1433),
+          port,
           dbName: String(formData.get(`koneksi_${label}_dbName`) ?? ""),
           dbUser: String(formData.get(`koneksi_${label}_dbUser`) ?? ""),
           dbPassword: String(formData.get(`koneksi_${label}_dbPassword`) ?? "") || null,

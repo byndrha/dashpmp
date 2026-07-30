@@ -43,6 +43,9 @@ export async function upsertKoneksiAction(input: UpsertKoneksiInput): Promise<vo
   if (!input.host.trim() || !input.dbName.trim() || !input.dbUser.trim()) {
     throw new Error("Host, Nama Database, dan Username wajib diisi untuk setiap koneksi.");
   }
+  if (!Number.isFinite(input.port) || input.port <= 0) {
+    throw new Error("Port harus berupa angka positif untuk setiap koneksi.");
+  }
   await upsertKoneksi(input);
   revalidatePath("/grup/perusahaan");
 }
