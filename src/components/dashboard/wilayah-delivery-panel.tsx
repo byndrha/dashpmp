@@ -1,4 +1,4 @@
-import { ArrowRight, Star } from "lucide-react";
+import { ArrowRight, EqualApproximately, Star } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { cn } from "@/lib/utils";
@@ -22,10 +22,6 @@ const EXPORT_COLUMNS: XlsxColumn[] = [
 // getWilayahDeliverySummary()) and sorts after all of these, per explicit
 // business request.
 const WILAYAH_PRIORITY = ["Ponorogo", "Madiun", "Magetan", "Wonogiri", "Pacitan", "Trenggalek", "Ngawi"];
-
-// Company-wide daily target across all wilayah, per explicit business
-// request — not derived from data, a fixed figure set by management.
-const TARGET_PER_HARI = 4000;
 
 function sortByPriority(data: WilayahDeliverySummary[]): WilayahDeliverySummary[] {
   return [...data].sort((a, b) => {
@@ -51,7 +47,10 @@ export function WilayahDeliveryPanel({
   const grandTotalToday = data.reduce((sum, w) => sum + w.TotalKantongHariIni, 0);
   const sortedData = sortByPriority(data);
   const ponorogo = data.find((w) => w.Wilayah === "Ponorogo");
-  const deviasiPonorogo = ponorogo?.TargetHarian != null ? TARGET_PER_HARI - ponorogo.TargetHarian : null;
+  // Sum of every wilayah's own Target/Hari — was a fixed company-wide figure
+  // (4000) set by management; now derived from data per explicit request.
+  const targetPerHariTotal = data.reduce((sum, w) => sum + (w.TargetHarian ?? 0), 0);
+  const deviasiPonorogo = ponorogo?.TargetHarian != null ? targetPerHariTotal - ponorogo.TargetHarian : null;
 
   const exportRows = sortedData.map((w) => ({
     wilayah: w.Wilayah,
@@ -96,12 +95,13 @@ export function WilayahDeliveryPanel({
                 <p className="font-display text-sm font-semibold tabular-nums text-primary">
                   {grandTotalToday.toLocaleString("id-ID")} kantong
                 </p>
-                {/* Compact, in-panel instead of a separate box — TARGET_PER_HARI
-                    is a fixed company-wide figure (not derived from data); the
-                    deviation is specifically Ponorogo's own gap against it,
-                    starred to match Ponorogo's marker elsewhere in this panel. */}
+                {/* Compact, in-panel instead of a separate box — Target here
+                    is the sum of every wilayah's own Target/Hari; the
+                    deviation is specifically Ponorogo's own gap against
+                    that total, starred to match Ponorogo's marker elsewhere
+                    in this panel. */}
                 <p className="mt-1 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">
-                  Target {TARGET_PER_HARI.toLocaleString("id-ID")}
+                  Target {targetPerHariTotal.toLocaleString("id-ID")}
                   <span className="mx-1">·</span>
                   <Star className="mb-0.5 inline size-2.5 shrink-0 fill-primary text-primary" /> Deviasi{" "}
                   {deviasiPonorogo != null ? deviasiPonorogo.toLocaleString("id-ID") : "-"}
@@ -125,7 +125,7 @@ export function WilayahDeliveryPanel({
                       type="button"
                       onClick={() => onWilayahClick?.(w.Wilayah)}
                       className={cn(
-                        "relative rounded-lg border p-2.5 pb-6 text-left transition-colors",
+                        "rounded-lg border p-2.5 text-left transition-colors",
                         w.Wilayah === "Ponorogo" ? "border-primary/30 bg-primary/5" : "border-border bg-card/50",
                         onWilayahClick && "hover:border-primary/40 hover:bg-primary/10"
                       )}
@@ -156,7 +156,9 @@ export function WilayahDeliveryPanel({
 
                       {/* Middle row: "Hari ini:" label above its number (left)
                           paired with the period total, vertically centered
-                          on the right. */}
+                          on the right. A vertical divider separates the two
+                          values so "hari ini" and "periode terpilih" read as
+                          distinct figures instead of running together. */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-[9px] text-muted-foreground">Hari ini:</p>
@@ -164,6 +166,7 @@ export function WilayahDeliveryPanel({
                             {w.TotalKantongHariIni.toLocaleString("id-ID")}
                           </p>
                         </div>
+                        <div className="h-6 shrink-0 border-l" />
                         <p className="shrink-0 font-display text-sm font-semibold tabular-nums">
                           {w.TotalKantong.toLocaleString("id-ID")}
                         </p>
@@ -179,13 +182,19 @@ export function WilayahDeliveryPanel({
                         </p>
                       </div>
 
-                      {/* Bottom-left corner: actual average delivered per day
-                          over the period (distinct from the capacity-based
-                          Target above). */}
-                      <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
-                        Rata-rata: {w.AvgPerHari.toLocaleString("id-ID", { maximumFractionDigits: 1 })}/hari
-                      </p>
-                      <ArrowRight className="absolute bottom-2 right-2 size-3.5 text-muted-foreground" />
+                      {/* Bottom row: actual average delivered per day (left,
+                          "Rata-rata:" label replaced with an icon to keep it
+                          compact) paired with the arrow (right) — directly
+                          under "Target periode" above it, and sejajar
+                          (same row) with Rata-rata, instead of pinned to the
+                          tile's bottom-right corner. */}
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="flex items-center gap-1 text-[10px] tabular-nums text-muted-foreground">
+                          <EqualApproximately className="size-3 shrink-0" />
+                          {w.AvgPerHari.toLocaleString("id-ID", { maximumFractionDigits: 1 })}/hari
+                        </p>
+                        <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+                      </div>
                     </button>
                   ))}
                 </div>

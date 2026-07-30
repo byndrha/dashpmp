@@ -17,6 +17,8 @@ const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Kecamatan", key: "kecamatan", width: 16 },
   { header: "Qty 10KG", key: "qty10kg", type: "number", width: 10 },
   { header: "Qty 5KG", key: "qty5kg", type: "number", width: 10 },
+  { header: "No SI", key: "siVoucherNo", type: "text", width: 20 },
+  { header: "No SP", key: "spVoucherNo", type: "text", width: 20 },
 ];
 
 // Ringkas/Detail is controlled by TransaksiPanels (the shared toggle above
@@ -41,6 +43,8 @@ export function KartuTransaksiPanel({ orders, collapsed }: { orders: SalesOrderC
         kecamatan: o.Kecamatan ?? "",
         qty10kg: o.Qty10KG,
         qty5kg: o.Qty5KG,
+        siVoucherNo: o.SIVoucherNo ?? "",
+        spVoucherNo: o.SPVoucherNo ?? "",
       })),
     [filteredOrders]
   );

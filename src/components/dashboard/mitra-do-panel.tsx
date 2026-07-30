@@ -154,7 +154,7 @@ function ContactLogButton({
           <button
             type="button"
             title={contactType}
-            className="rounded p-0.5 transition-colors hover:bg-muted"
+            className="rounded p-1 transition-colors hover:bg-muted"
           />
         }
       >

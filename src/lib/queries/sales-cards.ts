@@ -19,6 +19,14 @@ export interface SalesOrderCard {
   Kecamatan: string | null;
   Qty10KG: number;
   Qty5KG: number;
+  // Both only populated once the underlying invoice is fully paid (same
+  // "isPaid" convention as DeliveryCard.SPVoucherNo below) — for the Kartu
+  // Transaksi export, an unpaid SO's SI/SP columns stay blank rather than
+  // showing an invoice number that isn't settled yet. Resolved via the
+  // SO's earliest DeliveryOrder — same 1:1-in-practice assumption already
+  // relied on elsewhere in this file.
+  SIVoucherNo: string | null;
+  SPVoucherNo: string | null;
 }
 
 export async function getSalesOrderCards(filter: DateRangeFilter): Promise<SalesOrderCard[]> {
@@ -30,6 +38,44 @@ export async function getSalesOrderCards(filter: DateRangeFilter): Promise<Sales
   if (filter.wilayah) request.input("wilayah", sql.VarChar(128), filter.wilayah);
 
   const result = await request.query(`
+    -- SI/SP rollup is done as set-based CTEs (not a per-row correlated
+    -- OUTER APPLY chain) — the naive per-row version timed out scanning a
+    -- whole date range's worth of SalesOrders, since it re-ran the
+    -- REPLACE()-based SalesInvoice join (non-sargable, see
+    -- getDeliveryCardsForOrders below) once per outer row instead of once
+    -- total. DoRep is pre-scoped to only DeliveryOrders belonging to a SO
+    -- in this date range (FilteredSO), keeping the DeliveryOrder/SalesInvoice
+    -- scan small regardless of how wide the date range is.
+    WITH FilteredSO AS (
+        SELECT so_.SalesOrderID
+        FROM SalesOrder so_
+        LEFT JOIN BusinessPartner bp_ ON bp_.BusinessPartnerID = so_.BusinessPartnerID
+        WHERE so_.IsDeleted = 0
+          AND so_.TransDate >= @startDate AND so_.TransDate < @endDate
+          ${filter.wilayah ? "AND bp_.NPWPName = @wilayah" : ""}
+    ),
+    DoRep AS (
+        SELECT do_.SalesOrderID, do_.DeliveryOrderID,
+               ROW_NUMBER() OVER (PARTITION BY do_.SalesOrderID ORDER BY do_.TransDate ASC) AS rn
+        FROM DeliveryOrder do_
+        JOIN FilteredSO f ON f.SalesOrderID = do_.SalesOrderID
+        WHERE do_.IsDeleted = 0
+    ),
+    SiRep AS (
+        -- SalesInvoice.DeliveryOrderID carries literal single-quote
+        -- characters around the id — see getDeliveryCardsForOrders below.
+        SELECT dr.SalesOrderID, si2.SalesInvoiceID, si2.VoucherNo AS SIVoucherNo, si2.Netto AS SINetto, si2.Paid AS SIPaid
+        FROM DoRep dr
+        JOIN SalesInvoice si2 ON REPLACE(si2.DeliveryOrderID, '''', '') = dr.DeliveryOrderID AND si2.IsDeleted = 0
+        WHERE dr.rn = 1
+    ),
+    SpRep AS (
+        SELECT sr.SalesOrderID, sp2.VoucherNo AS SPVoucherNo,
+               ROW_NUMBER() OVER (PARTITION BY sr.SalesOrderID ORDER BY sp2.TransDate DESC) AS rn
+        FROM SiRep sr
+        JOIN SalesPaymentDetail spd ON spd.SalesInvoiceID = sr.SalesInvoiceID AND spd.IsDeleted = 0
+        JOIN SalesPayment sp2 ON sp2.SalesPaymentID = spd.SalesPaymentID AND sp2.IsDeleted = 0
+    )
     SELECT
         so.SalesOrderID,
         so.VoucherNo,
@@ -40,19 +86,42 @@ export async function getSalesOrderCards(filter: DateRangeFilter): Promise<Sales
         ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
         bp.NPWPAddress AS Kecamatan,
         ISNULL(SUM(CASE WHEN ${KEMASAN_5KG("sod.Name")} = 0 THEN sod.Qty ELSE 0 END), 0) AS Qty10KG,
-        ISNULL(SUM(CASE WHEN ${KEMASAN_5KG("sod.Name")} = 1 THEN sod.Qty ELSE 0 END), 0) AS Qty5KG
+        ISNULL(SUM(CASE WHEN ${KEMASAN_5KG("sod.Name")} = 1 THEN sod.Qty ELSE 0 END), 0) AS Qty5KG,
+        si.SIVoucherNo,
+        si.SINetto,
+        si.SIPaid,
+        sp.SPVoucherNo
     FROM SalesOrder so
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
+    LEFT JOIN SiRep si ON si.SalesOrderID = so.SalesOrderID
+    LEFT JOIN SpRep sp ON sp.SalesOrderID = so.SalesOrderID AND sp.rn = 1
     WHERE so.IsDeleted = 0
       AND so.TransDate >= @startDate AND so.TransDate < @endDate
       ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
     GROUP BY so.SalesOrderID, so.VoucherNo, so.TransDate, bp.BusinessPartnerID, bp.Name,
-             bp.NPWPName, bp.NPWPAddress, bp.SalesmanID, bp.Gender
+             bp.NPWPName, bp.NPWPAddress, bp.SalesmanID, bp.Gender,
+             si.SIVoucherNo, si.SINetto, si.SIPaid, sp.SPVoucherNo
     ORDER BY so.TransDate DESC
   `);
 
-  return result.recordset;
+  return result.recordset.map((row) => {
+    const isPaid = !!row.SIVoucherNo && row.SINetto > 0 && row.SIPaid >= row.SINetto;
+    return {
+      SalesOrderID: row.SalesOrderID,
+      VoucherNo: row.VoucherNo,
+      TransDate: row.TransDate,
+      BusinessPartnerID: row.BusinessPartnerID,
+      CustomerName: row.CustomerName,
+      PartnerType: row.PartnerType,
+      Wilayah: row.Wilayah,
+      Kecamatan: row.Kecamatan,
+      Qty10KG: row.Qty10KG,
+      Qty5KG: row.Qty5KG,
+      SIVoucherNo: isPaid ? row.SIVoucherNo : null,
+      SPVoucherNo: isPaid ? row.SPVoucherNo : null,
+    };
+  });
 }
 
 export type BillingStatus = "SudahDitagih" | "BelumDitagih";
