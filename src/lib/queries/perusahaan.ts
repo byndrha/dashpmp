@@ -17,6 +17,7 @@ export interface PerusahaanRow {
   PabrikAlamat: string | null;
   Status: PerusahaanStatus;
   StandaloneUrl: string | null;
+  Kode: string | null;
   DbServer: string | null;
   DbPort: number | null;
   DbName: string | null;
@@ -34,6 +35,10 @@ export interface PerusahaanInput {
   pabrikAlamat: string | null;
   status: PerusahaanStatus;
   standaloneUrl: string | null;
+  // Links this MSSQL registry row to Postgres perusahaan.kode ('mkesindo' |
+  // 'pmputra') — see docs/superpowers/specs/2026-07-30-perusahaan-db-koneksi-design.md.
+  // null means "not linked yet" (e.g. a brand-new Draft PT).
+  kode: string | null;
   dbServer: string | null;
   dbPort: number | null;
   dbName: string | null;
@@ -56,7 +61,7 @@ export async function listPerusahaan(): Promise<PerusahaanRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT PerusahaanID, Nama, JenisBisnis, Wilayah, PabrikLatitude, PabrikLongitude, PabrikAlamat,
-           Status, StandaloneUrl, DbServer, DbPort, DbName, DbUser,
+           Status, StandaloneUrl, Kode, DbServer, DbPort, DbName, DbUser,
            CASE WHEN DbPasswordEncrypted IS NULL THEN 0 ELSE 1 END AS HasDbPassword,
            Catatan
     FROM DashboardPerusahaan
@@ -93,6 +98,7 @@ export async function createPerusahaan(input: PerusahaanInput): Promise<number> 
     .input("pabrikAlamat", sql.VarChar(512), input.pabrikAlamat)
     .input("status", sql.VarChar(20), input.status)
     .input("standaloneUrl", sql.VarChar(512), input.standaloneUrl)
+    .input("kode", sql.VarChar(32), input.kode)
     .input("dbServer", sql.VarChar(256), input.dbServer)
     .input("dbPort", sql.Int, input.dbPort)
     .input("dbName", sql.VarChar(128), input.dbName)
@@ -101,11 +107,11 @@ export async function createPerusahaan(input: PerusahaanInput): Promise<number> 
     .input("catatan", sql.VarChar(1024), input.catatan).query(`
       INSERT INTO DashboardPerusahaan
         (Nama, JenisBisnis, Wilayah, PabrikLatitude, PabrikLongitude, PabrikAlamat, Status, StandaloneUrl,
-         DbServer, DbPort, DbName, DbUser, DbPasswordEncrypted, Catatan, IsDeleted, CreatedAt, UpdatedAt)
+         Kode, DbServer, DbPort, DbName, DbUser, DbPasswordEncrypted, Catatan, IsDeleted, CreatedAt, UpdatedAt)
       OUTPUT inserted.PerusahaanID
       VALUES
         (@nama, @jenisBisnis, @wilayah, @pabrikLatitude, @pabrikLongitude, @pabrikAlamat, @status, @standaloneUrl,
-         @dbServer, @dbPort, @dbName, @dbUser, @dbPasswordEncrypted, @catatan, 0, GETDATE(), GETDATE())
+         @kode, @dbServer, @dbPort, @dbName, @dbUser, @dbPasswordEncrypted, @catatan, 0, GETDATE(), GETDATE())
     `);
   return (result.recordset[0] as { PerusahaanID: number }).PerusahaanID;
 }
@@ -123,6 +129,7 @@ export async function updatePerusahaan(id: number, input: PerusahaanInput): Prom
     .input("pabrikAlamat", sql.VarChar(512), input.pabrikAlamat)
     .input("status", sql.VarChar(20), input.status)
     .input("standaloneUrl", sql.VarChar(512), input.standaloneUrl)
+    .input("kode", sql.VarChar(32), input.kode)
     .input("dbServer", sql.VarChar(256), input.dbServer)
     .input("dbPort", sql.Int, input.dbPort)
     .input("dbName", sql.VarChar(128), input.dbName)
@@ -138,7 +145,7 @@ export async function updatePerusahaan(id: number, input: PerusahaanInput): Prom
       UPDATE DashboardPerusahaan SET
         Nama = @nama, JenisBisnis = @jenisBisnis, Wilayah = @wilayah,
         PabrikLatitude = @pabrikLatitude, PabrikLongitude = @pabrikLongitude, PabrikAlamat = @pabrikAlamat,
-        Status = @status, StandaloneUrl = @standaloneUrl,
+        Status = @status, StandaloneUrl = @standaloneUrl, Kode = @kode,
         DbServer = @dbServer, DbPort = @dbPort, DbName = @dbName, DbUser = @dbUser,
         DbPasswordEncrypted = @dbPasswordEncrypted, Catatan = @catatan, UpdatedAt = GETDATE()
       WHERE PerusahaanID = @id
@@ -148,7 +155,7 @@ export async function updatePerusahaan(id: number, input: PerusahaanInput): Prom
       UPDATE DashboardPerusahaan SET
         Nama = @nama, JenisBisnis = @jenisBisnis, Wilayah = @wilayah,
         PabrikLatitude = @pabrikLatitude, PabrikLongitude = @pabrikLongitude, PabrikAlamat = @pabrikAlamat,
-        Status = @status, StandaloneUrl = @standaloneUrl,
+        Status = @status, StandaloneUrl = @standaloneUrl, Kode = @kode,
         DbServer = @dbServer, DbPort = @dbPort, DbName = @dbName, DbUser = @dbUser,
         Catatan = @catatan, UpdatedAt = GETDATE()
       WHERE PerusahaanID = @id
