@@ -17,7 +17,7 @@ export function getPool(): Promise<sql.ConnectionPool> {
       .then((cfg) => {
         if (!cfg) {
           throw new Error(
-            'No perusahaan_koneksi row for kode="mkesindo" label="utama" — run scripts/seed-mkesindo-koneksi.ts (see docs/superpowers/plans/2026-07-30-perusahaan-db-koneksi.md Task 3)'
+            'No perusahaan_koneksi row for kode="mkesindo" label="utama" — re-seed it using resolveKoneksi/upsertKoneksi from @/lib/queries/perusahaan-koneksi (see docs/superpowers/plans/2026-07-30-perusahaan-db-koneksi.md Task 3 — the original seed script was a one-off, deleted after use, not committed)'
           );
         }
         const config: sql.config = {
@@ -30,9 +30,12 @@ export function getPool(): Promise<sql.ConnectionPool> {
             encrypt: process.env.DB_ENCRYPT !== "false",
             trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === "true",
           },
-          // Same tuning as before this change — see the removed comment's
-          // rationale, unchanged: ~5s cold TLS handshake on this host,
-          // min:2 keeps warm connections alive for concurrent bursts.
+          // Same tuning as before this change: opening a fresh connection
+          // (TLS handshake + auth) alone takes ~5s on this host, so min:2
+          // keeps warm connections alive for concurrent bursts instead of
+          // paying that cost N times in parallel; timeouts give this app's
+          // slower aggregate queries (9-17s under load, see aging.ts) real
+          // headroom instead of hard-failing at the edge.
           connectionTimeout: 15000,
           requestTimeout: 40000,
           pool: { max: 10, min: 2, idleTimeoutMillis: 600000 },
