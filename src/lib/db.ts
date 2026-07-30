@@ -1,48 +1,51 @@
 import sql from "mssql";
+import { resolveKoneksi } from "@/lib/queries/perusahaan-koneksi";
 
-const config: sql.config = {
-  server: process.env.DB_SERVER!,
-  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 1433,
-  database: process.env.DB_NAME!,
-  user: process.env.DB_USER!,
-  password: process.env.DB_PASSWORD!,
-  options: {
-    encrypt: process.env.DB_ENCRYPT !== "false",
-    trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === "true",
-  },
-  // Measured live against this DB host: opening a fresh connection (TLS
-  // handshake + auth) alone takes ~5s, before any query even runs — with the
-  // old min:0/idleTimeoutMillis:30000 pool, any page whose Promise.all fires
-  // several concurrent queries after 30s of quiet pays that ~5s handshake
-  // cost N times in parallel, competing for the same DB host. min: 2 keeps
-  // warm connections alive so bursts reuse an already-open socket instead
-  // (subsequent queries on a warm connection measured ~0.4-0.5s). Timeouts
-  // bumped to give legitimately slow queries (some of this app's aggregate
-  // queries measured 9-17s under concurrent load, see aging.ts) real
-  // headroom instead of hard-failing right at the edge.
-  connectionTimeout: 15000,
-  requestTimeout: 40000,
-  pool: {
-    max: 10,
-    min: 2,
-    idleTimeoutMillis: 600000,
-  },
-};
-
+// MKEsindo's live MSSQL connection now resolves through the Postgres
+// "directory" DB (perusahaan_koneksi, kode="mkesindo" label="utama")
+// instead of static DB_* env vars — see docs/superpowers/specs/
+// 2026-07-30-perusahaan-db-koneksi-design.md. Deliberately NO env-var
+// fallback: if the directory lookup fails, this throws, and so does every
+// page that calls getPool(). Accepted risk, not an oversight.
 declare global {
   var _mssqlPool: Promise<sql.ConnectionPool> | undefined;
 }
 
 export function getPool(): Promise<sql.ConnectionPool> {
   if (!global._mssqlPool) {
-    global._mssqlPool = new sql.ConnectionPool(config).connect().catch((err) => {
-      // Don't cache a failed connection attempt — otherwise every request for
-      // the rest of the process's lifetime reuses the same rejected promise
-      // and never retries, even after the underlying issue (bad creds,
-      // network blip) is fixed.
-      global._mssqlPool = undefined;
-      throw err;
-    });
+    global._mssqlPool = resolveKoneksi("mkesindo", "utama")
+      .then((cfg) => {
+        if (!cfg) {
+          throw new Error(
+            'No perusahaan_koneksi row for kode="mkesindo" label="utama" — run scripts/seed-mkesindo-koneksi.ts (see docs/superpowers/plans/2026-07-30-perusahaan-db-koneksi.md Task 3)'
+          );
+        }
+        const config: sql.config = {
+          server: cfg.host,
+          port: cfg.port,
+          database: cfg.dbName,
+          user: cfg.dbUser,
+          password: cfg.dbPassword,
+          options: {
+            encrypt: process.env.DB_ENCRYPT !== "false",
+            trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === "true",
+          },
+          // Same tuning as before this change — see the removed comment's
+          // rationale, unchanged: ~5s cold TLS handshake on this host,
+          // min:2 keeps warm connections alive for concurrent bursts.
+          connectionTimeout: 15000,
+          requestTimeout: 40000,
+          pool: { max: 10, min: 2, idleTimeoutMillis: 600000 },
+        };
+        return new sql.ConnectionPool(config).connect();
+      })
+      .catch((err) => {
+        // Don't cache a failed resolution/connection attempt — otherwise
+        // every request for the rest of the process's lifetime reuses the
+        // same rejected promise and never retries.
+        global._mssqlPool = undefined;
+        throw err;
+      });
   }
   return global._mssqlPool;
 }
