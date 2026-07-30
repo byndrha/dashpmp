@@ -26,6 +26,21 @@ function getWibParts(now: Date): { year: number; month: number; day: number; hou
 }
 
 /**
+ * Same WIB-rollover concept as getBusinessDate below, but with an explicit
+ * rollover hour instead of the app-wide ROLLOVER_HOUR (14:00) — some panels
+ * (e.g. Kinerja Marketing, 13:00) have their own, different cutoff. Kept as
+ * the shared implementation so every rollover-hour variant stays consistent
+ * WIB-timezone math, not hand-rolled per call site.
+ */
+export function getBusinessDateWithRollover(rolloverHour: number, now: Date = new Date()): Date {
+  const wib = getWibParts(now);
+  const businessDay = wib.hour >= rolloverHour ? wib.day + 1 : wib.day;
+  // Construct as a UTC midnight Date for the WIB calendar date, since SQL Server
+  // DATE parameters only care about the calendar date, not a specific instant.
+  return new Date(Date.UTC(wib.year, wib.month - 1, businessDay));
+}
+
+/**
  * The "business date" for transaction data: after 14:00 WIB, staff consider
  * new orders/deliveries to belong to the next day, so anything labeled
  * "hari ini" (today) in the dashboard should mean tomorrow's calendar date
@@ -34,11 +49,7 @@ function getWibParts(now: Date): { year: number; month: number; day: number; hou
  * transaction data is entered in.
  */
 export function getBusinessDate(now: Date = new Date()): Date {
-  const wib = getWibParts(now);
-  const businessDay = wib.hour >= ROLLOVER_HOUR ? wib.day + 1 : wib.day;
-  // Construct as a UTC midnight Date for the WIB calendar date, since SQL Server
-  // DATE parameters only care about the calendar date, not a specific instant.
-  return new Date(Date.UTC(wib.year, wib.month - 1, businessDay));
+  return getBusinessDateWithRollover(ROLLOVER_HOUR, now);
 }
 
 export function getBusinessDateISO(now: Date = new Date()): string {

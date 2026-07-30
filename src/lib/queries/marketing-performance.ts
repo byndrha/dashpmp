@@ -1,5 +1,5 @@
 import { getPool, sql } from "@/lib/db";
-import { getBusinessDateISO } from "@/lib/business-date";
+import { getBusinessDateISO, getBusinessDateWithRollover } from "@/lib/business-date";
 import { getMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import {
   getMarketingUsers,
@@ -59,6 +59,15 @@ export interface MarketingPerformanceData {
 // in this same halved unit).
 const KANTONG_QTY_EXPR = `SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivered / 2.0 ELSE dod.Delivered END)`;
 
+// Kinerja Marketing's own rollover cutoff — deliberately 13:00 WIB, not the
+// app-wide ROLLOVER_HOUR (14:00) used by Papan Pengiriman. Standing
+// business rule (explicit request): the panel's visible range must never
+// lag behind "today" WIB, and once it's past 13:00 WIB it must already
+// include "tomorrow" too — every render recomputes this off the current
+// instant, so it keeps holding as days pass rather than needing a manual
+// periodDays bump.
+const KINERJA_MARKETING_ROLLOVER_HOUR = 13;
+
 // Per-Marketing counterpart to getMitraDOMonthly() — instead of one row per
 // mitra, buckets every mitra resolved (via DashboardMarketingWilayah) to a
 // Marketing's Wilayah/Kecamatan scope. The period is NOT the calendar month
@@ -79,8 +88,20 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
 
   const pool = await getPool();
   const rangeStart = new Date(period.startDate);
-  const rangeEnd = new Date(rangeStart.getTime() + period.periodDays * 86400000);
+  const configuredRangeEnd = new Date(rangeStart.getTime() + period.periodDays * 86400000);
   const todayISO = getBusinessDateISO();
+
+  // Last day that must be visible, per the 13:00 WIB rollover above —
+  // rangeEnd is an EXCLUSIVE upper bound, so it needs to land one day past
+  // that last-visible day. Only ever extends the configured range, never
+  // shrinks it (a deliberately longer/custom-configured period stays
+  // untouched) — Math.max against a rangeStart-in-the-future setting also
+  // falls back to the configured length harmlessly, since the rollover
+  // floor would compute behind rangeStart in that case.
+  const rolloverLastVisibleDay = getBusinessDateWithRollover(KINERJA_MARKETING_ROLLOVER_HOUR);
+  const rolloverMinRangeEnd = new Date(rolloverLastVisibleDay.getTime() + 86400000);
+  const rangeEnd = configuredRangeEnd.getTime() >= rolloverMinRangeEnd.getTime() ? configuredRangeEnd : rolloverMinRangeEnd;
+  const periodDays = Math.round((rangeEnd.getTime() - rangeStart.getTime()) / 86400000);
 
   // Grouped per-mitra (not just per Wilayah/Kecamatan) so a mitra with a
   // priority override (resolveResponsibleMarketing) can be pulled into its
@@ -136,7 +157,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
         Wilayah: wilayah,
         Kecamatan: kecamatan,
         TargetHarian: 0,
-        DailyQty: new Array(period.periodDays).fill(0),
+        DailyQty: new Array(periodDays).fill(0),
       };
       cells.set(key, cell);
     }
@@ -177,7 +198,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   // dailyResult (already fetched for the cell aggregation above) rather than
   // a second query.
   const mitraDailyQty: Record<string, number[]> = {};
-  for (const id of resolvedMarketingByMitra.keys()) mitraDailyQty[id] = new Array(period.periodDays).fill(0);
+  for (const id of resolvedMarketingByMitra.keys()) mitraDailyQty[id] = new Array(periodDays).fill(0);
 
   for (const r of dailyResult.recordset as {
     BusinessPartnerID: string;
@@ -189,13 +210,13 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
     if (!cell) continue;
     const dayIndex = Math.round((new Date(r.TransDate).getTime() - rangeStart.getTime()) / 86400000);
-    if (dayIndex < 0 || dayIndex >= period.periodDays) continue;
+    if (dayIndex < 0 || dayIndex >= periodDays) continue;
     cell.DailyQty[dayIndex] += r.QtyKantong;
     if (mitraDailyQty[r.BusinessPartnerID]) mitraDailyQty[r.BusinessPartnerID][dayIndex] += r.QtyKantong;
   }
 
   return {
-    periodDays: period.periodDays,
+    periodDays,
     rangeStartISO: period.startDate,
     todayISO,
     cells: [...cells.values()],
