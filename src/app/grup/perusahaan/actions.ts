@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireGrupAccess } from "@/lib/require-access";
 import { createPerusahaan, updatePerusahaan, softDeletePerusahaan, type PerusahaanInput } from "@/lib/queries/perusahaan";
 import { PERUSAHAAN_JENIS_BISNIS } from "@/lib/perusahaan-status";
+import { upsertKoneksi, deleteKoneksi, type UpsertKoneksiInput } from "@/lib/queries/perusahaan-koneksi";
 
 function assertValid(input: PerusahaanInput) {
   if (!input.nama.trim()) throw new Error("Nama PT wajib diisi.");
@@ -34,5 +35,20 @@ export async function updatePerusahaanAction(id: number, input: PerusahaanInput)
 export async function deletePerusahaanAction(id: number): Promise<void> {
   await requireGrupAccess();
   await softDeletePerusahaan(id);
+  revalidatePath("/grup/perusahaan");
+}
+
+export async function upsertKoneksiAction(input: UpsertKoneksiInput): Promise<void> {
+  await requireGrupAccess();
+  if (!input.host.trim() || !input.dbName.trim() || !input.dbUser.trim()) {
+    throw new Error("Host, Nama Database, dan Username wajib diisi untuk setiap koneksi.");
+  }
+  await upsertKoneksi(input);
+  revalidatePath("/grup/perusahaan");
+}
+
+export async function deleteKoneksiAction(id: number): Promise<void> {
+  await requireGrupAccess();
+  await deleteKoneksi(id);
   revalidatePath("/grup/perusahaan");
 }

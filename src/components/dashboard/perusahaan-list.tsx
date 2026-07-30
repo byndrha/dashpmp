@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { PerusahaanRow, PerusahaanStatus, PerusahaanInput } from "@/lib/queries/perusahaan";
+import type { PerusahaanDirektoriOption } from "@/lib/queries/akun-direktori";
+import type { KoneksiRow, UpsertKoneksiInput } from "@/lib/queries/perusahaan-koneksi";
 import { PerusahaanFormDialog } from "@/components/dashboard/perusahaan-form-dialog";
 import {
   createPerusahaanAction,
   updatePerusahaanAction,
   deletePerusahaanAction,
+  upsertKoneksiAction,
 } from "@/app/grup/perusahaan/actions";
 
 const STATUS_BADGE: Record<PerusahaanStatus, string> = {
@@ -25,12 +28,20 @@ const STATUS_LABEL: Record<PerusahaanStatus, string> = {
   AktifPenuh: "Aktif Penuh",
 };
 
-export function PerusahaanList({ rows }: { rows: PerusahaanRow[] }) {
+export function PerusahaanList({
+  rows,
+  perusahaanDirektoriOptions,
+  koneksi,
+}: {
+  rows: PerusahaanRow[];
+  perusahaanDirektoriOptions: PerusahaanDirektoriOption[];
+  koneksi: KoneksiRow[];
+}) {
   const [target, setTarget] = useState<PerusahaanRow | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function handleSubmit(input: PerusahaanInput) {
+  function handleSubmit(input: PerusahaanInput, koneksiBlocks: UpsertKoneksiInput[]) {
     setError(null);
     startTransition(async () => {
       try {
@@ -38,6 +49,9 @@ export function PerusahaanList({ rows }: { rows: PerusahaanRow[] }) {
           await createPerusahaanAction(input);
         } else if (target) {
           await updatePerusahaanAction(target.PerusahaanID, input);
+        }
+        for (const block of koneksiBlocks) {
+          await upsertKoneksiAction(block);
         }
         setTarget(null);
       } catch (err) {
@@ -110,7 +124,7 @@ export function PerusahaanList({ rows }: { rows: PerusahaanRow[] }) {
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="size-3" /> {r.Wilayah ?? "-"}
                 </span>
-                <span>DB: {r.DbServer ? `${r.DbServer}${r.DbName ? `/${r.DbName}` : ""}` : "belum diisi"}</span>
+                <span>Tautan Postgres: {r.Kode ?? "belum ditautkan"}</span>
               </div>
             </CardContent>
           </Card>
@@ -120,16 +134,15 @@ export function PerusahaanList({ rows }: { rows: PerusahaanRow[] }) {
         )}
       </div>
 
-      {/* Keyed on target identity — PerusahaanFormDialog's status/jenisBisnis/
-          location useState hooks only read their initial value once on mount;
-          without this key, switching straight from editing one PT to another
-          reuses the same component instance and keeps showing the first PT's
-          values. The key must live here (the call site) rather than on an
-          element inside the dialog, since remounting a child doesn't reset
-          hooks declared in this component's own function body. */}
+      {/* Keyed on target identity — see the original comment this replaces:
+          PerusahaanFormDialog's local useState hooks only read their initial
+          value once on mount, so this key forces a remount when switching
+          between PTs while the dialog stays conceptually "open". */}
       <PerusahaanFormDialog
         key={target === "new" ? "new" : target ? target.PerusahaanID : "closed"}
         target={target}
+        perusahaanDirektoriOptions={perusahaanDirektoriOptions}
+        existingKoneksi={koneksi}
         onOpenChange={(open) => !open && setTarget(null)}
         onSubmit={handleSubmit}
         pending={pending}
