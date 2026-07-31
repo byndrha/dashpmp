@@ -9,8 +9,19 @@
 // share one consistent ID space going forward.
 //
 // Read-write against MSSQL (these 3 tables only), read-only against
-// Postgres. Safe to re-run: an UPDATE that finds no matching old UserID
-// values simply affects 0 rows.
+// Postgres. Genuinely idempotent (not just accidentally so): a value only
+// gets rewritten if it's a member of the actual known set of MSSQL
+// DashboardUser.UserID values fetched at the top of this run — a value
+// that's already a Postgres akun.id is never touched, even if it happens
+// to numerically overlap with some other old UserID (a real, non-hypothetical
+// risk: akun.id is a freshly-seeded SERIAL over the same ~16 rows, so its
+// range plausibly overlaps DashboardUser.UserID's). Do NOT loosen this to a
+// generic "is it a finite number" check — that was tried first and is
+// unsafe: it can't distinguish "still needs migrating" from "already
+// migrated," so a second run could silently reassign an already-correct
+// row to the wrong person while the verification pass at the bottom would
+// still report PASS (it only checks "does this id exist in akun," not
+// "is it the SAME id it was before").
 //
 // Usage: npx tsx scripts/migrate-marketing-userid-to-akun-id.ts
 import "dotenv/config";
@@ -24,12 +35,14 @@ async function main() {
   // Build the old-UserID -> new-akun.id mapping via username (every
   // DashboardUser row was migrated 1:1 into akun with username preserved).
   const mssqlUsers = await mssql.request().query(`SELECT UserID, Username FROM DashboardUser`);
+  const knownOldUserIds = new Set<number>();
   const mapping = new Map<number, number>(); // old MSSQL UserID -> new Postgres akun.id
   for (const u of mssqlUsers.recordset as { UserID: number; Username: string }[]) {
+    knownOldUserIds.add(u.UserID);
     const pgRow = await pg.query(`SELECT id FROM akun WHERE username = $1`, [u.Username]);
     if (pgRow.rows[0]) mapping.set(u.UserID, pgRow.rows[0].id as number);
   }
-  console.log(`Built mapping for ${mapping.size} users.`);
+  console.log(`Built mapping for ${mapping.size} of ${mssqlUsers.recordset.length} DashboardUser rows.`);
 
   let totalUpdated = 0;
 
@@ -39,15 +52,16 @@ async function main() {
     `);
     for (const row of distinctResult.recordset as { val: string }[]) {
       const oldId = Number(row.val);
-      if (!Number.isFinite(oldId)) continue; // already migrated (new akun.id) or malformed — skip
+      // Only a value that's a genuine, known old DashboardUser.UserID is a
+      // migration candidate — anything else (already an akun.id, or
+      // malformed) is left untouched. This is the actual safety mechanism,
+      // not "is it a finite number" (see the file header comment).
+      if (!knownOldUserIds.has(oldId)) continue;
       const newId = mapping.get(oldId);
       if (newId == null) {
         console.log(`  WARNING: ${table}.${column} = '${row.val}' has no matching akun — leaving as-is.`);
         continue;
       }
-      // Skip a no-op update when old === new (would be rare, but avoids a
-      // spurious "already migrated" ambiguity on re-run).
-      if (oldId === newId) continue;
       const result = await mssql
         .request()
         .input("oldVal", sql.VarChar(16), row.val)
