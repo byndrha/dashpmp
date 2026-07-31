@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { PerusahaanRow, PerusahaanStatus, PerusahaanInput } from "@/lib/queries/perusahaan";
-import type { PerusahaanDirektoriOption } from "@/lib/queries/akun-direktori";
+import type { PerusahaanDirektoriOption } from "@/lib/queries/akun";
 import type { KoneksiRow, UpsertKoneksiInput } from "@/lib/queries/perusahaan-koneksi";
 import { PerusahaanFormDialog } from "@/components/dashboard/perusahaan-form-dialog";
 import {

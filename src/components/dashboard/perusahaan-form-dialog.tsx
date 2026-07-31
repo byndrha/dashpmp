@@ -17,7 +17,7 @@ import {
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
 import { PERUSAHAAN_STATUSES, type PerusahaanStatus, PERUSAHAAN_JENIS_BISNIS, type PerusahaanJenisBisnis } from "@/lib/perusahaan-status";
 import type { PerusahaanRow, PerusahaanInput } from "@/lib/queries/perusahaan";
-import type { PerusahaanDirektoriOption } from "@/lib/queries/akun-direktori";
+import type { PerusahaanDirektoriOption } from "@/lib/queries/akun";
 import type { KoneksiRow, UpsertKoneksiInput } from "@/lib/queries/perusahaan-koneksi";
 
 const STATUS_LABEL: Record<PerusahaanStatus, string> = {

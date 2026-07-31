@@ -1,6 +1,6 @@
 import { requireGrupAccess } from "@/lib/require-access";
 import { listPerusahaan } from "@/lib/queries/perusahaan";
-import { listPerusahaanDirektori } from "@/lib/queries/akun-direktori";
+import { listPerusahaanDirektori } from "@/lib/queries/akun";
 import { listAllKoneksi } from "@/lib/queries/perusahaan-koneksi";
 import { PerusahaanList } from "@/components/dashboard/perusahaan-list";
 
