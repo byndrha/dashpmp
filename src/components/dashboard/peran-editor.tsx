@@ -5,42 +5,23 @@ import { Plus, Trash2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MODULE_KEYS, MODULE_LABEL, type ModuleKey, type PermissionMap } from "@/lib/permissions";
-import type { DashboardRoleRow } from "@/lib/queries/akun";
-import { createRoleAction, deleteRoleAction, setRolePermissionAction } from "@/app/grup/akun/peran/actions";
+import type { PeranRow, PeranIzinRow, PerusahaanDirektoriOption } from "@/lib/queries/akun";
+import { createPeranAction, deletePeranAction, setPeranIzinAction } from "@/app/grup/akun/peran/actions";
 
-interface RolePermissionRow {
-  roleId: number;
-  moduleKey: string;
-  canView: boolean;
-  canEdit: boolean;
-}
-
-function buildMap(rows: RolePermissionRow[], roleId: number): PermissionMap {
+function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
   const map: PermissionMap = {};
   for (const key of MODULE_KEYS) {
-    const row = rows.find((r) => r.roleId === roleId && r.moduleKey === key);
+    const row = izinList.find((r) => r.peranId === peranId && r.moduleKey === key);
     map[key] = { canView: row?.canView ?? false, canEdit: row?.canEdit ?? false };
   }
   return map;
 }
 
-function RoleCard({
-  role,
-  initialMap,
-}: {
-  role: DashboardRoleRow;
-  initialMap: PermissionMap;
-}) {
+function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: PermissionMap }) {
   const [map, setMap] = useState(initialMap);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +44,8 @@ function RoleCard({
       try {
         await Promise.all(
           MODULE_KEYS.map((key) =>
-            setRolePermissionAction({
-              roleId: role.roleId,
+            setPeranIzinAction({
+              peranId: peran.id,
               moduleKey: key,
               canView: map[key]?.canView ?? false,
               canEdit: map[key]?.canEdit ?? false,
@@ -79,11 +60,11 @@ function RoleCard({
   }
 
   function handleDelete() {
-    if (!confirm(`Hapus peran "${role.roleName}"?`)) return;
+    if (!confirm(`Hapus peran "${peran.nama}"?`)) return;
     setError(null);
     startTransition(async () => {
       try {
-        await deleteRoleAction(role.roleId);
+        await deletePeranAction(peran.id);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menghapus peran.");
       }
@@ -94,7 +75,7 @@ function RoleCard({
     <Card size="sm">
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="font-display text-sm">
-          {role.roleName} <span className="font-normal text-muted-foreground">({role.userCount} akun)</span>
+          {peran.nama} <span className="font-normal text-muted-foreground">({peran.akunCount} akun)</span>
         </CardTitle>
         <Button variant="ghost" size="icon" className="size-7" disabled={pending} onClick={handleDelete}>
           <Trash2 className="size-3.5 text-destructive" />
@@ -115,20 +96,10 @@ function RoleCard({
                 <tr key={key} className="border-t border-border">
                   <td className="p-1.5">{MODULE_LABEL[key]}</td>
                   <td className="p-1.5 text-center">
-                    <input
-                      type="checkbox"
-                      className="accent-primary"
-                      checked={map[key]?.canView ?? false}
-                      onChange={() => toggle(key, "canView")}
-                    />
+                    <input type="checkbox" className="accent-primary" checked={map[key]?.canView ?? false} onChange={() => toggle(key, "canView")} />
                   </td>
                   <td className="p-1.5 text-center">
-                    <input
-                      type="checkbox"
-                      className="accent-primary"
-                      checked={map[key]?.canEdit ?? false}
-                      onChange={() => toggle(key, "canEdit")}
-                    />
+                    <input type="checkbox" className="accent-primary" checked={map[key]?.canEdit ?? false} onChange={() => toggle(key, "canEdit")} />
                   </td>
                 </tr>
               ))}
@@ -144,12 +115,14 @@ function RoleCard({
   );
 }
 
-function CreateRoleDialog({
+function CreatePeranDialog({
   open,
   onOpenChange,
+  perusahaanId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  perusahaanId: number;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +131,7 @@ function CreateRoleDialog({
     setError(null);
     startTransition(async () => {
       try {
-        await createRoleAction(String(formData.get("roleName") ?? ""));
+        await createPeranAction(perusahaanId, String(formData.get("nama") ?? ""));
         onOpenChange(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menambah peran.");
@@ -175,8 +148,8 @@ function CreateRoleDialog({
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="roleName">Nama Peran</Label>
-            <Input id="roleName" name="roleName" required />
+            <Label htmlFor="nama">Nama Peran</Label>
+            <Input id="nama" name="nama" required />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
@@ -191,52 +164,69 @@ function CreateRoleDialog({
 }
 
 export function PeranEditor({
-  roles,
-  permissions,
+  peranList,
+  izinList,
+  perusahaanList,
 }: {
-  roles: DashboardRoleRow[];
-  permissions: RolePermissionRow[];
+  peranList: PeranRow[];
+  izinList: PeranIzinRow[];
+  perusahaanList: PerusahaanDirektoriOption[];
 }) {
+  const [perusahaanId, setPerusahaanId] = useState<number | null>(perusahaanList[0]?.id ?? null);
   const [creating, setCreating] = useState(false);
-  const superAdminRole = roles.find((r) => r.isSuperAdmin);
-  const otherRoles = roles.filter((r) => !r.isSuperAdmin);
+
+  const scoped = peranList.filter((p) => p.perusahaanId === perusahaanId);
+  const superAdminRole = scoped.find((p) => p.isSuperAdmin);
+  const otherRoles = scoped.filter((p) => !p.isSuperAdmin);
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <Label>Perusahaan</Label>
+        <Select value={perusahaanId != null ? String(perusahaanId) : ""} onValueChange={(v) => setPerusahaanId(v ? Number(v) : null)}>
+          <SelectTrigger className="w-64">
+            <SelectValue>{() => perusahaanList.find((p) => p.id === perusahaanId)?.nama ?? "Pilih PT"}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {perusahaanList.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>
+                {p.nama}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {superAdminRole && (
         <Card size="sm" className="border-primary/30 bg-primary/5">
           <CardContent className="flex items-center gap-3 py-1">
             <ShieldCheck className="size-4 shrink-0 text-primary" />
             <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{superAdminRole.roleName}</span> ({superAdminRole.userCount}{" "}
-              akun) selalu memiliki akses penuh (lihat &amp; ubah) ke seluruh modul, termasuk Akun &mdash; tidak
-              dapat diatur di sini.
+              <span className="font-medium text-foreground">{superAdminRole.nama}</span> ({superAdminRole.akunCount} akun) selalu
+              memiliki akses penuh (lihat &amp; ubah) ke seluruh modul, termasuk Akun &mdash; tidak dapat diatur di sini.
             </p>
           </CardContent>
         </Card>
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">{otherRoles.length} peran lain.</p>
-        <Button onClick={() => setCreating(true)}>
+        <p className="text-xs text-muted-foreground">{otherRoles.length} peran lain untuk PT ini.</p>
+        <Button disabled={perusahaanId == null} onClick={() => setCreating(true)}>
           <Plus className="size-4" />
           Tambah Peran
         </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
-        {otherRoles.map((role) => (
-          <RoleCard key={role.roleId} role={role} initialMap={buildMap(permissions, role.roleId)} />
+        {otherRoles.map((peran) => (
+          <RoleCard key={peran.id} peran={peran} initialMap={buildMap(izinList, peran.id)} />
         ))}
         {otherRoles.length === 0 && (
-          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Belum ada peran lain.</p>
+          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Belum ada peran lain untuk PT ini.</p>
         )}
       </div>
 
-      <CreateRoleDialog open={creating} onOpenChange={setCreating} />
+      {perusahaanId != null && <CreatePeranDialog open={creating} onOpenChange={setCreating} perusahaanId={perusahaanId} />}
     </div>
   );
 }
-
-// Re-export for callers that only need the Badge-friendly type shape.
-export type { RolePermissionRow };

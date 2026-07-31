@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireGrupAccess } from "@/lib/require-access";
-import { listRoles, getRolePermissions } from "@/lib/queries/akun";
+import { listAllPeran, getAllPeranIzin, listPerusahaanDirektori } from "@/lib/queries/akun";
 import { PeranEditor } from "@/components/dashboard/peran-editor";
 import { Button } from "@/components/ui/button";
 
 export default async function PeranPage() {
   await requireGrupAccess();
-  const [roles, permissions] = await Promise.all([listRoles(), getRolePermissions()]);
+  const [peranList, izinList, perusahaanList] = await Promise.all([listAllPeran(), getAllPeranIzin(), listPerusahaanDirektori()]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -18,10 +18,10 @@ export default async function PeranPage() {
         <h1 className="font-display text-xl font-semibold">Peran &amp; Otoritas</h1>
       </div>
       <p className="text-sm text-muted-foreground">
-        Atur peran dan modul apa saja yang bisa dilihat/diubah oleh setiap peran. Super
-        Administrator selalu memiliki akses penuh dan tidak bisa diubah.
+        Peran sepenuhnya terpisah per PT — pilih PT untuk mengatur peran dan modul apa saja yang bisa dilihat/diubah
+        oleh tiap peran. Super Administrator selalu memiliki akses penuh dan tidak bisa diubah.
       </p>
-      <PeranEditor roles={roles} permissions={permissions} />
+      <PeranEditor peranList={peranList} izinList={izinList} perusahaanList={perusahaanList} />
     </div>
   );
 }
