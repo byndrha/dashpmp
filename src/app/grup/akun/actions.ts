@@ -3,33 +3,39 @@
 import { revalidatePath } from "next/cache";
 import { requireGrupAccess } from "@/lib/require-access";
 import {
-  createUser,
-  updateUser,
-  deleteUser,
-  resetUserPassword,
+  createAkun,
+  updateAkun,
+  deleteAkun,
+  resetAkunPassword,
   countActiveSuperAdmins,
-  listRoles,
+  listAllPeran,
+  listAkun,
+  type CreateAkunInput,
+  type UpdateAkunInput,
 } from "@/lib/queries/akun";
 import { getPabrikLocation, setPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getSiteSettings, setSiteSettings, type SiteSettings } from "@/lib/queries/site-settings";
 import { getDocTemplate, saveDocTemplate, type DocTemplate, type DocType } from "@/lib/queries/doc-template";
 
-export async function createUserAction(input: {
-  nama: string;
-  username: string;
-  password: string;
-  nomorTelepon: string | null;
-  email: string | null;
-  roleId: number;
-}) {
+// Enforces the invariant from the design spec: an account is either
+// cross-company Direktur (both null) or PT-scoped with a role in that PT
+// (both set) — never a mismatched combination.
+function assertScopeConsistent(perusahaanId: number | null, peranId: number | null) {
+  if ((perusahaanId == null) !== (peranId == null)) {
+    throw new Error("Akun harus terhubung ke Perusahaan DAN Peran sekaligus, atau menjadi akun Direktur (tanpa keduanya).");
+  }
+}
+
+export async function createAkunAction(input: CreateAkunInput) {
   await requireGrupAccess();
   if (!input.nama.trim() || !input.username.trim() || input.password.length < 6) {
     throw new Error("Nama, username wajib diisi dan password minimal 6 karakter.");
   }
+  assertScopeConsistent(input.perusahaanId, input.peranId);
   try {
-    await createUser(input);
+    await createAkun(input);
   } catch (err) {
-    if (err instanceof Error && /UQ_DashboardUser_Username/i.test(err.message)) {
+    if (err instanceof Error && /username_key/i.test(err.message)) {
       throw new Error("Username sudah digunakan, pilih username lain.");
     }
     throw err;
@@ -37,49 +43,50 @@ export async function createUserAction(input: {
   revalidatePath("/grup/akun");
 }
 
-export async function updateUserAction(input: {
-  userId: number;
-  nama: string;
-  nomorTelepon: string | null;
-  email: string | null;
-  roleId: number;
-  isActive: boolean;
-}) {
+export async function updateAkunAction(input: UpdateAkunInput) {
   await requireGrupAccess();
   if (!input.nama.trim()) throw new Error("Nama wajib diisi.");
+  assertScopeConsistent(input.perusahaanId, input.peranId);
 
-  const roles = await listRoles();
-  const newRoleIsSuperAdmin = roles.find((r) => r.roleId === input.roleId)?.isSuperAdmin ?? false;
-  if (!input.isActive || !newRoleIsSuperAdmin) {
-    const remaining = await countActiveSuperAdmins(input.userId);
-    if (remaining === 0) {
-      throw new Error(
-        "Tidak bisa menonaktifkan atau mengubah peran akun ini — minimal harus ada satu Super Administrator aktif."
-      );
+  if (input.perusahaanId != null && input.peranId != null) {
+    const peranList = await listAllPeran();
+    const newPeranIsSuperAdmin = peranList.find((p) => p.id === input.peranId)?.isSuperAdmin ?? false;
+    if (!input.isActive || !newPeranIsSuperAdmin) {
+      const remaining = await countActiveSuperAdmins(input.perusahaanId, input.id);
+      if (remaining === 0) {
+        throw new Error(
+          "Tidak bisa menonaktifkan atau mengubah peran akun ini — minimal harus ada satu Super Administrator aktif di PT tersebut."
+        );
+      }
     }
   }
 
-  await updateUser(input);
+  await updateAkun(input);
   revalidatePath("/grup/akun");
 }
 
-export async function resetUserPasswordAction(userId: number, newPassword: string) {
+export async function resetAkunPasswordAction(id: number, newPassword: string) {
   await requireGrupAccess();
   if (newPassword.length < 6) throw new Error("Password minimal 6 karakter.");
-  await resetUserPassword(userId, newPassword);
+  await resetAkunPassword(id, newPassword);
   revalidatePath("/grup/akun");
 }
 
-export async function deleteUserAction(userId: number) {
+export async function deleteAkunAction(id: number) {
   const session = await requireGrupAccess();
-  if (Number(session.user.id) === userId) {
+  if (Number(session.user.id) === id) {
     throw new Error("Tidak bisa menghapus akun Anda sendiri yang sedang digunakan untuk login.");
   }
-  const remaining = await countActiveSuperAdmins(userId);
-  if (remaining === 0) {
-    throw new Error("Tidak bisa menghapus akun ini — minimal harus ada satu Super Administrator aktif.");
+  // Only PT-scoped accounts have the "last active superadmin" guard —
+  // Direktur accounts (perusahaanId null) skip it entirely.
+  const target = (await listAkun()).find((a) => a.id === id);
+  if (target?.perusahaanId != null) {
+    const remaining = await countActiveSuperAdmins(target.perusahaanId, id);
+    if (remaining === 0) {
+      throw new Error("Tidak bisa menghapus akun ini — minimal harus ada satu Super Administrator aktif di PT tersebut.");
+    }
   }
-  await deleteUser(userId);
+  await deleteAkun(id);
   revalidatePath("/grup/akun");
 }
 
@@ -104,10 +111,6 @@ export async function setSiteSettingsAction(input: SiteSettings): Promise<void> 
   if (!input.title.trim()) throw new Error("Title tidak boleh kosong.");
   await setSiteSettings(input);
   revalidatePath("/grup/akun");
-  // Title/favicon/OG values are read by the root layout's generateMetadata()
-  // on every route (including /login and public token pages) — revalidate
-  // the whole layout tree, not just /akun, so the change takes effect
-  // immediately instead of only after that route is next visited fresh.
   revalidatePath("/", "layout");
 }
 

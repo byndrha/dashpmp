@@ -1,68 +1,123 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Plus, Pencil, KeyRound, Trash2, Phone, Mail } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { Plus, Pencil, KeyRound, Trash2, Phone, Mail, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
-import type { DashboardUserRow, DashboardRoleRow } from "@/lib/queries/akun";
-import {
-  createUserAction,
-  updateUserAction,
-  resetUserPasswordAction,
-  deleteUserAction,
-} from "@/app/grup/akun/actions";
+import type { AkunRow, PerusahaanDirektoriOption, PeranRow, CreateAkunInput, UpdateAkunInput } from "@/lib/queries/akun";
+import { createAkunAction, updateAkunAction, resetAkunPasswordAction, deleteAkunAction } from "@/app/grup/akun/actions";
 
-function CreateUserDialog({
+const DIREKTUR_FILTER = "direktur";
+const ALL_FILTER = "all";
+
+function scopeLabel(a: Pick<AkunRow, "perusahaanNama">): string {
+  return a.perusahaanNama ?? "Direktur (PMP Group)";
+}
+
+// Shared by the create and edit forms: PT dropdown, then a Peran dropdown
+// filtered to that PT's own roles, or hidden entirely for "Direktur".
+function ScopeFields({
+  perusahaanList,
+  peranList,
+  perusahaanId,
+  peranId,
+  onPerusahaanChange,
+  onPeranChange,
+}: {
+  perusahaanList: PerusahaanDirektoriOption[];
+  peranList: PeranRow[];
+  perusahaanId: number | null;
+  peranId: number | null;
+  onPerusahaanChange: (id: number | null) => void;
+  onPeranChange: (id: number | null) => void;
+}) {
+  const peranOptions = peranList.filter((p) => p.perusahaanId === perusahaanId);
+  return (
+    <>
+      <div className="flex flex-col gap-1.5">
+        <Label>Perusahaan</Label>
+        <Select
+          value={perusahaanId != null ? String(perusahaanId) : DIREKTUR_FILTER}
+          onValueChange={(v) => {
+            const next = v === DIREKTUR_FILTER ? null : Number(v);
+            onPerusahaanChange(next);
+            onPeranChange(null);
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {() => (perusahaanId == null ? "Direktur (PMP Group)" : perusahaanList.find((p) => p.id === perusahaanId)?.nama ?? "")}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={DIREKTUR_FILTER}>Direktur (PMP Group)</SelectItem>
+            {perusahaanList.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>
+                {p.nama}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {perusahaanId != null && (
+        <div className="flex flex-col gap-1.5">
+          <Label>Peran</Label>
+          <Select value={peranId != null ? String(peranId) : ""} onValueChange={(v) => onPeranChange(v ? Number(v) : null)}>
+            <SelectTrigger className="w-full">
+              <SelectValue>{() => peranOptions.find((p) => p.id === peranId)?.nama ?? "Pilih peran"}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {peranOptions.map((p) => (
+                <SelectItem key={p.id} value={String(p.id)}>
+                  {p.nama}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {peranOptions.length === 0 && (
+            <p className="text-xs text-muted-foreground">Belum ada peran untuk PT ini — buat dulu di halaman Peran &amp; Otoritas.</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function CreateDialog({
   open,
   onOpenChange,
-  roles,
+  perusahaanList,
+  peranList,
   onSubmit,
   pending,
   error,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  roles: DashboardRoleRow[];
-  onSubmit: (input: {
-    nama: string;
-    username: string;
-    password: string;
-    nomorTelepon: string | null;
-    email: string | null;
-    roleId: number;
-  }) => void;
+  perusahaanList: PerusahaanDirektoriOption[];
+  peranList: PeranRow[];
+  onSubmit: (input: CreateAkunInput) => void;
   pending: boolean;
   error: string | null;
 }) {
-  const [roleId, setRoleId] = useState(String(roles.find((r) => !r.isSuperAdmin)?.roleId ?? roles[0]?.roleId ?? ""));
+  const [perusahaanId, setPerusahaanId] = useState<number | null>(null);
+  const [peranId, setPeranId] = useState<number | null>(null);
 
   function handleSubmit(formData: FormData) {
     onSubmit({
       nama: String(formData.get("nama") ?? ""),
       username: String(formData.get("username") ?? ""),
       password: String(formData.get("password") ?? ""),
-      nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
       email: String(formData.get("email") ?? "") || null,
-      roleId: Number(roleId),
+      nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
+      perusahaanId,
+      peranId,
     });
   }
 
@@ -71,7 +126,7 @@ function CreateUserDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Tambah Akun</DialogTitle>
-          <DialogDescription>Buat akun login baru untuk dashboard.</DialogDescription>
+          <DialogDescription>Buat akun login baru untuk PT mana pun, atau akun Direktur lintas-PT.</DialogDescription>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
@@ -94,24 +149,17 @@ function CreateUserDialog({
             <Label htmlFor="email">Email</Label>
             <Input id="email" name="email" type="email" />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Peran</Label>
-            <Select value={roleId} onValueChange={(v) => setRoleId(v ?? "")}>
-              <SelectTrigger className="w-full">
-                <SelectValue>{(v: string) => roles.find((r) => String(r.roleId) === v)?.roleName ?? "Pilih peran"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((r) => (
-                  <SelectItem key={r.roleId} value={String(r.roleId)}>
-                    {r.roleName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ScopeFields
+            perusahaanList={perusahaanList}
+            peranList={peranList}
+            perusahaanId={perusahaanId}
+            peranId={peranId}
+            onPerusahaanChange={setPerusahaanId}
+            onPeranChange={setPeranId}
+          />
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={pending} className="ml-auto">
+            <Button type="submit" disabled={pending || (perusahaanId != null && peranId == null)} className="ml-auto">
               {pending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
@@ -121,38 +169,35 @@ function CreateUserDialog({
   );
 }
 
-function EditUserDialog({
-  user,
+function EditDialog({
+  akun,
+  perusahaanList,
+  peranList,
   onOpenChange,
-  roles,
   onSubmit,
   pending,
   error,
 }: {
-  user: DashboardUserRow;
+  akun: AkunRow;
+  perusahaanList: PerusahaanDirektoriOption[];
+  peranList: PeranRow[];
   onOpenChange: (open: boolean) => void;
-  roles: DashboardRoleRow[];
-  onSubmit: (input: {
-    userId: number;
-    nama: string;
-    nomorTelepon: string | null;
-    email: string | null;
-    roleId: number;
-    isActive: boolean;
-  }) => void;
+  onSubmit: (input: UpdateAkunInput) => void;
   pending: boolean;
   error: string | null;
 }) {
-  const [roleId, setRoleId] = useState(String(user.roleId));
-  const [status, setStatus] = useState(user.isActive ? "active" : "inactive");
+  const [perusahaanId, setPerusahaanId] = useState<number | null>(akun.perusahaanId);
+  const [peranId, setPeranId] = useState<number | null>(akun.peranId);
+  const [status, setStatus] = useState(akun.isActive ? "active" : "inactive");
 
   function handleSubmit(formData: FormData) {
     onSubmit({
-      userId: user.userId,
+      id: akun.id,
       nama: String(formData.get("nama") ?? ""),
-      nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
       email: String(formData.get("email") ?? "") || null,
-      roleId: Number(roleId),
+      nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
+      perusahaanId,
+      peranId,
       isActive: status === "active",
     });
   }
@@ -161,37 +206,30 @@ function EditUserDialog({
     <Dialog open onOpenChange={(open) => !open && onOpenChange(false)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Akun &mdash; {user.nama}</DialogTitle>
-          <DialogDescription>Username &ldquo;{user.username}&rdquo; tidak dapat diubah.</DialogDescription>
+          <DialogTitle>Edit Akun &mdash; {akun.nama}</DialogTitle>
+          <DialogDescription>Username &ldquo;{akun.username}&rdquo; tidak dapat diubah.</DialogDescription>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nama">Nama</Label>
-            <Input id="nama" name="nama" defaultValue={user.nama} required />
+            <Input id="nama" name="nama" defaultValue={akun.nama} required />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nomorTelepon">Nomor Telepon</Label>
-            <Input id="nomorTelepon" name="nomorTelepon" defaultValue={user.nomorTelepon ?? ""} />
+            <Input id="nomorTelepon" name="nomorTelepon" defaultValue={akun.nomorTelepon ?? ""} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" defaultValue={user.email ?? ""} />
+            <Input id="email" name="email" type="email" defaultValue={akun.email ?? ""} />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Peran</Label>
-            <Select value={roleId} onValueChange={(v) => setRoleId(v ?? "")}>
-              <SelectTrigger className="w-full">
-                <SelectValue>{(v: string) => roles.find((r) => String(r.roleId) === v)?.roleName ?? "Pilih peran"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((r) => (
-                  <SelectItem key={r.roleId} value={String(r.roleId)}>
-                    {r.roleName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ScopeFields
+            perusahaanList={perusahaanList}
+            peranList={peranList}
+            perusahaanId={perusahaanId}
+            peranId={peranId}
+            onPerusahaanChange={setPerusahaanId}
+            onPeranChange={setPeranId}
+          />
           <div className="flex flex-col gap-1.5">
             <Label>Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v ?? "active")}>
@@ -206,7 +244,7 @@ function EditUserDialog({
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={pending} className="ml-auto">
+            <Button type="submit" disabled={pending || (perusahaanId != null && peranId == null)} className="ml-auto">
               {pending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
@@ -217,27 +255,27 @@ function EditUserDialog({
 }
 
 function ResetPasswordDialog({
-  user,
+  akun,
   onOpenChange,
   onSubmit,
   pending,
   error,
 }: {
-  user: DashboardUserRow;
+  akun: AkunRow;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (userId: number, password: string) => void;
+  onSubmit: (id: number, password: string) => void;
   pending: boolean;
   error: string | null;
 }) {
   function handleSubmit(formData: FormData) {
-    onSubmit(user.userId, String(formData.get("password") ?? ""));
+    onSubmit(akun.id, String(formData.get("password") ?? ""));
   }
 
   return (
     <Dialog open onOpenChange={(open) => !open && onOpenChange(false)}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Reset Password &mdash; {user.nama}</DialogTitle>
+          <DialogTitle>Reset Password &mdash; {akun.nama}</DialogTitle>
           <DialogDescription>Password baru berlaku langsung untuk login berikutnya.</DialogDescription>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-3">
@@ -257,18 +295,33 @@ function ResetPasswordDialog({
   );
 }
 
-export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: DashboardRoleRow[] }) {
+export function AkunList({
+  akunList,
+  perusahaanList,
+  peranList,
+}: {
+  akunList: AkunRow[];
+  perusahaanList: PerusahaanDirektoriOption[];
+  peranList: PeranRow[];
+}) {
+  const [filter, setFilter] = useState<string>(ALL_FILTER);
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<DashboardUserRow | null>(null);
-  const [resetting, setResetting] = useState<DashboardUserRow | null>(null);
+  const [editing, setEditing] = useState<AkunRow | null>(null);
+  const [resetting, setResetting] = useState<AkunRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function handleCreate(input: Parameters<typeof createUserAction>[0]) {
+  const filtered = useMemo(() => {
+    if (filter === ALL_FILTER) return akunList;
+    if (filter === DIREKTUR_FILTER) return akunList.filter((a) => a.perusahaanId == null);
+    return akunList.filter((a) => a.perusahaanKode === filter);
+  }, [akunList, filter]);
+
+  function handleCreate(input: CreateAkunInput) {
     setError(null);
     startTransition(async () => {
       try {
-        await createUserAction(input);
+        await createAkunAction(input);
         setCreating(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menyimpan akun.");
@@ -276,11 +329,11 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
     });
   }
 
-  function handleUpdate(input: Parameters<typeof updateUserAction>[0]) {
+  function handleUpdate(input: UpdateAkunInput) {
     setError(null);
     startTransition(async () => {
       try {
-        await updateUserAction(input);
+        await updateAkunAction(input);
         setEditing(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menyimpan akun.");
@@ -288,11 +341,11 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
     });
   }
 
-  function handleResetPassword(userId: number, password: string) {
+  function handleResetPassword(id: number, password: string) {
     setError(null);
     startTransition(async () => {
       try {
-        await resetUserPasswordAction(userId, password);
+        await resetAkunPasswordAction(id, password);
         setResetting(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal reset password.");
@@ -300,11 +353,11 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
     });
   }
 
-  function handleDelete(user: DashboardUserRow) {
-    if (!confirm(`Hapus akun "${user.nama}" (@${user.username})? Tindakan ini tidak dapat dibatalkan.`)) return;
+  function handleDelete(akun: AkunRow) {
+    if (!confirm(`Hapus akun "${akun.nama}" (@${akun.username})? Tindakan ini tidak dapat dibatalkan.`)) return;
     startTransition(async () => {
       try {
-        await deleteUserAction(user.userId);
+        await deleteAkunAction(akun.id);
       } catch (err) {
         alert(err instanceof Error ? err.message : "Gagal menghapus akun.");
       }
@@ -313,8 +366,30 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">{users.length} akun terdaftar.</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-muted-foreground">{filtered.length} akun.</p>
+          <Select value={filter} onValueChange={(v) => setFilter(v ?? ALL_FILTER)}>
+            <SelectTrigger className="h-8 w-48 text-xs">
+              <SelectValue>
+                {() => {
+                  if (filter === ALL_FILTER) return "Semua PT";
+                  if (filter === DIREKTUR_FILTER) return "Direktur (PMP Group)";
+                  return perusahaanList.find((p) => p.kode === filter)?.nama ?? filter;
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_FILTER}>Semua PT</SelectItem>
+              <SelectItem value={DIREKTUR_FILTER}>Direktur (PMP Group)</SelectItem>
+              {perusahaanList.map((p) => (
+                <SelectItem key={p.kode} value={p.kode}>
+                  {p.nama}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Button
           onClick={() => {
             setError(null);
@@ -327,13 +402,13 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {users.map((u) => (
-          <Card key={u.userId} className="py-3.5">
+        {filtered.map((a) => (
+          <Card key={a.id} className="py-3.5">
             <CardContent className="flex flex-col gap-2 px-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{u.nama}</p>
-                  <p className="font-data text-xs text-muted-foreground">@{u.username}</p>
+                  <p className="truncate font-medium">{a.nama}</p>
+                  <p className="font-data text-xs text-muted-foreground">@{a.username}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button
@@ -342,7 +417,7 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
                     className="size-7"
                     onClick={() => {
                       setError(null);
-                      setEditing(u);
+                      setEditing(a);
                     }}
                   >
                     <Pencil className="size-3.5" />
@@ -353,62 +428,62 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
                     className="size-7"
                     onClick={() => {
                       setError(null);
-                      setResetting(u);
+                      setResetting(a);
                     }}
                   >
                     <KeyRound className="size-3.5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    disabled={pending}
-                    onClick={() => handleDelete(u)}
-                  >
+                  <Button variant="ghost" size="icon" className="size-7" disabled={pending} onClick={() => handleDelete(a)}>
                     <Trash2 className="size-3.5 text-destructive" />
                   </Button>
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant={u.roleName === "Super Administrator" ? "default" : "outline"} className="h-5 px-1.5 text-[10px]">
-                  {u.roleName}
+                <Badge variant={a.peranNama === "Super Administrator" ? "default" : "outline"} className="h-5 px-1.5 text-[10px]">
+                  {a.peranNama ?? "Direktur"}
                 </Badge>
-                <Badge variant={u.isActive ? "outline" : "destructive"} className="h-5 px-1.5 text-[10px]">
-                  {u.isActive ? "Aktif" : "Nonaktif"}
+                <Badge variant={a.isActive ? "outline" : "destructive"} className="h-5 px-1.5 text-[10px]">
+                  {a.isActive ? "Aktif" : "Nonaktif"}
                 </Badge>
               </div>
 
               <div className="flex flex-col gap-1 border-t pt-2 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
-                  <Phone className="size-3" /> {u.nomorTelepon || "-"}
+                  <Building2 className="size-3" /> {scopeLabel(a)}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <Mail className="size-3" /> {u.email || "-"}
+                  <Phone className="size-3" /> {a.nomorTelepon || "-"}
                 </span>
-                <span>Login terakhir: {u.lastLoginAt ? formatDate(u.lastLoginAt) : "-"}</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail className="size-3" /> {a.email || "-"}
+                </span>
+                <span>Login terakhir: {a.lastLoginAt ? formatDate(a.lastLoginAt) : "-"}</span>
               </div>
             </CardContent>
           </Card>
         ))}
-        {users.length === 0 && (
-          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Belum ada akun.</p>
+        {filtered.length === 0 && (
+          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Tidak ada akun untuk filter ini.</p>
         )}
       </div>
 
-      <CreateUserDialog
+      <CreateDialog
         open={creating}
         onOpenChange={setCreating}
-        roles={roles}
+        perusahaanList={perusahaanList}
+        peranList={peranList}
         onSubmit={handleCreate}
         pending={pending}
         error={error}
       />
       {editing && (
-        <EditUserDialog
-          user={editing}
+        <EditDialog
+          key={editing.id}
+          akun={editing}
+          perusahaanList={perusahaanList}
+          peranList={peranList}
           onOpenChange={(open) => !open && setEditing(null)}
-          roles={roles}
           onSubmit={handleUpdate}
           pending={pending}
           error={error}
@@ -416,7 +491,7 @@ export function AkunList({ users, roles }: { users: DashboardUserRow[]; roles: D
       )}
       {resetting && (
         <ResetPasswordDialog
-          user={resetting}
+          akun={resetting}
           onOpenChange={(open) => !open && setResetting(null)}
           onSubmit={handleResetPassword}
           pending={pending}
