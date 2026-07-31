@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import { getPgPool } from "@/lib/pg";
 import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { createMitra, type MitraInput } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
@@ -50,13 +51,18 @@ export interface PengajuanRow {
   CreatedAt: string;
 }
 
+// MarketingUserID -> nama can't be joined in one SQL statement since
+// DashboardMitraPengajuan (MSSQL) and akun (Postgres) are different
+// database engines — resolved here in application code instead. Same
+// pattern as getMarketingWilayahAssignments/getMarketingMitraAssignments
+// in marketing-wilayah.ts.
 export async function getPengajuanList(): Promise<PengajuanRow[]> {
-  const pool = await getPool();
-  const result = await pool.request().query(`
+  const mssqlPool = await getPool();
+  const pgPool = getPgPool();
+  const result = await mssqlPool.request().query(`
     SELECT
         dmp.PengajuanID,
         dmp.MarketingUserID,
-        ISNULL(du.Nama, 'Tidak diketahui') AS MarketingNama,
         dmp.NamaCalon,
         dmp.NoHP,
         dmp.WaktuPermintaanSampai,
@@ -74,10 +80,18 @@ export async function getPengajuanList(): Promise<PengajuanRow[]> {
         dmp.ConvertedBusinessPartnerID,
         dmp.CreatedAt
     FROM DashboardMitraPengajuan dmp
-    LEFT JOIN DashboardUser du ON du.UserID = TRY_CAST(dmp.MarketingUserID AS INT)
     ORDER BY dmp.CreatedAt DESC
   `);
-  return result.recordset;
+  const rows = result.recordset as Omit<PengajuanRow, "MarketingNama">[];
+
+  const akunIds = [...new Set(rows.map((r) => Number(r.MarketingUserID)).filter(Number.isFinite))];
+  const nameMap = new Map<number, string>();
+  if (akunIds.length > 0) {
+    const namesResult = await pgPool.query(`SELECT id, nama FROM akun WHERE id = ANY($1::int[])`, [akunIds]);
+    for (const r of namesResult.rows as { id: number; nama: string }[]) nameMap.set(r.id, r.nama);
+  }
+
+  return rows.map((r) => ({ ...r, MarketingNama: nameMap.get(Number(r.MarketingUserID)) ?? "Tidak diketahui" }));
 }
 
 export interface MarketingKPIRow {
@@ -92,34 +106,44 @@ export interface MarketingKPIRow {
 // app — see revenue-target.ts, sales-overview.ts). Every active Marketing
 // user is included even with zero pengajuan this month, so management can
 // see who hasn't logged any visits yet, not just who has.
+//
+// Active Marketing users come from Postgres (akun/peran); the visit/convert
+// counts come from MSSQL DashboardMitraPengajuan, keyed on the same
+// MarketingUserID = akun.id values migrate-marketing-userid-to-akun-id.ts
+// established — aggregated per user in application code since the two
+// tables live in different database engines.
 export async function getMarketingKPI(): Promise<MarketingKPIRow[]> {
-  const pool = await getPool();
+  const mssqlPool = await getPool();
+  const pgPool = getPgPool();
   const businessToday = getBusinessDate();
   const monthStart = monthBoundary(businessToday);
   const monthEnd = monthBoundary(businessToday, 1);
 
-  const result = await pool
+  const usersResult = await pgPool.query(
+    `SELECT id, nama FROM akun WHERE peran_id = $1 AND is_active = true ORDER BY nama`,
+    [MARKETING_ROLE_ID]
+  );
+  const users = usersResult.rows as { id: number; nama: string }[];
+
+  const pengajuanResult = await mssqlPool
     .request()
     .input("monthStart", sql.Date, monthStart)
-    .input("monthEnd", sql.Date, monthEnd)
-    .input("roleId", sql.Int, MARKETING_ROLE_ID).query(`
-      SELECT
-          CAST(du.UserID AS VARCHAR(16)) AS UserID,
-          du.Nama,
-          COUNT(dmp.PengajuanID) AS Kunjungan,
-          SUM(CASE WHEN dmp.QtyKantong > 0 THEN 1 ELSE 0 END) AS Konversi
-      FROM DashboardUser du
-      LEFT JOIN DashboardMitraPengajuan dmp
-             ON dmp.MarketingUserID = CAST(du.UserID AS VARCHAR(16))
-            AND dmp.CreatedAt >= @monthStart AND dmp.CreatedAt < @monthEnd
-      WHERE du.RoleID = @roleId AND ISNULL(du.IsActive, 0) = 1
-      GROUP BY du.UserID, du.Nama
-      ORDER BY du.Nama
+    .input("monthEnd", sql.Date, monthEnd).query(`
+      SELECT MarketingUserID, QtyKantong
+      FROM DashboardMitraPengajuan
+      WHERE CreatedAt >= @monthStart AND CreatedAt < @monthEnd
     `);
+  const pengajuanRows = pengajuanResult.recordset as { MarketingUserID: string; QtyKantong: number | null }[];
 
-  return (
-    result.recordset as { UserID: string; Nama: string; Kunjungan: number; Konversi: number | null }[]
-  ).map((r) => ({ UserID: r.UserID, Nama: r.Nama, Kunjungan: r.Kunjungan, Konversi: r.Konversi ?? 0 }));
+  return users.map((u) => {
+    const own = pengajuanRows.filter((p) => Number(p.MarketingUserID) === u.id);
+    return {
+      UserID: String(u.id),
+      Nama: u.nama,
+      Kunjungan: own.length,
+      Konversi: own.filter((p) => (p.QtyKantong ?? 0) > 0).length,
+    };
+  });
 }
 
 export interface PengajuanInput {

@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import { getPgPool } from "@/lib/pg";
 import { MARKETING_ROLE_ID } from "@/lib/roles";
 
 export interface MarketingUserOption {
@@ -17,27 +18,59 @@ export interface MarketingWilayahAssignment {
   CreatedAt: string;
 }
 
+// Marketing identity now lives in Postgres akun/peran (see
+// docs/superpowers/specs/2026-07-31-migrasi-akun-postgres-design.md) —
+// MSSQL DashboardUser is frozen and no longer where accounts are created.
+// MARKETING_ROLE_ID is still the right filter value since the Akun
+// migration explicitly preserved every MSSQL RoleID as the same Postgres
+// peran.id.
 export async function getMarketingUsers(): Promise<MarketingUserOption[]> {
-  const pool = await getPool();
-  const result = await pool.request().input("roleId", sql.Int, MARKETING_ROLE_ID).query(`
-    SELECT CAST(UserID AS VARCHAR(16)) AS UserID, Nama
-    FROM DashboardUser
-    WHERE RoleID = @roleId AND ISNULL(IsActive, 0) = 1
-    ORDER BY Nama
-  `);
-  return result.recordset;
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT a.id, a.nama FROM akun a WHERE a.peran_id = $1 AND a.is_active = true ORDER BY a.nama`,
+    [MARKETING_ROLE_ID]
+  );
+  return (result.rows as { id: number; nama: string }[]).map((r) => ({ UserID: String(r.id), Nama: r.nama }));
 }
 
+// DashboardMarketingWilayah (MSSQL) and akun (Postgres) are two different
+// database engines — MarketingUserID can't be resolved to a name via a SQL
+// JOIN across them, so the name lookup happens here in application code
+// instead. MarketingUserID values in this table were migrated from MSSQL
+// UserID to Postgres akun.id (scripts/migrate-marketing-userid-to-akun-id.ts)
+// so this Number(...) lookup is safe for both old and new assignment rows.
 export async function getMarketingWilayahAssignments(): Promise<MarketingWilayahAssignment[]> {
-  const pool = await getPool();
-  const result = await pool.request().query(`
-    SELECT mw.MarketingWilayahID, mw.MarketingUserID, ISNULL(du.Nama, 'Tidak diketahui') AS MarketingNama,
-           mw.Wilayah, mw.Kecamatan, mw.CreatedAt
-    FROM DashboardMarketingWilayah mw
-    LEFT JOIN DashboardUser du ON du.UserID = TRY_CAST(mw.MarketingUserID AS INT)
-    ORDER BY mw.Wilayah, ISNULL(mw.Kecamatan, ''), du.Nama
+  const mssqlPool = await getPool();
+  const pgPool = getPgPool();
+  const mwResult = await mssqlPool.request().query(`
+    SELECT MarketingWilayahID, MarketingUserID, Wilayah, Kecamatan, CreatedAt
+    FROM DashboardMarketingWilayah
   `);
-  return result.recordset;
+  const rows = mwResult.recordset as {
+    MarketingWilayahID: number;
+    MarketingUserID: string;
+    Wilayah: string;
+    Kecamatan: string | null;
+    CreatedAt: string;
+  }[];
+
+  const akunIds = [...new Set(rows.map((r) => Number(r.MarketingUserID)).filter(Number.isFinite))];
+  const nameMap = new Map<number, string>();
+  if (akunIds.length > 0) {
+    const namesResult = await pgPool.query(`SELECT id, nama FROM akun WHERE id = ANY($1::int[])`, [akunIds]);
+    for (const r of namesResult.rows as { id: number; nama: string }[]) nameMap.set(r.id, r.nama);
+  }
+
+  return rows
+    .map((r) => ({
+      MarketingWilayahID: r.MarketingWilayahID,
+      MarketingUserID: r.MarketingUserID,
+      MarketingNama: nameMap.get(Number(r.MarketingUserID)) ?? "Tidak diketahui",
+      Wilayah: r.Wilayah,
+      Kecamatan: r.Kecamatan,
+      CreatedAt: r.CreatedAt,
+    }))
+    .sort((a, b) => a.Wilayah.localeCompare(b.Wilayah) || (a.Kecamatan ?? "").localeCompare(b.Kecamatan ?? "") || a.MarketingNama.localeCompare(b.MarketingNama));
 }
 
 // Atomic claim: the INSERT only happens if no conflicting row exists yet,
@@ -109,19 +142,52 @@ export interface MitraOption {
   Wilayah: string;
 }
 
+// Same cross-database name-resolution pattern as getMarketingWilayahAssignments
+// — MarketingUserID -> nama is looked up against Postgres in application
+// code, since it can't be joined in the same SQL statement as the MSSQL
+// BusinessPartner join.
 export async function getMarketingMitraAssignments(): Promise<MarketingMitraAssignment[]> {
-  const pool = await getPool();
-  const result = await pool.request().query(`
-    SELECT mm.MarketingMitraID, mm.MarketingUserID, ISNULL(du.Nama, 'Tidak diketahui') AS MarketingNama,
+  const mssqlPool = await getPool();
+  const pgPool = getPgPool();
+  const mmResult = await mssqlPool.request().query(`
+    SELECT mm.MarketingMitraID, mm.MarketingUserID,
            mm.BusinessPartnerID, bp.Name AS MitraName,
            ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
            bp.NPWPAddress AS Kecamatan, bp.Capacity, mm.CreatedAt
     FROM DashboardMarketingMitra mm
     JOIN BusinessPartner bp ON bp.BusinessPartnerID = mm.BusinessPartnerID
-    LEFT JOIN DashboardUser du ON du.UserID = TRY_CAST(mm.MarketingUserID AS INT)
-    ORDER BY du.Nama, bp.Name
   `);
-  return result.recordset;
+  const rows = mmResult.recordset as {
+    MarketingMitraID: number;
+    MarketingUserID: string;
+    BusinessPartnerID: string;
+    MitraName: string;
+    Wilayah: string;
+    Kecamatan: string | null;
+    Capacity: number | null;
+    CreatedAt: string;
+  }[];
+
+  const akunIds = [...new Set(rows.map((r) => Number(r.MarketingUserID)).filter(Number.isFinite))];
+  const nameMap = new Map<number, string>();
+  if (akunIds.length > 0) {
+    const namesResult = await pgPool.query(`SELECT id, nama FROM akun WHERE id = ANY($1::int[])`, [akunIds]);
+    for (const r of namesResult.rows as { id: number; nama: string }[]) nameMap.set(r.id, r.nama);
+  }
+
+  return rows
+    .map((r) => ({
+      MarketingMitraID: r.MarketingMitraID,
+      MarketingUserID: r.MarketingUserID,
+      MarketingNama: nameMap.get(Number(r.MarketingUserID)) ?? "Tidak diketahui",
+      BusinessPartnerID: r.BusinessPartnerID,
+      MitraName: r.MitraName,
+      Wilayah: r.Wilayah,
+      Kecamatan: r.Kecamatan,
+      Capacity: r.Capacity,
+      CreatedAt: r.CreatedAt,
+    }))
+    .sort((a, b) => a.MarketingNama.localeCompare(b.MarketingNama) || a.MitraName.localeCompare(b.MitraName));
 }
 
 // Lightweight list for the "assign a specific Mitra" search combobox — not
