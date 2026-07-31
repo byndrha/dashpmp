@@ -48,15 +48,33 @@ export async function updateAkunAction(input: UpdateAkunInput) {
   if (!input.nama.trim()) throw new Error("Nama wajib diisi.");
   assertScopeConsistent(input.perusahaanId, input.peranId);
 
-  if (input.perusahaanId != null && input.peranId != null) {
+  // The "last active superadmin" guard must be checked against the account's
+  // CURRENT (database) perusahaanId, not the newly submitted one — otherwise
+  // reassigning/deactivating the sole superadmin of PT A while editing it
+  // into PT B (or converting it to Direktur) would never trip the check for
+  // PT A. Mirrors the pattern deleteAkunAction already uses via listAkun().
+  const current = (await listAkun()).find((a) => a.id === input.id);
+  const currentPerusahaanId = current?.perusahaanId ?? null;
+
+  if (currentPerusahaanId != null) {
     const peranList = await listAllPeran();
-    const newPeranIsSuperAdmin = peranList.find((p) => p.id === input.peranId)?.isSuperAdmin ?? false;
-    if (!input.isActive || !newPeranIsSuperAdmin) {
-      const remaining = await countActiveSuperAdmins(input.perusahaanId, input.id);
-      if (remaining === 0) {
-        throw new Error(
-          "Tidak bisa menonaktifkan atau mengubah peran akun ini — minimal harus ada satu Super Administrator aktif di PT tersebut."
-        );
+    const currentPeranIsSuperAdmin =
+      current?.peranId != null ? peranList.find((p) => p.id === current.peranId)?.isSuperAdmin ?? false : false;
+    const wasActiveSuperAdmin = (current?.isActive ?? false) && currentPeranIsSuperAdmin;
+
+    if (wasActiveSuperAdmin) {
+      const newPeranIsSuperAdmin =
+        input.peranId != null ? peranList.find((p) => p.id === input.peranId)?.isSuperAdmin ?? false : false;
+      const staysActiveSuperAdminInSamePt =
+        input.perusahaanId === currentPerusahaanId && input.isActive && newPeranIsSuperAdmin;
+
+      if (!staysActiveSuperAdminInSamePt) {
+        const remaining = await countActiveSuperAdmins(currentPerusahaanId, input.id);
+        if (remaining === 0) {
+          throw new Error(
+            "Tidak bisa menonaktifkan atau mengubah peran akun ini — minimal harus ada satu Super Administrator aktif di PT tersebut."
+          );
+        }
       }
     }
   }
