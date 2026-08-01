@@ -292,6 +292,20 @@ function MergeExternalDialog({
   onDone: () => void;
 }) {
   const [time, setTime] = useState("08:00");
+  // Full ceiled SalesOrder.TransDate (date + time), kept alongside `time`'s
+  // HH:MM display string — submitting the auto-filled default must reuse
+  // this Date directly rather than re-derive it from `time` via
+  // resolveBusinessDateTime(businessDate, time). resolveBusinessDateTime can
+  // only ever produce a datetime on `businessDate` or `businessDate` minus
+  // one day (see its own comment); a SalesOrder touched outside that 2-day
+  // window (confirmed live: a same-day-edited SO can carry a TransDate whose
+  // calendar date sits a full day ahead of the delivery's own business day)
+  // falls outside what any HH:MM the user could type would ever satisfy,
+  // permanently tripping assertJamJadwalNotBeforeOrders no matter the input.
+  // Only once the user actually edits the time field do we fall back to the
+  // normal businessDate-relative interpretation.
+  const [defaultJamJadwal, setDefaultJamJadwal] = useState<Date | null>(null);
+  const [timeEdited, setTimeEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -300,20 +314,24 @@ function MergeExternalDialog({
     // Resets stale state from a previous open — not derivable from render.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
+    setTimeEdited(false);
     const ids = deliveries.map((d) => d.DeliveryOrderID);
     // Defaults to the latest underlying SalesOrder's own TransDate (not a
     // DeliveryOrder's own TransDate — confirmed live those don't reliably
-    // move together), ceil-rounded to the next minute so the <input
-    // type="time"> minute-precision default never trips
-    // assertJamJadwalNotBeforeOrders's strict "departure can't be earlier
-    // than the order it's delivering" check. Built as "HH:MM" by hand
-    // (never via formatTime(), whose id-ID locale output uses "." as the
-    // separator and silently produces an Invalid Date once fed into
-    // resolveBusinessDateTime/the time input) — same pattern already used
-    // correctly in route-validation-dialog.tsx.
+    // move together), ceil-rounded to the next minute so the default never
+    // trips assertJamJadwalNotBeforeOrders's strict "departure can't be
+    // earlier than the order it's delivering" check. The HH:MM shown in the
+    // time input is built by hand (never via formatTime(), whose id-ID
+    // locale output uses "." as the separator and silently produces an
+    // Invalid Date once fed into resolveBusinessDateTime/the time input) —
+    // same pattern already used correctly in route-validation-dialog.tsx.
     getMaxSalesOrderTransDateForDeliveriesAction(ids).then((iso) => {
-      if (iso == null) return;
+      if (iso == null) {
+        setDefaultJamJadwal(null);
+        return;
+      }
       const ceiled = new Date(Math.ceil(new Date(iso).getTime() / 60000) * 60000);
+      setDefaultJamJadwal(ceiled);
       setTime(`${String(ceiled.getHours()).padStart(2, "0")}:${String(ceiled.getMinutes()).padStart(2, "0")}`);
     });
   }, [open, deliveries]);
@@ -323,13 +341,17 @@ function MergeExternalDialog({
   function handleSubmit() {
     if (armadaId == null || deliveries.length === 0) return;
     setError(null);
+    // Untouched default -> reuse the exact ceiled SalesOrder.TransDate Date
+    // directly, date and all. Re-deriving it from `time` here (as if it
+    // were just an HH:MM on `businessDate`) is what caused this: a SO
+    // touched outside the businessDate/businessDate-1 window ceils to a
+    // valid HH:MM, but resolveBusinessDateTime(businessDate, thatHH:MM)
+    // silently lands back on the wrong calendar day, permanently failing
+    // assertJamJadwalNotBeforeOrders no matter what the input showed.
+    const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : resolveBusinessDateTime(businessDate, time);
     startTransition(async () => {
       try {
-        await mergeExternalDeliveriesAction(
-          armadaId,
-          deliveries.map((d) => d.DeliveryOrderID),
-          resolveBusinessDateTime(businessDate, time)
-        );
+        await mergeExternalDeliveriesAction(armadaId, deliveries.map((d) => d.DeliveryOrderID), jamJadwal);
         onOpenChange(false);
         onDone();
       } catch (err) {
@@ -350,7 +372,15 @@ function MergeExternalDialog({
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32" />
+            <Input
+              type="time"
+              value={time}
+              onChange={(e) => {
+                setTime(e.target.value);
+                setTimeEdited(true);
+              }}
+              className="w-32"
+            />
             <span className="ml-auto text-xs text-muted-foreground">{totalKantong} kantong</span>
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
