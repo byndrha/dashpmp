@@ -459,6 +459,30 @@ async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrd
   }
 }
 
+// Companion to assertJamJadwalNotBeforeOrders, used by "Gabungkan jadi
+// Jadwal" (mergeExternalDeliveriesIntoJadwal/appendRowsToDraft) instead of
+// it. That flow backfills a Draft from DeliveryOrders that already exist in
+// the desktop ERP — there's no "pick a later time instead" escape hatch
+// like every other write path has, since the DO already happened at a
+// fixed moment. SalesOrder.TransDate on these routinely drifts to sit
+// after that moment (same same-day-edit staleness documented on
+// assertJamJadwalNotBeforeOrders itself), so rather than blocking the
+// merge, this pulls the offending SalesOrder(s)' TransDate back to
+// jamJadwal — fixing the stale order time instead of working around it.
+async function overwriteOrderTimeIfAfter(pool: sql.ConnectionPool, salesOrderIds: string[], jamJadwal: Date): Promise<void> {
+  if (salesOrderIds.length === 0) return;
+  const request = pool.request();
+  const placeholders = salesOrderIds.map((id, i) => {
+    request.input(`so${i}`, sql.VarChar(16), id);
+    return `@so${i}`;
+  });
+  request.input("jamJadwal", sql.DateTime, jamJadwal);
+  await request.query(`
+    UPDATE SalesOrder SET TransDate = @jamJadwal, ModifiedDate = GETDATE()
+    WHERE SalesOrderID IN (${placeholders.join(",")}) AND TransDate > @jamJadwal
+  `);
+}
+
 // Resolves lat/lng/qty for an arbitrary set of SalesOrderIDs in one query —
 // shared by the busy-window estimate below. A SO with no saved mitra
 // location maps to null so its bongkar time is still counted (via
@@ -672,7 +696,7 @@ async function appendRowsToDraft(
   if (!headerRow) throw new Error("Keberangkatan tujuan penggabungan tidak ditemukan.");
 
   const newSalesOrderIds = rows.map((r) => r.salesOrderId);
-  await assertJamJadwalNotBeforeOrders(pool, newSalesOrderIds, headerRow.JamJadwal);
+  await overwriteOrderTimeIfAfter(pool, newSalesOrderIds, headerRow.JamJadwal);
 
   const existing = await pool
     .request()
@@ -868,7 +892,7 @@ export async function mergeExternalDeliveriesIntoJadwal(
   );
   if (doRows.length === 0) throw new Error("DO yang dipilih tidak ditemukan atau sudah masuk Jadwal lain.");
 
-  await assertJamJadwalNotBeforeOrders(
+  await overwriteOrderTimeIfAfter(
     pool,
     doRows.map((r) => r.SalesOrderID),
     jamJadwal
