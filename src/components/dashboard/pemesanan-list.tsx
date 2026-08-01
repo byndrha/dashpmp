@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,10 @@ import type { SalesOrderListRow, SalesOrderStatus } from "@/lib/queries/pemesana
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
+import {
+  UbahTanggalPemesananDialog,
+  type UbahTanggalPemesananTarget,
+} from "@/components/dashboard/ubah-tanggal-pemesanan-dialog";
 import { deletePemesananAction } from "@/app/(dashboard)/pemesanan/actions";
 
 const STATUS_VARIANT: Record<SalesOrderStatus, "outline" | "secondary" | "default"> = {
@@ -27,10 +31,12 @@ const STATUS_VARIANT: Record<SalesOrderStatus, "outline" | "secondary" | "defaul
 function PemesananRow({
   row,
   onEdit,
+  onEditTransDate,
   onDeleted,
 }: {
   row: SalesOrderListRow;
   onEdit: () => void;
+  onEditTransDate: () => void;
   onDeleted: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -75,13 +81,22 @@ function PemesananRow({
         <p className="font-medium tabular-nums">{formatRupiah(row.Amount)}</p>
         <p className="text-xs tabular-nums text-muted-foreground">{formatKemasanQty(row.Qty10KG, row.Qty5KG)}</p>
       </div>
-      {canModify && (
+      {canModify ? (
         <div className="flex shrink-0 items-center gap-1">
           <Button variant="ghost" size="icon" className="size-7" onClick={onEdit}>
             <Pencil className="size-3.5" />
           </Button>
           <Button variant="ghost" size="icon" className="size-7" disabled={pending} onClick={handleDelete}>
             <Trash2 className="size-3.5 text-destructive" />
+          </Button>
+        </div>
+      ) : (
+        // Scheduling (Ubah Pemesanan) and delete are gone once Terbit — this
+        // is the one thing staff can still fix on a shipped order: a wrong
+        // TransDate (see UbahTanggalPemesananDialog's own comment).
+        <div className="flex shrink-0 items-center gap-1">
+          <Button variant="ghost" size="icon" className="size-7" onClick={onEditTransDate} title="Ubah tanggal pemesanan">
+            <CalendarClock className="size-3.5" />
           </Button>
         </div>
       )}
@@ -100,6 +115,7 @@ export function PemesananList({
 }) {
   const router = useRouter();
   const [editingTarget, setEditingTarget] = useState<UbahPemesananTarget | null>(null);
+  const [editingTransDateTarget, setEditingTransDateTarget] = useState<UbahTanggalPemesananTarget | null>(null);
 
   return (
     <>
@@ -118,6 +134,14 @@ export function PemesananList({
                 qty5KG: r.Qty5KG,
               })
             }
+            onEditTransDate={() =>
+              setEditingTransDateTarget({
+                salesOrderId: r.SalesOrderID,
+                customerName: r.CustomerName,
+                voucherNo: r.VoucherNo,
+                transDate: r.TransDate,
+              })
+            }
             onDeleted={() => router.refresh()}
           />
         ))}
@@ -131,6 +155,10 @@ export function PemesananList({
         onOpenChange={(open) => !open && setEditingTarget(null)}
         armadaList={armadaList}
         drivers={drivers}
+      />
+      <UbahTanggalPemesananDialog
+        target={editingTransDateTarget}
+        onOpenChange={(open) => !open && setEditingTransDateTarget(null)}
       />
     </>
   );

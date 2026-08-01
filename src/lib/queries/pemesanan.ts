@@ -240,6 +240,27 @@ export async function reschedulePemesanan(input: ReschedulePemesananInput): Prom
   return { jadwalId };
 }
 
+// Directly edits SalesOrder.TransDate — the desktop-ERP "order date" field
+// this dashboard otherwise only ever sets once, at creation
+// (createSalesOrderManual/createSalesOrderFromPengajuan), and never touches
+// again. Exists specifically for Terbit orders: TransDate is routinely
+// bumped by same-day desktop-ERP edits to a value later than the real order
+// time (see assertJamJadwalNotBeforeOrders's own comment in
+// pengiriman-jadwal.ts), and once an SO has shipped, reschedulePemesanan
+// (Ubah Pemesanan) is no longer reachable to work around it — that dialog
+// only ever touched scheduling (Jadwal.JamJadwal), never TransDate itself,
+// so this is a genuinely new write path, not a relaxed version of an
+// existing one.
+export async function updateSalesOrderTransDate(salesOrderId: string, transDate: Date): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.VarChar(16), salesOrderId)
+    .input("transDate", sql.DateTime, transDate)
+    .query(`UPDATE SalesOrder SET TransDate = @transDate, ModifiedDate = GETDATE() WHERE SalesOrderID = @id AND IsDeleted = 0`);
+  if (result.rowsAffected[0] === 0) throw new Error("Sales Order tidak ditemukan.");
+}
+
 // Soft-deletes an SO from the Pemesanan list — only for orders that haven't
 // actually shipped. getCurrentAssignment only resolves a Draft-status
 // Jadwal (its own query filters on that), so a directly-linked, non-Draft

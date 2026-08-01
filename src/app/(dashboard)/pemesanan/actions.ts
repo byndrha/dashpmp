@@ -5,6 +5,7 @@ import {
   createPemesanan,
   reschedulePemesanan,
   deletePemesanan,
+  updateSalesOrderTransDate,
   type CreatePemesananInput,
   type CreatePemesananResult,
   type ReschedulePemesananInput,
@@ -43,4 +44,10 @@ export async function reschedulePemesananAction(input: ReschedulePemesananInput)
 // Pemesanan" dialog opens.
 export async function getCurrentAssignmentAction(salesOrderId: string): Promise<CurrentAssignment | null> {
   return getCurrentAssignment(salesOrderId);
+}
+
+export async function updateSalesOrderTransDateAction(salesOrderId: string, transDate: Date): Promise<void> {
+  await updateSalesOrderTransDate(salesOrderId, transDate);
+  revalidatePath("/pemesanan");
+  revalidatePath("/delivery");
 }
