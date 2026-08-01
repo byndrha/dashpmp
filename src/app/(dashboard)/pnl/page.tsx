@@ -12,6 +12,7 @@ import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
 import { COADetailTable } from "@/components/dashboard/coa-detail-table";
+import { saveCOABudgetAction } from "@/app/(dashboard)/pnl/actions";
 import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
 import { CashFlowHarianPanel } from "@/components/dashboard/cash-flow-harian-panel";
@@ -141,6 +142,7 @@ export default async function PnLPage({
             rows={coaDetail}
             year={periodStart.getUTCFullYear()}
             month={periodStart.getUTCMonth() + 1}
+            onSaveBudget={saveCOABudgetAction}
           />
         </div>
         <div className="@4xl:col-span-2">

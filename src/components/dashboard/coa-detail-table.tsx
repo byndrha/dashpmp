@@ -25,7 +25,6 @@ import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
 import { COA_KATEGORI_LABEL } from "@/lib/coa-labels";
-import { saveCOABudgetAction } from "@/app/(dashboard)/pnl/actions";
 
 const KATEGORI_ORDER: COAKategori[] = [
   "Pendapatan",
@@ -41,10 +40,12 @@ export function COADetailTable({
   rows,
   year,
   month,
+  onSaveBudget,
 }: {
   rows: COADetailRow[];
   year: number;
   month: number;
+  onSaveBudget: (input: { chartOfAccountId: string; year: number; month: number; amount: number }) => Promise<void>;
 }) {
   const [editing, setEditing] = useState<COADetailRow | null>(null);
   const [pending, startTransition] = useTransition();
@@ -53,7 +54,7 @@ export function COADetailTable({
     if (!editing) return;
     const amount = Number(formData.get("amount"));
     startTransition(async () => {
-      await saveCOABudgetAction({ chartOfAccountId: editing.ChartOfAccountID, year, month, amount });
+      await onSaveBudget({ chartOfAccountId: editing.ChartOfAccountID, year, month, amount });
       setEditing(null);
     });
   }
