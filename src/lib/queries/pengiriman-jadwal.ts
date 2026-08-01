@@ -594,7 +594,18 @@ async function findOverlappingJadwalForArmada(
 // + Urutan change), so a source Draft that was itself backfilled from real
 // ERP DOs (mergeExternalDeliveriesIntoJadwal) carries its real
 // DeliveryOrderID across the merge correctly.
-async function mergeJadwalInto(pool: sql.ConnectionPool, sourceJadwalId: number, targetJadwalId: number): Promise<void> {
+async function mergeJadwalInto(
+  pool: sql.ConnectionPool,
+  sourceJadwalId: number,
+  targetJadwalId: number,
+  // Same override as updateJadwalDriverTime's own skipOrderTimeCheck (see
+  // its comment) — Validasi Rute's manual edit can land the source's new
+  // time inside an existing Draft's busy window, forcing a merge, and this
+  // check must not reintroduce the lockout for a target time staff didn't
+  // even choose directly. updateJadwalArmada's drag-and-drop call site
+  // leaves this false, keeping strict behavior there.
+  skipOrderTimeCheck = false
+): Promise<void> {
   const targetHeader = await pool
     .request()
     .input("jadwalId", sql.Int, targetJadwalId)
@@ -609,11 +620,13 @@ async function mergeJadwalInto(pool: sql.ConnectionPool, sourceJadwalId: number,
   const sourceRows = sourceDetails.recordset as { JadwalDetailID: number; SalesOrderID: string }[];
   if (sourceRows.length === 0) return;
 
-  await assertJamJadwalNotBeforeOrders(
-    pool,
-    sourceRows.map((r) => r.SalesOrderID),
-    targetRow.JamJadwal
-  );
+  if (!skipOrderTimeCheck) {
+    await assertJamJadwalNotBeforeOrders(
+      pool,
+      sourceRows.map((r) => r.SalesOrderID),
+      targetRow.JamJadwal
+    );
+  }
 
   const existing = await pool
     .request()
@@ -1075,7 +1088,7 @@ export async function updateJadwalDriverTime(
           `Waktu baru ini tumpang tindih dengan armada yang diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa diubah ke waktu tersebut.`
         );
       }
-      await mergeJadwalInto(pool, jadwalId, conflict.jadwalId);
+      await mergeJadwalInto(pool, jadwalId, conflict.jadwalId, options.skipOrderTimeCheck);
       return conflict.jadwalId;
     }
   }
