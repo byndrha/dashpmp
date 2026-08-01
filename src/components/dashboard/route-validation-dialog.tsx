@@ -27,7 +27,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah, formatTime, formatKemasanQty } from "@/lib/format";
-import { resolveBusinessDateTime } from "@/lib/business-date";
 import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
 import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
@@ -184,6 +183,13 @@ export function RouteValidationDialog({
 }) {
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<JadwalDetailRow[]>([]);
+  // Freely editable delivery date — the primary override for this Jadwal's
+  // departure day. Kept as its own field (not derived from businessDate's
+  // rollover label) precisely so staff can set ANY calendar date here,
+  // including one outside the board's current businessDate/businessDate-1
+  // window — see buildJamJadwal below and skipOrderTimeCheck at the
+  // updateJadwalDriverTimeAction call sites.
+  const [date, setDate] = useState("");
   const [time, setTime] = useState("00:00");
   const [driverId, setDriverId] = useState("");
   const [pabrik, setPabrik] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -270,12 +276,27 @@ export function RouteValidationDialog({
   useEffect(() => {
     if (jadwal == null) return;
     const d = new Date(jadwal.JamJadwal);
-    // Syncs the editable time/driver fields from the open card — not
-    // derivable from render since these are user-editable inputs.
+    // Syncs the editable date/time/driver fields from the open card — not
+    // derivable from render since these are user-editable inputs. Unlike
+    // the old time-only sync, this keeps the real calendar date too (see
+    // the `date` state's own comment).
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDate(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    );
     setTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
     setDriverId(jadwal.SalesmanID ?? "");
   }, [jadwal]);
+
+  // Builds the departure Date directly from the freely-editable `date` +
+  // `time` fields — deliberately NOT resolveBusinessDateTime(businessDate,
+  // time), which can only ever land on businessDate or businessDate minus
+  // one day (see its own comment) and silently discards any date the user
+  // picks outside that 2-day window. `date` is the authoritative source of
+  // truth for the calendar day here.
+  function buildJamJadwal(): Date {
+    return new Date(`${date}T${time}:00`);
+  }
 
   useEffect(() => {
     if (jadwalId == null) return;
@@ -367,10 +388,11 @@ export function RouteValidationDialog({
     setError(null);
     startTransition(async () => {
       try {
-        const resultId = await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: resolveBusinessDateTime(businessDate, time),
-          salesmanId: driverId || null,
-        });
+        const resultId = await updateJadwalDriverTimeAction(
+          jadwalId,
+          { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
+          { skipOrderTimeCheck: true }
+        );
         // The new time landed inside another Draft's estimated busy window
         // for the same armada — this Jadwal got folded into that one
         // instead (see updateJadwalDriverTime), so there's nothing left
@@ -446,10 +468,11 @@ export function RouteValidationDialog({
     setError(null);
     startTransition(async () => {
       try {
-        const resultId = await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: resolveBusinessDateTime(businessDate, time),
-          salesmanId: driverId || null,
-        });
+        const resultId = await updateJadwalDriverTimeAction(
+          jadwalId,
+          { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
+          { skipOrderTimeCheck: true }
+        );
         // If the just-edited time now overlaps another Draft for this
         // armada, it got merged into that one instead (see
         // updateJadwalDriverTime) — jadwalId no longer exists, so
@@ -731,6 +754,7 @@ export function RouteValidationDialog({
           >
             {isDraft ? (
               <div className="flex flex-wrap items-center gap-2">
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 shrink-0" />
                 <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32 shrink-0" />
                 <Select value={driverId} onValueChange={(v) => setDriverId(v ?? "")}>
                   <SelectTrigger className="min-w-40 flex-1">

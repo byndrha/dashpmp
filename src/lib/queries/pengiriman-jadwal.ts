@@ -1024,7 +1024,19 @@ export async function updateJadwalUrutan(jadwalId: number, orderedDetailIds: num
 // must use the returned id, not the one they passed in.
 export async function updateJadwalDriverTime(
   jadwalId: number,
-  input: { jamJadwal: Date; salesmanId: string | null }
+  input: { jamJadwal: Date; salesmanId: string | null },
+  // skipOrderTimeCheck: Validasi Rute's own date/time editor is the
+  // explicit manual override for exactly the "departure before the order
+  // it's delivering" case assertJamJadwalNotBeforeOrders exists to catch —
+  // real desktop-ERP SalesOrder.TransDate values aren't reliably "when the
+  // order was placed" (confirmed live: routinely bumped by same-day edits
+  // to a value later than an already-correct delivery slot), so re-running
+  // that check against a value staff picked on purpose here would just
+  // reintroduce the exact lockout it was meant to prevent. Defaults to
+  // false so every other caller (createPemesanan/reschedulePemesanan in
+  // pemesanan.ts, which explicitly document depending on this check) keeps
+  // the strict behavior unchanged.
+  options: { skipOrderTimeCheck?: boolean } = {}
 ): Promise<number> {
   const pool = await getPool();
   const current = await pool
@@ -1040,7 +1052,9 @@ export async function updateJadwalDriverTime(
     .input("jadwalId", sql.Int, jadwalId)
     .query(`SELECT SalesOrderID FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const bundledSalesOrderIds = (detailResult.recordset as { SalesOrderID: string }[]).map((r) => r.SalesOrderID);
-  await assertJamJadwalNotBeforeOrders(pool, bundledSalesOrderIds, input.jamJadwal);
+  if (!options.skipOrderTimeCheck) {
+    await assertJamJadwalNotBeforeOrders(pool, bundledSalesOrderIds, input.jamJadwal);
+  }
 
   // Only re-check the armada-overlap rule when the departure time is
   // actually moving — an unchanged time can't newly create an overlap that

@@ -83,9 +83,10 @@ export async function updateJadwalUrutanAction(jadwalId: number, orderedDetailId
 // before chaining any further action onto the original jadwalId.
 export async function updateJadwalDriverTimeAction(
   jadwalId: number,
-  input: { jamJadwal: Date; salesmanId: string | null }
+  input: { jamJadwal: Date; salesmanId: string | null },
+  options?: { skipOrderTimeCheck?: boolean }
 ): Promise<number> {
-  const resultId = await updateJadwalDriverTime(jadwalId, input);
+  const resultId = await updateJadwalDriverTime(jadwalId, input, options);
   revalidatePath("/delivery");
   return resultId;
 }
