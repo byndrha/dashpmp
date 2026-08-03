@@ -179,11 +179,15 @@ export function VehicleCheckPanel({
           <p className="text-xs text-muted-foreground">Belum ada Cek Berangkat.</p>
         )}
 
-        {berangkat && (datang ? <CheckSummary check={datang} /> : isSatpam ? (
-          <CheckForm tipe="DATANG" onUploadPhoto={onUploadPhoto} onSubmitCheck={onSubmitCheck} />
-        ) : (
-          <p className="text-xs text-muted-foreground">Belum ada Cek Datang.</p>
-        ))}
+        {datang ? (
+          <CheckSummary check={datang} />
+        ) : berangkat ? (
+          isSatpam ? (
+            <CheckForm tipe="DATANG" onUploadPhoto={onUploadPhoto} onSubmitCheck={onSubmitCheck} />
+          ) : (
+            <p className="text-xs text-muted-foreground">Belum ada Cek Datang.</p>
+          )
+        ) : null}
       </CardContent>
     </Card>
   );

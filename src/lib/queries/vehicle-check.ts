@@ -80,6 +80,22 @@ export async function createVehicleCheck(input: {
   await transaction.begin();
 
   try {
+    // Gate to Terbit only: a Satpam session could otherwise call the
+    // server action directly against a Draft Jadwal's ID (the UI only
+    // renders the form once Terbit, but that's not a server-side
+    // guarantee). Since a check is immutable and unique per (JadwalID,
+    // Tipe), a bogus check attached to a Draft would be permanent, and
+    // if that Draft later became Terbit via startBerangkat, the board's
+    // timeline math would read a stale JamKembaliAktual predating the
+    // real departure.
+    const jadwal = await new sql.Request(transaction)
+      .input("jadwalId", sql.Int, input.jadwalId)
+      .query(`SELECT Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+    const jadwalStatus = (jadwal.recordset[0] as { Status: string } | undefined)?.Status;
+    if (jadwalStatus !== "Terbit") {
+      throw new Error("Cek kendaraan hanya dapat diisi untuk keberangkatan yang sudah Terbit.");
+    }
+
     const existing = await new sql.Request(transaction)
       .input("jadwalId", sql.Int, input.jadwalId)
       .input("tipe", sql.VarChar(10), input.tipe)
