@@ -28,7 +28,7 @@ export default async function PmputraLayout({ children }: { children: React.Reac
             <SignOutButton />
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
+        <main className="@container/dashboard-main flex flex-1 flex-col gap-4 p-4">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );
