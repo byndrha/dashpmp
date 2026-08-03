@@ -1,48 +1,21 @@
 import { getPool, sql } from "@/lib/db";
+import {
+  type VehicleCheckTipe,
+  type FuelLevel,
+  type JenisFotoKendaraan,
+  JENIS_FOTO_LIST,
+  JENIS_FOTO_LABEL,
+  type VehicleCheckPhoto,
+  type VehicleCheckRow,
+} from "@/lib/vehicle-check-types";
 
-export type VehicleCheckTipe = "BERANGKAT" | "DATANG";
-export type FuelLevel = "E" | "1/4" | "1/2" | "3/4" | "F";
-export type JenisFotoKendaraan =
-  | "DEPAN"
-  | "SAMPING_KANAN"
-  | "SAMPING_KIRI"
-  | "BELAKANG"
-  | "BOX_MUATAN"
-  | "KABIN";
-
-export const JENIS_FOTO_LIST: JenisFotoKendaraan[] = [
-  "DEPAN",
-  "SAMPING_KANAN",
-  "SAMPING_KIRI",
-  "BELAKANG",
-  "BOX_MUATAN",
-  "KABIN",
-];
-
-export const JENIS_FOTO_LABEL: Record<JenisFotoKendaraan, string> = {
-  DEPAN: "Depan",
-  SAMPING_KANAN: "Samping Kanan",
-  SAMPING_KIRI: "Samping Kiri",
-  BELAKANG: "Belakang",
-  BOX_MUATAN: "Box Muatan",
-  KABIN: "Kabin (Area Speedometer)",
-};
-
-export interface VehicleCheckPhoto {
-  jenisFoto: JenisFotoKendaraan;
-  filePath: string;
-}
-
-export interface VehicleCheckRow {
-  vehicleCheckId: number;
-  jadwalId: number;
-  tipe: VehicleCheckTipe;
-  odometerKM: number;
-  fuelLevel: FuelLevel;
-  checkedByUserId: string;
-  checkedAt: string;
-  photos: VehicleCheckPhoto[];
-}
+// Re-exported so existing server-side importers (upload route, server
+// actions) can keep doing `import { ... } from "@/lib/queries/vehicle-check"`
+// unchanged. Client components should import these from
+// "@/lib/vehicle-check-types" directly instead, to avoid pulling this
+// module's `@/lib/db` (mssql) dependency into the client bundle.
+export type { VehicleCheckTipe, FuelLevel, JenisFotoKendaraan, VehicleCheckPhoto, VehicleCheckRow };
+export { JENIS_FOTO_LIST, JENIS_FOTO_LABEL };
 
 export async function getVehicleChecksForJadwal(jadwalId: number): Promise<VehicleCheckRow[]> {
   const pool = await getPool();

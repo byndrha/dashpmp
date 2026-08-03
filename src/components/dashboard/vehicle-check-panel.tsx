@@ -16,7 +16,7 @@ import {
   type FuelLevel,
   type VehicleCheckPhoto,
   type JenisFotoKendaraan,
-} from "@/lib/queries/vehicle-check";
+} from "@/lib/vehicle-check-types";
 
 const FUEL_LEVELS: FuelLevel[] = ["E", "1/4", "1/2", "3/4", "F"];
 const TIPE_LABEL: Record<VehicleCheckTipe, string> = { BERANGKAT: "Cek Berangkat", DATANG: "Cek Datang" };
