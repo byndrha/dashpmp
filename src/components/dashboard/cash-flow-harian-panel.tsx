@@ -9,13 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatRupiah, formatDate } from "@/lib/format";
 import type { CashFlowHarian } from "@/lib/queries/cash-flow-harian";
-import {
-  saveCashFlowDailyFiguresAction,
-  addCashFlowExpenseAction,
-  deleteCashFlowExpenseAction,
-} from "@/app/(dashboard)/pnl/actions";
 
-export function CashFlowHarianPanel({ data }: { data: CashFlowHarian }) {
+export function CashFlowHarianPanel({
+  data,
+  onSaveFigures,
+  onAddExpense,
+  onDeleteExpense,
+}: {
+  data: CashFlowHarian;
+  onSaveFigures: (input: { businessDate: string; kasDiTangan: number; pengeluaranKasDiTangan: number }) => Promise<void>;
+  onAddExpense: (input: { businessDate: string; deskripsi: string; nominal: number }) => Promise<void>;
+  onDeleteExpense: (id: number) => Promise<void>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -44,7 +49,7 @@ export function CashFlowHarianPanel({ data }: { data: CashFlowHarian }) {
 
   function handleSaveFigures() {
     startTransition(async () => {
-      await saveCashFlowDailyFiguresAction({
+      await onSaveFigures({
         businessDate: data.businessDate,
         kasDiTangan: Number(kasDiTangan) || 0,
         pengeluaranKasDiTangan: Number(pengeluaranKasDiTangan) || 0,
@@ -55,7 +60,7 @@ export function CashFlowHarianPanel({ data }: { data: CashFlowHarian }) {
   function handleAddExpense() {
     if (!deskripsi.trim() || !(Number(nominal) > 0)) return;
     startTransition(async () => {
-      await addCashFlowExpenseAction({
+      await onAddExpense({
         businessDate: data.businessDate,
         deskripsi: deskripsi.trim(),
         nominal: Number(nominal),
@@ -67,7 +72,7 @@ export function CashFlowHarianPanel({ data }: { data: CashFlowHarian }) {
 
   function handleDeleteExpense(id: number) {
     startTransition(async () => {
-      await deleteCashFlowExpenseAction(id);
+      await onDeleteExpense(id);
     });
   }
 

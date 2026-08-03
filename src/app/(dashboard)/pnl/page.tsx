@@ -12,7 +12,12 @@ import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
 import { COADetailTable } from "@/components/dashboard/coa-detail-table";
-import { saveCOABudgetAction } from "@/app/(dashboard)/pnl/actions";
+import {
+  saveCOABudgetAction,
+  saveCashFlowDailyFiguresAction,
+  addCashFlowExpenseAction,
+  deleteCashFlowExpenseAction,
+} from "@/app/(dashboard)/pnl/actions";
 import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
 import { CashFlowHarianPanel } from "@/components/dashboard/cash-flow-harian-panel";
@@ -95,7 +100,13 @@ export default async function PnLPage({
       <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-5">
         <div className="flex flex-col gap-4 @4xl:col-span-3">
           <CashFlowPanel data={cashFlow} asOfLabel={formatDate(balanceSheetCutoff)} />
-          <CashFlowHarianPanel key={cashFlowHarian.businessDate} data={cashFlowHarian} />
+          <CashFlowHarianPanel
+            key={cashFlowHarian.businessDate}
+            data={cashFlowHarian}
+            onSaveFigures={saveCashFlowDailyFiguresAction}
+            onAddExpense={addCashFlowExpenseAction}
+            onDeleteExpense={deleteCashFlowExpenseAction}
+          />
           <CashFlowHarianHistoryPanel rows={cashFlowHarianHistory} activeDate={cfDate} />
         </div>
 
