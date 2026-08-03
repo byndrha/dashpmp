@@ -63,3 +63,6 @@ android/local.properties
 
 # user-uploaded files (local disk storage, never committed)
 public/uploads/
+
+# superpowers scratch workspaces (SDD ledgers, brainstorm mockups)
+/.superpowers/
