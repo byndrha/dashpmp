@@ -49,7 +49,8 @@ import {
   getAvailableSalesOrdersAction,
   deleteJadwalDraftAction,
   startMuatAction,
-  startBerangkatAction,
+  selesaiMuatAction,
+  konfirmasiBerangkatAction,
   getVehicleChecksForJadwalAction,
   createVehicleCheckAction,
 } from "@/app/(dashboard)/delivery/actions";
@@ -73,7 +74,7 @@ function SortableStopRow({
   onEdit: (detail: JadwalDetailRow) => void;
   disabled: boolean;
   printChecked: boolean;
-  onTogglePrint: (deliveryOrderId: string) => void;
+  onTogglePrint: (jadwalDetailId: number) => void;
   // Only usable while the Jadwal is still Draft (matches
   // removeSalesOrderFromJadwal's own guard) — omitted/hidden once Terbit.
   onRemove?: (detail: JadwalDetailRow) => void;
@@ -122,19 +123,17 @@ function SortableStopRow({
           Tanpa lokasi
         </Badge>
       )}
-      {detail.DeliveryOrderID && (
-        <button
-          type="button"
-          title={printChecked ? "Batal cetak DO ini" : "Tandai untuk dicetak"}
-          onClick={() => onTogglePrint(detail.DeliveryOrderID as string)}
-          className={cn(
-            "shrink-0 rounded border p-1 transition-colors",
-            printChecked ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:border-border"
-          )}
-        >
-          <Printer className="size-3.5" />
-        </button>
-      )}
+      <button
+        type="button"
+        title={printChecked ? "Batal tandai untuk dicetak" : "Tandai untuk dicetak"}
+        onClick={() => onTogglePrint(detail.JadwalDetailID)}
+        className={cn(
+          "shrink-0 rounded border p-1 transition-colors",
+          printChecked ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:border-border"
+        )}
+      >
+        <Printer className="size-3.5" />
+      </button>
       {onRemove && (
         <button
           type="button"
@@ -239,25 +238,26 @@ export function RouteValidationDialog({
   const [availableToAdd, setAvailableToAdd] = useState<AvailableSalesOrder[]>([]);
   const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
-  const [printSelected, setPrintSelected] = useState<Set<string>>(new Set());
+  const [printSelected, setPrintSelected] = useState<Set<number>>(new Set());
 
-  function togglePrint(deliveryOrderId: string) {
+  function togglePrint(jadwalDetailId: number) {
     setPrintSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(deliveryOrderId)) next.delete(deliveryOrderId);
-      else next.add(deliveryOrderId);
+      if (next.has(jadwalDetailId)) next.delete(jadwalDetailId);
+      else next.add(jadwalDetailId);
       return next;
     });
   }
 
+  // Opens the printable invoice for every currently-marked stop that already
+  // has an InvoiceToken (a stop marked before Selesai Muat runs has none yet
+  // — nothing to open for it here; the auto-print in handleSelesaiMuat is
+  // what actually opens it the moment its token becomes available).
   function handlePrintSelected() {
-    // One PDF per DeliveryOrder, each opened in its own tab — simplest
-    // correct behavior for v1 (no merged multi-page endpoint yet). Browsers
-    // may block more than a couple of simultaneous window.open() calls
-    // outside a direct click handler, but this runs synchronously inside
-    // one, so it's within the same user-gesture window for all of them.
-    for (const id of printSelected) {
-      window.open(`/api/print/delivery-order/${id}`, "_blank");
+    for (const d of order) {
+      if (printSelected.has(d.JadwalDetailID) && d.InvoiceToken) {
+        window.open(`/invoice/${d.InvoiceToken}`, "_blank");
+      }
     }
   }
 
@@ -407,7 +407,7 @@ export function RouteValidationDialog({
 
   // Standalone "Simpan" path — still needed on its own since editing
   // driver/time while already Terbit (re-assigning driver/vehicle onto
-  // existing DOs) doesn't go through handleBerangkat.
+  // existing DOs) doesn't go through handleSelesaiMuat/handleKonfirmasiBerangkat.
   function handleSaveDriverTime() {
     if (jadwalId == null) return;
     setError(null);
@@ -482,37 +482,38 @@ export function RouteValidationDialog({
     });
   }
 
-  // "Berangkat" always persists the currently-selected driver/time first —
-  // otherwise a driver picked but not yet "Simpan"-ed would still read as
-  // NULL server-side (startBerangkat checks the persisted SalesmanID column,
-  // not client state), failing confusingly even though the button looked
-  // ready. This is also the moment real DO documents get created — there is
-  // no separate "Terbitkan" step anymore.
-  function handleBerangkat() {
+  // Selesai Muat creates the real DO+SI documents (see selesaiMuat) and
+  // auto-opens the invoice for every stop marked in printSelected — same
+  // window.open mechanism handlePrintSelected already uses, just triggered
+  // automatically instead of manually, and without closing this dialog so
+  // the operator can keep working here while the print tabs load.
+  function handleSelesaiMuat() {
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
       try {
-        const resultId = await updateJadwalDriverTimeAction(
-          jadwalId,
-          { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
-          { skipOrderTimeCheck: true }
-        );
-        // If the just-edited time now overlaps another Draft for this
-        // armada, it got merged into that one instead (see
-        // updateJadwalDriverTime) — jadwalId no longer exists, so
-        // departing on it would fail. Stop here and send the user back to
-        // the board to reopen the now-combined Jadwal and review it (its
-        // stop list just changed) before actually departing.
-        if (resultId !== jadwalId) {
-          toast.success("Waktu ini tumpang tindih dengan keberangkatan lain untuk armada ini — sudah digabung. Buka kembali untuk melanjutkan keberangkatan.");
-          onDeleted?.();
-          onOpenChange(false);
-          return;
+        const tokens = await selesaiMuatAction(jadwalId);
+        for (const t of tokens) {
+          if (printSelected.has(t.jadwalDetailId)) {
+            window.open(`/invoice/${t.invoiceToken}`, "_blank");
+          }
         }
-        await startBerangkatAction(jadwalId);
+        const rows = await getJadwalDetailAction(jadwalId);
+        setOrder(rows);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal memproses keberangkatan.");
+        setError(err instanceof Error ? err.message : "Gagal menyelesaikan muat.");
+      }
+    });
+  }
+
+  function handleKonfirmasiBerangkat() {
+    if (jadwalId == null) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await konfirmasiBerangkatAction(jadwalId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal mengonfirmasi keberangkatan.");
       }
     });
   }
@@ -578,9 +579,11 @@ export function RouteValidationDialog({
   }
 
   const isDraft = jadwal?.Status === "Draft";
+  const isWaitingDeparture = jadwal?.Status === "Terbit" && jadwal?.JamAktualBerangkat == null;
+  const hasBerangkatCheck = vehicleChecks.some((c) => c.tipe === "BERANGKAT");
   const isFutureDate = businessDate > todayISO;
   const overCapacity = kapasitasMaks != null && totalQty > kapasitasMaks;
-  const canBerangkat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity && !isFutureDate;
+  const canSelesaiMuat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity && !isFutureDate;
   const totalFuelLiters = useMemo(() => {
     if (route == null || konsumsiBBM == null) return null;
     return Math.round(route.distanceKm * konsumsiBBM * 10) / 10;
@@ -837,18 +840,28 @@ export function RouteValidationDialog({
                 <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
                   Batalkan Draft
                 </Button>
-                {jadwal?.JamMulaiMuat == null && (
+                {jadwal?.JamMulaiMuat == null ? (
                   <Button
                     size="sm"
-                    variant="outline"
                     className="flex-1"
                     disabled={pending || isFutureDate}
                     onClick={handleMuat}
                   >
                     Mulai Muat
                   </Button>
+                ) : (
+                  <Button size="sm" className="flex-1" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
+                    {pending ? "Memproses..." : "Selesai Muat"}
+                  </Button>
                 )}
-                <Button size="sm" className="flex-1" disabled={!canBerangkat || pending} onClick={handleBerangkat}>
+              </div>
+            ) : isWaitingDeparture ? (
+              <div className="flex flex-col gap-2">
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="size-3.5" />
+                  Selesai Muat pukul {formatTime(jadwal!.JamSelesaiMuat as string)} — menunggu Cek Berangkat
+                </p>
+                <Button size="sm" className="w-fit" disabled={pending || !hasBerangkatCheck} onClick={handleKonfirmasiBerangkat}>
                   {pending ? "Memproses..." : "Berangkat"}
                 </Button>
               </div>
@@ -969,7 +982,7 @@ export function RouteValidationDialog({
                         index={i}
                         onEdit={onEditSalesOrder}
                         disabled={!isDraft}
-                        printChecked={d.DeliveryOrderID != null && printSelected.has(d.DeliveryOrderID)}
+                        printChecked={printSelected.has(d.JadwalDetailID)}
                         onTogglePrint={togglePrint}
                         onRemove={isDraft ? handleRemoveStop : undefined}
                       />
@@ -979,10 +992,10 @@ export function RouteValidationDialog({
               )}
             </div>
 
-            {!isDraft && printSelected.size > 0 && (
+            {printSelected.size > 0 && (
               <Button size="sm" variant="outline" className="gap-1.5" data-capture-hide="true" onClick={handlePrintSelected}>
                 <Printer className="size-3.5" />
-                Cetak DO Terpilih ({printSelected.size})
+                Cetak SI Terpilih ({printSelected.size})
               </Button>
             )}
 
