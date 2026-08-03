@@ -1,7 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import {
   type VehicleCheckTipe,
-  type FuelLevel,
+  type FuelBar,
   type JenisFotoKendaraan,
   JENIS_FOTO_LIST,
   JENIS_FOTO_LABEL,
@@ -14,7 +14,7 @@ import {
 // unchanged. Client components should import these from
 // "@/lib/vehicle-check-types" directly instead, to avoid pulling this
 // module's `@/lib/db` (mssql) dependency into the client bundle.
-export type { VehicleCheckTipe, FuelLevel, JenisFotoKendaraan, VehicleCheckPhoto, VehicleCheckRow };
+export type { VehicleCheckTipe, FuelBar, JenisFotoKendaraan, VehicleCheckPhoto, VehicleCheckRow };
 export { JENIS_FOTO_LIST, JENIS_FOTO_LABEL };
 
 export async function getVehicleChecksForJadwal(jadwalId: number): Promise<VehicleCheckRow[]> {
@@ -23,7 +23,7 @@ export async function getVehicleChecksForJadwal(jadwalId: number): Promise<Vehic
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .query(`
-      SELECT vc.VehicleCheckID, vc.JadwalID, vc.Tipe, vc.OdometerKM, vc.FuelLevel,
+      SELECT vc.VehicleCheckID, vc.JadwalID, vc.Tipe, vc.OdometerKM, vc.FuelBar, vc.MuatanQty,
              vc.CheckedByUserID, vc.CheckedAt,
              p.JenisFoto, p.FilePath
       FROM DashboardVehicleCheck vc
@@ -37,7 +37,8 @@ export async function getVehicleChecksForJadwal(jadwalId: number): Promise<Vehic
     JadwalID: number;
     Tipe: VehicleCheckTipe;
     OdometerKM: number;
-    FuelLevel: FuelLevel;
+    FuelBar: FuelBar;
+    MuatanQty: number;
     CheckedByUserID: string;
     CheckedAt: Date;
     JenisFoto: JenisFotoKendaraan | null;
@@ -53,7 +54,8 @@ export async function getVehicleChecksForJadwal(jadwalId: number): Promise<Vehic
         jadwalId: r.JadwalID,
         tipe: r.Tipe,
         odometerKM: r.OdometerKM,
-        fuelLevel: r.FuelLevel,
+        fuelBar: r.FuelBar,
+        muatanQty: r.MuatanQty,
         checkedByUserId: r.CheckedByUserID,
         checkedAt: r.CheckedAt.toISOString(),
         photos: [],
@@ -71,7 +73,8 @@ export async function createVehicleCheck(input: {
   jadwalId: number;
   tipe: VehicleCheckTipe;
   odometerKM: number;
-  fuelLevel: FuelLevel;
+  fuelBar: FuelBar;
+  muatanQty: number;
   userId: string;
   photos: VehicleCheckPhoto[];
 }): Promise<void> {
@@ -112,11 +115,12 @@ export async function createVehicleCheck(input: {
       .input("jadwalId", sql.Int, input.jadwalId)
       .input("tipe", sql.VarChar(10), input.tipe)
       .input("odometerKM", sql.Int, input.odometerKM)
-      .input("fuelLevel", sql.VarChar(4), input.fuelLevel)
+      .input("fuelBar", sql.TinyInt, input.fuelBar)
+      .input("muatanQty", sql.Int, input.muatanQty)
       .input("userId", sql.VarChar(16), input.userId).query(`
-        INSERT INTO DashboardVehicleCheck (JadwalID, Tipe, OdometerKM, FuelLevel, CheckedByUserID)
+        INSERT INTO DashboardVehicleCheck (JadwalID, Tipe, OdometerKM, FuelBar, MuatanQty, CheckedByUserID)
         OUTPUT INSERTED.VehicleCheckID
-        VALUES (@jadwalId, @tipe, @odometerKM, @fuelLevel, @userId)
+        VALUES (@jadwalId, @tipe, @odometerKM, @fuelBar, @muatanQty, @userId)
       `);
     const vehicleCheckId = (header.recordset[0] as { VehicleCheckID: number }).VehicleCheckID;
 
