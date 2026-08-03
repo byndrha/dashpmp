@@ -279,13 +279,14 @@ export interface PeranRow {
   perusahaanId: number;
   nama: string;
   isSuperAdmin: boolean;
+  isSatpam: boolean;
   akunCount: number;
 }
 
 export async function listAllPeran(): Promise<PeranRow[]> {
   const pool = getPgPool();
   const result = await pool.query(`
-    SELECT r.id, r.perusahaan_id, r.nama, r.is_super_admin,
+    SELECT r.id, r.perusahaan_id, r.nama, r.is_super_admin, r.is_satpam,
            (SELECT count(*) FROM akun a WHERE a.peran_id = r.id) AS akun_count
     FROM peran r
     ORDER BY r.perusahaan_id, r.is_super_admin DESC, r.nama
@@ -295,6 +296,7 @@ export async function listAllPeran(): Promise<PeranRow[]> {
     perusahaanId: row.perusahaan_id,
     nama: row.nama,
     isSuperAdmin: row.is_super_admin,
+    isSatpam: row.is_satpam,
     akunCount: Number(row.akun_count),
   }));
 }
@@ -341,4 +343,9 @@ export async function setPeranIzin(input: {
      ON CONFLICT (peran_id, module_key) DO UPDATE SET can_view = EXCLUDED.can_view, can_edit = EXCLUDED.can_edit`,
     [input.peranId, input.moduleKey, input.canView, input.canEdit]
   );
+}
+
+export async function setPeranSatpam(peranId: number, isSatpam: boolean): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE peran SET is_satpam = $1 WHERE id = $2`, [isSatpam, peranId]);
 }

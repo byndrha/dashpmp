@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MODULE_KEYS, MODULE_LABEL, type ModuleKey, type PermissionMap } from "@/lib/permissions";
 import type { PeranRow, PeranIzinRow, PerusahaanDirektoriOption } from "@/lib/queries/akun";
-import { createPeranAction, deletePeranAction, setPeranIzinAction } from "@/app/grup/akun/peran/actions";
+import { createPeranAction, deletePeranAction, setPeranIzinAction, setPeranSatpamAction } from "@/app/grup/akun/peran/actions";
 
 function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
   const map: PermissionMap = {};
@@ -23,6 +23,7 @@ function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
 
 function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: PermissionMap }) {
   const [map, setMap] = useState(initialMap);
+  const [isSatpam, setIsSatpam] = useState(peran.isSatpam);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -38,20 +39,26 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     setDirty(true);
   }
 
+  function toggleSatpam() {
+    setIsSatpam((prev) => !prev);
+    setDirty(true);
+  }
+
   function handleSave() {
     setError(null);
     startTransition(async () => {
       try {
-        await Promise.all(
-          MODULE_KEYS.map((key) =>
+        await Promise.all([
+          ...MODULE_KEYS.map((key) =>
             setPeranIzinAction({
               peranId: peran.id,
               moduleKey: key,
               canView: map[key]?.canView ?? false,
               canEdit: map[key]?.canEdit ?? false,
             })
-          )
-        );
+          ),
+          setPeranSatpamAction(peran.id, isSatpam),
+        ]);
         setDirty(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal menyimpan otoritas.");
@@ -106,6 +113,15 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
             </tbody>
           </table>
         </div>
+        <label className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
+          <input type="checkbox" className="accent-primary" checked={isSatpam} onChange={toggleSatpam} />
+          <span>
+            Peran Khusus: Satpam
+            <span className="block text-muted-foreground">
+              Hanya akun dengan peran ini yang bisa mengisi Cek Berangkat/Cek Datang di Validasi Rute.
+            </span>
+          </span>
+        </label>
         {error && <p className="text-xs text-destructive">{error}</p>}
         <Button size="sm" className="w-fit" disabled={pending || !dirty} onClick={handleSave}>
           {pending ? "Menyimpan..." : "Simpan Otoritas"}

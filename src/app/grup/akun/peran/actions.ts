@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireGrupAccess } from "@/lib/require-access";
-import { createPeran, deletePeran, setPeranIzin, listAllPeran } from "@/lib/queries/akun";
+import { createPeran, deletePeran, setPeranIzin, setPeranSatpam, listAllPeran } from "@/lib/queries/akun";
 import type { ModuleKey } from "@/lib/permissions";
 
 export async function createPeranAction(perusahaanId: number, nama: string) {
@@ -26,5 +26,11 @@ export async function deletePeranAction(peranId: number) {
 export async function setPeranIzinAction(input: { peranId: number; moduleKey: ModuleKey; canView: boolean; canEdit: boolean }) {
   await requireGrupAccess();
   await setPeranIzin(input);
+  revalidatePath("/grup/akun/peran");
+}
+
+export async function setPeranSatpamAction(peranId: number, isSatpam: boolean) {
+  await requireGrupAccess();
+  await setPeranSatpam(peranId, isSatpam);
   revalidatePath("/grup/akun/peran");
 }
