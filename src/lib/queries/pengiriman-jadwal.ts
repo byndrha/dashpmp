@@ -5,6 +5,7 @@ import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { formatDate, formatTime } from "@/lib/format";
 import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
 import { estimateTravelMinutes, type LatLng } from "@/lib/route-estimate";
+import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
 // mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
@@ -61,6 +62,11 @@ export interface JadwalCard {
   // Perjalanan" / "Kembali ke Pabrik" segments on the board (see
   // computeArmadaTimelineSegments).
   DurasiMenit: number | null;
+  // The real vehicle-return timestamp from a Satpam's Cek Datang, when one
+  // exists (see vehicle-check.ts) — null for any Jadwal without a recorded
+  // arrival check yet, in which case the board falls back to the
+  // JamAktualBerangkat + DurasiMenit estimate (unchanged legacy behavior).
+  JamKembaliAktual: string | null;
   // Estimated total busy duration: each stop's own bongkar/unloading time
   // (estimateDeliveryMinutes, delivery-duration.ts) plus pabrik->stop1->...
   // ->pabrik travel time — the real OSRM-derived DurasiMenit when already
@@ -221,11 +227,15 @@ export async function getPengirimanBoard(
     getPabrikLocation(),
   ]);
 
-  const jadwalRows = jadwalResult.recordset as JadwalCard[];
-  const travelByJadwalId = await estimateTravelMinutesForJadwal(pool, pabrik, jadwalRows);
-  const jadwal = jadwalRows.map((jr) => ({
+  const jadwalRows = jadwalResult.recordset as Omit<JadwalCard, "JamKembaliAktual">[];
+  const [travelByJadwalId, jamKembaliMap] = await Promise.all([
+    estimateTravelMinutesForJadwal(pool, pabrik, jadwalRows),
+    getJamKembaliAktualMap(jadwalRows.map((jr) => jr.JadwalID)),
+  ]);
+  const jadwal: JadwalCard[] = jadwalRows.map((jr) => ({
     ...jr,
     EstimasiDurasiMenit: jr.EstimasiDurasiMenit + (travelByJadwalId.get(jr.JadwalID) ?? 0),
+    JamKembaliAktual: jamKembaliMap.get(jr.JadwalID) ?? null,
   }));
 
   return { armada, jadwal, externalDeliveries: externalResult.recordset };
@@ -242,7 +252,7 @@ export async function getPengirimanBoard(
 async function estimateTravelMinutesForJadwal(
   pool: sql.ConnectionPool,
   pabrik: { latitude: number; longitude: number },
-  jadwalRows: JadwalCard[]
+  jadwalRows: Omit<JadwalCard, "JamKembaliAktual">[]
 ): Promise<Map<number, number>> {
   const travelByJadwalId = new Map<number, number>();
   if (jadwalRows.length === 0) return travelByJadwalId;

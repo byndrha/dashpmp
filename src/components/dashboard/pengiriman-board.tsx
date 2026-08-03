@@ -821,7 +821,8 @@ function ArmadaRowBoard({
       }
       if (j.JamAktualBerangkat && j.DurasiMenit != null) {
         const start = new Date(j.JamAktualBerangkat);
-        const end = new Date(start.getTime() + j.DurasiMenit * 60_000);
+        const estimatedEnd = new Date(start.getTime() + j.DurasiMenit * 60_000);
+        const end = j.JamKembaliAktual ? new Date(j.JamKembaliAktual) : estimatedEnd;
         segments.push({ key: `jalan-${j.JadwalID}`, jadwalId: j.JadwalID, label: "Dalam Perjalanan", start, end });
         segments.push({
           key: `kembali-${j.JadwalID}`,
