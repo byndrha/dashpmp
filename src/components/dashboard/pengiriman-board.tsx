@@ -817,15 +817,25 @@ function ArmadaRowBoard({
   const autoSegments = useMemo(() => {
     type AutoSegment = { key: string; jadwalId: number; label: string; start: Date; end: Date };
     const segments: AutoSegment[] = [];
+    const now = new Date();
     for (const j of jadwal) {
       if (j.Status !== "Terbit") continue;
-      if (j.JamMulaiMuat && j.JamAktualBerangkat) {
+      if (j.JamMulaiMuat && j.JamSelesaiMuat) {
         segments.push({
           key: `memuat-${j.JadwalID}`,
           jadwalId: j.JadwalID,
           label: "Sedang Memuat",
           start: new Date(j.JamMulaiMuat),
-          end: new Date(j.JamAktualBerangkat),
+          end: new Date(j.JamSelesaiMuat),
+        });
+      }
+      if (j.JamSelesaiMuat) {
+        segments.push({
+          key: `tunggu-${j.JadwalID}`,
+          jadwalId: j.JadwalID,
+          label: "Menunggu Keberangkatan",
+          start: new Date(j.JamSelesaiMuat),
+          end: j.JamAktualBerangkat ? new Date(j.JamAktualBerangkat) : now,
         });
       }
       if (j.JamAktualBerangkat && j.DurasiMenit != null) {
