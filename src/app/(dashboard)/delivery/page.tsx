@@ -16,7 +16,7 @@ export default async function DeliveryPage({
 }: {
   searchParams: Promise<{ wilayah?: string; pengirimanDate?: string }>;
 }) {
-  await requireModuleAccess("delivery");
+  const session = await requireModuleAccess("delivery");
   const params = await searchParams;
   // Wilayah only filters the "Pengiriman Terbuka" tab (getOpenDeliveries) —
   // the board is date-scoped instead and intentionally shows every wilayah
@@ -57,6 +57,7 @@ export default async function DeliveryPage({
             businessDate={boardDate}
             todayISO={todayISO}
             expeditionOptions={expeditionOptions}
+            isSatpam={session.user.isSatpam}
           />
         }
       />

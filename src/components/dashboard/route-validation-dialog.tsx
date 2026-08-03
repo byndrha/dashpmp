@@ -32,6 +32,14 @@ import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
 import type { FuelType } from "@/lib/armada-fuel";
+import { VehicleCheckPanel } from "@/components/dashboard/vehicle-check-panel";
+import type {
+  VehicleCheckRow,
+  VehicleCheckTipe,
+  FuelLevel,
+  VehicleCheckPhoto,
+  JenisFotoKendaraan,
+} from "@/lib/vehicle-check-types";
 import {
   getJadwalDetailAction,
   updateJadwalUrutanAction,
@@ -42,6 +50,8 @@ import {
   deleteJadwalDraftAction,
   startMuatAction,
   startBerangkatAction,
+  getVehicleChecksForJadwalAction,
+  createVehicleCheckAction,
 } from "@/app/(dashboard)/delivery/actions";
 
 const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((m) => m.RouteMap), {
@@ -144,11 +154,13 @@ export function RouteValidationDialog({
   businessDate,
   todayISO,
   drivers,
+  armadaId,
   armadaNama,
   konsumsiBBM,
   kapasitasMaks,
   jenisBBM,
   biayaBBMPerLiter,
+  isSatpam,
   onOpenChange,
   onDeleted,
   onEditSalesOrder,
@@ -157,6 +169,12 @@ export function RouteValidationDialog({
   businessDate: string;
   todayISO: string;
   drivers: DriverOption[];
+  // The open Jadwal's own ArmadaID — same already-resolved ArmadaRow the
+  // caller uses for armadaNama/konsumsiBBM/kapasitasMaks/jenisBBM below.
+  // Needed as a form field for the Satpam photo-upload endpoint. Null for
+  // the same reason armadaNama can be null (jadwal == null / no matching
+  // Armada resolved yet).
+  armadaId: number | null;
   // Display-only, for the Share summary text — same ArmadaRow the caller
   // already resolved for konsumsiBBM/kapasitasMaks below.
   armadaNama: string | null;
@@ -171,6 +189,10 @@ export function RouteValidationDialog({
   // the Armada hasn't had these fields filled in yet.
   jenisBBM: FuelType | null;
   biayaBBMPerLiter: number | null;
+  // Current session's Satpam flag, resolved server-side by the caller —
+  // gates whether VehicleCheckPanel shows an editable form or a read-only
+  // summary/placeholder.
+  isSatpam: boolean;
   onOpenChange: (open: boolean) => void;
   // Fired after a successful "Batalkan Draft" so the caller can close this
   // dialog (it has no Jadwal left to show once deleted).
@@ -183,6 +205,7 @@ export function RouteValidationDialog({
 }) {
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<JadwalDetailRow[]>([]);
+  const [vehicleChecks, setVehicleChecks] = useState<VehicleCheckRow[]>([]);
   // Freely editable delivery date — the primary override for this Jadwal's
   // departure day. Kept as its own field (not derived from businessDate's
   // rollover label) precisely so staff can set ANY calendar date here,
@@ -262,6 +285,7 @@ export function RouteValidationDialog({
 
     if (jadwalId == null) {
       setOrder([]);
+      setVehicleChecks([]);
       return;
     }
     setLoading(true);
@@ -271,6 +295,7 @@ export function RouteValidationDialog({
         setOrder(rows);
       })
       .finally(() => setLoading(false));
+    getVehicleChecksForJadwalAction(jadwalId).then(setVehicleChecks);
   }, [jadwalId]);
 
   useEffect(() => {
@@ -526,6 +551,30 @@ export function RouteValidationDialog({
         setAddError(err instanceof Error ? err.message : "Gagal menambahkan SO.");
       }
     });
+  }
+
+  async function handleUploadVehiclePhoto(file: File, jenisFoto: JenisFotoKendaraan): Promise<string> {
+    if (armadaId == null) throw new Error("Armada tidak diketahui.");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("armadaId", String(armadaId));
+    formData.append("jenisFoto", jenisFoto);
+    const res = await fetch("/api/upload/satpam-check", { method: "POST", body: formData });
+    const data = (await res.json()) as { path?: string; error?: string };
+    if (!res.ok || !data.path) throw new Error(data.error ?? "Gagal mengunggah foto.");
+    return data.path;
+  }
+
+  async function handleSubmitVehicleCheck(input: {
+    tipe: VehicleCheckTipe;
+    odometerKM: number;
+    fuelLevel: FuelLevel;
+    photos: VehicleCheckPhoto[];
+  }): Promise<void> {
+    if (jadwalId == null) return;
+    await createVehicleCheckAction({ jadwalId, ...input });
+    const rows = await getVehicleChecksForJadwalAction(jadwalId);
+    setVehicleChecks(rows);
   }
 
   const isDraft = jadwal?.Status === "Draft";
@@ -959,6 +1008,17 @@ export function RouteValidationDialog({
                   <span className="flex items-center gap-1 font-medium">{formatRupiah(totalFuelCost)}</span>
                 )}
               </div>
+            )}
+
+            {!isDraft && jadwalId != null && armadaId != null && (
+              <VehicleCheckPanel
+                jadwalId={jadwalId}
+                armadaId={armadaId}
+                isSatpam={isSatpam}
+                onUploadPhoto={handleUploadVehiclePhoto}
+                onSubmitCheck={handleSubmitVehicleCheck}
+                checks={vehicleChecks}
+              />
             )}
 
             {error && <p className="text-xs text-destructive">{error}</p>}
