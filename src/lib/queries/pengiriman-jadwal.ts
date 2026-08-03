@@ -887,11 +887,17 @@ export async function getMaxSalesOrderTransDateForDeliveries(deliveryOrderIds: s
 // change once Status='Terbit'. The cosmetic cost: the card reads "Draft"
 // for shipments that, in reality, already happened. Each JadwalDetail row
 // gets a real DeliveryOrderID (unlike a normal Draft, where it's always
-// NULL until startBerangkat) — this is intentional and safe: startBerangkat's
+// NULL until selesaiMuat) — this is intentional and safe: selesaiMuat's
 // per-row loop already skips creating a new DO whenever DeliveryOrderID is
-// already set, so clicking "Berangkat" on this backfilled Draft later just
-// transitions Status -> Terbit and computes a real OSRM route, without
-// attempting to re-issue any of the already-real DOs.
+// already set (see its own idempotent-retry-guard comment), only correcting
+// that DO's TransDate to the now-confirmed loading-complete moment — it
+// deliberately does NOT create a SalesInvoice for these rows either (that
+// DO was already issued, and invoiced if at all, by the desktop ERP itself).
+// So clicking "Selesai Muat" on this backfilled Draft later just transitions
+// Status -> Terbit and computes a real OSRM route, without attempting to
+// re-issue or re-invoice any of the already-real DOs. "Berangkat"
+// (konfirmasiBerangkat) comes after that, and only ever sets
+// JamAktualBerangkat on an already-Terbit Jadwal.
 export async function mergeExternalDeliveriesIntoJadwal(
   armadaId: number,
   deliveryOrderIds: string[],
@@ -1235,19 +1241,28 @@ const DOC_SUFFIX = "003/001";
 const BRANCH_ID = "011";
 const DEPARTMENT_ID = "0110";
 
-async function nextDeliveryOrderId(pool: sql.ConnectionPool): Promise<string> {
+// Widened from a plain sql.ConnectionPool so these helpers can run inside
+// selesaiMuat's sql.Transaction (see its own comment) — both
+// sql.ConnectionPool and sql.Transaction expose a compatible
+// `.request(): Request` method (verified against @types/mssql/index.d.ts),
+// so a single implementation works unchanged for either. No other caller of
+// these six helpers exists outside selesaiMuat (they're module-private), so
+// widening this type can't affect anything else.
+type PoolOrTransaction = sql.ConnectionPool | sql.Transaction;
+
+async function nextDeliveryOrderId(pool: PoolOrTransaction): Promise<string> {
   const result = await pool.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderID AS INT)) AS MaxID FROM DeliveryOrder`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-async function nextDeliveryOrderDetailId(pool: sql.ConnectionPool): Promise<string> {
+async function nextDeliveryOrderDetailId(pool: PoolOrTransaction): Promise<string> {
   const result = await pool.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderDetailID AS INT)) AS MaxID FROM DeliveryOrderDetail`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-async function nextDOVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Promise<string> {
+async function nextDOVoucherSeq(pool: PoolOrTransaction, yearMonth: string): Promise<string> {
   const result = await pool
     .request()
     .input("pattern", sql.VarChar(64), `MKE/DO/%/${yearMonth}/${DOC_SUFFIX}`).query(`
@@ -1259,13 +1274,13 @@ async function nextDOVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Pr
   return String(maxSeq + 1).padStart(6, "0");
 }
 
-async function nextSalesInvoiceId(pool: sql.ConnectionPool): Promise<string> {
+async function nextSalesInvoiceId(pool: PoolOrTransaction): Promise<string> {
   const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceID AS INT)) AS MaxID FROM SalesInvoice`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-async function nextSalesInvoiceDetailId(pool: sql.ConnectionPool): Promise<string> {
+async function nextSalesInvoiceDetailId(pool: PoolOrTransaction): Promise<string> {
   const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceDetailID AS INT)) AS MaxID FROM SalesInvoiceDetail`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
@@ -1274,7 +1289,7 @@ async function nextSalesInvoiceDetailId(pool: sql.ConnectionPool): Promise<strin
 // Same numbering shape as nextDOVoucherSeq, MKE/SI/ prefix (matches the real
 // SalesInvoice VoucherNo pattern already seen in takeaway.ts's own
 // createTakeAwayPemesanan, e.g. "MKE/SI/000123/2026-08/003/001").
-async function nextSIVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Promise<string> {
+async function nextSIVoucherSeq(pool: PoolOrTransaction, yearMonth: string): Promise<string> {
   const result = await pool
     .request()
     .input("pattern", sql.VarChar(64), `MKE/SI/%/${yearMonth}/${DOC_SUFFIX}`).query(`
@@ -1311,10 +1326,24 @@ interface SalesOrderDetailForPublish {
 // DeliveryOrder + DeliveryOrderDetail(s) AND one SalesInvoice +
 // SalesInvoiceDetail(s) from the linked SalesOrder/SalesOrderDetail. Writes
 // DeliveryOrderID/SalesInvoiceID back onto the detail row, then flips
-// Jadwal.Status and sets JamSelesaiMuat together in the same atomic claim. On
-// partial failure, soft-deletes only the DeliveryOrder/DeliveryOrderDetail/
-// SalesInvoice/SalesInvoiceDetail rows this call itself created (not the
-// Jadwal/SO selection) and rethrows.
+// Jadwal.Status and sets JamSelesaiMuat together in the same atomic claim.
+//
+// Everything from the claim onward (claim UPDATE, armada/detail-rows reads,
+// and the entire per-stop loop) runs inside one real sql.Transaction — same
+// shape as createVehicleCheck in vehicle-check.ts, which established this
+// pattern in this codebase for the same reason. This deliberately departs
+// from createTakeAwayPemesanan's (takeaway.ts) compensating-cleanup-only
+// style: this loop can create many DO/DODetail/SI/SIDetail rows plus
+// per-row JadwalDetail updates across potentially many stops, and a
+// JS-catchable error is not the only way it can fail partway through — a
+// hard process crash mid-loop (not a catchable throw) could otherwise leave
+// a half-created state (e.g. a DO with no matching SI) with the Jadwal
+// stuck in Status='Terbit' and no client-triggerable retry path (this
+// function immediately rejects any non-Draft Jadwal). A real
+// transaction.rollback() undoes every uncommitted INSERT/UPDATE atomically
+// regardless of how the failure happened, so the single catch block below
+// rolls back rather than manually re-deleting/reverting each row it
+// created.
 export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: number; invoiceToken: string }[]> {
   const pool = await getPool();
 
@@ -1330,8 +1359,8 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
   // Server-side mirror of the client's mandatory route-computed check
   // (design spec: checked client- AND server-side) — a direct server-action
   // call bypassing the UI must not be able to skip it. Deliberately BEFORE
-  // the claim below, so a failed route check never leaves the Jadwal wrongly
-  // flipped to Terbit.
+  // the transaction below, so a failed route check never leaves the Jadwal
+  // wrongly flipped to Terbit.
   const stopsForRouteCheck = await getJadwalDetail(jadwalId);
   if (stopsForRouteCheck.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
   const missingCoords = stopsForRouteCheck.some((s) => s.Latitude == null || s.Longitude == null);
@@ -1357,31 +1386,33 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
   const totalQty = stopsForRouteCheck.reduce((sum, s) => sum + s.Qty, 0);
   await assertWithinCapacity(pool, headerRow.ArmadaID, totalQty);
 
-  // Atomically claim: only succeeds if Status is still 'Draft'. Guards
-  // against two racing selesaiMuat calls for the same jadwalId both passing
-  // the Status!=='Draft' check above and then both creating a duplicate set
-  // of real documents.
-  const claim = await pool
-    .request()
-    .input("jadwalId", sql.Int, jadwalId)
-    .input("jarakKM", sql.Decimal(10, 2), validatedRoute.distanceKm)
-    .input("durasiMenit", sql.Int, Math.round(validatedRoute.durationMinutes))
-    .query(
-      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamSelesaiMuat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
-    );
-  if (claim.rowsAffected[0] === 0) {
-    throw new Error("Muat untuk keberangkatan ini sudah selesai atau sedang diproses.");
-  }
-
-  const createdDeliveryOrderIds: string[] = [];
-  const createdSalesInvoiceIds: string[] = [];
   const invoiceTokens: { jadwalDetailId: number; invoiceToken: string }[] = [];
   const now = new Date();
   const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
   try {
-    const armadaResult = await pool
-      .request()
+    // Atomically claim: only succeeds if Status is still 'Draft'. Guards
+    // against two racing selesaiMuat calls for the same jadwalId both passing
+    // the Status!=='Draft' check above and then both creating a duplicate set
+    // of real documents — the row lock this UPDATE takes is held until this
+    // transaction commits or rolls back, so a second concurrent call's own
+    // claim blocks here until the first fully finishes, then correctly finds
+    // Status is no longer 'Draft'.
+    const claim = await new sql.Request(transaction)
+      .input("jadwalId", sql.Int, jadwalId)
+      .input("jarakKM", sql.Decimal(10, 2), validatedRoute.distanceKm)
+      .input("durasiMenit", sql.Int, Math.round(validatedRoute.durationMinutes))
+      .query(
+        `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamSelesaiMuat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
+      );
+    if (claim.rowsAffected[0] === 0) {
+      throw new Error("Muat untuk keberangkatan ini sudah selesai atau sedang diproses.");
+    }
+
+    const armadaResult = await new sql.Request(transaction)
       .input("armadaId", sql.Int, headerRow.ArmadaID).query(`
         SELECT a.Nama, ed.ExpeditionID, ed.VehicleNo
         FROM DashboardArmada a
@@ -1395,8 +1426,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
     const doVehicleNo = armadaRow.VehicleNo ?? armadaRow.Nama;
     const doExpeditionId = armadaRow.ExpeditionID ?? "";
 
-    const details = await pool
-      .request()
+    const details = await new sql.Request(transaction)
       .input("jadwalId", sql.Int, jadwalId)
       .query(`
         SELECT JadwalDetailID, SalesOrderID, DeliveryOrderID FROM DashboardPengirimanJadwalDetail
@@ -1419,32 +1449,28 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
       // GETDATE() reference as JamSelesaiMuat above; the original desktop-app
       // TransDate was just whenever the document was typed in).
       if (detail.DeliveryOrderID) {
-        await pool
-          .request()
+        await new sql.Request(transaction)
           .input("doId", sql.VarChar(16), detail.DeliveryOrderID)
           .query(`UPDATE DeliveryOrder SET TransDate = GETDATE(), ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
         continue;
       }
 
-      const soResult = await pool
-        .request()
+      const soResult = await new sql.Request(transaction)
         .input("soId", sql.VarChar(16), detail.SalesOrderID)
         .query(`SELECT BusinessPartnerID, DueDate, TermOfPaymentID FROM SalesOrder WHERE SalesOrderID = @soId`);
       const so = soResult.recordset[0] as SalesOrderForPublish | undefined;
       if (!so) throw new Error(`Sales Order ${detail.SalesOrderID} tidak ditemukan.`);
 
-      const sodResult = await pool
-        .request()
+      const sodResult = await new sql.Request(transaction)
         .input("soId", sql.VarChar(16), detail.SalesOrderID)
         .query(`SELECT SalesOrderDetailID, ItemID, Name, Qty, Unit, Price, Amount FROM SalesOrderDetail WHERE SalesOrderID = @soId`);
       const soDetails = sodResult.recordset as SalesOrderDetailForPublish[];
 
-      const deliveryOrderId = await nextDeliveryOrderId(pool);
-      const voucherSeq = await nextDOVoucherSeq(pool, yearMonth);
+      const deliveryOrderId = await nextDeliveryOrderId(transaction);
+      const voucherSeq = await nextDOVoucherSeq(transaction, yearMonth);
       const voucherNo = `MKE/DO/${voucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
 
-      await pool
-        .request()
+      await new sql.Request(transaction)
         .input("id", sql.VarChar(16), deliveryOrderId)
         .input("voucherNo", sql.VarChar(128), voucherNo)
         .input("branchId", sql.VarChar(16), BRANCH_ID)
@@ -1466,12 +1492,10 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
              NULL, 0, '', 1, 1, @salesmanId, 0,
              '', @dueDate, '', '', NULL)
         `);
-      createdDeliveryOrderIds.push(deliveryOrderId);
 
       for (const sod of soDetails) {
-        const detailId = await nextDeliveryOrderDetailId(pool);
-        await pool
-          .request()
+        const detailId = await nextDeliveryOrderDetailId(transaction);
+        await new sql.Request(transaction)
           .input("id", sql.VarChar(16), detailId)
           .input("doId", sql.VarChar(16), deliveryOrderId)
           .input("itemId", sql.VarChar(160), sod.ItemID)
@@ -1492,12 +1516,11 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
 
       // --- SalesInvoice (new — reuses createTakeAwayPemesanan's exact
       // column/value shape from takeaway.ts) ---
-      const salesInvoiceId = await nextSalesInvoiceId(pool);
-      const siVoucherSeq = await nextSIVoucherSeq(pool, yearMonth);
+      const salesInvoiceId = await nextSalesInvoiceId(transaction);
+      const siVoucherSeq = await nextSIVoucherSeq(transaction, yearMonth);
       const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
       const totalAmount = soDetails.reduce((sum, sod) => sum + sod.Amount, 0);
-      await pool
-        .request()
+      await new sql.Request(transaction)
         .input("id", sql.VarChar(16), salesInvoiceId)
         .input("voucherNo", sql.VarChar(128), siVoucherNo)
         .input("dueDate", sql.DateTime, so.DueDate)
@@ -1524,12 +1547,10 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
              @salesmanId, 0, 0, 0, 0, '', 0,
              0, '', 0, '')
         `);
-      createdSalesInvoiceIds.push(salesInvoiceId);
 
       for (const sod of soDetails) {
-        const siDetailId = await nextSalesInvoiceDetailId(pool);
-        await pool
-          .request()
+        const siDetailId = await nextSalesInvoiceDetailId(transaction);
+        await new sql.Request(transaction)
           .input("id", sql.VarChar(16), siDetailId)
           .input("siId", sql.VarChar(16), salesInvoiceId)
           .input("itemId", sql.VarChar(160), sod.ItemID)
@@ -1547,8 +1568,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
           `);
       }
 
-      await pool
-        .request()
+      await new sql.Request(transaction)
         .input("detailId", sql.Int, detail.JadwalDetailID)
         .input("doId", sql.VarChar(16), deliveryOrderId)
         .input("siId", sql.VarChar(16), salesInvoiceId)
@@ -1556,37 +1576,10 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
 
       invoiceTokens.push({ jadwalDetailId: detail.JadwalDetailID, invoiceToken: encodeInvoiceToken(salesInvoiceId) });
     }
+
+    await transaction.commit();
   } catch (err) {
-    for (const siId of createdSalesInvoiceIds) {
-      await pool
-        .request()
-        .input("id", sql.VarChar(16), siId)
-        .query(`UPDATE SalesInvoice SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE SalesInvoiceID = @id`);
-      await pool
-        .request()
-        .input("siId", sql.VarChar(16), siId)
-        .query(`DELETE FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId`);
-    }
-    for (const doId of createdDeliveryOrderIds) {
-      await pool
-        .request()
-        .input("doId", sql.VarChar(16), doId)
-        .query(`UPDATE DeliveryOrder SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
-      await pool
-        .request()
-        .input("doId", sql.VarChar(16), doId)
-        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = NULL, SalesInvoiceID = NULL WHERE DeliveryOrderID = @doId`);
-    }
-    // The claim above already flipped Status to 'Terbit' and set
-    // JamSelesaiMuat before this loop ran — a genuinely failed attempt must
-    // revert both so it can be retried, on top of the
-    // DeliveryOrder/SalesInvoice/JadwalDetail cleanup already done above.
-    await pool
-      .request()
-      .input("jadwalId", sql.Int, jadwalId)
-      .query(
-        `UPDATE DashboardPengirimanJadwal SET Status = 'Draft', JamSelesaiMuat = NULL, JarakKM = NULL, DurasiMenit = NULL, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`
-      );
+    await transaction.rollback();
     throw err;
   }
 

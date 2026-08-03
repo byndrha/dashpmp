@@ -487,11 +487,37 @@ export function RouteValidationDialog({
   // window.open mechanism handlePrintSelected already uses, just triggered
   // automatically instead of manually, and without closing this dialog so
   // the operator can keep working here while the print tabs load.
+  //
+  // Persists the currently-selected driver/time FIRST, same safety net the
+  // old (now-removed) handleBerangkat had before it called startBerangkat:
+  // selesaiMuat reads SalesmanID off the DB row, not off this component's
+  // client state, so a driver picked in the dropdown but not yet "Simpan"-ed
+  // would otherwise get silently attributed to whichever driver was last
+  // persisted — on a real DeliveryOrder/SalesInvoice, once Status flips to
+  // Terbit, that misattribution can no longer be corrected through the UI
+  // (updateJadwalDriverTime refuses any edit once not Draft).
   function handleSelesaiMuat() {
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
       try {
+        const resultId = await updateJadwalDriverTimeAction(
+          jadwalId,
+          { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
+          { skipOrderTimeCheck: true }
+        );
+        // The new time landed inside another Draft's estimated busy window
+        // for the same armada — this Jadwal got folded into that one
+        // instead (see updateJadwalDriverTime), so there's nothing left
+        // under jadwalId to run selesaiMuat against anymore.
+        if (resultId !== jadwalId) {
+          toast.success(
+            "Waktu ini tumpang tindih dengan keberangkatan lain untuk armada ini — sudah digabung. Buka kembali untuk melanjutkan keberangkatan."
+          );
+          onDeleted?.();
+          onOpenChange(false);
+          return;
+        }
         const tokens = await selesaiMuatAction(jadwalId);
         for (const t of tokens) {
           if (printSelected.has(t.jadwalDetailId)) {
