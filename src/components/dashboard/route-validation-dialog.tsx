@@ -32,11 +32,11 @@ import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
 import type { FuelType } from "@/lib/armada-fuel";
-import { VehicleCheckPanel } from "@/components/dashboard/vehicle-check-panel";
+import { VehicleCheckDialog } from "@/components/dashboard/vehicle-check-dialog";
 import type {
   VehicleCheckRow,
   VehicleCheckTipe,
-  FuelLevel,
+  FuelBar,
   VehicleCheckPhoto,
   JenisFotoKendaraan,
 } from "@/lib/vehicle-check-types";
@@ -595,7 +595,8 @@ export function RouteValidationDialog({
   async function handleSubmitVehicleCheck(input: {
     tipe: VehicleCheckTipe;
     odometerKM: number;
-    fuelLevel: FuelLevel;
+    fuelBar: FuelBar;
+    muatanQty: number;
     photos: VehicleCheckPhoto[];
   }): Promise<void> {
     if (jadwalId == null) return;
@@ -1050,7 +1051,7 @@ export function RouteValidationDialog({
             )}
 
             {!isDraft && jadwalId != null && armadaId != null && (
-              <VehicleCheckPanel
+              <VehicleCheckDialog
                 jadwalId={jadwalId}
                 armadaId={armadaId}
                 isSatpam={isSatpam}
