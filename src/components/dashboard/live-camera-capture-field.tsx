@@ -24,6 +24,7 @@ export function LiveCameraCaptureField({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const capturingRef = useRef(false);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const localPreviewUrlRef = useRef<string | null>(null);
   const [retaking, setRetaking] = useState(false);
@@ -85,15 +86,20 @@ export function LiveCameraCaptureField({
 
   function handleCapture() {
     const video = videoRef.current;
-    if (!video || video.videoWidth === 0) return;
+    if (!video || video.videoWidth === 0 || capturingRef.current) return;
+    capturingRef.current = true;
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      capturingRef.current = false;
+      return;
+    }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(
       (blob) => {
+        capturingRef.current = false;
         if (!blob) return;
         setLocalPreviewUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
@@ -119,6 +125,7 @@ export function LiveCameraCaptureField({
       return;
     }
     if (showLive) {
+      if (capturingRef.current) return;
       handleCapture();
     }
   }
