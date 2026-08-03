@@ -280,30 +280,32 @@ function MergeExternalDialog({
   open,
   onOpenChange,
   armadaId,
-  businessDate,
   deliveries,
   onDone,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   armadaId: number | null;
-  businessDate: string;
   deliveries: ExternalDelivery[];
   onDone: () => void;
 }) {
+  const [date, setDate] = useState("");
   const [time, setTime] = useState("08:00");
-  // Full ceiled SalesOrder.TransDate (date + time), kept alongside `time`'s
-  // HH:MM display string — submitting the auto-filled default must reuse
-  // this Date directly rather than re-derive it from `time` via
-  // resolveBusinessDateTime(businessDate, time). resolveBusinessDateTime can
-  // only ever produce a datetime on `businessDate` or `businessDate` minus
-  // one day (see its own comment); a SalesOrder touched outside that 2-day
-  // window (confirmed live: a same-day-edited SO can carry a TransDate whose
-  // calendar date sits a full day ahead of the delivery's own business day)
-  // falls outside what any HH:MM the user could type would ever satisfy,
-  // permanently tripping assertJamJadwalNotBeforeOrders no matter the input.
-  // Only once the user actually edits the time field do we fall back to the
-  // normal businessDate-relative interpretation.
+  // Full ceiled SalesOrder.TransDate (date + time), kept alongside `date`/
+  // `time`'s own display strings — submitting the auto-filled default must
+  // reuse this Date directly rather than re-derive it from `date`+`time`.
+  // Once the user touches either field, `date`+`time` are combined directly
+  // (same free, un-derived combination route-validation-dialog.tsx's own
+  // date/time editor already uses) instead of going through
+  // resolveBusinessDateTime(businessDate, time), which can only ever produce
+  // a datetime on `businessDate` or `businessDate` minus one day (see its own
+  // comment) — too narrow a window for picking an arbitrary merge date. A
+  // SalesOrder touched outside that 2-day window (confirmed live: a
+  // same-day-edited SO can carry a TransDate whose calendar date sits a full
+  // day ahead of the delivery's own business day) falls outside what any
+  // resolveBusinessDateTime-derived value could ever satisfy, permanently
+  // tripping assertJamJadwalNotBeforeOrders no matter the input — the free
+  // date field lets the user pick that SalesOrder's own date directly instead.
   const [defaultJamJadwal, setDefaultJamJadwal] = useState<Date | null>(null);
   const [timeEdited, setTimeEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,6 +334,9 @@ function MergeExternalDialog({
       }
       const ceiled = new Date(Math.ceil(new Date(iso).getTime() / 60000) * 60000);
       setDefaultJamJadwal(ceiled);
+      setDate(
+        `${ceiled.getFullYear()}-${String(ceiled.getMonth() + 1).padStart(2, "0")}-${String(ceiled.getDate()).padStart(2, "0")}`
+      );
       setTime(`${String(ceiled.getHours()).padStart(2, "0")}:${String(ceiled.getMinutes()).padStart(2, "0")}`);
     });
   }, [open, deliveries]);
@@ -342,13 +347,10 @@ function MergeExternalDialog({
     if (armadaId == null || deliveries.length === 0) return;
     setError(null);
     // Untouched default -> reuse the exact ceiled SalesOrder.TransDate Date
-    // directly, date and all. Re-deriving it from `time` here (as if it
-    // were just an HH:MM on `businessDate`) is what caused this: a SO
-    // touched outside the businessDate/businessDate-1 window ceils to a
-    // valid HH:MM, but resolveBusinessDateTime(businessDate, thatHH:MM)
-    // silently lands back on the wrong calendar day, permanently failing
-    // assertJamJadwalNotBeforeOrders no matter what the input showed.
-    const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : resolveBusinessDateTime(businessDate, time);
+    // directly, date and all. Once the user touches either field, `date` and
+    // `time` combine directly (free, un-derived) — same shape as
+    // route-validation-dialog.tsx's own buildJamJadwal().
+    const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : new Date(`${date}T${time}:00`);
     startTransition(async () => {
       try {
         await mergeExternalDeliveriesAction(armadaId, deliveries.map((d) => d.DeliveryOrderID), jamJadwal);
@@ -372,6 +374,15 @@ function MergeExternalDialog({
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setTimeEdited(true);
+              }}
+              className="w-40"
+            />
             <Input
               type="time"
               value={time}
@@ -757,7 +768,6 @@ function ArmadaRowBoard({
   externalDeliveries,
   hourWidth,
   dayWidth,
-  businessDate,
   onCardClick,
   onCreateClick,
   onCreateActivityClick,
@@ -770,7 +780,6 @@ function ArmadaRowBoard({
   externalDeliveries: ExternalDelivery[];
   hourWidth: number;
   dayWidth: number;
-  businessDate: string;
   onCardClick: (jadwalId: number) => void;
   onCreateClick: (armadaId: number) => void;
   onCreateActivityClick: (armadaId: number) => void;
@@ -1075,7 +1084,6 @@ function ArmadaRowBoard({
         open={mergeDialogOpen}
         onOpenChange={setMergeDialogOpen}
         armadaId={armada.ArmadaID}
-        businessDate={businessDate}
         deliveries={selectedExternalDeliveries}
         onDone={() => setSelectedExternal(new Set())}
       />
@@ -1432,7 +1440,6 @@ export function PengirimanBoard({
                     externalDeliveries={externalByArmada.get(a.ArmadaID) ?? []}
                     hourWidth={hourWidth}
                     dayWidth={dayWidth}
-                    businessDate={businessDate}
                     onCardClick={setDetailJadwalId}
                     onCreateClick={setCreateArmadaId}
                     onCreateActivityClick={setCreateActivityArmadaId}
