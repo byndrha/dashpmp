@@ -30,6 +30,14 @@ import {
   type UpdateArmadaActivityInput,
 } from "@/lib/queries/armada-activity";
 import { getDriverProfiles, saveDriverProfile, type DriverProfileRow, type SaveDriverProfileInput } from "@/lib/queries/driver-profile";
+import {
+  getVehicleChecksForJadwal,
+  createVehicleCheck,
+  type VehicleCheckRow,
+  type VehicleCheckTipe,
+  type FuelLevel,
+  type VehicleCheckPhoto,
+} from "@/lib/queries/vehicle-check";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<number> {
   const id = await createArmada(input);
@@ -176,5 +184,34 @@ export async function getDriverProfilesAction(): Promise<DriverProfileRow[]> {
 export async function saveDriverProfileAction(input: SaveDriverProfileInput): Promise<void> {
   await requireModuleAccess("delivery");
   await saveDriverProfile(input);
+  revalidatePath("/delivery");
+}
+
+export async function getVehicleChecksForJadwalAction(jadwalId: number): Promise<VehicleCheckRow[]> {
+  await requireModuleAccess("delivery");
+  return getVehicleChecksForJadwal(jadwalId);
+}
+
+export async function createVehicleCheckAction(input: {
+  jadwalId: number;
+  tipe: VehicleCheckTipe;
+  odometerKM: number;
+  fuelLevel: FuelLevel;
+  photos: VehicleCheckPhoto[];
+}): Promise<void> {
+  const session = await requireModuleAccess("delivery");
+  // Deliberately NOT bypassed by isSuperAdmin — see the design spec's "Deliberately
+  // not bypassed by isSuperAdmin" note. A gate-check record is a physical-presence
+  // claim, not a general permission.
+  if (!session.user.isSatpam) {
+    throw new Error("Hanya Satpam yang dapat mengisi Cek Berangkat/Cek Datang.");
+  }
+  if (input.photos.length !== 6) {
+    throw new Error("Semua 6 foto kendaraan wajib diisi.");
+  }
+  if (!(input.odometerKM > 0)) {
+    throw new Error("Odometer wajib diisi dengan angka yang valid.");
+  }
+  await createVehicleCheck({ ...input, userId: session.user.id });
   revalidatePath("/delivery");
 }
