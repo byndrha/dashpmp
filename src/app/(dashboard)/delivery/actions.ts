@@ -220,7 +220,7 @@ export async function createVehicleCheckAction(input: {
   if (!(input.odometerKM > 0)) {
     throw new Error("Odometer wajib diisi dengan angka yang valid.");
   }
-  if (!(input.fuelBar >= 0 && input.fuelBar <= 4)) {
+  if (!(Number.isInteger(input.fuelBar) && input.fuelBar >= 0 && input.fuelBar <= 4)) {
     throw new Error("Fuel Meter wajib diisi.");
   }
   if (!(input.muatanQty >= 0)) {
