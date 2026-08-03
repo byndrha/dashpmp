@@ -24,17 +24,24 @@ export function CostBehaviorEditor({
 }) {
   const [localRows, setLocalRows] = useState(rows);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   function handleChange(row: CostBehaviorRow, value: string) {
     const next = value === "NONE" ? null : (value as "FIXED" | "VARIABLE" | "MIXED");
+    setError(null);
     setPendingId(row.ChartOfAccountID);
     startTransition(async () => {
-      await onSetCostBehavior(row.ChartOfAccountID, next);
-      setLocalRows((prev) =>
-        prev.map((r) => (r.ChartOfAccountID === row.ChartOfAccountID ? { ...r, CostBehavior: next } : r))
-      );
-      setPendingId(null);
+      try {
+        await onSetCostBehavior(row.ChartOfAccountID, next);
+        setLocalRows((prev) =>
+          prev.map((r) => (r.ChartOfAccountID === row.ChartOfAccountID ? { ...r, CostBehavior: next } : r))
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal menyimpan klasifikasi.");
+      } finally {
+        setPendingId(null);
+      }
     });
   }
 
@@ -47,6 +54,7 @@ export function CostBehaviorEditor({
           Tandai setiap akun Beban Operasional sebagai Tetap/Variabel/Campuran. Akun yang belum ditandai tidak ikut
           dihitung di Break-Even Point di bawah.
         </CardDescription>
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </CardHeader>
       <CardContent>
         <Table>
