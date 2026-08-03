@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
 import { requirePmputra } from "@/lib/require-access";
 import { setCOABudgetPmputra, setCostBehaviorPmputra } from "@/lib/queries/keuangan-detail-pmputra";
 import {
@@ -49,11 +48,13 @@ export async function deleteCashFlowExpensePmputraAction(id: number) {
   revalidatePath("/pmputra/keuangan");
 }
 
-// Read-only refetch (year navigation) — auth() alone is enough, same
-// reasoning as MKEsindo's getHPPBersihAction.
+// Read-only refetch (year navigation) — but this app is multi-tenant
+// (accountScope mkesindo/direktur/pmputra), unlike MKEsindo's own
+// getHPPBersihAction which lives in a single-tenant context. requirePmputra()
+// enforces the PT Prima Maesa Putra company boundary, matching every other
+// action in this file.
 export async function getHPPBersihPmputraAction(year: number) {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  await requirePmputra();
   return getHPPBersihPmputra(year);
 }
 

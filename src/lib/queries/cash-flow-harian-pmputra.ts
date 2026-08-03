@@ -1,5 +1,5 @@
 import { sql } from "@/lib/db";
-import { getPmputraPool } from "@/lib/db-pmputra";
+import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
 import type { CashFlowHarian, CashFlowHarianHistoryRow } from "@/lib/queries/cash-flow-harian";
 
 const KAS_BANK_FILTER = `coa.IsChildest = 1 AND LEFT(coa.AccountNo,2) IN ('11','12') AND ISNULL(coa.IsDeleted,0) = 0`;
@@ -7,6 +7,29 @@ const KAS_BANK_FILTER = `coa.IsChildest = 1 AND LEFT(coa.AccountNo,2) IN ('11','
 function nextDayISO(dateISO: string): string {
   const d = new Date(dateISO);
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).toISOString().slice(0, 10);
+}
+
+// Live GL query, no manual-entry dependency — mirrors cash-flow-pmputra.ts's
+// getCashFlowForLabel's identical "Kas+Bank SALESPAYMENT" figure, which
+// correctly sums both databases. Unlike PMP_CashFlowDaily/PMP_CashFlowExpense
+// below (which only exist in `utama`), this is a real GeneralLedger query
+// against both `utama` and `logistik`.
+async function getPendapatanOperasionalForLabel(label: PmputraKoneksiLabel, businessDate: string): Promise<number> {
+  const pool = await getPmputraPool(label);
+  const result = await pool
+    .request()
+    .input("date", sql.Date, businessDate)
+    .input("nextDate", sql.Date, nextDayISO(businessDate))
+    .query(`
+      SELECT ISNULL(SUM(gl.Debit), 0) AS Total
+      FROM GeneralLedger gl
+      JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
+      WHERE ${KAS_BANK_FILTER}
+        AND gl.Type = 'SALESPAYMENT'
+        AND gl.TransDate >= @date AND gl.TransDate < @nextDate;
+    `);
+  const rs = result.recordset as { Total: number }[];
+  return rs[0]?.Total ?? 0;
 }
 
 export async function getCashFlowHarianHistoryPmputra(limit = 60): Promise<CashFlowHarianHistoryRow[]> {
@@ -51,18 +74,13 @@ export async function getCashFlowHarianHistoryPmputra(limit = 60): Promise<CashF
 
 export async function getCashFlowHarianPmputra(businessDate: string): Promise<CashFlowHarian> {
   const pool = await getPmputraPool("utama");
-  const result = await pool
-    .request()
-    .input("date", sql.Date, businessDate)
-    .input("nextDate", sql.Date, nextDayISO(businessDate))
-    .query(`
-      SELECT ISNULL(SUM(gl.Debit), 0) AS Total
-      FROM GeneralLedger gl
-      JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
-      WHERE ${KAS_BANK_FILTER}
-        AND gl.Type = 'SALESPAYMENT'
-        AND gl.TransDate >= @date AND gl.TransDate < @nextDate;
-
+  const [pendapatanUtama, pendapatanLogistik, result] = await Promise.all([
+    getPendapatanOperasionalForLabel("utama", businessDate),
+    getPendapatanOperasionalForLabel("logistik", businessDate),
+    pool
+      .request()
+      .input("date", sql.Date, businessDate)
+      .query(`
       SELECT KasDiTangan, PengeluaranKasDiTangan, UpdatedAt
       FROM PMP_CashFlowDaily
       WHERE BusinessDate = @date;
@@ -71,10 +89,10 @@ export async function getCashFlowHarianPmputra(businessDate: string): Promise<Ca
       FROM PMP_CashFlowExpense
       WHERE BusinessDate = @date
       ORDER BY CreatedAt ASC;
-    `);
+    `),
+  ]);
 
-  const [pendapatanRs, dailyRs, expenseRs] = result.recordsets as unknown as [
-    { Total: number }[],
+  const [dailyRs, expenseRs] = result.recordsets as unknown as [
     { KasDiTangan: number; PengeluaranKasDiTangan: number; UpdatedAt: string }[],
     { ID: number; Deskripsi: string; Nominal: number }[],
   ];
@@ -84,7 +102,7 @@ export async function getCashFlowHarianPmputra(businessDate: string): Promise<Ca
 
   return {
     businessDate,
-    pendapatanOperasional: pendapatanRs[0]?.Total ?? 0,
+    pendapatanOperasional: pendapatanUtama + pendapatanLogistik,
     kasDiTangan: daily?.KasDiTangan ?? null,
     pengeluaranKasDiTangan: daily?.PengeluaranKasDiTangan ?? null,
     updatedAt: daily?.UpdatedAt ?? null,
