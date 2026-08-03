@@ -36,7 +36,7 @@ import {
   createVehicleCheck,
   type VehicleCheckRow,
   type VehicleCheckTipe,
-  type FuelLevel,
+  type FuelBar,
   type VehicleCheckPhoto,
 } from "@/lib/queries/vehicle-check";
 
@@ -203,7 +203,8 @@ export async function createVehicleCheckAction(input: {
   jadwalId: number;
   tipe: VehicleCheckTipe;
   odometerKM: number;
-  fuelLevel: FuelLevel;
+  fuelBar: FuelBar;
+  muatanQty: number;
   photos: VehicleCheckPhoto[];
 }): Promise<void> {
   const session = await requireModuleAccess("delivery");
@@ -218,6 +219,12 @@ export async function createVehicleCheckAction(input: {
   }
   if (!(input.odometerKM > 0)) {
     throw new Error("Odometer wajib diisi dengan angka yang valid.");
+  }
+  if (!(input.fuelBar >= 0 && input.fuelBar <= 4)) {
+    throw new Error("Fuel Meter wajib diisi.");
+  }
+  if (!(input.muatanQty >= 0)) {
+    throw new Error("Jumlah muatan wajib diisi dengan angka 0 atau lebih.");
   }
   await createVehicleCheck({ ...input, userId: session.user.id });
   revalidatePath("/delivery");
