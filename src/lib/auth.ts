@@ -17,6 +17,7 @@ interface AuthorizedUser {
   username: string;
   roleId: number;
   isSuperAdmin: boolean;
+  isSatpam: boolean;
   permissions: ReturnType<typeof fullPermissionMap>;
   accountScope: AccountScope;
   perusahaanId: number | null;
@@ -72,6 +73,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           username: row.username,
           roleId: row.peranId ?? 0,
           isSuperAdmin: row.isSuperAdmin,
+          isSatpam: row.isSatpam,
           permissions,
           accountScope: (row.perusahaanKode ?? "direktur") as AccountScope,
           perusahaanId: row.perusahaanId,
@@ -88,6 +90,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.username = u.username;
         token.roleId = u.roleId;
         token.isSuperAdmin = u.isSuperAdmin;
+        token.isSatpam = u.isSatpam;
         token.permissions = u.permissions;
         token.accountScope = u.accountScope;
         token.perusahaanId = u.perusahaanId;
@@ -100,6 +103,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.username = token.username as string;
         session.user.roleId = token.roleId as number;
         session.user.isSuperAdmin = token.isSuperAdmin as boolean;
+        session.user.isSatpam = token.isSatpam as boolean;
         session.user.permissions = token.permissions as ReturnType<typeof fullPermissionMap>;
         session.user.accountScope = token.accountScope as AccountScope;
         session.user.perusahaanId = token.perusahaanId as number | null;

@@ -16,6 +16,7 @@ export interface AkunAuthRow {
   perusahaanId: number | null;
   perusahaanKode: string | null; // null only for Direktur accounts
   isSuperAdmin: boolean;
+  isSatpam: boolean;
   isActive: boolean;
   failedLoginCount: number;
   lockedUntil: Date | null;
@@ -26,6 +27,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
   const result = await pool.query(
     `SELECT a.id, a.username, a.password_hash, a.nama, a.peran_id, a.perusahaan_id, p.kode AS perusahaan_kode,
             COALESCE(r.is_super_admin, false) AS is_super_admin,
+            COALESCE(r.is_satpam, false) AS is_satpam,
             a.is_active, a.failed_login_count, a.locked_until
      FROM akun a
      LEFT JOIN perusahaan p ON p.id = a.perusahaan_id
@@ -44,6 +46,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
     perusahaanId: row.perusahaan_id,
     perusahaanKode: row.perusahaan_kode,
     isSuperAdmin: row.is_super_admin,
+    isSatpam: row.is_satpam,
     isActive: row.is_active,
     failedLoginCount: row.failed_login_count,
     lockedUntil: row.locked_until,

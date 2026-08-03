@@ -13,6 +13,7 @@ declare module "next-auth" {
       username: string;
       roleId: number;
       isSuperAdmin: boolean;
+      isSatpam: boolean;
       permissions: PermissionMap;
       accountScope: AccountScope;
       perusahaanId: number | null;
@@ -23,6 +24,7 @@ declare module "next-auth" {
     username: string;
     roleId: number;
     isSuperAdmin: boolean;
+    isSatpam: boolean;
     permissions: PermissionMap;
     accountScope: AccountScope;
     perusahaanId: number | null;
@@ -35,6 +37,7 @@ declare module "next-auth/jwt" {
     username: string;
     roleId: number;
     isSuperAdmin: boolean;
+    isSatpam: boolean;
     permissions: PermissionMap;
     accountScope: AccountScope;
     perusahaanId: number | null;
