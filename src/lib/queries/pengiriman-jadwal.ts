@@ -6,6 +6,7 @@ import { formatDate, formatTime } from "@/lib/format";
 import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
 import { estimateTravelMinutes, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
+import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
 // mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
@@ -62,6 +63,11 @@ export interface JadwalCard {
   // Perjalanan" / "Kembali ke Pabrik" segments on the board (see
   // computeArmadaTimelineSegments).
   DurasiMenit: number | null;
+  // Set at selesaiMuat (loading finished, DO+SI created) — null until then,
+  // and for every Jadwal created before this column existed. Drives the
+  // board's new "Menunggu Keberangkatan" segment (JamSelesaiMuat ->
+  // JamAktualBerangkat, open-ended while the latter is still null).
+  JamSelesaiMuat: string | Date | null;
   // The real vehicle-return timestamp from a Satpam's Cek Datang, when one
   // exists (see vehicle-check.ts) — null for any Jadwal without a recorded
   // arrival check yet, in which case the board falls back to the
@@ -138,6 +144,7 @@ export async function getPengirimanBoard(
             j.JamJadwal,
             j.JamMulaiMuat,
             j.JamAktualBerangkat,
+            j.JamSelesaiMuat,
             j.Status,
             ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS TotalKantong,
             COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop,
@@ -157,7 +164,7 @@ export async function getPengirimanBoard(
           -- midnight-to-midnight day. Kept as WIB->UTC (-7h) on top of that,
           -- same convention as the rest of this file's businessDate filters.
           AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
-        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.Status, j.JarakKM, j.DurasiMenit, sdur.EstimasiDurasiMenit
+        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.JamSelesaiMuat, j.Status, j.JarakKM, j.DurasiMenit, sdur.EstimasiDurasiMenit
         ORDER BY j.JamJadwal
       `),
     pool
@@ -290,6 +297,11 @@ export interface JadwalDetailRow {
   JadwalDetailID: number;
   SalesOrderID: string;
   DeliveryOrderID: string | null;
+  // encodeInvoiceToken(SalesInvoiceID) when a SalesInvoice exists for this
+  // stop (set at selesaiMuat, alongside DeliveryOrderID) — null otherwise.
+  // The client never sees the raw SalesInvoiceID, only this opaque token,
+  // used to build the print URL /invoice/{InvoiceToken}.
+  InvoiceToken: string | null;
   Urutan: number;
   CustomerName: string;
   Qty: number;
@@ -321,6 +333,7 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
           jd.JadwalDetailID,
           jd.SalesOrderID,
           jd.DeliveryOrderID,
+          jd.SalesInvoiceID,
           jd.Urutan,
           bp.Name AS CustomerName,
           ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty,
@@ -339,11 +352,15 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
       LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
       LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
       WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
-      GROUP BY jd.JadwalDetailID, jd.SalesOrderID, jd.DeliveryOrderID, jd.Urutan,
+      GROUP BY jd.JadwalDetailID, jd.SalesOrderID, jd.DeliveryOrderID, jd.SalesInvoiceID, jd.Urutan,
                bp.Name, bp.NPWPName, bp.NPWPAddress, bp.Address, bp.MobileNo, ml.Latitude, ml.Longitude
       ORDER BY jd.Urutan
     `);
-  return result.recordset;
+  const rows = result.recordset as (Omit<JadwalDetailRow, "InvoiceToken"> & { SalesInvoiceID: string | null })[];
+  return rows.map((r) => {
+    const { SalesInvoiceID, ...rest } = r;
+    return { ...rest, InvoiceToken: SalesInvoiceID ? encodeInvoiceToken(SalesInvoiceID) : null };
+  });
 }
 
 export interface AvailableSalesOrder {
@@ -1242,9 +1259,35 @@ async function nextDOVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Pr
   return String(maxSeq + 1).padStart(6, "0");
 }
 
+async function nextSalesInvoiceId(pool: sql.ConnectionPool): Promise<string> {
+  const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceID AS INT)) AS MaxID FROM SalesInvoice`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextSalesInvoiceDetailId(pool: sql.ConnectionPool): Promise<string> {
+  const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceDetailID AS INT)) AS MaxID FROM SalesInvoiceDetail`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+// Same numbering shape as nextDOVoucherSeq, MKE/SI/ prefix (matches the real
+// SalesInvoice VoucherNo pattern already seen in takeaway.ts's own
+// createTakeAwayPemesanan, e.g. "MKE/SI/000123/2026-08/003/001").
+async function nextSIVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Promise<string> {
+  const result = await pool
+    .request()
+    .input("pattern", sql.VarChar(64), `MKE/SI/%/${yearMonth}/${DOC_SUFFIX}`).query(`
+      SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq FROM SalesInvoice WHERE VoucherNo LIKE @pattern
+    `);
+  const maxSeq = (result.recordset[0]?.MaxSeq as number | null) ?? 0;
+  return String(maxSeq + 1).padStart(6, "0");
+}
+
 interface SalesOrderForPublish {
   BusinessPartnerID: string;
   DueDate: Date | null;
+  TermOfPaymentID: string;
 }
 interface SalesOrderDetailForPublish {
   SalesOrderDetailID: string;
@@ -1256,20 +1299,23 @@ interface SalesOrderDetailForPublish {
   Amount: number;
 }
 
-// Draft -> Terbit, fired by clicking "Berangkat" (there is no separate
-// "Terbitkan" step — route/driver validation already happened while the
-// Jadwal sat in Draft, so Berangkat is both the real-world departure event
-// and the moment the dashboard's SO selection becomes real DO documents).
-// For each detail row (in Urutan order), creates one real DeliveryOrder +
-// its DeliveryOrderDetail line(s) from the linked SalesOrder/SalesOrderDetail,
-// shaped to match live-verified existing SO-linked DO rows exactly (see this
-// plan's Global Constraints). Writes the new DeliveryOrderID back onto the
-// detail row, then flips Jadwal.Status and sets JamAktualBerangkat together
-// in the same atomic claim. On partial failure, soft-deletes only the
-// DeliveryOrder/DeliveryOrderDetail rows this call itself created (not the
-// Jadwal/SO selection) and rethrows — matching createJadwalDraft's own
-// compensating-cleanup precedent, scoped to what this function owns.
-export async function startBerangkat(jadwalId: number): Promise<void> {
+// Draft -> Terbit, fired by clicking "Selesai Muat" (loading finished). Does
+// everything the old startBerangkat used to do EXCEPT recording the actual
+// physical departure — that's konfirmasiBerangkat's job now, fired later by
+// Satpam at the gate. Route/driver validation already happened while the
+// Jadwal sat in Draft; this is the moment the dashboard's SO selection
+// becomes real DeliveryOrder AND SalesInvoice documents (reusing
+// createTakeAwayPemesanan's exact SalesInvoice column/value shape from
+// takeaway.ts) so a Surat SI can be printed and handed to the driver before
+// the vehicle leaves. For each detail row (in Urutan order), creates one real
+// DeliveryOrder + DeliveryOrderDetail(s) AND one SalesInvoice +
+// SalesInvoiceDetail(s) from the linked SalesOrder/SalesOrderDetail. Writes
+// DeliveryOrderID/SalesInvoiceID back onto the detail row, then flips
+// Jadwal.Status and sets JamSelesaiMuat together in the same atomic claim. On
+// partial failure, soft-deletes only the DeliveryOrder/DeliveryOrderDetail/
+// SalesInvoice/SalesInvoiceDetail rows this call itself created (not the
+// Jadwal/SO selection) and rethrows.
+export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: number; invoiceToken: string }[]> {
   const pool = await getPool();
 
   const header = await pool
@@ -1278,14 +1324,14 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
     .query(`SELECT ArmadaID, SalesmanID, Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const headerRow = header.recordset[0] as { ArmadaID: number; SalesmanID: string | null; Status: JadwalStatus } | undefined;
   if (!headerRow) throw new Error("Keberangkatan tidak ditemukan.");
-  if (headerRow.Status !== "Draft") throw new Error("Keberangkatan ini sudah berangkat.");
-  if (!headerRow.SalesmanID) throw new Error("Driver wajib diisi sebelum berangkat.");
+  if (headerRow.Status !== "Draft") throw new Error("Muat untuk keberangkatan ini sudah selesai.");
+  if (!headerRow.SalesmanID) throw new Error("Driver wajib diisi sebelum menyelesaikan muat.");
 
   // Server-side mirror of the client's mandatory route-computed check
   // (design spec: checked client- AND server-side) — a direct server-action
   // call bypassing the UI must not be able to skip it. Deliberately BEFORE
-  // the departure claim below, so a failed route check never leaves the
-  // Jadwal wrongly flipped to Terbit.
+  // the claim below, so a failed route check never leaves the Jadwal wrongly
+  // flipped to Terbit.
   const stopsForRouteCheck = await getJadwalDetail(jadwalId);
   if (stopsForRouteCheck.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
   const missingCoords = stopsForRouteCheck.some((s) => s.Latitude == null || s.Longitude == null);
@@ -1311,23 +1357,25 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
   const totalQty = stopsForRouteCheck.reduce((sum, s) => sum + s.Qty, 0);
   await assertWithinCapacity(pool, headerRow.ArmadaID, totalQty);
 
-  // Atomically claim the departure: only succeeds if Status is still
-  // 'Draft'. Guards against two racing startBerangkat calls for the same
-  // jadwalId both passing the Status!=='Draft' check above and then both
-  // creating a duplicate set of real DeliveryOrder/DeliveryOrderDetail rows.
+  // Atomically claim: only succeeds if Status is still 'Draft'. Guards
+  // against two racing selesaiMuat calls for the same jadwalId both passing
+  // the Status!=='Draft' check above and then both creating a duplicate set
+  // of real documents.
   const claim = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .input("jarakKM", sql.Decimal(10, 2), validatedRoute.distanceKm)
     .input("durasiMenit", sql.Int, Math.round(validatedRoute.durationMinutes))
     .query(
-      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamAktualBerangkat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
+      `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamSelesaiMuat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
     );
   if (claim.rowsAffected[0] === 0) {
-    throw new Error("Keberangkatan ini sudah berangkat atau sedang diproses.");
+    throw new Error("Muat untuk keberangkatan ini sudah selesai atau sedang diproses.");
   }
 
   const createdDeliveryOrderIds: string[] = [];
+  const createdSalesInvoiceIds: string[] = [];
+  const invoiceTokens: { jadwalDetailId: number; invoiceToken: string }[] = [];
   const now = new Date();
   const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
@@ -1343,17 +1391,7 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
     const armadaRow = armadaResult.recordset[0] as
       | { Nama: string; ExpeditionID: string | null; VehicleNo: string | null }
       | undefined;
-    // Departure assigns a real vehicle to a real ERP document — a
-    // soft-deleted Armada (deleted after this Draft was created, before it
-    // departed) must block departure rather than silently write a stale or
-    // blank VehicleNo onto a permanent DeliveryOrder.
-    if (!armadaRow) throw new Error("Armada sudah dihapus, tidak bisa berangkat.");
-    // Prefers the real ERP plate (ExpeditionDetail.VehicleNo, linked via
-    // Kelola Armada) over the dashboard's own nickname (DashboardArmada.Nama,
-    // e.g. "GM 14") — this is what ends up on the printed DO, so it needs to
-    // be the actual plate whenever the link exists. Falls back to Nama
-    // (previous behavior) for any armada not yet linked, rather than
-    // blocking departure over an incomplete data-linking task.
+    if (!armadaRow) throw new Error("Armada sudah dihapus, tidak bisa menyelesaikan muat.");
     const doVehicleNo = armadaRow.VehicleNo ?? armadaRow.Nama;
     const doExpeditionId = armadaRow.ExpeditionID ?? "";
 
@@ -1369,16 +1407,17 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
     if (detailRows.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
 
     for (const detail of detailRows) {
-      // Idempotent-retry guard: if a previous startBerangkat attempt already
+      // Idempotent-retry guard: if a previous selesaiMuat attempt already
       // created a DeliveryOrder for this detail row (and only failed later,
       // e.g. partway through this same loop), skip it instead of creating a
-      // duplicate DO for the same SO. Also covers the merged-external-DO
-      // case (mergeExternalDeliveriesIntoJadwal): that DO was already
-      // issued by the desktop ERP, so it must never be re-created — but its
-      // TransDate gets corrected to this now-confirmed departure moment
-      // (same GETDATE() reference as JamAktualBerangkat above), since the
-      // desktop app's original TransDate was just whenever the document was
-      // typed in, not a real departure time.
+      // duplicate DO/SI. Also covers the merged-external-DO case
+      // (mergeExternalDeliveriesIntoJadwal): that DO was already issued by
+      // the desktop ERP, so it must never be re-created, and it never gets
+      // an auto-created SalesInvoice either (its invoicing, if any, is the
+      // desktop ERP's own separate concern) — only its TransDate gets
+      // corrected to this now-confirmed loading-complete moment (same
+      // GETDATE() reference as JamSelesaiMuat above; the original desktop-app
+      // TransDate was just whenever the document was typed in).
       if (detail.DeliveryOrderID) {
         await pool
           .request()
@@ -1390,7 +1429,7 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
       const soResult = await pool
         .request()
         .input("soId", sql.VarChar(16), detail.SalesOrderID)
-        .query(`SELECT BusinessPartnerID, DueDate FROM SalesOrder WHERE SalesOrderID = @soId`);
+        .query(`SELECT BusinessPartnerID, DueDate, TermOfPaymentID FROM SalesOrder WHERE SalesOrderID = @soId`);
       const so = soResult.recordset[0] as SalesOrderForPublish | undefined;
       if (!so) throw new Error(`Sales Order ${detail.SalesOrderID} tidak ditemukan.`);
 
@@ -1451,13 +1490,83 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
           `);
       }
 
+      // --- SalesInvoice (new — reuses createTakeAwayPemesanan's exact
+      // column/value shape from takeaway.ts) ---
+      const salesInvoiceId = await nextSalesInvoiceId(pool);
+      const siVoucherSeq = await nextSIVoucherSeq(pool, yearMonth);
+      const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+      const totalAmount = soDetails.reduce((sum, sod) => sum + sod.Amount, 0);
+      await pool
+        .request()
+        .input("id", sql.VarChar(16), salesInvoiceId)
+        .input("voucherNo", sql.VarChar(128), siVoucherNo)
+        .input("dueDate", sql.DateTime, so.DueDate)
+        .input("termOfPaymentId", sql.VarChar(16), so.TermOfPaymentID)
+        .input("soId", sql.VarChar(16), detail.SalesOrderID)
+        .input("doId", sql.VarChar(16), deliveryOrderId)
+        .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
+        .input("branchId", sql.VarChar(16), BRANCH_ID)
+        .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+        .input("amount", sql.Decimal(23, 4), totalAmount)
+        .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID).query(`
+          INSERT INTO SalesInvoice
+            (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
+             SalesOrderID, DeliveryOrderID, SalesDepositID, BusinessPartnerID, BranchID, DepartmentID,
+             Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, BankID, Paid, Deposit, PaidDate,
+             IsClosed, IsDeleted, ModifiedDate, Rate, CurrencyID, IsAccountReceiveable, StatusForm,
+             SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
+             DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
+          VALUES
+            (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
+             @soId, @doId, '', @bpId, @branchId, @departmentId,
+             @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
+             0, 0, GETDATE(), 1, '', 1, 1,
+             @salesmanId, 0, 0, 0, 0, '', 0,
+             0, '', 0, '')
+        `);
+      createdSalesInvoiceIds.push(salesInvoiceId);
+
+      for (const sod of soDetails) {
+        const siDetailId = await nextSalesInvoiceDetailId(pool);
+        await pool
+          .request()
+          .input("id", sql.VarChar(16), siDetailId)
+          .input("siId", sql.VarChar(16), salesInvoiceId)
+          .input("itemId", sql.VarChar(160), sod.ItemID)
+          .input("name", sql.VarChar(160), sod.Name)
+          .input("qty", sql.Decimal(23, 4), sod.Qty)
+          .input("unit", sql.VarChar(8), sod.Unit)
+          .input("price", sql.Decimal(23, 4), sod.Price)
+          .input("amount", sql.Decimal(23, 4), sod.Amount).query(`
+            INSERT INTO SalesInvoiceDetail
+              (SalesInvoiceDetailID, SalesInvoiceID, ItemID, Qty, Unit, Ratio, UnitRatio, Price, Disc, DiscValue,
+               DiscRp, Amount, Name, Value, Netto, Description, WaiterName, Cashback, Total)
+            VALUES
+              (@id, @siId, @itemId, @qty, @unit, 1, 1, @price, 0, 0,
+               0, @amount, @name, @amount, @amount, '', '', 0, NULL)
+          `);
+      }
+
       await pool
         .request()
         .input("detailId", sql.Int, detail.JadwalDetailID)
         .input("doId", sql.VarChar(16), deliveryOrderId)
-        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = @doId WHERE JadwalDetailID = @detailId`);
+        .input("siId", sql.VarChar(16), salesInvoiceId)
+        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = @doId, SalesInvoiceID = @siId WHERE JadwalDetailID = @detailId`);
+
+      invoiceTokens.push({ jadwalDetailId: detail.JadwalDetailID, invoiceToken: encodeInvoiceToken(salesInvoiceId) });
     }
   } catch (err) {
+    for (const siId of createdSalesInvoiceIds) {
+      await pool
+        .request()
+        .input("id", sql.VarChar(16), siId)
+        .query(`UPDATE SalesInvoice SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE SalesInvoiceID = @id`);
+      await pool
+        .request()
+        .input("siId", sql.VarChar(16), siId)
+        .query(`DELETE FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId`);
+    }
     for (const doId of createdDeliveryOrderIds) {
       await pool
         .request()
@@ -1466,19 +1575,58 @@ export async function startBerangkat(jadwalId: number): Promise<void> {
       await pool
         .request()
         .input("doId", sql.VarChar(16), doId)
-        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = NULL WHERE DeliveryOrderID = @doId`);
+        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = NULL, SalesInvoiceID = NULL WHERE DeliveryOrderID = @doId`);
     }
     // The claim above already flipped Status to 'Terbit' and set
-    // JamAktualBerangkat before this loop ran — a genuinely failed departure
-    // attempt must revert both so it can be retried, on top of the
-    // DeliveryOrder/JadwalDetail cleanup already done above.
+    // JamSelesaiMuat before this loop ran — a genuinely failed attempt must
+    // revert both so it can be retried, on top of the
+    // DeliveryOrder/SalesInvoice/JadwalDetail cleanup already done above.
     await pool
       .request()
       .input("jadwalId", sql.Int, jadwalId)
       .query(
-        `UPDATE DashboardPengirimanJadwal SET Status = 'Draft', JamAktualBerangkat = NULL, JarakKM = NULL, DurasiMenit = NULL, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`
+        `UPDATE DashboardPengirimanJadwal SET Status = 'Draft', JamSelesaiMuat = NULL, JarakKM = NULL, DurasiMenit = NULL, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`
       );
     throw err;
+  }
+
+  return invoiceTokens;
+}
+
+// Records the real physical departure — fired by Satpam pressing "Berangkat"
+// at the gate, only once a Cek Berangkat inspection exists for this Jadwal
+// (DashboardVehicleCheck, Tipe='BERANGKAT' — see vehicle-check.ts). Deliberately
+// minimal: DeliveryOrder/SalesInvoice already exist (created at selesaiMuat),
+// route/capacity already validated then too — this function only ever
+// touches JamAktualBerangkat.
+export async function konfirmasiBerangkat(jadwalId: number): Promise<void> {
+  const pool = await getPool();
+
+  const header = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT Status, JamAktualBerangkat FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const headerRow = header.recordset[0] as { Status: JadwalStatus; JamAktualBerangkat: Date | null } | undefined;
+  if (!headerRow) throw new Error("Keberangkatan tidak ditemukan.");
+  if (headerRow.Status !== "Terbit") throw new Error("Keberangkatan ini belum selesai dimuat.");
+  if (headerRow.JamAktualBerangkat) throw new Error("Keberangkatan ini sudah berangkat.");
+
+  const check = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT VehicleCheckID FROM DashboardVehicleCheck WHERE JadwalID = @jadwalId AND Tipe = 'BERANGKAT'`);
+  if (check.recordset.length === 0) {
+    throw new Error("Belum ada Cek Berangkat dari Satpam.");
+  }
+
+  const claim = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(
+      `UPDATE DashboardPengirimanJadwal SET JamAktualBerangkat = GETDATE(), ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Terbit' AND JamAktualBerangkat IS NULL`
+    );
+  if (claim.rowsAffected[0] === 0) {
+    throw new Error("Keberangkatan ini sudah berangkat atau sedang diproses.");
   }
 }
 
