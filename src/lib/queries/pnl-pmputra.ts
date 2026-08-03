@@ -4,24 +4,41 @@ import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
 import type { BEPSummary, PnLSummary } from "@/lib/queries/pnl";
 import type { DateRangeFilter } from "@/types/dashboard";
 
-// Re-derived from real PMPutra ChartOfAccount data (utama + logistik) — do
-// NOT copy pnl.ts's PNL_KATEGORI_CASE verbatim. MKEsindo's carve-outs
-// (630x=tax, 640x=depreciation, 6115=Air) don't apply here: PMPutra has no
-// 630x/640x pattern matching those meanings (verified — those ranges hold
-// ordinary maintenance/supplies expenses in both PMPutra databases), and
-// 6115 means "Sparepart" in `logistik`, not a utility. Only Gaji/THR/BPJS
-// (6101%) and Sewa (6103, confirmed present and meaning "rent" in both
-// databases) are pulled out of prefix 6 into BiayaTetap.
-export const PMPUTRA_PNL_KATEGORI_CASE = `
-  CASE
-      WHEN LEFT(coa.AccountNo,1) = '4' THEN 'Pendapatan'
-      WHEN LEFT(coa.AccountNo,1) = '5' THEN 'HPP'
-      WHEN coa.AccountNo LIKE '6101%' OR coa.AccountNo = '6103' THEN 'BiayaTetap'
-      WHEN LEFT(coa.AccountNo,1) = '6' THEN 'BebanOperasional'
-      WHEN LEFT(coa.AccountNo,1) = '7' THEN 'PenghasilanLainnya'
-      WHEN LEFT(coa.AccountNo,1) = '8' THEN 'BebanLainnya'
-  END
-`;
+// Per-database category classification — re-derived from real PMPutra
+// ChartOfAccount data (utama + logistik), user-confirmed 2026-08-03. Do NOT
+// copy pnl.ts's PNL_KATEGORI_CASE verbatim; MKEsindo's own carve-outs don't
+// apply here. The two databases' BiayaTetap/Adjustment sets are NOT the same
+// account numbers (utama's 6101.xx sub-accounts include BPJS Kesehatan/
+// Ketenagakerjaan, which logistik's 6101.xx range doesn't have at all — only
+// Gaji/THR exist there), so this must stay a per-label function, not one
+// shared CASE string.
+//
+// utama (FINAC_ES_PO):
+//   BiayaTetap = Gaji (6101.01), BPJS Kesehatan (6101.03), BPJS
+//     Ketenagakerjaan (6101.04), Sewa (6103) — an exact set, NOT the whole
+//     6101.xx range: THR (6101.02) is deliberately excluded, falls through
+//     to BebanOperasional like any other prefix-6 account.
+//   Adjustment = Beban Pajak Lainnya (6120).
+// logistik (FINAC_LOGISTIC_PO):
+//   BiayaTetap = Gaji (6101.01), Sewa (6103) — logistik has no BPJS
+//     sub-accounts under 6101.xx to include.
+//   Adjustment = Beban Pajak Lainnya (6606).
+export function pmputraKategoriCase(label: PmputraKoneksiLabel): string {
+  const adjustmentAccount = label === "utama" ? "'6120'" : "'6606'";
+  const biayaTetapAccounts =
+    label === "utama" ? "'6101.01','6101.03','6101.04','6103'" : "'6101.01','6103'";
+  return `
+    CASE
+        WHEN LEFT(coa.AccountNo,1) = '4' THEN 'Pendapatan'
+        WHEN LEFT(coa.AccountNo,1) = '5' THEN 'HPP'
+        WHEN coa.AccountNo = ${adjustmentAccount} THEN 'Adjustment'
+        WHEN coa.AccountNo IN (${biayaTetapAccounts}) THEN 'BiayaTetap'
+        WHEN LEFT(coa.AccountNo,1) = '6' THEN 'BebanOperasional'
+        WHEN LEFT(coa.AccountNo,1) = '7' THEN 'PenghasilanLainnya'
+        WHEN LEFT(coa.AccountNo,1) = '8' THEN 'BebanLainnya'
+    END
+  `;
+}
 
 interface RawCategoryTotal {
   Kategori: string;
@@ -59,7 +76,7 @@ async function getPnLTotalsForLabel(label: PmputraKoneksiLabel, filter: DateRang
     .input("endDate", sql.Date, filter.endDate)
     .query(`
       SELECT
-          ${PMPUTRA_PNL_KATEGORI_CASE} AS Kategori,
+          ${pmputraKategoriCase(label)} AS Kategori,
           SUM(gl.Debit)  AS TotalDebit,
           SUM(gl.Credit) AS TotalCredit
       FROM GeneralLedger gl
@@ -67,7 +84,7 @@ async function getPnLTotalsForLabel(label: PmputraKoneksiLabel, filter: DateRang
       WHERE gl.TransDate >= @startDate
         AND gl.TransDate <  @endDate
         AND LEFT(coa.AccountNo,1) IN ('4','5','6','7','8')
-      GROUP BY ${PMPUTRA_PNL_KATEGORI_CASE}
+      GROUP BY ${pmputraKategoriCase(label)}
     `);
 
   const totals = emptyTotals();

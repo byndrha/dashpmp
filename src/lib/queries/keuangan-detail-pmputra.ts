@@ -2,7 +2,7 @@
 import { getDaysInMonth } from "date-fns";
 import { sql } from "@/lib/db";
 import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
-import { PMPUTRA_PNL_KATEGORI_CASE } from "@/lib/queries/pnl-pmputra";
+import { pmputraKategoriCase } from "@/lib/queries/pnl-pmputra";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
 import type { DateRangeFilter } from "@/types/dashboard";
 
@@ -75,7 +75,7 @@ async function getCOADetailRowsForLabel(
         coa.ChartOfAccountID,
         coa.AccountNo,
         coa.Description AS AccountName,
-        ${PMPUTRA_PNL_KATEGORI_CASE} AS Kategori,
+        ${pmputraKategoriCase(label)} AS Kategori,
         ISNULL(SUM(gl.Debit), 0)  AS TotalDebit,
         ISNULL(SUM(gl.Credit), 0) AS TotalCredit,
         ${budgetSelect}
