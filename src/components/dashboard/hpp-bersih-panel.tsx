@@ -9,7 +9,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { HPPBersihData } from "@/lib/queries/hpp-bersih";
-import { getHPPBersihAction } from "@/app/(dashboard)/pnl/actions";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -21,13 +20,23 @@ function formatQty(value: number): string {
 
 // Mirrors SalesTodayPanel's self-contained navigation pattern: local state +
 // useTransition + a server action refetch, no URL/searchParams involved.
-export function HPPBersihPanel({ initialData }: { initialData: HPPBersihData }) {
+export function HPPBersihPanel({
+  initialData,
+  onNavigateYear,
+  unitLabel = "Kantong",
+  formulaAccountsLabel = "5000, 6103, 6105, 6108, 6110, 6115, 6126, 6101",
+}: {
+  initialData: HPPBersihData;
+  onNavigateYear: (year: number) => Promise<HPPBersihData>;
+  unitLabel?: string;
+  formulaAccountsLabel?: string;
+}) {
   const [data, setData] = useState(initialData);
   const [pending, startTransition] = useTransition();
 
   function navigate(nextYear: number) {
     startTransition(async () => {
-      const result = await getHPPBersihAction(nextYear);
+      const result = await onNavigateYear(nextYear);
       setData(result);
     });
   }
@@ -38,8 +47,8 @@ export function HPPBersihPanel({ initialData }: { initialData: HPPBersihData }) 
         <div>
           <CardTitle>Perhitungan HPP Bersih</CardTitle>
           <CardDescription>
-            Detail HPP Bersih per bulan &mdash; jumlah nominal tiap akun COA dibagi total kantong penjualan bulan
-            tersebut.
+            Detail HPP Bersih per bulan &mdash; jumlah nominal tiap akun COA dibagi total {unitLabel.toLowerCase()}{" "}
+            penjualan bulan tersebut.
           </CardDescription>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -104,7 +113,7 @@ export function HPPBersihPanel({ initialData }: { initialData: HPPBersihData }) 
 
               <TableRow className="bg-card/50">
                 <TableCell className={cn("px-2 py-1.5", STICKY_LABEL_CLASS, "bg-card/50")}>
-                  <p className="text-xs font-medium leading-tight">Total Kantong Penjualan</p>
+                  <p className="text-xs font-medium leading-tight">Total {unitLabel} Penjualan</p>
                 </TableCell>
                 {data.totalKantongPenjualan.map((qty, i) => (
                   <TableCell key={i} className="px-2 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
@@ -130,8 +139,8 @@ export function HPPBersihPanel({ initialData }: { initialData: HPPBersihData }) 
         <div className="mt-3 rounded-lg border border-border bg-card/50 p-3 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">Rumus Perhitungan HPP Bersih:</p>
           <p className="mt-1 font-data">
-            HPP Bersih = &Sigma; (Nominal Akun COA &divide; Total Kantong Penjualan), per bulan, dijumlahkan dari
-            akun: 5000, 6103, 6105, 6108, 6110, 6115, 6126, 6101.
+            HPP Bersih = &Sigma; (Nominal Akun COA &divide; Total {unitLabel} Penjualan), per bulan, dijumlahkan dari
+            akun: {formulaAccountsLabel}.
           </p>
         </div>
       </CardContent>

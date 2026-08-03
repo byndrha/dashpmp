@@ -17,6 +17,7 @@ import {
   saveCashFlowDailyFiguresAction,
   addCashFlowExpenseAction,
   deleteCashFlowExpenseAction,
+  getHPPBersihAction,
 } from "@/app/(dashboard)/pnl/actions";
 import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
@@ -192,7 +193,7 @@ export default async function PnLPage({
         dimasukkan ke perhitungan BEP di atas — perlu direview manual.
       </p>
 
-      <HPPBersihPanel initialData={hppBersih} />
+      <HPPBersihPanel initialData={hppBersih} onNavigateYear={getHPPBersihAction} />
     </div>
   );
 }
