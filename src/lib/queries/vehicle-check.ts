@@ -103,42 +103,48 @@ export async function createVehicleCheck(input: {
   photos: VehicleCheckPhoto[];
 }): Promise<void> {
   const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
 
-  const existing = await pool
-    .request()
-    .input("jadwalId", sql.Int, input.jadwalId)
-    .input("tipe", sql.VarChar(10), input.tipe)
-    .query(`SELECT VehicleCheckID FROM DashboardVehicleCheck WHERE JadwalID = @jadwalId AND Tipe = @tipe`);
-  if (existing.recordset.length > 0) {
-    throw new Error(
-      input.tipe === "BERANGKAT"
-        ? "Cek Berangkat untuk keberangkatan ini sudah pernah diisi."
-        : "Cek Datang untuk keberangkatan ini sudah pernah diisi."
-    );
-  }
+  try {
+    const existing = await new sql.Request(transaction)
+      .input("jadwalId", sql.Int, input.jadwalId)
+      .input("tipe", sql.VarChar(10), input.tipe)
+      .query(`SELECT VehicleCheckID FROM DashboardVehicleCheck WHERE JadwalID = @jadwalId AND Tipe = @tipe`);
+    if (existing.recordset.length > 0) {
+      throw new Error(
+        input.tipe === "BERANGKAT"
+          ? "Cek Berangkat untuk keberangkatan ini sudah pernah diisi."
+          : "Cek Datang untuk keberangkatan ini sudah pernah diisi."
+      );
+    }
 
-  const header = await pool
-    .request()
-    .input("jadwalId", sql.Int, input.jadwalId)
-    .input("tipe", sql.VarChar(10), input.tipe)
-    .input("odometerKM", sql.Int, input.odometerKM)
-    .input("fuelLevel", sql.VarChar(4), input.fuelLevel)
-    .input("userId", sql.VarChar(16), input.userId).query(`
-      INSERT INTO DashboardVehicleCheck (JadwalID, Tipe, OdometerKM, FuelLevel, CheckedByUserID)
-      OUTPUT INSERTED.VehicleCheckID
-      VALUES (@jadwalId, @tipe, @odometerKM, @fuelLevel, @userId)
-    `);
-  const vehicleCheckId = (header.recordset[0] as { VehicleCheckID: number }).VehicleCheckID;
-
-  for (const photo of input.photos) {
-    await pool
-      .request()
-      .input("vehicleCheckId", sql.Int, vehicleCheckId)
-      .input("jenisFoto", sql.VarChar(16), photo.jenisFoto)
-      .input("filePath", sql.VarChar(256), photo.filePath).query(`
-        INSERT INTO DashboardVehicleCheckPhoto (VehicleCheckID, JenisFoto, FilePath)
-        VALUES (@vehicleCheckId, @jenisFoto, @filePath)
+    const header = await new sql.Request(transaction)
+      .input("jadwalId", sql.Int, input.jadwalId)
+      .input("tipe", sql.VarChar(10), input.tipe)
+      .input("odometerKM", sql.Int, input.odometerKM)
+      .input("fuelLevel", sql.VarChar(4), input.fuelLevel)
+      .input("userId", sql.VarChar(16), input.userId).query(`
+        INSERT INTO DashboardVehicleCheck (JadwalID, Tipe, OdometerKM, FuelLevel, CheckedByUserID)
+        OUTPUT INSERTED.VehicleCheckID
+        VALUES (@jadwalId, @tipe, @odometerKM, @fuelLevel, @userId)
       `);
+    const vehicleCheckId = (header.recordset[0] as { VehicleCheckID: number }).VehicleCheckID;
+
+    for (const photo of input.photos) {
+      await new sql.Request(transaction)
+        .input("vehicleCheckId", sql.Int, vehicleCheckId)
+        .input("jenisFoto", sql.VarChar(16), photo.jenisFoto)
+        .input("filePath", sql.VarChar(256), photo.filePath).query(`
+          INSERT INTO DashboardVehicleCheckPhoto (VehicleCheckID, JenisFoto, FilePath)
+          VALUES (@vehicleCheckId, @jenisFoto, @filePath)
+        `);
+    }
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
   }
 }
 
