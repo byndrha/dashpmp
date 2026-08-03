@@ -12,7 +12,8 @@ import {
   updateJadwalDriverTime,
   updateJadwalArmada,
   startMuat,
-  startBerangkat,
+  selesaiMuat,
+  konfirmasiBerangkat,
   getJadwalDetail,
   getAvailableSalesOrders,
   mergeExternalDeliveriesIntoJadwal,
@@ -132,8 +133,14 @@ export async function startMuatAction(jadwalId: number): Promise<void> {
   revalidatePath("/delivery");
 }
 
-export async function startBerangkatAction(jadwalId: number): Promise<void> {
-  await startBerangkat(jadwalId);
+export async function selesaiMuatAction(jadwalId: number): Promise<{ jadwalDetailId: number; invoiceToken: string }[]> {
+  const result = await selesaiMuat(jadwalId);
+  revalidatePath("/delivery");
+  return result;
+}
+
+export async function konfirmasiBerangkatAction(jadwalId: number): Promise<void> {
+  await konfirmasiBerangkat(jadwalId);
   revalidatePath("/delivery");
 }
 
