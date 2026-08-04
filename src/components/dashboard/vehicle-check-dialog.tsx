@@ -173,7 +173,7 @@ function CheckForm({
 
     return (
       <div className="relative flex h-full w-full flex-col gap-2 p-2">
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8 text-muted-foreground/10">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
           <TruckSideIllustration side={side} />
         </div>
         <div className="relative flex min-h-0 flex-1 gap-2">
