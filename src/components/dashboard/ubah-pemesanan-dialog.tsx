@@ -61,8 +61,8 @@ export function UbahPemesananDialog({
   const [time, setTime] = useState("08:00");
   const [armadaId, setArmadaId] = useState<string>(UNSET);
   const [salesmanId, setSalesmanId] = useState<string>(UNSET);
-  const [qty10KG, setQty10KG] = useState<number | null>(null);
-  const [qty5KG, setQty5KG] = useState<number | null>(null);
+  const [qty10KG, setQty10KG] = useState("");
+  const [qty5KG, setQty5KG] = useState("");
   const [initialQty10KG, setInitialQty10KG] = useState<number | null>(null);
   const [initialQty5KG, setInitialQty5KG] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -90,8 +90,8 @@ export function UbahPemesananDialog({
           setArmadaId(UNSET);
           setSalesmanId(UNSET);
         }
-        setQty10KG(editableQty.qty10KG);
-        setQty5KG(editableQty.qty5KG);
+        setQty10KG(editableQty.qty10KG != null ? String(editableQty.qty10KG) : "");
+        setQty5KG(editableQty.qty5KG != null ? String(editableQty.qty5KG) : "");
         setInitialQty10KG(editableQty.qty10KG);
         setInitialQty5KG(editableQty.qty5KG);
       })
@@ -102,26 +102,26 @@ export function UbahPemesananDialog({
     !!target &&
     !!date &&
     armadaId !== UNSET &&
-    (qty10KG == null || qty10KG > 0) &&
-    (qty5KG == null || qty5KG > 0);
+    (initialQty10KG == null || (qty10KG !== "" && Number(qty10KG) > 0)) &&
+    (initialQty5KG == null || (qty5KG !== "" && Number(qty5KG) > 0));
 
   function handleSubmit() {
     if (!target || !canSubmit) return;
     setError(null);
     startTransition(async () => {
       try {
+        if (initialQty10KG != null && Number(qty10KG) !== initialQty10KG) {
+          await updateSalesOrderQtyAction(target.salesOrderId, "10kg", Number(qty10KG));
+        }
+        if (initialQty5KG != null && Number(qty5KG) !== initialQty5KG) {
+          await updateSalesOrderQtyAction(target.salesOrderId, "5kg", Number(qty5KG));
+        }
         await reschedulePemesananAction({
           salesOrderId: target.salesOrderId,
           armadaId: Number(armadaId),
           deliveryDateTime: new Date(`${date}T${time}:00`),
           salesmanId: salesmanId === UNSET ? null : salesmanId,
         });
-        if (qty10KG != null && qty10KG !== initialQty10KG) {
-          await updateSalesOrderQtyAction(target.salesOrderId, "10kg", qty10KG);
-        }
-        if (qty5KG != null && qty5KG !== initialQty5KG) {
-          await updateSalesOrderQtyAction(target.salesOrderId, "5kg", qty5KG);
-        }
         onOpenChange(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal mengubah pemesanan.");
@@ -222,8 +222,8 @@ export function UbahPemesananDialog({
                           type="number"
                           inputMode="numeric"
                           min={1}
-                          value={qty10KG ?? ""}
-                          onChange={(e) => setQty10KG(e.target.value === "" ? null : Number(e.target.value))}
+                          value={qty10KG}
+                          onChange={(e) => setQty10KG(e.target.value)}
                         />
                       </div>
                     )}
@@ -237,8 +237,8 @@ export function UbahPemesananDialog({
                           type="number"
                           inputMode="numeric"
                           min={1}
-                          value={qty5KG ?? ""}
-                          onChange={(e) => setQty5KG(e.target.value === "" ? null : Number(e.target.value))}
+                          value={qty5KG}
+                          onChange={(e) => setQty5KG(e.target.value)}
                         />
                       </div>
                     )}
