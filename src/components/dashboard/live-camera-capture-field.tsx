@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useLiveCameraCapture } from "@/hooks/use-live-camera-capture";
 
 export function LiveCameraCaptureField({
   label,
@@ -22,109 +22,13 @@ export function LiveCameraCaptureField({
   active: boolean;
   disabled?: boolean;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const capturingRef = useRef(false);
-  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
-  const localPreviewUrlRef = useRef<string | null>(null);
-  const [retaking, setRetaking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-
-  useEffect(() => {
-    localPreviewUrlRef.current = localPreviewUrl;
+  const { videoRef, displayedPhotoUrl, showLive, error, retry, handleTap } = useLiveCameraCapture({
+    label,
+    photoUrl,
+    active: size === "main" && active,
+    disabled,
+    onCapture,
   });
-
-  // Best-effort release of the last captured frame's object URL when this
-  // field's whole lifetime ends (dialog closed) — not on every re-render,
-  // only true unmount, hence the empty deps array plus the ref above to
-  // read the *latest* value at that point.
-  useEffect(() => {
-    return () => {
-      if (localPreviewUrlRef.current) URL.revokeObjectURL(localPreviewUrlRef.current);
-    };
-  }, []);
-
-  // An abandoned retake (tapped to retake, then navigated away before
-  // capturing a replacement) must not leave `retaking` stuck true — otherwise
-  // returning to this side later would force displayedPhotoUrl back to null
-  // and silently reopen the live camera with no fresh tap from the user.
-  useEffect(() => {
-    // Not derivable from render since it depends on this effect actually
-    // re-running when `active` flips false→true→false across cube-side
-    // navigations, not on the render that follows.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!active) setRetaking(false);
-  }, [active]);
-
-  const displayedPhotoUrl = retaking ? null : (localPreviewUrl ?? photoUrl);
-  const showLive = size === "main" && active && !disabled && displayedPhotoUrl == null;
-
-  useEffect(() => {
-    if (!showLive) {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
-      return;
-    }
-    let cancelled = false;
-    // Clears a stale permission error from a previous attempt at the start of
-    // each new getUserMedia cycle (mount, or "Coba Lagi" retry) — not
-    // derivable from render since it depends on this effect actually re-running.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setError(null);
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" } })
-      .then((stream) => {
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      })
-      .catch(() => {
-        if (!cancelled) setError("Izin kamera diperlukan untuk mengambil foto.");
-      });
-    return () => {
-      cancelled = true;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
-    };
-  }, [showLive, retryCount]);
-
-  function handleCapture() {
-    const video = videoRef.current;
-    if (!video || video.videoWidth === 0 || capturingRef.current) return;
-    capturingRef.current = true;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      capturingRef.current = false;
-      return;
-    }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(
-      (blob) => {
-        capturingRef.current = false;
-        if (!blob) return;
-        setLocalPreviewUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(blob);
-        });
-        setRetaking(false);
-        const file = new File([blob], `${label}.jpg`, { type: "image/jpeg" });
-        onCapture(file);
-      },
-      "image/jpeg",
-      0.9
-    );
-  }
 
   function handleAreaClick() {
     if (disabled) return;
@@ -132,14 +36,7 @@ export function LiveCameraCaptureField({
       onTogglePress?.();
       return;
     }
-    if (displayedPhotoUrl != null) {
-      setRetaking(true);
-      return;
-    }
-    if (showLive) {
-      if (capturingRef.current) return;
-      handleCapture();
-    }
+    handleTap();
   }
 
   return (
@@ -173,8 +70,7 @@ export function LiveCameraCaptureField({
               variant="outline"
               onClick={(e) => {
                 e.stopPropagation();
-                setError(null);
-                setRetryCount((c) => c + 1);
+                retry();
               }}
             >
               Coba Lagi
