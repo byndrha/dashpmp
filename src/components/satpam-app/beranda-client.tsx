@@ -8,6 +8,9 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatTime } from "@/lib/format";
 import type { SatpamInspectionCard } from "@/lib/queries/satpam-inspection";
+import { UserMenu } from "@/components/dashboard/user-menu";
+import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
+import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
 
 function InspectionCard({ card }: { card: SatpamInspectionCard }) {
   const router = useRouter();
@@ -52,14 +55,26 @@ function InspectionCard({ card }: { card: SatpamInspectionCard }) {
   );
 }
 
-export function SatpamBerandaClient({ cards }: { cards: SatpamInspectionCard[] }) {
+export function SatpamBerandaClient({
+  cards,
+  userName,
+  profile,
+}: {
+  cards: SatpamInspectionCard[];
+  userName: string;
+  profile: OwnProfile | null;
+}) {
   const [tab, setTab] = useState<"BERANGKAT" | "DATANG">("BERANGKAT");
   const filtered = cards.filter((c) => c.tipe === tab);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-10 border-b bg-background px-4 py-3">
+      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
         <h1 className="font-display text-xl font-bold">Inspeksi Pengiriman</h1>
+        <div className="flex items-center gap-1">
+          <AppearanceMenu />
+          <UserMenu name={userName} profile={profile} />
+        </div>
       </header>
       <Tabs value={tab} onValueChange={(v) => setTab(v as "BERANGKAT" | "DATANG")} className="flex-1">
         <div className="px-4 pt-3">
