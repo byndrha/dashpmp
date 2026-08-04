@@ -239,6 +239,7 @@ export function RouteValidationDialog({
   const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
   const [printSelected, setPrintSelected] = useState<Set<number>>(new Set());
+  const [printError, setPrintError] = useState<string | null>(null);
 
   function togglePrint(jadwalDetailId: number) {
     setPrintSelected((prev) => {
@@ -252,12 +253,24 @@ export function RouteValidationDialog({
   // Opens the printable invoice for every currently-marked stop that already
   // has an InvoiceToken (a stop marked before Selesai Muat runs has none yet
   // — nothing to open for it here; the auto-print in handleSelesaiMuat is
-  // what actually opens it the moment its token becomes available).
+  // what actually opens it the moment its token becomes available). Stops
+  // marked but still missing a token are reported instead of silently
+  // skipped, so a Draft-stage click doesn't look like it did nothing.
   function handlePrintSelected() {
+    setPrintError(null);
+    let missingCount = 0;
     for (const d of order) {
-      if (printSelected.has(d.JadwalDetailID) && d.InvoiceToken) {
+      if (!printSelected.has(d.JadwalDetailID)) continue;
+      if (d.InvoiceToken) {
         window.open(`/invoice/${d.InvoiceToken}`, "_blank");
+      } else {
+        missingCount++;
       }
+    }
+    if (missingCount > 0) {
+      setPrintError(
+        `${missingCount} SI belum terbit — SI baru dibuat otomatis saat "Selesai Muat" diklik. Tetap ditandai; akan otomatis tercetak begitu Selesai Muat selesai.`
+      );
     }
   }
 
@@ -619,6 +632,17 @@ export function RouteValidationDialog({
     if (totalFuelLiters == null || biayaBBMPerLiter == null) return null;
     return Math.round(totalFuelLiters * biayaBBMPerLiter);
   }, [totalFuelLiters, biayaBBMPerLiter]);
+  // "Biaya BBM tambahan": an extra buffer figure on top of the normal fuel
+  // cost above, shown separately (never merged into totalFuelCost) — for
+  // every complete 5km of route distance, add the cost of 5km worth of
+  // fuel. Confirmed formula with the user: floor(distanceKm / 5) * (5km
+  // worth of fuel cost), not a re-scaling of the existing total.
+  const extraFuelCost = useMemo(() => {
+    if (route == null || konsumsiBBM == null || biayaBBMPerLiter == null) return null;
+    const segments = Math.floor(route.distanceKm / 5);
+    const costPer5Km = 5 * konsumsiBBM * biayaBBMPerLiter;
+    return Math.round(segments * costPer5Km);
+  }, [route, konsumsiBBM, biayaBBMPerLiter]);
 
   // "Detail Rute" — plain-text destination list only (no route/fuel
   // figures, those are visual-only info covered by the image share
@@ -1025,6 +1049,7 @@ export function RouteValidationDialog({
                 Cetak SI Terpilih ({printSelected.size})
               </Button>
             )}
+            {printError && <p className="text-xs text-destructive">{printError}</p>}
 
             {routeError && <p className="text-xs text-destructive">{routeError}</p>}
             {route && (
@@ -1046,6 +1071,12 @@ export function RouteValidationDialog({
                 )}
                 {totalFuelCost != null && (
                   <span className="flex items-center gap-1 font-medium">{formatRupiah(totalFuelCost)}</span>
+                )}
+                {extraFuelCost != null && (
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    + {formatRupiah(extraFuelCost)}
+                    <span className="text-[10px]">(BBM tambahan)</span>
+                  </span>
                 )}
               </div>
             )}
