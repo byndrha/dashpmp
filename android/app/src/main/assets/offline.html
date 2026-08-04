@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>PMP Group</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: oklch(0.16 0.025 240);
+    color: oklch(0.94 0.02 200);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+  .shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 20px;
+    gap: 16px;
+  }
+  .wordmark {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    padding: 4px 0 12px;
+  }
+  .skeleton-block {
+    height: 88px;
+    border-radius: 12px;
+    background: oklch(0.24 0.03 240);
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-block::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, oklch(0.32 0.03 240 / 60%), transparent);
+    animation: shimmer 1.6s infinite;
+  }
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+  .banner {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: oklch(0.75 0.15 55);
+    color: oklch(0.18 0.02 60);
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: oklch(0.18 0.02 60);
+    flex-shrink: 0;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    50% { opacity: 0.35; }
+  }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="wordmark">PMP Group</div>
+    <div class="skeleton-block"></div>
+    <div class="skeleton-block"></div>
+    <div class="skeleton-block"></div>
+    <div class="skeleton-block"></div>
+  </div>
+  <div class="banner">
+    <span class="dot"></span>
+    Tidak ada koneksi internet
+  </div>
+  <script>
+    (function () {
+      var FALLBACK = "https://dash.pabrikespmp.com/";
+      var params = new URLSearchParams(window.location.search);
+      var target = params.get("target");
+      // URLSearchParams.get() already percent-decodes the value — the
+      // native side encodes it once with Uri.encode(), so no further
+      // decoding happens here.
+      var destination = target && /^https:\/\/dash\.pabrikespmp\.com\//.test(target) ? target : FALLBACK;
+
+      function checkConnection() {
+        fetch(destination, { method: "HEAD", mode: "no-cors", cache: "no-store" })
+          .then(function () {
+            window.location.href = destination;
+          })
+          .catch(function () {
+            // still offline — keep polling
+          });
+      }
+
+      setInterval(checkConnection, 3000);
+    })();
+  </script>
+</body>
+</html>
