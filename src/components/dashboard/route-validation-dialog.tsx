@@ -294,6 +294,7 @@ export function RouteValidationDialog({
     setSelectedToAdd(new Set());
     setAddError(null);
     setPrintSelected(new Set());
+    setPrintError(null);
     setShowMap(true);
 
     if (jadwalId == null) {
