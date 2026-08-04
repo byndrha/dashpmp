@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CameraCaptureField } from "@/components/dashboard/camera-capture-field";
+import { LiveCameraCaptureField } from "@/components/dashboard/live-camera-capture-field";
 import { TruckCubeCarousel } from "@/components/dashboard/truck-cube-carousel";
 import { TruckSideIllustration } from "@/components/dashboard/truck-side-illustration";
 import { formatTime } from "@/lib/format";
@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 import {
   JENIS_FOTO_LIST,
   JENIS_FOTO_LABEL,
-  TRUCK_SIDE_LABEL,
   TRUCK_SIDE_PRIMARY_PHOTO,
   TRUCK_SIDE_SECONDARY_PHOTO,
   FUEL_BAR_MAX,
@@ -121,6 +120,8 @@ function CheckForm({
   }) => Promise<void>;
 }) {
   const [activeSide, setActiveSide] = useState<TruckSide>("DEPAN");
+  const [depanMainTarget, setDepanMainTarget] = useState<JenisFotoKendaraan>("DEPAN");
+  const [belakangMainTarget, setBelakangMainTarget] = useState<JenisFotoKendaraan>("BELAKANG");
   const [photos, setPhotos] = useState<Partial<Record<JenisFotoKendaraan, string>>>({});
   const [uploading, setUploading] = useState<JenisFotoKendaraan | null>(null);
   const [odometerKM, setOdometerKM] = useState("");
@@ -166,48 +167,61 @@ function CheckForm({
   function renderSideContent(side: TruckSide) {
     const primary = TRUCK_SIDE_PRIMARY_PHOTO[side];
     const secondary = TRUCK_SIDE_SECONDARY_PHOTO[side];
+    const mainTarget = side === "DEPAN" ? depanMainTarget : side === "BELAKANG" ? belakangMainTarget : primary;
+    const toggleTarget = secondary ? (mainTarget === primary ? secondary : primary) : null;
+    const setMainTarget = side === "DEPAN" ? setDepanMainTarget : setBelakangMainTarget;
+
     return (
-      <div className="relative flex h-full w-full flex-col items-center gap-2 p-3">
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8 text-muted-foreground/20">
+      <div className="relative flex h-full w-full flex-col gap-2 p-2">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8 text-muted-foreground/10">
           <TruckSideIllustration side={side} />
         </div>
-        <p className="relative text-xs font-medium">{TRUCK_SIDE_LABEL[side]}</p>
-        <div className="relative flex w-full flex-col items-center gap-2">
-          <CameraCaptureField
-            label={JENIS_FOTO_LABEL[primary]}
+        <div className="relative flex min-h-0 flex-1 gap-2">
+          <LiveCameraCaptureField
+            key={mainTarget}
+            label={JENIS_FOTO_LABEL[mainTarget]}
+            photoUrl={photos[mainTarget] ?? null}
+            size="main"
+            active={activeSide === side}
             disabled={uploading != null || pending}
-            onCapture={(file) => handleCapture(file, primary)}
+            onCapture={(file) => handleCapture(file, mainTarget)}
           />
-          {secondary && (
-            <CameraCaptureField
-              label={JENIS_FOTO_LABEL[secondary]}
+          {toggleTarget && (
+            <LiveCameraCaptureField
+              key={toggleTarget}
+              label={JENIS_FOTO_LABEL[toggleTarget]}
+              photoUrl={photos[toggleTarget] ?? null}
+              size="toggle"
+              active={false}
               disabled={uploading != null || pending}
-              onCapture={(file) => handleCapture(file, secondary)}
+              onCapture={() => {}}
+              onTogglePress={() => setMainTarget(toggleTarget)}
             />
           )}
-          {side === "DEPAN" && (
-            <div className="flex w-full flex-col gap-2">
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder="Odometer (KM)"
-                value={odometerKM}
-                onChange={(e) => setOdometerKM(e.target.value)}
-              />
-              <FuelBarSelector value={fuelBar} onChange={setFuelBar} />
-            </div>
-          )}
-          {side === "BELAKANG" && (
+        </div>
+        {side === "DEPAN" && (
+          <div className="relative flex w-full flex-col gap-2">
             <Input
               type="number"
               inputMode="numeric"
-              min={0}
-              placeholder="Jumlah Koli/Unit Muatan"
-              value={muatanQty}
-              onChange={(e) => setMuatanQty(e.target.value)}
+              placeholder="Odometer (KM)"
+              value={odometerKM}
+              onChange={(e) => setOdometerKM(e.target.value)}
             />
-          )}
-        </div>
+            <FuelBarSelector value={fuelBar} onChange={setFuelBar} />
+          </div>
+        )}
+        {side === "BELAKANG" && (
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            placeholder="Jumlah Koli/Unit Muatan"
+            value={muatanQty}
+            onChange={(e) => setMuatanQty(e.target.value)}
+            className="relative"
+          />
+        )}
       </div>
     );
   }
@@ -225,15 +239,17 @@ function CheckForm({
           KIRI: renderSideContent("KIRI"),
         }}
       />
-      <Button size="sm" disabled={!canSubmit} onClick={handleSubmit}>
-        {pending ? "Menyimpan..." : `Simpan ${TIPE_LABEL[tipe]}`}
-      </Button>
+      <div className="flex justify-end">
+        <Button
+          size="lg"
+          disabled={!canSubmit}
+          onClick={handleSubmit}
+          className="bg-emerald-600 px-6 text-white hover:bg-emerald-700 disabled:bg-emerald-600/50 disabled:text-white/70"
+        >
+          {pending ? "Menyimpan..." : `Simpan ${TIPE_LABEL[tipe]}`}
+        </Button>
+      </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
-      <p className="text-[10px] text-muted-foreground">
-        Foto wajib diambil langsung dari kamera. Catatan: sebagian browser tetap menampilkan pintasan galeri di
-        antarmuka kameranya sendiri — ini batasan platform, bukan sesuatu yang bisa diblokir sepenuhnya dari sisi
-        web.
-      </p>
     </div>
   );
 }
