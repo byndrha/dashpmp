@@ -45,6 +45,18 @@ export function LiveCameraCaptureField({
     };
   }, []);
 
+  // An abandoned retake (tapped to retake, then navigated away before
+  // capturing a replacement) must not leave `retaking` stuck true — otherwise
+  // returning to this side later would force displayedPhotoUrl back to null
+  // and silently reopen the live camera with no fresh tap from the user.
+  useEffect(() => {
+    // Not derivable from render since it depends on this effect actually
+    // re-running when `active` flips false→true→false across cube-side
+    // navigations, not on the render that follows.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!active) setRetaking(false);
+  }, [active]);
+
   const displayedPhotoUrl = retaking ? null : (localPreviewUrl ?? photoUrl);
   const showLive = size === "main" && active && !disabled && displayedPhotoUrl == null;
 
