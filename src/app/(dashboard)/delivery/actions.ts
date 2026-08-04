@@ -30,7 +30,13 @@ import {
   type ArmadaActivityType,
   type UpdateArmadaActivityInput,
 } from "@/lib/queries/armada-activity";
-import { getDriverProfiles, saveDriverProfile, type DriverProfileRow, type SaveDriverProfileInput } from "@/lib/queries/driver-profile";
+import {
+  getDriverProfiles,
+  saveDriverProfile,
+  deleteDriverProfile,
+  type DriverProfileRow,
+  type SaveDriverProfileInput,
+} from "@/lib/queries/driver-profile";
 import {
   getVehicleChecksForJadwal,
   createVehicleCheck,
@@ -191,6 +197,12 @@ export async function getDriverProfilesAction(): Promise<DriverProfileRow[]> {
 export async function saveDriverProfileAction(input: SaveDriverProfileInput): Promise<void> {
   await requireModuleAccess("delivery");
   await saveDriverProfile(input);
+  revalidatePath("/delivery");
+}
+
+export async function deleteDriverProfileAction(salesmanId: string): Promise<void> {
+  await requireModuleAccess("delivery");
+  await deleteDriverProfile(salesmanId);
   revalidatePath("/delivery");
 }
 

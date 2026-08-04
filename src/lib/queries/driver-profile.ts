@@ -120,3 +120,23 @@ export async function saveDriverProfile(input: SaveDriverProfileInput): Promise<
       .query(`INSERT INTO DashboardDriverSim (SalesmanID, JenisSim, IsDeleted) VALUES (@salesmanId, @jenisSim, 0)`);
   }
 }
+
+// Hard-deletes only this SalesmanID's dashboard-side extension data
+// (DashboardDriverProfile + DashboardDriverSim) — the real ERP Salesman
+// row, and any historical SalesOrder/DeliveryOrder referencing this
+// SalesmanID, are never touched. Matches saveDriverProfile's own
+// no-transaction style for this same table pair (a partial failure here
+// just leaves stale SIM rows for a profile-less SalesmanID, which
+// re-running this same delete cleans up — not a real data-integrity risk
+// the way the SalesOrder/SalesOrderDetail pair in sales-order.ts is).
+export async function deleteDriverProfile(salesmanId: string): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("salesmanId", sql.VarChar(16), salesmanId)
+    .query(`DELETE FROM DashboardDriverSim WHERE SalesmanID = @salesmanId`);
+  await pool
+    .request()
+    .input("salesmanId", sql.VarChar(16), salesmanId)
+    .query(`DELETE FROM DashboardDriverProfile WHERE SalesmanID = @salesmanId`);
+}

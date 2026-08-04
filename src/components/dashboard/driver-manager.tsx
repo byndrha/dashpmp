@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, X, EyeOff, Eye } from "lucide-react";
+import { Pencil, X, EyeOff, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { DriverProfileRow, SaveDriverProfileInput } from "@/lib/queries/driver-profile";
-import { saveDriverProfileAction } from "@/app/(dashboard)/delivery/actions";
+import { saveDriverProfileAction, deleteDriverProfileAction } from "@/app/(dashboard)/delivery/actions";
 
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 
@@ -251,13 +251,21 @@ function DriverFormDialog({
 }
 
 // Driver identity itself comes from the real ERP Salesman table (no
-// "Tambah Driver" here — nothing to create, only extend with dashboard-only
-// personal data) — same read-only-identity/extend-with-a-side-table shape
-// as ArmadaManager, just without the create/delete actions since those
-// don't apply to a Salesman record from here.
+// "Tambah Driver" here — nothing to create, the ERP Salesman row is never
+// touched). Delete here only removes this SalesmanID's dashboard-only
+// extension rows (DashboardDriverProfile/DashboardDriverSim) — the driver
+// reappears with a blank profile the moment anyone re-saves against the
+// same SalesmanID, since identity itself isn't stored here.
 export function DriverManager({ drivers }: { drivers: DriverProfileRow[] }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DriverProfileRow | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function handleDelete(driver: DriverProfileRow) {
+    if (!confirm(`Hapus data profil dashboard untuk "${driver.Name}"? Data Salesman ERP asli tidak akan terhapus.`)) return;
+    setDeletingId(driver.SalesmanID);
+    deleteDriverProfileAction(driver.SalesmanID).finally(() => setDeletingId(null));
+  }
 
   return (
     <>
@@ -287,17 +295,28 @@ export function DriverManager({ drivers }: { drivers: DriverProfileRow[] }) {
                     {d.SimTypes.length > 0 ? `SIM ${d.SimTypes.join(", ")}` : "Belum ada data SIM"}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 shrink-0"
-                  onClick={() => {
-                    setOpen(false);
-                    setEditing(d);
-                  }}
-                >
-                  <Pencil className="size-3.5" />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => {
+                      setOpen(false);
+                      setEditing(d);
+                    }}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 text-destructive hover:text-destructive"
+                    disabled={deletingId === d.SalesmanID}
+                    onClick={() => handleDelete(d)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
               </div>
             ))}
             {drivers.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Belum ada driver.</p>}
