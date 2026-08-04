@@ -12,6 +12,12 @@ import {
 } from "@/lib/queries/pemesanan";
 import { getCurrentAssignment, type CurrentAssignment } from "@/lib/queries/pengiriman-jadwal";
 import { createTakeAwayPemesanan, type CreateTakeAwayInput, type CreateTakeAwayResult } from "@/lib/queries/takeaway";
+import {
+  getEditableSalesOrderQty,
+  updateSalesOrderDetailQty,
+  type EditableSalesOrderQty,
+  type KantongVariant,
+} from "@/lib/queries/sales-order";
 
 export async function createPemesananAction(input: CreatePemesananInput): Promise<CreatePemesananResult> {
   const result = await createPemesanan(input);
@@ -48,6 +54,18 @@ export async function getCurrentAssignmentAction(salesOrderId: string): Promise<
 
 export async function updateSalesOrderTransDateAction(salesOrderId: string, transDate: Date): Promise<void> {
   await updateSalesOrderTransDate(salesOrderId, transDate);
+  revalidatePath("/pemesanan");
+  revalidatePath("/delivery");
+}
+
+// Read-only — no revalidatePath needed, fetched on demand when "Ubah
+// Pemesanan" opens, same shape as getCurrentAssignmentAction above.
+export async function getEditableSalesOrderQtyAction(salesOrderId: string): Promise<EditableSalesOrderQty> {
+  return getEditableSalesOrderQty(salesOrderId);
+}
+
+export async function updateSalesOrderQtyAction(salesOrderId: string, variant: KantongVariant, newQty: number): Promise<void> {
+  await updateSalesOrderDetailQty(salesOrderId, variant, newQty);
   revalidatePath("/pemesanan");
   revalidatePath("/delivery");
 }

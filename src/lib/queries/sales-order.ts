@@ -282,6 +282,96 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
   return salesOrderId;
 }
 
+export interface EditableSalesOrderQty {
+  qty10KG: number | null;
+  qty5KG: number | null;
+}
+
+// Only the SOLD row per variant — deliberately excludes the separate bonus
+// rows (BONUS_ITEM_VARIANTS), so this never conflates billed quantity with
+// free/bonus quantity. null means this SO has no sold row for that variant
+// at all (nothing to edit — the UI must not offer an input for it, since
+// this function never creates a new row).
+export async function getEditableSalesOrderQty(salesOrderId: string): Promise<EditableSalesOrderQty> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .input("item10", sql.VarChar(150), KANTONG_ITEM_ID)
+    .input("item5", sql.VarChar(150), KANTONG_VARIANTS["5kg"].itemId)
+    .query(`SELECT ItemID, Qty FROM SalesOrderDetail WHERE SalesOrderID = @soId AND ItemID IN (@item10, @item5)`);
+  const rows = result.recordset as { ItemID: string; Qty: number }[];
+  const row10 = rows.find((r) => r.ItemID === KANTONG_ITEM_ID);
+  const row5 = rows.find((r) => r.ItemID === KANTONG_VARIANTS["5kg"].itemId);
+  return {
+    qty10KG: row10 ? row10.Qty : null,
+    qty5KG: row5 ? row5.Qty : null,
+  };
+}
+
+// Edits an existing sold-row's Qty (and its Amount, recomputed from that
+// row's own already-stored Price — never re-fetched from the current Price
+// Level, so editing Qty never silently changes the unit price the customer
+// was quoted). Refuses if the variant has no existing sold row (this never
+// creates one) or if the SO has already shipped (a real DeliveryOrder
+// exists) — same shipped-order guard deletePemesanan already uses, for the
+// same reason: editing an SO after its DO/SI already reflects the old Qty
+// would silently desync real ERP documents.
+export async function updateSalesOrderDetailQty(salesOrderId: string, variant: KantongVariant, newQty: number): Promise<void> {
+  if (!(newQty > 0)) throw new Error("Qty pemesanan harus lebih dari 0.");
+
+  const pool = await getPool();
+
+  const doCheck = await pool
+    .request()
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .query(`SELECT COUNT(*) AS Cnt FROM DeliveryOrder WHERE SalesOrderID = @soId AND IsDeleted = 0`);
+  if ((doCheck.recordset[0] as { Cnt: number }).Cnt > 0) {
+    throw new Error("Pesanan ini sudah terkirim (DO sudah terbit) — Qty tidak bisa diubah dari sini.");
+  }
+
+  const itemId = KANTONG_VARIANTS[variant].itemId;
+  const existing = await pool
+    .request()
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .input("itemId", sql.VarChar(150), itemId)
+    .query(`SELECT SalesOrderDetailID, Price FROM SalesOrderDetail WHERE SalesOrderID = @soId AND ItemID = @itemId`);
+  const row = existing.recordset[0] as { SalesOrderDetailID: string; Price: number } | undefined;
+  if (!row) {
+    throw new Error(`Pesanan ini tidak memiliki baris ${variant === "10kg" ? "10 KG" : "5 KG"} untuk diubah.`);
+  }
+
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const newAmount = newQty * row.Price;
+    await new sql.Request(transaction)
+      .input("detailId", sql.VarChar(16), row.SalesOrderDetailID)
+      .input("qty", sql.Float, newQty)
+      .input("amount", sql.Float, newAmount)
+      .query(`UPDATE SalesOrderDetail SET Qty = @qty, Amount = @amount WHERE SalesOrderDetailID = @detailId`);
+
+    // Keeps the header's Amount/Netto consistent with the sum of its own
+    // details (bonus rows included, always Amount=0) — the same
+    // header-equals-sum-of-details relationship createSalesOrderManual
+    // establishes at creation time.
+    await new sql.Request(transaction)
+      .input("soId", sql.VarChar(16), salesOrderId)
+      .query(`
+        UPDATE SalesOrder SET
+          Amount = (SELECT ISNULL(SUM(Amount), 0) FROM SalesOrderDetail WHERE SalesOrderID = @soId),
+          Netto = (SELECT ISNULL(SUM(Amount), 0) FROM SalesOrderDetail WHERE SalesOrderID = @soId),
+          ModifiedDate = GETDATE()
+        WHERE SalesOrderID = @soId
+      `);
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
 // Soft-deletes a SalesOrder — compensating cleanup for createPemesanan
 // (pemesanan.ts) when the scheduling step after SO creation fails, matching
 // createJadwalDraft's own cleanup discipline in pengiriman-jadwal.ts.
