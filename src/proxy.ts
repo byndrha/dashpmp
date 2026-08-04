@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const isLoginPage = req.nextUrl.pathname === "/login";
+  const isSatpam = req.auth?.user.isSatpam ?? false;
+  const isSatpamAppRoute = req.nextUrl.pathname.startsWith("/satpam-app");
 
   if (!isLoggedIn && !isLoginPage) {
     const loginUrl = new URL("/login", req.nextUrl.origin);
@@ -12,7 +14,13 @@ export default auth((req) => {
   }
 
   if (isLoggedIn && isLoginPage) {
-    return NextResponse.redirect(new URL("/", req.nextUrl.origin));
+    return NextResponse.redirect(new URL(isSatpam ? "/satpam-app" : "/", req.nextUrl.origin));
+  }
+
+  // Satpam accounts are confined to the mobile inspection UI — every other
+  // route (including the regular Beranda dashboard) redirects back there.
+  if (isLoggedIn && isSatpam && !isSatpamAppRoute) {
+    return NextResponse.redirect(new URL("/satpam-app", req.nextUrl.origin));
   }
 });
 
