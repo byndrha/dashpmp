@@ -21,7 +21,12 @@ import {
 } from "@/components/ui/select";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
-import { getCurrentAssignmentAction, reschedulePemesananAction } from "@/app/(dashboard)/pemesanan/actions";
+import {
+  getCurrentAssignmentAction,
+  reschedulePemesananAction,
+  getEditableSalesOrderQtyAction,
+  updateSalesOrderQtyAction,
+} from "@/app/(dashboard)/pemesanan/actions";
 import { formatKemasanQty } from "@/lib/format";
 
 const UNSET = "__unset__";
@@ -56,6 +61,10 @@ export function UbahPemesananDialog({
   const [time, setTime] = useState("08:00");
   const [armadaId, setArmadaId] = useState<string>(UNSET);
   const [salesmanId, setSalesmanId] = useState<string>(UNSET);
+  const [qty10KG, setQty10KG] = useState<number | null>(null);
+  const [qty5KG, setQty5KG] = useState<number | null>(null);
+  const [initialQty10KG, setInitialQty10KG] = useState<number | null>(null);
+  const [initialQty5KG, setInitialQty5KG] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -67,8 +76,8 @@ export function UbahPemesananDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    getCurrentAssignmentAction(target.salesOrderId)
-      .then((assignment) => {
+    Promise.all([getCurrentAssignmentAction(target.salesOrderId), getEditableSalesOrderQtyAction(target.salesOrderId)])
+      .then(([assignment, editableQty]) => {
         if (assignment) {
           const d = new Date(assignment.jamJadwal);
           setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
@@ -81,11 +90,20 @@ export function UbahPemesananDialog({
           setArmadaId(UNSET);
           setSalesmanId(UNSET);
         }
+        setQty10KG(editableQty.qty10KG);
+        setQty5KG(editableQty.qty5KG);
+        setInitialQty10KG(editableQty.qty10KG);
+        setInitialQty5KG(editableQty.qty5KG);
       })
       .finally(() => setLoading(false));
   }, [target]);
 
-  const canSubmit = !!target && !!date && armadaId !== UNSET;
+  const canSubmit =
+    !!target &&
+    !!date &&
+    armadaId !== UNSET &&
+    (qty10KG == null || qty10KG > 0) &&
+    (qty5KG == null || qty5KG > 0);
 
   function handleSubmit() {
     if (!target || !canSubmit) return;
@@ -98,6 +116,12 @@ export function UbahPemesananDialog({
           deliveryDateTime: new Date(`${date}T${time}:00`),
           salesmanId: salesmanId === UNSET ? null : salesmanId,
         });
+        if (qty10KG != null && qty10KG !== initialQty10KG) {
+          await updateSalesOrderQtyAction(target.salesOrderId, "10kg", qty10KG);
+        }
+        if (qty5KG != null && qty5KG !== initialQty5KG) {
+          await updateSalesOrderQtyAction(target.salesOrderId, "5kg", qty5KG);
+        }
         onOpenChange(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal mengubah pemesanan.");
@@ -185,6 +209,41 @@ export function UbahPemesananDialog({
                     </Select>
                   </div>
                 </div>
+
+                {(initialQty10KG != null || initialQty5KG != null) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {initialQty10KG != null && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="ubah-qty10" className="text-xs text-muted-foreground">
+                          Qty 10 KG
+                        </Label>
+                        <Input
+                          id="ubah-qty10"
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={qty10KG ?? ""}
+                          onChange={(e) => setQty10KG(e.target.value === "" ? null : Number(e.target.value))}
+                        />
+                      </div>
+                    )}
+                    {initialQty5KG != null && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="ubah-qty5" className="text-xs text-muted-foreground">
+                          Qty 5 KG
+                        </Label>
+                        <Input
+                          id="ubah-qty5"
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={qty5KG ?? ""}
+                          onChange={(e) => setQty5KG(e.target.value === "" ? null : Number(e.target.value))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {error && <p className="text-xs text-destructive">{error}</p>}
               </>
