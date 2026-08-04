@@ -45,7 +45,7 @@ function SampingIllustration({ flip }: { flip?: boolean }) {
       strokeLinejoin="round"
       strokeLinecap="round"
     >
-      <path d="M10 46 h34 v-16 a4 4 0 0 1 4 -4 h10 a4 4 0 0 1 4 4 v16 h4 v34 h-56 z" />
+      <path d="M10 46 h6 v-16 a4 4 0 0 1 4 -4 h38 a4 4 0 0 1 4 4 v16 h4 v34 h-56 z" />
       <rect x="20" y="34" width="22" height="14" rx="2" />
       <rect x="66" y="20" width="140" height="60" rx="4" />
       <line x1="100" y1="20" x2="100" y2="80" />
