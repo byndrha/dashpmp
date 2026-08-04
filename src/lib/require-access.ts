@@ -49,3 +49,10 @@ export async function requirePmputra() {
   if (session.user.accountScope !== "pmputra") redirect("/akses-ditolak");
   return session;
 }
+
+export async function requireSatpam() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!session.user.isSatpam) redirect("/akses-ditolak");
+  return session;
+}
