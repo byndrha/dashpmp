@@ -1228,6 +1228,13 @@ export function PengirimanBoard({
   const [createActivityArmadaId, setCreateActivityArmadaId] = useState<number | null>(null);
   const [editingActivity, setEditingActivity] = useState<ArmadaActivity | null>(null);
   const [editingSalesOrder, setEditingSalesOrder] = useState<UbahPemesananTarget | null>(null);
+  // Bumped every time UbahPemesananDialog closes (saved or cancelled — both
+  // are handled the same way here) — RouteValidationDialog watches this to
+  // refetch its stop list, since it deliberately stays open underneath
+  // UbahPemesananDialog (see onEditSalesOrder below) and its own `order`
+  // state would otherwise go stale after an in-place Qty edit reachable
+  // through that dialog.
+  const [salesOrderEditSignal, setSalesOrderEditSignal] = useState(0);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
@@ -1477,6 +1484,7 @@ export function PengirimanBoard({
         isSatpam={isSatpam}
         onOpenChange={(open) => !open && setDetailJadwalId(null)}
         onDeleted={() => setDetailJadwalId(null)}
+        salesOrderEditSignal={salesOrderEditSignal}
         onEditSalesOrder={(detail) => {
           // Validasi Rute deliberately stays open underneath — Ubah
           // Pemesanan is meant to be a quick in-place edit for one stop,
@@ -1513,7 +1521,12 @@ export function PengirimanBoard({
       />
       <UbahPemesananDialog
         target={editingSalesOrder}
-        onOpenChange={(open) => !open && setEditingSalesOrder(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingSalesOrder(null);
+            setSalesOrderEditSignal((n) => n + 1);
+          }
+        }}
         armadaList={armada}
         drivers={drivers}
       />

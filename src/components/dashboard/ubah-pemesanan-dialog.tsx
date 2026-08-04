@@ -215,7 +215,7 @@ export function UbahPemesananDialog({
                     {initialQty10KG != null && (
                       <div className="flex flex-col gap-1.5">
                         <Label htmlFor="ubah-qty10" className="text-xs text-muted-foreground">
-                          Qty 10 KG
+                          Qty 10 KG (terjual)
                         </Label>
                         <Input
                           id="ubah-qty10"
@@ -225,12 +225,17 @@ export function UbahPemesananDialog({
                           value={qty10KG}
                           onChange={(e) => setQty10KG(e.target.value)}
                         />
+                        {target.qty10KG - initialQty10KG > 0 && (
+                          <p className="text-[10px] text-muted-foreground">
+                            + {target.qty10KG - initialQty10KG} bonus (tidak diubah di sini)
+                          </p>
+                        )}
                       </div>
                     )}
                     {initialQty5KG != null && (
                       <div className="flex flex-col gap-1.5">
                         <Label htmlFor="ubah-qty5" className="text-xs text-muted-foreground">
-                          Qty 5 KG
+                          Qty 5 KG (terjual)
                         </Label>
                         <Input
                           id="ubah-qty5"
@@ -240,6 +245,11 @@ export function UbahPemesananDialog({
                           value={qty5KG}
                           onChange={(e) => setQty5KG(e.target.value)}
                         />
+                        {target.qty5KG - initialQty5KG > 0 && (
+                          <p className="text-[10px] text-muted-foreground">
+                            + {target.qty5KG - initialQty5KG} bonus (tidak diubah di sini)
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>

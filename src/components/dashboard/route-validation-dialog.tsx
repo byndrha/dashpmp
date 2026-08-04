@@ -163,6 +163,7 @@ export function RouteValidationDialog({
   onOpenChange,
   onDeleted,
   onEditSalesOrder,
+  salesOrderEditSignal,
 }: {
   jadwal: JadwalCardData | null;
   businessDate: string;
@@ -201,6 +202,12 @@ export function RouteValidationDialog({
   // dialog first, so it stays visible (and its scroll/route-calc state
   // intact) underneath once the edit dialog closes again.
   onEditSalesOrder: (detail: JadwalDetailRow) => void;
+  // Bumped by the caller every time UbahPemesananDialog closes (see
+  // onEditSalesOrder above) — a Qty edit reached through that dialog can
+  // change this Jadwal's per-stop Qty/totals/capacity, so this dialog
+  // needs an explicit nudge to refetch `order` rather than staying stale
+  // until the whole dialog is closed and reopened.
+  salesOrderEditSignal: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<JadwalDetailRow[]>([]);
@@ -311,6 +318,23 @@ export function RouteValidationDialog({
       .finally(() => setLoading(false));
     getVehicleChecksForJadwalAction(jadwalId).then(setVehicleChecks);
   }, [jadwalId]);
+
+  // Refetches just `order` after UbahPemesananDialog closes (saved or
+  // cancelled — refetching unconditionally is simplest and safe: idempotent
+  // if nothing changed, correctly fresh if the Qty edit went through).
+  // Deliberately a separate effect from the one above rather than adding
+  // salesOrderEditSignal to its dependency array — that effect also resets
+  // the "Tambahkan" sub-panel, print selections, and map visibility, none
+  // of which should be disturbed by an in-place Qty edit on one stop.
+  useEffect(() => {
+    if (jadwalId == null) return;
+    getJadwalDetailAction(jadwalId).then(setOrder);
+    // Deliberately keyed on salesOrderEditSignal only, not jadwalId — the
+    // effect above already covers the initial fetch / jadwalId change, and
+    // including jadwalId here too would just re-run this fetch redundantly
+    // right after that one on every open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salesOrderEditSignal]);
 
   useEffect(() => {
     if (jadwal == null) return;
