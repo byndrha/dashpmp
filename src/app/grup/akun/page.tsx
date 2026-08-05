@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Monitor } from "lucide-react";
 import { requireGrupAccess } from "@/lib/require-access";
 import { listAkun, listPerusahaanDirektori, listAllPeran } from "@/lib/queries/akun";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
@@ -26,10 +26,16 @@ export default async function AkunPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-display text-xl font-semibold">Akun</h1>
-        <Button variant="outline" render={<Link href="/grup/akun/peran" />}>
-          <ShieldCheck className="size-4" />
-          Peran &amp; Otoritas
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" render={<Link href="/grup/akun/sesi" />}>
+            <Monitor className="size-4" />
+            Sesi Login Aktif
+          </Button>
+          <Button variant="outline" render={<Link href="/grup/akun/peran" />}>
+            <ShieldCheck className="size-4" />
+            Peran &amp; Otoritas
+          </Button>
+        </div>
       </div>
       <p className="text-sm text-muted-foreground">
         Kelola seluruh akun untuk setiap PT, termasuk akun Direktur PMP Group — hanya Super Administrator/Direktur
