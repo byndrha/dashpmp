@@ -109,11 +109,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // token) is the revocation check: if this session was force-logged-out
       // from the sesi-login-aktif admin page, invalidate it immediately
       // rather than waiting for the JWT to naturally expire.
-      if (typeof token.sessionId === "string") {
-        const valid = await checkAkunSesi(token.sessionId);
-        if (!valid) return null;
-        await touchAkunSesiLastSeen(token.sessionId);
-      }
+      if (typeof token.sessionId !== "string") return null;
+      const valid = await checkAkunSesi(token.sessionId);
+      if (!valid) return null;
+      await touchAkunSesiLastSeen(token.sessionId);
       return token;
     },
     async session({ session, token }) {
