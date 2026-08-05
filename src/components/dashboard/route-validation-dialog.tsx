@@ -721,27 +721,44 @@ export function RouteValidationDialog({
 
   async function shareImageBlob(blob: Blob, filename: string, title: string): Promise<void> {
     const file = new File([blob], filename, { type: "image/png" });
+
+    // Copy to clipboard FIRST, before calling share() — both APIs need a
+    // live user-activation gesture, and awaiting the OS share sheet can
+    // take arbitrarily long (or hand off to another app entirely), which
+    // risks the activation expiring before a clipboard write attempted
+    // afterward. Doing it up front also means it still happens even when
+    // the user cancels the share sheet, or shares to an app that can't
+    // receive the image directly.
+    let copied = false;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      copied = true;
+    } catch {
+      // Clipboard image write isn't universally supported (e.g. Firefox) —
+      // proceed to share/download regardless.
+    }
+
     if (navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title });
       } catch {
         // User cancelled the share sheet — not an error worth surfacing.
       }
+      if (copied) toast.success("Gambar disalin ke clipboard.");
       return;
     }
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+
+    if (copied) {
       toast.success("Gambar disalin ke clipboard.");
-    } catch {
-      // Clipboard image write isn't universally supported (e.g. Firefox) —
-      // final fallback is a plain download.
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      return;
     }
+    // Final fallback when neither share nor clipboard write is available.
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function handleShareSeluruhnya() {
@@ -752,18 +769,31 @@ export function RouteValidationDialog({
   async function handleShareDetailRute() {
     const text = buildStopListText();
     if (!text) return;
+
+    // Same ordering rationale as shareImageBlob: copy first, before
+    // calling share(), so it isn't lost to a user-activation timeout while
+    // the OS share sheet is open, and still happens if the user cancels it.
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch {
+      // Proceed to share regardless.
+    }
+
     if (navigator.share) {
       try {
         await navigator.share({ title: "Detail Rute", text });
       } catch {
         // User cancelled the share sheet — not an error worth surfacing.
       }
+      if (copied) toast.success("Detail rute disalin ke clipboard.");
       return;
     }
-    try {
-      await navigator.clipboard.writeText(text);
+
+    if (copied) {
       toast.success("Detail rute disalin ke clipboard.");
-    } catch {
+    } else {
       toast.error("Gagal menyalin detail rute.");
     }
   }
