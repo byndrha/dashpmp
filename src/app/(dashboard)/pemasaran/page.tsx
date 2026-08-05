@@ -9,11 +9,13 @@ import {
 } from "@/lib/queries/marketing-wilayah";
 import { getMarketingPerformance } from "@/lib/queries/marketing-performance";
 import { getPemasaranWilayahDelivery } from "@/lib/queries/pemasaran-wilayah-delivery";
+import { getLatestMarketingPositions } from "@/lib/queries/akun-lokasi";
 import { WILAYAH_MANAGER_ROLE_IDS, STAFF_ROLE_ID } from "@/lib/roles";
 import { PemasaranSection } from "@/components/dashboard/pemasaran-section";
 import { MarketingWilayahPanel } from "@/components/dashboard/marketing-wilayah-panel";
 import { MarketingPerformancePanel } from "@/components/dashboard/marketing-performance-panel";
 import { PemasaranWilayahDeliveryPanel } from "@/components/dashboard/pemasaran-wilayah-delivery-panel";
+import { MarketingLocationMap } from "@/components/dashboard/marketing-location-map";
 
 export default async function PemasaranPage() {
   const session = await requireModuleAccess("pemasaran");
@@ -26,8 +28,18 @@ export default async function PemasaranPage() {
   // (Marketing, Supervisor, Accounting, Manager, Super Admin) still sees it.
   const canViewKinerjaMarketing = !(session.user.roleId === STAFF_ROLE_ID && !session.user.isSuperAdmin);
 
-  const [rows, allKpiRows, priceLevels, wilayahAssignments, marketingUsers, mitraAssignments, mitraOptions, performance, wilayahDelivery] =
-    await Promise.all([
+  const [
+    rows,
+    allKpiRows,
+    priceLevels,
+    wilayahAssignments,
+    marketingUsers,
+    mitraAssignments,
+    mitraOptions,
+    performance,
+    wilayahDelivery,
+    marketingPositions,
+  ] = await Promise.all([
       getPengajuanList(),
       getMarketingKPI(),
       getPriceLevelOptions(),
@@ -43,6 +55,9 @@ export default async function PemasaranPage() {
       // Staff can't see Kinerja Marketing at all — no point querying it.
       canViewKinerjaMarketing ? getMarketingPerformance() : Promise.resolve(null),
       getPemasaranWilayahDelivery(),
+      // Live-position map is part of the same canManageWilayah-gated section
+      // as MarketingWilayahPanel — Marketing themselves never see it.
+      canManageWilayah ? getLatestMarketingPositions() : Promise.resolve([]),
     ]);
 
   // Marketing sees only their own progress here — Supervisor/Accounting/Super
@@ -71,6 +86,8 @@ export default async function PemasaranPage() {
           />
         )}
       </div>
+
+      {canManageWilayah && <MarketingLocationMap positions={marketingPositions} />}
 
       {canViewKinerjaMarketing && performanceForSession && (
         <MarketingPerformancePanel
