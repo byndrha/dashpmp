@@ -378,3 +378,49 @@ export async function touchAkunSesiLastSeen(sesiId: string): Promise<void> {
     [sesiId]
   );
 }
+
+export interface AkunSesiRow {
+  sesiId: string;
+  akunId: number;
+  nama: string;
+  username: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export async function listActiveSesi(): Promise<AkunSesiRow[]> {
+  const pool = getPgPool();
+  const result = await pool.query<{
+    id: string;
+    akun_id: number;
+    nama: string;
+    username: string;
+    user_agent: string | null;
+    ip_address: string | null;
+    created_at: Date;
+    last_seen_at: Date;
+  }>(
+    `SELECT s.id, s.akun_id, a.nama, a.username, s.user_agent, s.ip_address, s.created_at, s.last_seen_at
+     FROM akun_sesi s
+     JOIN akun a ON a.id = s.akun_id
+     WHERE s.revoked_at IS NULL
+     ORDER BY s.last_seen_at DESC`
+  );
+  return result.rows.map((r) => ({
+    sesiId: r.id,
+    akunId: r.akun_id,
+    nama: r.nama,
+    username: r.username,
+    userAgent: r.user_agent,
+    ipAddress: r.ip_address,
+    createdAt: r.created_at.toISOString(),
+    lastSeenAt: r.last_seen_at.toISOString(),
+  }));
+}
+
+export async function revokeAkunSesi(sesiId: string): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE akun_sesi SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, [sesiId]);
+}
