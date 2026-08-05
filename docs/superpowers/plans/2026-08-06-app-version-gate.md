@@ -1,6 +1,6 @@
 # App Version Gate Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** When the Android Capacitor app opens, detect the running APK's `versionCode` and either block usage entirely (below minimum) or show a dismissible "update available" banner (below latest but not below minimum) — with zero server round-trip, driven entirely by constants in a code file.
 
@@ -31,7 +31,7 @@
 
 This project has no test runner configured (no `vitest`/`jest` in `package.json`, no `test` script, no existing `*.test.ts` files outside `node_modules`) — every feature in this codebase so far has been verified through manual/live checks, not automated unit tests. Don't introduce a test framework for one pure function. Instead, verify it with a disposable script run through `tsx` (already a project dependency, used for one-off scripts like `scripts/migrate-akun-sesi.ts` and the `seed:auth` npm script), then delete the script — it's a verification step, not a permanent artifact.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 ```ts
 // Manually bumped alongside every APK release. APP_MIN_VERSION_CODE is
@@ -59,7 +59,7 @@ export function classifyAppVersion(
 }
 ```
 
-- [ ] **Step 2: Verify it with a disposable script**
+- [x] **Step 2: Verify it with a disposable script**
 
 Create a scratch file `scripts/_verify-app-version.ts` (underscore prefix marks it disposable, not a permanent addition to `scripts/`):
 
@@ -93,13 +93,13 @@ console.log("All cases passed");
 Run: `npx tsx scripts/_verify-app-version.ts`
 Expected: all 7 lines print `PASS`, final line `All cases passed`.
 
-- [ ] **Step 3: Delete the scratch verification script**
+- [x] **Step 3: Delete the scratch verification script**
 
 ```bash
 rm scripts/_verify-app-version.ts
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/lib/app-version-config.ts
@@ -117,22 +117,22 @@ git commit -m "Add app version classification constants and comparison function"
 **Interfaces:**
 - Produces: `App.getInfo()` from `import { App } from "@capacitor/app";`, resolving to `{ build: string; version: string; ... }` (per `@capacitor/app`'s published `AppInfo` type) — consumed by Task 3.
 
-- [ ] **Step 1: Install the plugin**
+- [x] **Step 1: Install the plugin**
 
 Run: `npm install @capacitor/app`
 
-- [ ] **Step 2: Sync Android native project**
+- [x] **Step 2: Sync Android native project**
 
 Run: `npx cap sync android`
 
 Expected: command completes without error; it prints a summary of plugins found including `@capacitor/app`.
 
-- [ ] **Step 3: Confirm what changed**
+- [x] **Step 3: Confirm what changed**
 
 Run: `git status`
 Expected: `package.json`, `package-lock.json`, and one or more `android/` files touched by `cap sync` (e.g. `android/app/capacitor.build.gradle`, `android/capacitor.settings.gradle`). No manual edits needed to any of these — they are generated.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add package.json package-lock.json android/
@@ -152,7 +152,7 @@ git commit -m "Add @capacitor/app plugin for native version detection"
 
 Before writing this file, read `src/components/location-tracking-bootstrap.tsx` for the exact native-gating pattern (`Capacitor.isNativePlatform()`, `useEffect` with a mount-once ref, cleanup) this component should mirror for consistency, and read `src/components/ui/dialog.tsx` briefly to confirm this component intentionally does NOT use it (the block screen must have zero dismiss path, which the shadcn Dialog primitive doesn't guarantee by default).
 
-- [ ] **Step 1: Write the component**
+- [x] **Step 1: Write the component**
 
 ```tsx
 "use client";
@@ -227,12 +227,12 @@ export function AppVersionGate({ children }: { children: React.ReactNode }) {
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new type errors introduced by this file.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/app-version-gate.tsx
@@ -277,7 +277,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
 `NativeStatusBarSync` and `LocationTrackingBootstrap` render `null` and sit as siblings — they don't need to wrap anything. `AppVersionGate` is different: it must be able to suppress `children` entirely when blocked, so it wraps rather than sits alongside.
 
-- [ ] **Step 1: Edit the file**
+- [x] **Step 1: Edit the file**
 
 Change the import block to add:
 
@@ -305,18 +305,18 @@ to:
         </PaletteProvider>
 ```
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new type errors.
 
-- [ ] **Step 3: Manual verification in dev browser**
+- [x] **Step 3: Manual verification in dev browser**
 
 Run the dev server (`npm run dev` or the project's existing dev script) and load the dashboard in a normal desktop browser. Confirm the page renders exactly as before this change — no banner, no block screen, no layout shift — since `Capacitor.isNativePlatform()` is `false` in a plain browser and `AppVersionGate` renders only `children` unchanged.
 
 Then, temporarily edit `src/components/app-version-gate.tsx`'s `useEffect` to force a status for visual inspection only (do not commit this): replace the body of the `useEffect` with `setStatus("blocked");` and reload — confirm the full-screen block overlay covers the entire viewport with no visible way to dismiss it (try Escape key, clicking outside — nothing should close it). Repeat with `setStatus("update-available");` and confirm the banner appears at the top, the X button dismisses it, and the rest of the dashboard remains fully usable underneath. Revert the temporary edit back to the real `App.getInfo()` logic before committing.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/components/providers.tsx
@@ -333,26 +333,26 @@ git commit -m "Wire AppVersionGate into the app-wide Providers tree"
 **Interfaces:**
 - Consumes: everything from Tasks 1-4.
 
-- [ ] **Step 1: Re-run the Task 1 verification cases**
+- [x] **Step 1: Re-run the Task 1 verification cases**
 
 Since this project has no persistent test suite, re-confirm `classifyAppVersion` still behaves correctly by recreating and running the same disposable script from Task 1, Step 2 (`scripts/_verify-app-version.ts`), then deleting it again. Expected: all 7 cases print `PASS`.
 
-- [ ] **Step 2: Full type-check**
+- [x] **Step 2: Full type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no errors anywhere in the project.
 
-- [ ] **Step 3: Confirm `cap sync` state is committed and clean**
+- [x] **Step 3: Confirm `cap sync` state is committed and clean**
 
 Run: `npx cap sync android` again, then `git status`.
 Expected: no uncommitted changes appear — Task 2 already committed the generated files, and running sync again should be a no-op against a clean working tree.
 
-- [ ] **Step 4: Re-run the manual browser check from Task 4, Step 3**
+- [x] **Step 4: Re-run the manual browser check from Task 4, Step 3**
 
 Confirm once more, on the final committed code (not the temporary override), that:
 - In a normal browser, nothing renders differently than before this feature existed.
 - `AppVersionGate` gates purely on `Capacitor.isNativePlatform()`, so this is the full extent of what's testable outside a real Android device in this environment — actual on-device testing (confirming `App.getInfo()` returns the real `versionCode` from `android/app/build.gradle` and the three real status transitions) is the user's responsibility once they rebuild the APK outside this sandbox, per the established limitation from the earlier APK build attempt this session.
 
-- [ ] **Step 5: Commit if any fixes were needed**
+- [x] **Step 5: Commit if any fixes were needed**
 
 If Steps 1-4 required any code changes to pass, commit them individually with descriptive messages before considering this plan complete. If everything already passed, no commit is needed for this task.
