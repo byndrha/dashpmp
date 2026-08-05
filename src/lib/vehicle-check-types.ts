@@ -31,11 +31,11 @@ export const JENIS_FOTO_LIST: JenisFotoKendaraan[] = [
 
 export const JENIS_FOTO_LABEL: Record<JenisFotoKendaraan, string> = {
   DEPAN: "Depan",
-  SAMPING_KANAN: "Samping Kanan",
-  SAMPING_KIRI: "Samping Kiri",
+  SAMPING_KANAN: "Kanan",
+  SAMPING_KIRI: "Kiri",
   BELAKANG: "Belakang",
-  BOX_MUATAN: "Box Muatan",
-  KABIN: "Kabin (Area Speedometer)",
+  BOX_MUATAN: "Muatan",
+  KABIN: "Kabin",
 };
 
 // The 4 physical sides a Satpam walks around, in the order

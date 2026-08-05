@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, HelpCircle, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -146,6 +146,13 @@ export function LiveInspeksiClient({
   const router = useRouter();
   const [activeSlot, setActiveSlot] = useState<JenisFotoKendaraan>("DEPAN");
   const [photos, setPhotos] = useState<Partial<Record<JenisFotoKendaraan, string>>>({});
+  // Local object URLs for the bottom-grid thumbnails — shown instead of the
+  // uploaded server path so a thumbnail never depends on a follow-up network
+  // request succeeding (production has shown broken-image icons here despite
+  // the upload itself succeeding). `photos` above still holds the real
+  // server path used for submission.
+  const [previewUrls, setPreviewUrls] = useState<Partial<Record<JenisFotoKendaraan, string>>>({});
+  const previewUrlsRef = useRef(previewUrls);
   const [uploading, setUploading] = useState<JenisFotoKendaraan | null>(null);
   const [odometerKM, setOdometerKM] = useState("");
   const [fuelBar, setFuelBar] = useState<FuelBar>(2);
@@ -156,9 +163,27 @@ export function LiveInspeksiClient({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    previewUrlsRef.current = previewUrls;
+  }, [previewUrls]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of Object.values(previewUrlsRef.current)) {
+        if (url) URL.revokeObjectURL(url);
+      }
+    };
+  }, []);
+
   async function handleCapture(file: File, jenisFoto: JenisFotoKendaraan) {
     setError(null);
     setUploading(jenisFoto);
+    const localUrl = URL.createObjectURL(file);
+    setPreviewUrls((prev) => {
+      const old = prev[jenisFoto];
+      if (old) URL.revokeObjectURL(old);
+      return { ...prev, [jenisFoto]: localUrl };
+    });
     try {
       const path = await uploadPhoto(file, jenisFoto, armadaId);
       setPhotos((prev) => ({ ...prev, [jenisFoto]: path }));
@@ -269,9 +294,9 @@ export function LiveInspeksiClient({
               )}
             >
               <div className="aspect-square w-full overflow-hidden rounded bg-muted/50">
-                {photos[j] ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- uploaded path, not a static build asset
-                  <img src={photos[j]} alt={JENIS_FOTO_LABEL[j]} className="h-full w-full object-cover" />
+                {previewUrls[j] ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- local object URL, not a static build asset
+                  <img src={previewUrls[j]} alt={JENIS_FOTO_LABEL[j]} className="h-full w-full object-cover" />
                 ) : null}
               </div>
               <span className={cn("text-[9px] font-bold uppercase", j === activeSlot ? "text-warning" : "text-muted-foreground")}>

@@ -7,3 +7,6 @@ project(':capacitor-geolocation').projectDir = new File('../node_modules/@capaci
 
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacitor/status-bar/android')
+
+include ':capgo-background-geolocation'
+project(':capgo-background-geolocation').projectDir = new File('../node_modules/@capgo/background-geolocation/android')
