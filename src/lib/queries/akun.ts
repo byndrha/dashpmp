@@ -390,6 +390,17 @@ export interface AkunSesiRow {
   lastSeenAt: string;
 }
 
+// Known limitation: this only reflects explicit revocation (revoked_at set
+// via the sesi-login-aktif admin "force logout" action). It does NOT account
+// for sessions whose JWT has naturally expired under NextAuth's default
+// maxAge (30 days, not overridden in auth.ts) — those rows are never marked
+// revoked_at or pruned. As a result, this list can include entries for
+// devices that are already effectively logged out simply because enough
+// time has passed. This is a disclosed, intentionally-deferred gap (not an
+// oversight): a proper fix needs a real design decision — e.g. filtering by
+// a staleness cutoff derived from maxAge, a scheduled/self-cleaning prune
+// similar to akun_lokasi's retention pattern, or explicitly tracking a
+// shorter maxAge in auth.ts — and is out of scope here.
 export async function listActiveSesi(): Promise<AkunSesiRow[]> {
   const pool = getPgPool();
   const result = await pool.query<{

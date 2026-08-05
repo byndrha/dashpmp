@@ -109,6 +109,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // token) is the revocation check: if this session was force-logged-out
       // from the sesi-login-aktif admin page, invalidate it immediately
       // rather than waiting for the JWT to naturally expire.
+      //
+      // Performance trade-off: this adds one extra Postgres query per
+      // authenticated request. Separately, background location tracking
+      // (src/components/location-tracking-bootstrap.tsx) calls the
+      // recordLokasiAction server action roughly every 90 seconds per active
+      // native-Android device, which also runs through this same jwt
+      // callback and therefore this same revocation check. That makes the
+      // check's call volume a continuous background baseline, not just a
+      // function of interactive user requests. Both lookups are indexed PK
+      // reads, and at this app's current scale (an internal company
+      // dashboard, not high request volume) this was assessed as an
+      // acceptable addition to the existing per-request trade-off above —
+      // documented here intentionally, not an oversight. If request/device
+      // volume grows significantly, revisit.
       if (typeof token.sessionId !== "string") return null;
       const valid = await checkAkunSesi(token.sessionId);
       if (!valid) return null;
