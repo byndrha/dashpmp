@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
@@ -12,6 +13,19 @@ import { Separator } from "@/components/ui/separator";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+
+  // Satpam accounts are confined to the mobile inspection UI at
+  // /satpam-app — this runs before any individual page's own
+  // requireXXX() guard, so it catches every route in this group (not
+  // just "/"), the same way the Marketing→/pemasaran redirect in
+  // (dashboard)/page.tsx already proves reliable for this exact pattern.
+  // (Proxy also attempts this same redirect, but is not reliably invoked
+  // for every route in this environment — this layout-level check is the
+  // real guarantee, proxy is best-effort UX only.)
+  if (session?.user?.isSatpam) {
+    redirect("/satpam-app");
+  }
+
   const [profile, perusahaanList] = await Promise.all([
     session?.user?.id ? getUserById(Number(session.user.id)) : Promise.resolve(null),
     listPerusahaanForSwitcher(),
