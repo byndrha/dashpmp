@@ -9,14 +9,21 @@ import { revokeSesiAction } from "@/app/grup/akun/sesi/actions";
 import type { AkunSesiRow } from "@/lib/queries/akun";
 
 export function AkunSesiList({ sesiList }: { sesiList: AkunSesiRow[] }) {
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [, startTransition] = useTransition();
 
   function handleRevoke(sesiId: string) {
-    setPendingId(sesiId);
+    setPendingIds((prev) => new Set(prev).add(sesiId));
     startTransition(async () => {
-      await revokeSesiAction(sesiId);
-      setPendingId(null);
+      try {
+        await revokeSesiAction(sesiId);
+      } finally {
+        setPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(sesiId);
+          return next;
+        });
+      }
     });
   }
 
@@ -46,7 +53,7 @@ export function AkunSesiList({ sesiList }: { sesiList: AkunSesiRow[] }) {
           <Button
             size="sm"
             variant="destructive"
-            disabled={pending && pendingId === s.sesiId}
+            disabled={pendingIds.has(s.sesiId)}
             onClick={() => handleRevoke(s.sesiId)}
           >
             <LogOut className="size-4" />
