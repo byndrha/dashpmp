@@ -17,6 +17,7 @@ declare module "next-auth" {
       permissions: PermissionMap;
       accountScope: AccountScope;
       perusahaanId: number | null;
+      sessionId: string;
     } & DefaultSession["user"];
   }
 
@@ -41,5 +42,6 @@ declare module "next-auth/jwt" {
     permissions: PermissionMap;
     accountScope: AccountScope;
     perusahaanId: number | null;
+    sessionId: string;
   }
 }

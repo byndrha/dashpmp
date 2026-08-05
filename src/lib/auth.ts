@@ -6,6 +6,9 @@ import {
   recordFailedLogin,
   recordSuccessfulLogin,
   getPermissionMapForPeran,
+  createAkunSesi,
+  checkAkunSesi,
+  touchAkunSesiLastSeen,
 } from "@/lib/queries/akun";
 import { fullPermissionMap } from "@/lib/permissions";
 
@@ -21,6 +24,7 @@ interface AuthorizedUser {
   permissions: ReturnType<typeof fullPermissionMap>;
   accountScope: AccountScope;
   perusahaanId: number | null;
+  sessionId: string;
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -56,6 +60,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         await recordSuccessfulLogin(row.id, ip);
 
+        const userAgent = request?.headers?.get("user-agent") ?? null;
+        const sessionId = await createAkunSesi(row.id, userAgent, ip);
+
         // Super Administrator bypasses the permission grid entirely, same
         // as before — now sourced from peran.is_super_admin instead of
         // DashboardRole.IsSuperAdmin. A Direktur account has no peran at
@@ -77,6 +84,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           permissions,
           accountScope: (row.perusahaanKode ?? "direktur") as AccountScope,
           perusahaanId: row.perusahaanId,
+          sessionId,
         };
         return user;
       },
@@ -94,6 +102,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.permissions = u.permissions;
         token.accountScope = u.accountScope;
         token.perusahaanId = u.perusahaanId;
+        token.sessionId = u.sessionId;
+        return token;
+      }
+      // Every subsequent call (no fresh `user` — just decoding an existing
+      // token) is the revocation check: if this session was force-logged-out
+      // from the sesi-login-aktif admin page, invalidate it immediately
+      // rather than waiting for the JWT to naturally expire.
+      if (typeof token.sessionId === "string") {
+        const valid = await checkAkunSesi(token.sessionId);
+        if (!valid) return null;
+        await touchAkunSesiLastSeen(token.sessionId);
       }
       return token;
     },
@@ -107,6 +126,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.permissions = token.permissions as ReturnType<typeof fullPermissionMap>;
         session.user.accountScope = token.accountScope as AccountScope;
         session.user.perusahaanId = token.perusahaanId as number | null;
+        session.user.sessionId = token.sessionId as string;
       }
       return session;
     },

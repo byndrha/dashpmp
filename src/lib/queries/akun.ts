@@ -349,3 +349,32 @@ export async function setPeranSatpam(peranId: number, isSatpam: boolean): Promis
   const pool = getPgPool();
   await pool.query(`UPDATE peran SET is_satpam = $1 WHERE id = $2`, [isSatpam, peranId]);
 }
+
+// ---------- Sesi login aktif (consumed by auth.ts's jwt callback) ----------
+
+export async function createAkunSesi(akunId: number, userAgent: string | null, ipAddress: string | null): Promise<string> {
+  const pool = getPgPool();
+  const result = await pool.query<{ id: string }>(
+    `INSERT INTO akun_sesi (akun_id, user_agent, ip_address) VALUES ($1, $2, $3) RETURNING id`,
+    [akunId, userAgent, ipAddress]
+  );
+  return result.rows[0].id;
+}
+
+export async function checkAkunSesi(sesiId: string): Promise<boolean> {
+  const pool = getPgPool();
+  const result = await pool.query<{ revoked_at: Date | null }>(
+    `SELECT revoked_at FROM akun_sesi WHERE id = $1`,
+    [sesiId]
+  );
+  if (result.rows.length === 0) return false;
+  return result.rows[0].revoked_at === null;
+}
+
+export async function touchAkunSesiLastSeen(sesiId: string): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(
+    `UPDATE akun_sesi SET last_seen_at = now() WHERE id = $1 AND last_seen_at < now() - INTERVAL '5 minutes'`,
+    [sesiId]
+  );
+}
