@@ -12,6 +12,7 @@
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@capacitor/android": "^8.4.2",
+    "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.2",
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/ios": "^8.4.2",
