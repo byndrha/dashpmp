@@ -352,11 +352,30 @@ export async function setPeranSatpam(peranId: number, isSatpam: boolean): Promis
 
 // ---------- Sesi login aktif (consumed by auth.ts's jwt callback) ----------
 
+// Sessions are treated as stale (for both the listActiveSesi filter below
+// and the delete here) once they've gone quiet for longer than NextAuth's
+// default JWT maxAge (30 days, not overridden in auth.ts) — past that
+// point the underlying JWT can no longer validate anyway, active-revoke or
+// not. Deletion uses a longer window (90 days) than the display filter (30
+// days) so a session isn't physically removed the moment it drops off the
+// admin list, only once it's been stale for a while.
+const SESI_STALE_DAYS = 30;
+const SESI_RETENTION_DAYS = 90;
+
 export async function createAkunSesi(akunId: number, userAgent: string | null, ipAddress: string | null): Promise<string> {
   const pool = getPgPool();
   const result = await pool.query<{ id: string }>(
     `INSERT INTO akun_sesi (akun_id, user_agent, ip_address) VALUES ($1, $2, $3) RETURNING id`,
     [akunId, userAgent, ipAddress]
+  );
+  // Self-cleaning retention, same pattern as recordLokasi in
+  // akun-lokasi.ts: delete this same account's own long-stale sessions
+  // (revoked or simply inactive well past the point their JWT could still
+  // be valid) on every new login, so the table never grows unbounded
+  // without needing a scheduled job.
+  await pool.query(
+    `DELETE FROM akun_sesi WHERE akun_id = $1 AND last_seen_at < now() - INTERVAL '${SESI_RETENTION_DAYS} days'`,
+    [akunId]
   );
   return result.rows[0].id;
 }
@@ -390,17 +409,12 @@ export interface AkunSesiRow {
   lastSeenAt: string;
 }
 
-// Known limitation: this only reflects explicit revocation (revoked_at set
-// via the sesi-login-aktif admin "force logout" action). It does NOT account
-// for sessions whose JWT has naturally expired under NextAuth's default
-// maxAge (30 days, not overridden in auth.ts) — those rows are never marked
-// revoked_at or pruned. As a result, this list can include entries for
-// devices that are already effectively logged out simply because enough
-// time has passed. This is a disclosed, intentionally-deferred gap (not an
-// oversight): a proper fix needs a real design decision — e.g. filtering by
-// a staleness cutoff derived from maxAge, a scheduled/self-cleaning prune
-// similar to akun_lokasi's retention pattern, or explicitly tracking a
-// shorter maxAge in auth.ts — and is out of scope here.
+// Excludes both explicitly-revoked sessions AND ones that have simply gone
+// quiet for longer than SESI_STALE_DAYS — a session that hasn't been seen
+// in that long can no longer have a valid JWT under NextAuth's default
+// maxAge regardless of revoked_at, so showing it as "active" would be
+// misleading. See SESI_STALE_DAYS/SESI_RETENTION_DAYS above for the
+// self-cleaning delete that eventually removes these rows outright.
 export async function listActiveSesi(): Promise<AkunSesiRow[]> {
   const pool = getPgPool();
   const result = await pool.query<{
@@ -417,6 +431,7 @@ export async function listActiveSesi(): Promise<AkunSesiRow[]> {
      FROM akun_sesi s
      JOIN akun a ON a.id = s.akun_id
      WHERE s.revoked_at IS NULL
+       AND s.last_seen_at > now() - INTERVAL '${SESI_STALE_DAYS} days'
      ORDER BY s.last_seen_at DESC`
   );
   return result.rows.map((r) => ({
