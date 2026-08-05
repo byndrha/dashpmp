@@ -42,6 +42,8 @@ React yang membingungkan).
 ### `src/lib/action-result.ts` (baru)
 
 ```ts
+import { unstable_rethrow } from "next/navigation";
+
 export class AppError extends Error {}
 
 export type ActionResult<T> =
@@ -52,12 +54,27 @@ export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T
   try {
     return { success: true, data: await fn() };
   } catch (err) {
+    // Several actions call requireModuleAccess/requirePmputra/etc, which
+    // redirect() on failure — redirect() works by throwing a special
+    // Next.js control-flow error. unstable_rethrow lets that pass through
+    // untouched instead of being swallowed into a generic AppError-style
+    // response (see node_modules/next/dist/docs/.../unstable_rethrow.md).
+    unstable_rethrow(err);
     if (err instanceof AppError) return { success: false, error: err.message };
     console.error(err);
     return { success: false, error: "Terjadi kesalahan tak terduga. Silakan coba lagi." };
   }
 }
 ```
+
+**Penting:** `unstable_rethrow(err)` harus dipanggil di baris PALING ATAS
+blok `catch`, sebelum pengecekan apa pun — ini persis yang direkomendasikan
+dokumentasi resminya (`node_modules/next/dist/docs/01-app/03-api-reference/
+04-functions/unstable_rethrow.md`), supaya `redirect()`/`notFound()` yang
+dipanggil transitif oleh fungsi guard (`requireModuleAccess`,
+`requirePmputra`, `requireSuperAdmin`, dll — semuanya di
+`src/lib/require-access.ts`) tetap benar-benar melakukan redirect,
+bukan malah ditangkap sebagai "error tak terduga".
 
 `AppError` menandai "pesan ini sengaja ditulis untuk dibaca user" — begitu
 sebuah error adalah instance `AppError`, `runAction` meneruskan
