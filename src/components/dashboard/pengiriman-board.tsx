@@ -1288,6 +1288,14 @@ export function PengirimanBoard({
   const [createActivityArmadaId, setCreateActivityArmadaId] = useState<number | null>(null);
   const [editingActivity, setEditingActivity] = useState<ArmadaActivity | null>(null);
   const [editingSalesOrder, setEditingSalesOrder] = useState<UbahPemesananTarget | null>(null);
+  const [dragConflict, setDragConflict] = useState<{
+    info: ArmadaConflictInfo;
+    jadwalId: number;
+    targetArmadaId: number;
+    currentArmadaId: number;
+    newJamJadwal: Date | undefined; // undefined = time unchanged (pure armada-row move)
+    salesmanId: string | null;
+  } | null>(null);
   // Bumped every time UbahPemesananDialog closes (saved or cancelled — both
   // are handled the same way here) — RouteValidationDialog watches this to
   // refetch its stop list, since it deliberately stays open underneath
@@ -1359,6 +1367,29 @@ export function PengirimanBoard({
     goToDate(shiftDateISO(businessDate, deltaDays));
   }
 
+  async function commitDragMove(pending: {
+    jadwalId: number;
+    targetArmadaId: number;
+    currentArmadaId: number;
+    newJamJadwal: Date | undefined;
+    salesmanId: string | null;
+  }) {
+    if (pending.targetArmadaId !== pending.currentArmadaId) {
+      // Dropped on a different armada's row — reassigns the Jadwal
+      // there, carrying the new time along too if the drag also moved
+      // horizontally (a diagonal drag changes both at once).
+      const result = await updateJadwalArmadaAction(pending.jadwalId, pending.targetArmadaId, pending.newJamJadwal);
+      if (!result.success) toast.error(result.error);
+    } else if (pending.newJamJadwal != null) {
+      // Same armada, time-only reschedule-by-drag — driver stays as-is.
+      const result = await updateJadwalDriverTimeAction(pending.jadwalId, {
+        jamJadwal: pending.newJamJadwal,
+        salesmanId: pending.salesmanId,
+      });
+      if (!result.success) toast.error(result.error);
+    }
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const jadwalId = event.active.data.current?.jadwalId as number | undefined;
     if (jadwalId == null) return;
@@ -1391,31 +1422,23 @@ export function PengirimanBoard({
 
     if (targetArmadaId === current.ArmadaID && newTime == null) return; // dropped back where it started
 
+    const newJamJadwal = newTime != null ? resolveBusinessDateTime(businessDate, newTime) : undefined;
+    const candidateStart = newJamJadwal ?? new Date(current.JamJadwal);
+    const pending = {
+      jadwalId,
+      targetArmadaId,
+      currentArmadaId: current.ArmadaID,
+      newJamJadwal,
+      salesmanId: current.SalesmanID,
+    };
+
     startTransition(async () => {
-      if (targetArmadaId !== current.ArmadaID) {
-        // Dropped on a different armada's row — reassigns the Jadwal
-        // there, carrying the new time along too if the drag also moved
-        // horizontally (a diagonal drag changes both at once).
-        const result = await updateJadwalArmadaAction(
-          jadwalId,
-          targetArmadaId,
-          newTime != null ? resolveBusinessDateTime(businessDate, newTime) : undefined
-        );
-        if (!result.success) {
-          toast.error(result.error);
-          return;
-        }
-      } else if (newTime != null) {
-        // Same armada, time-only reschedule-by-drag — driver stays as-is.
-        const result = await updateJadwalDriverTimeAction(jadwalId, {
-          jamJadwal: resolveBusinessDateTime(businessDate, newTime),
-          salesmanId: current.SalesmanID,
-        });
-        if (!result.success) {
-          toast.error(result.error);
-          return;
-        }
+      const check = await checkArmadaConflictAction(targetArmadaId, candidateStart, current.TotalKantong, jadwalId);
+      if (check) {
+        setDragConflict({ info: check, ...pending });
+        return;
       }
+      await commitDragMove(pending);
     });
   }
 
@@ -1594,6 +1617,19 @@ export function PengirimanBoard({
         armadaList={armada}
         drivers={drivers}
       />
+      {dragConflict && (
+        <ArmadaConflictDialog
+          conflict={dragConflict.info}
+          onCancel={() => setDragConflict(null)}
+          onConfirm={() => {
+            const pending = dragConflict;
+            setDragConflict(null);
+            startTransition(async () => {
+              await commitDragMove(pending);
+            });
+          }}
+        />
+      )}
     </Card>
   );
 }
