@@ -53,8 +53,8 @@ export function MitraDetailDialog({
     setDetail(null);
     setEditingLocation(false);
     getMitraDetailAction(businessPartnerId)
-      .then((row) => {
-        if (!cancelled) setDetail(row);
+      .then((result) => {
+        if (!cancelled && result.success) setDetail(result.data);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -73,15 +73,15 @@ export function MitraDetailDialog({
   function handleSaveLocation() {
     if (!businessPartnerId || !draftLocation) return;
     startTransition(async () => {
-      try {
-        await setMitraLocationAction({ businessPartnerId, ...draftLocation });
-        setDetail((d) =>
-          d ? { ...d, Latitude: draftLocation.latitude, Longitude: draftLocation.longitude, GeoAlamat: draftLocation.alamat } : d
-        );
-        setEditingLocation(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menyimpan lokasi.");
+      const result = await setMitraLocationAction({ businessPartnerId, ...draftLocation });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setDetail((d) =>
+        d ? { ...d, Latitude: draftLocation.latitude, Longitude: draftLocation.longitude, GeoAlamat: draftLocation.alamat } : d
+      );
+      setEditingLocation(false);
     });
   }
 

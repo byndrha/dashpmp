@@ -284,13 +284,13 @@ function TargetButton({ businessPartnerId, target }: { businessPartnerId: string
       return;
     }
     startTransition(async () => {
-      try {
-        await updateMitraCapacityAction(businessPartnerId, parsed);
-        setOpen(false);
-        router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menyimpan target.");
+      const result = await updateMitraCapacityAction(businessPartnerId, parsed);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setOpen(false);
+      router.refresh();
     });
   }
 

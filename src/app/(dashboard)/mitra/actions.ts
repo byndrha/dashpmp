@@ -14,34 +14,44 @@ import {
 } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
-import { AppError } from "@/lib/action-result";
+import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
-export async function createMitraAction(input: MitraInput): Promise<string> {
-  const id = await createMitra(input);
-  revalidatePath("/mitra");
-  return id;
+export async function createMitraAction(input: MitraInput): Promise<ActionResult<string>> {
+  return runAction(async () => {
+    const id = await createMitra(input);
+    revalidatePath("/mitra");
+    return id;
+  });
 }
 
-export async function updateMitraAction(id: string, input: MitraInput) {
-  await updateMitra(id, input);
-  revalidatePath("/mitra");
+export async function updateMitraAction(id: string, input: MitraInput): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await updateMitra(id, input);
+    revalidatePath("/mitra");
+  });
 }
 
-export async function updateMitraCapacityAction(id: string, capacity: number | null) {
-  await updateMitraCapacity(id, capacity);
-  revalidatePath("/mitra");
-  revalidatePath("/transaksi");
+export async function updateMitraCapacityAction(id: string, capacity: number | null): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await updateMitraCapacity(id, capacity);
+    revalidatePath("/mitra");
+    revalidatePath("/transaksi");
+  });
 }
 
-export async function deleteMitraAction(id: string) {
-  await deleteMitra(id);
-  revalidatePath("/mitra");
+export async function deleteMitraAction(id: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await deleteMitra(id);
+    revalidatePath("/mitra");
+  });
 }
 
-export async function setMitraSuspendedAction(id: string, suspended: boolean) {
-  await setMitraSuspended(id, suspended);
-  revalidatePath("/mitra");
-  revalidatePath("/pemesanan");
+export async function setMitraSuspendedAction(id: string, suspended: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await setMitraSuspended(id, suspended);
+    revalidatePath("/mitra");
+    revalidatePath("/pemesanan");
+  });
 }
 
 export async function setMitraLocationAction(input: {
@@ -49,30 +59,39 @@ export async function setMitraLocationAction(input: {
   latitude: number;
   longitude: number;
   alamat: string | null;
-}) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) throw new AppError("Unauthorized");
+}): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) throw new AppError("Unauthorized");
 
-  await setMitraLocation({ ...input, userId });
-  revalidatePath("/mitra");
+    await setMitraLocation({ ...input, userId });
+    revalidatePath("/mitra");
+  });
 }
 
-export async function setMitraCompetitorAction(input: { businessPartnerId: string; kompetitor: string | null }) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) throw new AppError("Unauthorized");
+export async function setMitraCompetitorAction(input: {
+  businessPartnerId: string;
+  kompetitor: string | null;
+}): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) throw new AppError("Unauthorized");
 
-  await setMitraCompetitor({ ...input, userId });
-  revalidatePath("/mitra");
+    await setMitraCompetitor({ ...input, userId });
+    revalidatePath("/mitra");
+  });
 }
 
 // Read-only, fetched on demand (e.g. clicking a mitra name in Kinerja
 // Marketing) — same isAuthenticated-only baseline as the rest of this
 // already-gated (dashboard) route group, no extra role check needed.
-export async function getMitraDetailAction(businessPartnerId: string): Promise<MitraRow | null> {
-  const session = await auth();
-  if (!session?.user?.id) throw new AppError("Unauthorized");
+export async function getMitraDetailAction(businessPartnerId: string): Promise<ActionResult<MitraRow | null>> {
+  return runAction(async () => {
+    const session = await auth();
+    if (!session?.user?.id) throw new AppError("Unauthorized");
 
-  return getMitraDetail(businessPartnerId);
+    return getMitraDetail(businessPartnerId);
+  });
 }
