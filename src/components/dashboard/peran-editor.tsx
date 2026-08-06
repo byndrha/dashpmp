@@ -47,22 +47,23 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
   function handleSave() {
     setError(null);
     startTransition(async () => {
-      try {
-        await Promise.all([
-          ...MODULE_KEYS.map((key) =>
-            setPeranIzinAction({
-              peranId: peran.id,
-              moduleKey: key,
-              canView: map[key]?.canView ?? false,
-              canEdit: map[key]?.canEdit ?? false,
-            })
-          ),
-          setPeranSatpamAction(peran.id, isSatpam),
-        ]);
-        setDirty(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan otoritas.");
+      const results = await Promise.all([
+        ...MODULE_KEYS.map((key) =>
+          setPeranIzinAction({
+            peranId: peran.id,
+            moduleKey: key,
+            canView: map[key]?.canView ?? false,
+            canEdit: map[key]?.canEdit ?? false,
+          })
+        ),
+        setPeranSatpamAction(peran.id, isSatpam),
+      ]);
+      const failed = results.find((r) => !r.success);
+      if (failed && !failed.success) {
+        setError(failed.error);
+        return;
       }
+      setDirty(false);
     });
   }
 
@@ -70,10 +71,9 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     if (!confirm(`Hapus peran "${peran.nama}"?`)) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await deletePeranAction(peran.id);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menghapus peran.");
+      const result = await deletePeranAction(peran.id);
+      if (!result.success) {
+        setError(result.error);
       }
     });
   }
@@ -146,12 +146,12 @@ function CreatePeranDialog({
   function handleSubmit(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      try {
-        await createPeranAction(perusahaanId, String(formData.get("nama") ?? ""));
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menambah peran.");
+      const result = await createPeranAction(perusahaanId, String(formData.get("nama") ?? ""));
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onOpenChange(false);
     });
   }
 
