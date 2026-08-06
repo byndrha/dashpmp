@@ -316,7 +316,7 @@ function MergeExternalDialog({
   const [defaultJamJadwal, setDefaultJamJadwal] = useState<Date | null>(null);
   const [timeEdited, setTimeEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<ArmadaConflictInfo | null>(null);
+  const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; jamJadwal: Date } | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -325,6 +325,7 @@ function MergeExternalDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
     setTimeEdited(false);
+    setConflict(null);
     const ids = deliveries.map((d) => d.DeliveryOrderID);
     // Defaults to the latest underlying SalesOrder's own TransDate (not a
     // DeliveryOrder's own TransDate — confirmed live those don't reliably
@@ -375,7 +376,7 @@ function MergeExternalDialog({
     startTransition(async () => {
       const check = await checkArmadaConflictAction(armadaId, jamJadwal, totalKantong, null);
       if (check) {
-        setConflict(check);
+        setConflict({ info: check, jamJadwal });
         return;
       }
       doMerge(jamJadwal);
@@ -436,10 +437,10 @@ function MergeExternalDialog({
     </Dialog>
     {conflict && (
       <ArmadaConflictDialog
-        conflict={conflict}
+        conflict={conflict.info}
         onCancel={() => setConflict(null)}
         onConfirm={() => {
-          const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : new Date(`${date}T${time}:00`);
+          const jamJadwal = conflict.jamJadwal;
           setConflict(null);
           doMerge(jamJadwal);
         }}
