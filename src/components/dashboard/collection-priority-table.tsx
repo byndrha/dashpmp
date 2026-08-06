@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { Target, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,6 +153,14 @@ function PriorityCard({ row, onEdit }: { row: CollectionPriorityRow; onEdit: (ro
 export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[] }) {
   const [editing, setEditing] = useState<CollectionPriorityRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Tracks which row's dialog is currently open, read fresh (not via a
+  // closed-over `editing` reference) inside the async handlers below — a
+  // save/remove request in flight for row A whose dialog got dismissed (or
+  // replaced by row B's dialog) before the response arrives must not paint
+  // A's stale error over B's now-open dialog. Kept in a ref rather than
+  // state because it's read for a same-tick comparison after an await, not
+  // rendered.
+  const editingIdRef = useRef<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [page, setPage] = useState(1);
 
@@ -203,17 +211,20 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
   const pageRows = rest.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function openEditor(row: CollectionPriorityRow) {
+    editingIdRef.current = row.BusinessPartnerID;
     setError(null);
     setEditing(row);
   }
 
   function closeEditor() {
+    editingIdRef.current = null;
     setEditing(null);
     setError(null);
   }
 
   function handleSubmit(formData: FormData) {
     if (!editing) return;
+    const targetId = editing.BusinessPartnerID;
     const targetDate = formData.get("targetDate") as string;
     const targetAmount = formData.get("targetAmount") as string;
     const note = formData.get("note") as string;
@@ -221,11 +232,15 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
     setError(null);
     startTransition(async () => {
       const result = await saveCollectionTargetAction({
-        businessPartnerId: editing.BusinessPartnerID,
+        businessPartnerId: targetId,
         targetDate: targetDate || null,
         targetAmount: targetAmount ? Number(targetAmount) : null,
         note: note || null,
       });
+      // The dialog may have moved on to a different row (or closed) while
+      // this request was in flight — only touch state if it's still showing
+      // the row this request was actually for.
+      if (editingIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;
@@ -236,9 +251,11 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
 
   function handleRemove() {
     if (!editing) return;
+    const targetId = editing.BusinessPartnerID;
     setError(null);
     startTransition(async () => {
-      const result = await removeCollectionTargetAction(editing.BusinessPartnerID);
+      const result = await removeCollectionTargetAction(targetId);
+      if (editingIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;

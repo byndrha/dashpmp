@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { NotebookPen } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +106,11 @@ export function TopMitraPiutangPanel({ rows }: { rows: TopMitraPiutangRow[] }) {
   const [wilayahFilter, setWilayahFilter] = useState("all");
   const [editingNote, setEditingNote] = useState<TopMitraPiutangRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // See collection-priority-table.tsx's editingIdRef for why this exists:
+  // read fresh after an await so a save request for row A that resolves
+  // after the user has already switched to (or closed) row B's dialog can't
+  // paint A's stale error over B's dialog.
+  const editingNoteIdRef = useRef<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const wilayahOptions = useMemo(() => [...new Set(rows.map((r) => r.Wilayah))].sort(), [rows]);
@@ -116,21 +121,28 @@ export function TopMitraPiutangPanel({ rows }: { rows: TopMitraPiutangRow[] }) {
   }, [rows, wilayahFilter]);
 
   function openNoteEditor(row: TopMitraPiutangRow) {
+    editingNoteIdRef.current = row.BusinessPartnerID;
     setError(null);
     setEditingNote(row);
   }
 
   function closeNoteEditor() {
+    editingNoteIdRef.current = null;
     setEditingNote(null);
     setError(null);
   }
 
   function handleSaveNote(formData: FormData) {
     if (!editingNote) return;
+    const targetId = editingNote.BusinessPartnerID;
     const note = String(formData.get("note") ?? "").trim();
     setError(null);
     startTransition(async () => {
-      const result = await setMitraNoteAction({ businessPartnerId: editingNote.BusinessPartnerID, note: note || null });
+      const result = await setMitraNoteAction({ businessPartnerId: targetId, note: note || null });
+      // The dialog may have moved on to a different mitra (or closed) while
+      // this request was in flight — only touch state if it's still showing
+      // the mitra this request was actually for.
+      if (editingNoteIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;
