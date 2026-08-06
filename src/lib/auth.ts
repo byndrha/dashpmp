@@ -21,6 +21,8 @@ interface AuthorizedUser {
   roleId: number;
   isSuperAdmin: boolean;
   isSatpam: boolean;
+  isDriver: boolean;
+  salesmanId: string | null;
   permissions: ReturnType<typeof fullPermissionMap>;
   accountScope: AccountScope;
   perusahaanId: number | null;
@@ -81,6 +83,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           roleId: row.peranId ?? 0,
           isSuperAdmin: row.isSuperAdmin,
           isSatpam: row.isSatpam,
+          isDriver: row.isDriver,
+          salesmanId: row.salesmanId,
           permissions,
           accountScope: (row.perusahaanKode ?? "direktur") as AccountScope,
           perusahaanId: row.perusahaanId,
@@ -99,6 +103,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.roleId = u.roleId;
         token.isSuperAdmin = u.isSuperAdmin;
         token.isSatpam = u.isSatpam;
+        token.isDriver = u.isDriver;
+        token.salesmanId = u.salesmanId;
         token.permissions = u.permissions;
         token.accountScope = u.accountScope;
         token.perusahaanId = u.perusahaanId;
@@ -136,6 +142,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.roleId = token.roleId as number;
         session.user.isSuperAdmin = token.isSuperAdmin as boolean;
         session.user.isSatpam = token.isSatpam as boolean;
+        session.user.isDriver = token.isDriver as boolean;
+        session.user.salesmanId = token.salesmanId as string | null;
         session.user.permissions = token.permissions as ReturnType<typeof fullPermissionMap>;
         session.user.accountScope = token.accountScope as AccountScope;
         session.user.perusahaanId = token.perusahaanId as number | null;
