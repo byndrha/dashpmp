@@ -152,6 +152,7 @@ function PriorityCard({ row, onEdit }: { row: CollectionPriorityRow; onEdit: (ro
 
 export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[] }) {
   const [editing, setEditing] = useState<CollectionPriorityRow | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [page, setPage] = useState(1);
 
@@ -201,28 +202,48 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
   const pageCount = Math.max(1, Math.ceil(rest.length / PAGE_SIZE));
   const pageRows = rest.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  function openEditor(row: CollectionPriorityRow) {
+    setError(null);
+    setEditing(row);
+  }
+
+  function closeEditor() {
+    setEditing(null);
+    setError(null);
+  }
+
   function handleSubmit(formData: FormData) {
     if (!editing) return;
     const targetDate = formData.get("targetDate") as string;
     const targetAmount = formData.get("targetAmount") as string;
     const note = formData.get("note") as string;
 
+    setError(null);
     startTransition(async () => {
-      await saveCollectionTargetAction({
+      const result = await saveCollectionTargetAction({
         businessPartnerId: editing.BusinessPartnerID,
         targetDate: targetDate || null,
         targetAmount: targetAmount ? Number(targetAmount) : null,
         note: note || null,
       });
-      setEditing(null);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      closeEditor();
     });
   }
 
   function handleRemove() {
     if (!editing) return;
+    setError(null);
     startTransition(async () => {
-      await removeCollectionTargetAction(editing.BusinessPartnerID);
-      setEditing(null);
+      const result = await removeCollectionTargetAction(editing.BusinessPartnerID);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      closeEditor();
     });
   }
 
@@ -245,7 +266,7 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
       <CardContent className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {headline.map((r) => (
-            <PriorityCard key={r.BusinessPartnerID} row={r} onEdit={setEditing} />
+            <PriorityCard key={r.BusinessPartnerID} row={r} onEdit={openEditor} />
           ))}
           {headline.length === 0 && (
             <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
@@ -259,7 +280,7 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
             <p className="text-xs font-medium text-muted-foreground">Mitra lainnya dengan piutang berjalan</p>
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               {pageRows.map((r) => (
-                <PriorityCard key={r.BusinessPartnerID} row={r} onEdit={setEditing} />
+                <PriorityCard key={r.BusinessPartnerID} row={r} onEdit={openEditor} />
               ))}
             </div>
             <Pagination page={page} pageCount={pageCount} onChange={setPage} />
@@ -267,7 +288,7 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
         )}
       </CardContent>
 
-      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+      <Dialog open={!!editing} onOpenChange={(open) => !open && closeEditor()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Target Pelunasan &mdash; {editing?.CustomerName}</DialogTitle>
@@ -299,6 +320,7 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
               <Label htmlFor="note">Catatan</Label>
               <Input id="note" name="note" defaultValue={editing?.TargetNote ?? ""} />
             </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
             <DialogFooter className="gap-2 sm:justify-between">
               {editing?.IsTarget && (
                 <Button type="button" variant="destructive" onClick={handleRemove} disabled={pending}>

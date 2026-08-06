@@ -105,6 +105,7 @@ function MitraCard({ row, onEditNote }: { row: TopMitraPiutangRow; onEditNote: (
 export function TopMitraPiutangPanel({ rows }: { rows: TopMitraPiutangRow[] }) {
   const [wilayahFilter, setWilayahFilter] = useState("all");
   const [editingNote, setEditingNote] = useState<TopMitraPiutangRow | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const wilayahOptions = useMemo(() => [...new Set(rows.map((r) => r.Wilayah))].sort(), [rows]);
@@ -114,12 +115,27 @@ export function TopMitraPiutangPanel({ rows }: { rows: TopMitraPiutangRow[] }) {
     return [...scoped].sort((a, b) => ratioRank(b) - ratioRank(a)).slice(0, TOP_N);
   }, [rows, wilayahFilter]);
 
+  function openNoteEditor(row: TopMitraPiutangRow) {
+    setError(null);
+    setEditingNote(row);
+  }
+
+  function closeNoteEditor() {
+    setEditingNote(null);
+    setError(null);
+  }
+
   function handleSaveNote(formData: FormData) {
     if (!editingNote) return;
     const note = String(formData.get("note") ?? "").trim();
+    setError(null);
     startTransition(async () => {
-      await setMitraNoteAction({ businessPartnerId: editingNote.BusinessPartnerID, note: note || null });
-      setEditingNote(null);
+      const result = await setMitraNoteAction({ businessPartnerId: editingNote.BusinessPartnerID, note: note || null });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      closeNoteEditor();
     });
   }
 
@@ -154,13 +170,13 @@ export function TopMitraPiutangPanel({ rows }: { rows: TopMitraPiutangRow[] }) {
         ) : (
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
             {visibleRows.map((r) => (
-              <MitraCard key={r.BusinessPartnerID} row={r} onEditNote={setEditingNote} />
+              <MitraCard key={r.BusinessPartnerID} row={r} onEditNote={openNoteEditor} />
             ))}
           </div>
         )}
       </CardContent>
 
-      <Dialog open={!!editingNote} onOpenChange={(open) => !open && setEditingNote(null)}>
+      <Dialog open={!!editingNote} onOpenChange={(open) => !open && closeNoteEditor()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Catatan &mdash; {editingNote?.CustomerName}</DialogTitle>
@@ -172,6 +188,7 @@ export function TopMitraPiutangPanel({ rows }: { rows: TopMitraPiutangRow[] }) {
               </Label>
               <Textarea id="note" name="note" rows={4} defaultValue={editingNote?.TargetNote ?? ""} />
             </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={pending}>
                 {pending ? "Menyimpan..." : "Simpan Catatan"}

@@ -49,8 +49,9 @@ export function PelunasanDialog({
     // clicked — not derivable from render since it's an async network call.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInvoices(null);
-    getOutstandingInvoicesAction(businessPartnerId).then((rows) => {
-      if (cancelled) return;
+    getOutstandingInvoicesAction(businessPartnerId).then((result) => {
+      if (cancelled || !result.success) return;
+      const rows = result.data;
       setInvoices(rows);
       setLines(
         Object.fromEntries(rows.map((r) => [r.SalesInvoiceID, { checked: false, amount: String(r.Outstanding) }]))
@@ -89,20 +90,20 @@ export function PelunasanDialog({
     if (activeLines.length === 0) return;
 
     startTransition(async () => {
-      try {
-        const result = await recordPaymentAction({
-          businessPartnerId,
-          chartOfAccountId: channel,
-          allocations: activeLines.map(([salesInvoiceId, l]) => ({ salesInvoiceId, amount: Number(l.amount) })),
-        });
-        toast.success(
-          `Pembayaran ${result.voucherNo} tercatat — ${formatRupiah(result.totalAmount)}` +
-            (result.totalDeposit > 0 ? ` (termasuk deposit ${formatRupiah(result.totalDeposit)})` : "")
-        );
-        onOpenChange(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal mencatat pembayaran.");
+      const result = await recordPaymentAction({
+        businessPartnerId,
+        chartOfAccountId: channel,
+        allocations: activeLines.map(([salesInvoiceId, l]) => ({ salesInvoiceId, amount: Number(l.amount) })),
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      toast.success(
+        `Pembayaran ${result.data.voucherNo} tercatat — ${formatRupiah(result.data.totalAmount)}` +
+          (result.data.totalDeposit > 0 ? ` (termasuk deposit ${formatRupiah(result.data.totalDeposit)})` : "")
+      );
+      onOpenChange(false);
     });
   }
 
