@@ -341,13 +341,13 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
   function handleCreate(input: ArmadaInput) {
     setError(null);
     startTransition(async () => {
-      try {
-        await createArmadaAction(input);
-        setCreating(false);
-        setOpen(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan armada.");
+      const result = await createArmadaAction(input);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setCreating(false);
+      setOpen(true);
     });
   }
 
@@ -355,23 +355,22 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
     if (!editing) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await updateArmadaAction(editing.ArmadaID, input);
-        setEditing(null);
-        setOpen(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan armada.");
+      const result = await updateArmadaAction(editing.ArmadaID, input);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setEditing(null);
+      setOpen(true);
     });
   }
 
   function handleDelete(row: ArmadaRow) {
     if (!confirm(`Hapus armada "${row.Nama}"?`)) return;
     startTransition(async () => {
-      try {
-        await deleteArmadaAction(row.ArmadaID);
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Gagal menghapus armada.");
+      const result = await deleteArmadaAction(row.ArmadaID);
+      if (!result.success) {
+        alert(result.error);
       }
     });
   }

@@ -201,16 +201,16 @@ export function LiveInspeksiClient({
     if (!canSubmit || muatanQty == null) return;
     setError(null);
     startTransition(async () => {
-      try {
-        const photoList: VehicleCheckPhoto[] = JENIS_FOTO_LIST.map((jenisFoto) => ({
-          jenisFoto,
-          filePath: photos[jenisFoto] as string,
-        }));
-        await createVehicleCheckAction({ jadwalId, tipe, odometerKM: Number(odometerKM), fuelBar, muatanQty, photos: photoList });
-        router.push("/satpam-app");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan inspeksi.");
+      const photoList: VehicleCheckPhoto[] = JENIS_FOTO_LIST.map((jenisFoto) => ({
+        jenisFoto,
+        filePath: photos[jenisFoto] as string,
+      }));
+      const result = await createVehicleCheckAction({ jadwalId, tipe, odometerKM: Number(odometerKM), fuelBar, muatanQty, photos: photoList });
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      router.push("/satpam-app");
     });
   }
 

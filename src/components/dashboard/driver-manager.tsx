@@ -103,12 +103,12 @@ function DriverFormDialog({
       simTypes,
     };
     startTransition(async () => {
-      try {
-        await saveDriverProfileAction(input);
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan data driver.");
+      const result = await saveDriverProfileAction(input);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onOpenChange(false);
     });
   }
 
@@ -260,11 +260,17 @@ export function DriverManager({ drivers }: { drivers: DriverProfileRow[] }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DriverProfileRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function handleDelete(driver: DriverProfileRow) {
     if (!confirm(`Hapus data profil dashboard untuk "${driver.Name}"? Data Salesman ERP asli tidak akan terhapus.`)) return;
+    setError(null);
     setDeletingId(driver.SalesmanID);
-    deleteDriverProfileAction(driver.SalesmanID).finally(() => setDeletingId(null));
+    deleteDriverProfileAction(driver.SalesmanID)
+      .then((result) => {
+        if (!result.success) setError(result.error);
+      })
+      .finally(() => setDeletingId(null));
   }
 
   return (
@@ -279,6 +285,7 @@ export function DriverManager({ drivers }: { drivers: DriverProfileRow[] }) {
             <DialogTitle>Kelola Driver</DialogTitle>
             <DialogDescription>Data pribadi, SIM, jadwal kerja, dan visibilitas driver di dropdown.</DialogDescription>
           </DialogHeader>
+          {error && <p className="text-xs text-destructive">{error}</p>}
           <div className="flex flex-col divide-y rounded-lg border">
             {drivers.map((d) => (
               <div key={d.SalesmanID} className="flex items-center justify-between gap-2 px-3 py-2">
