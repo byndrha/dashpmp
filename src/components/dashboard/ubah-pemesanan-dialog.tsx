@@ -27,6 +27,9 @@ import {
   getEditableSalesOrderQtyAction,
   updateSalesOrderQtyAction,
 } from "@/app/(dashboard)/pemesanan/actions";
+import { checkArmadaConflictAction } from "@/app/(dashboard)/delivery/actions";
+import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
+import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import { formatKemasanQty } from "@/lib/format";
 
 const UNSET = "__unset__";
@@ -67,6 +70,7 @@ export function UbahPemesananDialog({
   const [initialQty5KG, setInitialQty5KG] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; deliveryDateTime: Date } | null>(null);
   const [pending, startTransition] = useTransition();
   // UbahPemesananDialog is a single persistent instance whose `target` is
   // swapped by the caller (Papan Pengiriman's stop list, the Pemesanan
@@ -74,10 +78,11 @@ export function UbahPemesananDialog({
   // CURRENTLY showing, resynced on every render straight from the `target`
   // prop rather than from an open/close event, since a dialog opened
   // externally never fires this component's own onOpenChange. handleSubmit
-  // makes up to three sequential awaited calls, so it's checked after EACH
-  // one — the dialog could move on to a different SO between any two of
-  // them, and a stale response must not paint its error (or close the
-  // dialog on stale success) over whichever SO is now open.
+  // makes up to four sequential awaited calls (qty updates, conflict check,
+  // reschedule), so it's checked after EACH one — the dialog could move on
+  // to a different SO between any two of them, and a stale response must
+  // not paint its error (or close the dialog on stale success) over
+  // whichever SO is now open.
   const targetIdRef = useRef<string | null>(target?.salesOrderId ?? null);
   targetIdRef.current = target?.salesOrderId ?? null;
 
@@ -88,6 +93,7 @@ export function UbahPemesananDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
+    setConflict(null);
     Promise.all([getCurrentAssignmentAction(target.salesOrderId), getEditableSalesOrderQtyAction(target.salesOrderId)])
       .then(([assignment, editableQty]) => {
         if (assignment) {
@@ -117,31 +123,32 @@ export function UbahPemesananDialog({
     (initialQty10KG == null || (qty10KG !== "" && Number(qty10KG) > 0)) &&
     (initialQty5KG == null || (qty5KG !== "" && Number(qty5KG) > 0));
 
-  function handleSubmit() {
-    if (!target || !canSubmit) return;
-    const targetId = target.salesOrderId;
-    setError(null);
+  async function applyQtyChanges(targetId: string): Promise<boolean> {
+    if (initialQty10KG != null && Number(qty10KG) !== initialQty10KG) {
+      const result = await updateSalesOrderQtyAction(targetId, "10kg", Number(qty10KG));
+      if (targetIdRef.current !== targetId) return false;
+      if (!result.success) {
+        setError(result.error);
+        return false;
+      }
+    }
+    if (initialQty5KG != null && Number(qty5KG) !== initialQty5KG) {
+      const result = await updateSalesOrderQtyAction(targetId, "5kg", Number(qty5KG));
+      if (targetIdRef.current !== targetId) return false;
+      if (!result.success) {
+        setError(result.error);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function doReschedule(targetId: string, deliveryDateTime: Date) {
     startTransition(async () => {
-      if (initialQty10KG != null && Number(qty10KG) !== initialQty10KG) {
-        const result = await updateSalesOrderQtyAction(targetId, "10kg", Number(qty10KG));
-        if (targetIdRef.current !== targetId) return;
-        if (!result.success) {
-          setError(result.error);
-          return;
-        }
-      }
-      if (initialQty5KG != null && Number(qty5KG) !== initialQty5KG) {
-        const result = await updateSalesOrderQtyAction(targetId, "5kg", Number(qty5KG));
-        if (targetIdRef.current !== targetId) return;
-        if (!result.success) {
-          setError(result.error);
-          return;
-        }
-      }
       const result = await reschedulePemesananAction({
         salesOrderId: targetId,
         armadaId: Number(armadaId),
-        deliveryDateTime: new Date(`${date}T${time}:00`),
+        deliveryDateTime,
         salesmanId: salesmanId === UNSET ? null : salesmanId,
       });
       if (targetIdRef.current !== targetId) return;
@@ -153,144 +160,186 @@ export function UbahPemesananDialog({
     });
   }
 
+  function handleSubmit() {
+    if (!target || !canSubmit) return;
+    const targetId = target.salesOrderId;
+    setError(null);
+    startTransition(async () => {
+      const qtyOk = await applyQtyChanges(targetId);
+      if (!qtyOk || targetIdRef.current !== targetId) return;
+
+      // Combined kantong-equivalent, matching JADWAL_KANTONG_EXPR's 5KG-halving
+      // convention used everywhere else in this file/app.
+      const candidateQty = (Number(qty10KG) || 0) + (Number(qty5KG) || 0) / 2;
+      const deliveryDateTime = new Date(`${date}T${time}:00`);
+      const check = await checkArmadaConflictAction(Number(armadaId), deliveryDateTime, candidateQty, null);
+      if (targetIdRef.current !== targetId) return;
+      if (check) {
+        setConflict({ info: check, deliveryDateTime });
+        return;
+      }
+      doReschedule(targetId, deliveryDateTime);
+    });
+  }
+
   return (
-    <Dialog open={target != null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Ubah Pemesanan</DialogTitle>
-          <DialogDescription>
-            Ganti armada, waktu, atau driver untuk pesanan ini saja — tidak memengaruhi SO lain pada keberangkatan yang
-            sama.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={target != null} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ubah Pemesanan</DialogTitle>
+            <DialogDescription>
+              Ganti armada, waktu, atau driver untuk pesanan ini saja — tidak memengaruhi SO lain pada keberangkatan
+              yang sama.
+            </DialogDescription>
+          </DialogHeader>
 
-        {target && (
-          <div className="flex flex-col gap-3">
-            <div className="rounded-lg border bg-muted/30 p-3 text-xs">
-              <p className="font-medium">{target.customerName}</p>
-              <p className="text-muted-foreground">
-                {target.wilayah} &middot; {formatKemasanQty(target.qty10KG, target.qty5KG)}
-              </p>
-            </div>
+          {target && (
+            <div className="flex flex-col gap-3">
+              <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+                <p className="font-medium">{target.customerName}</p>
+                <p className="text-muted-foreground">
+                  {target.wilayah} &middot; {formatKemasanQty(target.qty10KG, target.qty5KG)}
+                </p>
+              </div>
 
-            {loading ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">Memuat...</p>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="ubah-tanggal" className="sr-only">
-                      Tanggal Kirim
-                    </Label>
-                    <Input id="ubah-tanggal" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="ubah-jam" className="sr-only">
-                      Jam
-                    </Label>
-                    <Input id="ubah-jam" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="sr-only">Armada</Label>
-                    <Select value={armadaId} onValueChange={(v) => setArmadaId(v ?? UNSET)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Pilih armada">
-                          {(v: string) =>
-                            v === UNSET ? "Pilih armada" : (armadaList.find((a) => String(a.ArmadaID) === v)?.Nama ?? "Pilih armada")
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {armadaList.map((a) => (
-                          <SelectItem key={a.ArmadaID} value={String(a.ArmadaID)} disabled={a.Status !== "Baik"}>
-                            {a.Nama} {a.Status !== "Baik" && `(${a.Status})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="sr-only">Driver</Label>
-                    <Select value={salesmanId} onValueChange={(v) => setSalesmanId(v ?? UNSET)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Belum ditentukan">
-                          {(v: string) =>
-                            v === UNSET ? "Belum ditentukan" : (drivers.find((d) => d.SalesmanID === v)?.Name ?? "Belum ditentukan")
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={UNSET}>Belum ditentukan</SelectItem>
-                        {drivers.map((d) => (
-                          <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
-                            {d.Name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {(initialQty10KG != null || initialQty5KG != null) && (
+              {loading ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">Memuat...</p>
+              ) : (
+                <>
                   <div className="grid grid-cols-2 gap-2">
-                    {initialQty10KG != null && (
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="ubah-qty10" className="text-xs text-muted-foreground">
-                          Qty 10 KG (terjual)
-                        </Label>
-                        <Input
-                          id="ubah-qty10"
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          value={qty10KG}
-                          onChange={(e) => setQty10KG(e.target.value)}
-                        />
-                        {target.qty10KG - initialQty10KG > 0 && (
-                          <p className="text-[10px] text-muted-foreground">
-                            + {target.qty10KG - initialQty10KG} bonus (tidak diubah di sini)
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {initialQty5KG != null && (
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="ubah-qty5" className="text-xs text-muted-foreground">
-                          Qty 5 KG (terjual)
-                        </Label>
-                        <Input
-                          id="ubah-qty5"
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          value={qty5KG}
-                          onChange={(e) => setQty5KG(e.target.value)}
-                        />
-                        {target.qty5KG - initialQty5KG > 0 && (
-                          <p className="text-[10px] text-muted-foreground">
-                            + {target.qty5KG - initialQty5KG} bonus (tidak diubah di sini)
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="ubah-tanggal" className="sr-only">
+                        Tanggal Kirim
+                      </Label>
+                      <Input id="ubah-tanggal" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="ubah-jam" className="sr-only">
+                        Jam
+                      </Label>
+                      <Input id="ubah-jam" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                    </div>
                   </div>
-                )}
 
-                {error && <p className="text-xs text-destructive">{error}</p>}
-              </>
-            )}
-          </div>
-        )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="sr-only">Armada</Label>
+                      <Select value={armadaId} onValueChange={(v) => setArmadaId(v ?? UNSET)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pilih armada">
+                            {(v: string) =>
+                              v === UNSET
+                                ? "Pilih armada"
+                                : (armadaList.find((a) => String(a.ArmadaID) === v)?.Nama ?? "Pilih armada")
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {armadaList.map((a) => (
+                            <SelectItem key={a.ArmadaID} value={String(a.ArmadaID)} disabled={a.Status !== "Baik"}>
+                              {a.Nama} {a.Status !== "Baik" && `(${a.Status})`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="sr-only">Driver</Label>
+                      <Select value={salesmanId} onValueChange={(v) => setSalesmanId(v ?? UNSET)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Belum ditentukan">
+                            {(v: string) =>
+                              v === UNSET
+                                ? "Belum ditentukan"
+                                : (drivers.find((d) => d.SalesmanID === v)?.Name ?? "Belum ditentukan")
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={UNSET}>Belum ditentukan</SelectItem>
+                          {drivers.map((d) => (
+                            <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
+                              {d.Name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-        <DialogFooter>
-          <Button disabled={!canSubmit || pending || loading} onClick={handleSubmit}>
-            {pending ? "Menyimpan..." : "Simpan Perubahan"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+                  {(initialQty10KG != null || initialQty5KG != null) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {initialQty10KG != null && (
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="ubah-qty10" className="text-xs text-muted-foreground">
+                            Qty 10 KG (terjual)
+                          </Label>
+                          <Input
+                            id="ubah-qty10"
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            value={qty10KG}
+                            onChange={(e) => setQty10KG(e.target.value)}
+                          />
+                          {target.qty10KG - initialQty10KG > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                              + {target.qty10KG - initialQty10KG} bonus (tidak diubah di sini)
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {initialQty5KG != null && (
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="ubah-qty5" className="text-xs text-muted-foreground">
+                            Qty 5 KG (terjual)
+                          </Label>
+                          <Input
+                            id="ubah-qty5"
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            value={qty5KG}
+                            onChange={(e) => setQty5KG(e.target.value)}
+                          />
+                          {target.qty5KG - initialQty5KG > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                              + {target.qty5KG - initialQty5KG} bonus (tidak diubah di sini)
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {error && <p className="text-xs text-destructive">{error}</p>}
+                </>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button disabled={!canSubmit || pending || loading} onClick={handleSubmit}>
+              {pending ? "Menyimpan..." : "Simpan Perubahan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {conflict && (
+        <ArmadaConflictDialog
+          conflict={conflict.info}
+          onCancel={() => setConflict(null)}
+          onConfirm={() => {
+            if (!target) return;
+            const targetId = target.salesOrderId;
+            const { deliveryDateTime } = conflict;
+            setConflict(null);
+            doReschedule(targetId, deliveryDateTime);
+          }}
+        />
+      )}
+    </>
   );
 }
