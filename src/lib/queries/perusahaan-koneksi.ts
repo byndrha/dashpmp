@@ -1,5 +1,6 @@
 import { getPgPool } from "@/lib/pg";
 import { encryptSecret, decryptSecret } from "@/lib/crypto-secret";
+import { AppError } from "@/lib/action-result";
 
 export interface ResolvedKoneksi {
   host: string;
@@ -96,7 +97,7 @@ export async function upsertKoneksi(input: UpsertKoneksiInput): Promise<void> {
     [input.host, input.port, input.dbName, input.dbUser, input.perusahaanId, input.label]
   );
   if (result.rowCount === 0) {
-    throw new Error(`Koneksi "${input.label}" belum ada — password wajib diisi untuk membuat koneksi baru.`);
+    throw new AppError(`Koneksi "${input.label}" belum ada — password wajib diisi untuk membuat koneksi baru.`);
   }
 }
 

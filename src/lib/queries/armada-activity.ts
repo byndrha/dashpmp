@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import type { ArmadaActivityType, ArmadaActivity } from "@/lib/armada-activity-types";
+import { AppError } from "@/lib/action-result";
 
 // Constants/types moved to lib/armada-activity-types.ts (DB-free) so
 // pengiriman-board.tsx, a client component, can import them without
@@ -37,7 +38,7 @@ export interface CreateArmadaActivityInput {
 
 export async function createArmadaActivity(input: CreateArmadaActivityInput): Promise<number> {
   if (input.endTime <= input.startTime) {
-    throw new Error("Jam selesai harus setelah jam mulai.");
+    throw new AppError("Jam selesai harus setelah jam mulai.");
   }
   const pool = await getPool();
   const result = await pool
@@ -64,7 +65,7 @@ export interface UpdateArmadaActivityInput {
 
 export async function updateArmadaActivity(activityId: number, input: UpdateArmadaActivityInput): Promise<void> {
   if (input.endTime <= input.startTime) {
-    throw new Error("Jam selesai harus setelah jam mulai.");
+    throw new AppError("Jam selesai harus setelah jam mulai.");
   }
   const pool = await getPool();
   await pool

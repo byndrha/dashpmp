@@ -14,6 +14,7 @@ import {
 } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
+import { AppError } from "@/lib/action-result";
 
 export async function createMitraAction(input: MitraInput): Promise<string> {
   const id = await createMitra(input);
@@ -51,7 +52,7 @@ export async function setMitraLocationAction(input: {
 }) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) throw new AppError("Unauthorized");
 
   await setMitraLocation({ ...input, userId });
   revalidatePath("/mitra");
@@ -60,7 +61,7 @@ export async function setMitraLocationAction(input: {
 export async function setMitraCompetitorAction(input: { businessPartnerId: string; kompetitor: string | null }) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) throw new AppError("Unauthorized");
 
   await setMitraCompetitor({ ...input, userId });
   revalidatePath("/mitra");
@@ -71,7 +72,7 @@ export async function setMitraCompetitorAction(input: { businessPartnerId: strin
 // already-gated (dashboard) route group, no extra role check needed.
 export async function getMitraDetailAction(businessPartnerId: string): Promise<MitraRow | null> {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new AppError("Unauthorized");
 
   return getMitraDetail(businessPartnerId);
 }

@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { createSalesOrderManual, softDeleteSalesOrder, type KantongVariant } from "@/lib/queries/sales-order";
+import { AppError } from "@/lib/action-result";
 
 // '0127' ("Ambil Sendiri") — same code PARTNER_TYPE_CASE (aging.ts) already
 // treats as the TakeAway classification, confirmed against real historical
@@ -99,7 +100,7 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
       .input("soId", sql.VarChar(16), salesOrderId)
       .query(`SELECT BusinessPartnerID, DueDate, TermOfPaymentID FROM SalesOrder WHERE SalesOrderID = @soId`);
     const so = soResult.recordset[0] as { BusinessPartnerID: string; DueDate: Date; TermOfPaymentID: string } | undefined;
-    if (!so) throw new Error("Sales Order tidak ditemukan setelah dibuat.");
+    if (!so) throw new AppError("Sales Order tidak ditemukan setelah dibuat.");
 
     const sodResult = await pool
       .request()

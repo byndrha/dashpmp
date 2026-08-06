@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { getPriceLevelOptions } from "@/lib/queries/mitra";
+import { AppError } from "@/lib/action-result";
 
 // The only product a Pengajuan-approval Sales Order ever lines up — "Es Tube
 // Jual" (ItemID "019") is the same item getPriceLevelOptions() reads its
@@ -172,8 +173,8 @@ export interface CreateSalesOrderManualInput {
 // datetime, not a separately-entered due date — in this flow they're the
 // same moment by construction.
 export async function createSalesOrderManual(input: CreateSalesOrderManualInput): Promise<string> {
-  if (input.qtyKantong <= 0) throw new Error("Qty pemesanan harus lebih dari 0.");
-  if (input.bonusQty < 0) throw new Error("Bonus qty tidak boleh negatif.");
+  if (input.qtyKantong <= 0) throw new AppError("Qty pemesanan harus lebih dari 0.");
+  if (input.bonusQty < 0) throw new AppError("Bonus qty tidak boleh negatif.");
 
   const pool = await getPool();
   const variant = KANTONG_VARIANTS[input.variant];
@@ -187,13 +188,13 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
   const bp = bpResult.recordset[0] as
     | { TermOfPaymentID: string | null; Address: string | null; PriceLevel: number | null }
     | undefined;
-  if (!bp) throw new Error("Mitra tidak ditemukan.");
-  if (bp.PriceLevel == null) throw new Error("Mitra belum punya Price Level — atur dulu di modul Mitra.");
+  if (!bp) throw new AppError("Mitra tidak ditemukan.");
+  if (bp.PriceLevel == null) throw new AppError("Mitra belum punya Price Level — atur dulu di modul Mitra.");
 
   const priceLevels = await getPriceLevelOptions(variant.name);
   const priceLevelEntry = priceLevels.find((p) => p.Level === bp.PriceLevel);
   if (!priceLevelEntry) {
-    throw new Error(`Harga untuk varian ${variant.name} pada Price Level ${bp.PriceLevel} belum diatur.`);
+    throw new AppError(`Harga untuk varian ${variant.name} pada Price Level ${bp.PriceLevel} belum diatur.`);
   }
   const price = priceLevelEntry.Price;
   // Billed only on the ordered qty — the bonus row (below) is its own line
@@ -318,7 +319,7 @@ export async function getEditableSalesOrderQty(salesOrderId: string): Promise<Ed
 // same reason: editing an SO after its DO/SI already reflects the old Qty
 // would silently desync real ERP documents.
 export async function updateSalesOrderDetailQty(salesOrderId: string, variant: KantongVariant, newQty: number): Promise<void> {
-  if (!(newQty > 0)) throw new Error("Qty pemesanan harus lebih dari 0.");
+  if (!(newQty > 0)) throw new AppError("Qty pemesanan harus lebih dari 0.");
 
   const pool = await getPool();
 
@@ -327,7 +328,7 @@ export async function updateSalesOrderDetailQty(salesOrderId: string, variant: K
     .input("soId", sql.VarChar(16), salesOrderId)
     .query(`SELECT COUNT(*) AS Cnt FROM DeliveryOrder WHERE SalesOrderID = @soId AND IsDeleted = 0`);
   if ((doCheck.recordset[0] as { Cnt: number }).Cnt > 0) {
-    throw new Error("Pesanan ini sudah terkirim (DO sudah terbit) — Qty tidak bisa diubah dari sini.");
+    throw new AppError("Pesanan ini sudah terkirim (DO sudah terbit) — Qty tidak bisa diubah dari sini.");
   }
 
   const itemId = KANTONG_VARIANTS[variant].itemId;
@@ -338,7 +339,7 @@ export async function updateSalesOrderDetailQty(salesOrderId: string, variant: K
     .query(`SELECT SalesOrderDetailID, Price FROM SalesOrderDetail WHERE SalesOrderID = @soId AND ItemID = @itemId`);
   const row = existing.recordset[0] as { SalesOrderDetailID: string; Price: number } | undefined;
   if (!row) {
-    throw new Error(`Pesanan ini tidak memiliki baris ${variant === "10kg" ? "10 KG" : "5 KG"} untuk diubah.`);
+    throw new AppError(`Pesanan ini tidak memiliki baris ${variant === "10kg" ? "10 KG" : "5 KG"} untuk diubah.`);
   }
 
   const transaction = new sql.Transaction(pool);

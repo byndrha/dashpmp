@@ -9,6 +9,7 @@ import {
   deleteCashFlowExpense,
 } from "@/lib/queries/cash-flow-harian";
 import { getHPPBersih } from "@/lib/queries/hpp-bersih";
+import { AppError } from "@/lib/action-result";
 
 export async function saveCOABudgetAction(input: {
   chartOfAccountId: string;
@@ -18,7 +19,7 @@ export async function saveCOABudgetAction(input: {
 }) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) throw new AppError("Unauthorized");
 
   await setCOABudget({ ...input, userId });
   revalidatePath("/pnl");
@@ -31,7 +32,7 @@ export async function saveCashFlowDailyFiguresAction(input: {
 }) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) throw new AppError("Unauthorized");
 
   await saveCashFlowDailyFigures({ ...input, userId });
   revalidatePath("/pnl");
@@ -44,8 +45,8 @@ export async function addCashFlowExpenseAction(input: {
 }) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
-  if (!input.deskripsi.trim() || !(input.nominal > 0)) throw new Error("Data tidak valid");
+  if (!userId) throw new AppError("Unauthorized");
+  if (!input.deskripsi.trim() || !(input.nominal > 0)) throw new AppError("Data tidak valid");
 
   await addCashFlowExpense({ ...input, userId });
   revalidatePath("/pnl");
@@ -53,7 +54,7 @@ export async function addCashFlowExpenseAction(input: {
 
 export async function deleteCashFlowExpenseAction(id: number) {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new AppError("Unauthorized");
 
   await deleteCashFlowExpense(id);
   revalidatePath("/pnl");
@@ -64,7 +65,7 @@ export async function deleteCashFlowExpenseAction(id: number) {
 // the rest of /pnl which is already gated by requireModuleAccess).
 export async function getHPPBersihAction(year: number) {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new AppError("Unauthorized");
 
   return getHPPBersih(year);
 }

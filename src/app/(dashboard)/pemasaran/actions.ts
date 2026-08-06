@@ -24,11 +24,12 @@ import {
   type MarketingVisitLogEntry,
 } from "@/lib/queries/marketing-visit-log";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
+import { AppError } from "@/lib/action-result";
 
 export async function createPengajuanAction(input: PengajuanInput) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) throw new AppError("Unauthorized");
 
   await createPengajuan(input, userId);
   revalidatePath("/pemasaran");
@@ -39,9 +40,9 @@ export async function createPengajuanAction(input: PengajuanInput) {
 async function requireApprover() {
   const session = await auth();
   const user = session?.user;
-  if (!user) throw new Error("Unauthorized");
+  if (!user) throw new AppError("Unauthorized");
   if (!user.isSuperAdmin && !APPROVER_ROLE_IDS.includes(user.roleId)) {
-    throw new Error("Tidak punya izin menyetujui/menolak pengajuan");
+    throw new AppError("Tidak punya izin menyetujui/menolak pengajuan");
   }
   return user;
 }
@@ -65,8 +66,8 @@ export async function rejectPengajuanAction(pengajuanId: number, catatan: string
 export async function deletePengajuanAction(pengajuanId: number) {
   const session = await auth();
   const user = session?.user;
-  if (!user) throw new Error("Unauthorized");
-  if (!user.isSuperAdmin) throw new Error("Hanya Super Admin yang dapat menghapus pengajuan");
+  if (!user) throw new AppError("Unauthorized");
+  if (!user.isSuperAdmin) throw new AppError("Hanya Super Admin yang dapat menghapus pengajuan");
 
   await deletePengajuan(pengajuanId);
   revalidatePath("/pemasaran");
@@ -79,9 +80,9 @@ export async function deletePengajuanAction(pengajuanId: number) {
 async function requireWilayahManager() {
   const session = await auth();
   const user = session?.user;
-  if (!user) throw new Error("Unauthorized");
+  if (!user) throw new AppError("Unauthorized");
   if (!user.isSuperAdmin && !WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId)) {
-    throw new Error("Tidak punya izin mengatur cakupan wilayah Marketing");
+    throw new AppError("Tidak punya izin mengatur cakupan wilayah Marketing");
   }
   return user;
 }
@@ -125,7 +126,7 @@ export async function removeMarketingMitraAction(id: number) {
 export async function setMarketingPeriodSettingAction(input: { startDate: string; periodDays: number }) {
   const user = await requireWilayahManager();
   if (input.periodDays < 1 || input.periodDays > 62) {
-    throw new Error("Panjang periode harus antara 1 dan 62 hari.");
+    throw new AppError("Panjang periode harus antara 1 dan 62 hari.");
   }
   await setMarketingPeriodSetting({ ...input, userId: user.id });
   revalidatePath("/pemasaran");
@@ -134,7 +135,7 @@ export async function setMarketingPeriodSettingAction(input: { startDate: string
 export async function setWilayahPotentialTargetAction(input: { wilayah: string; potentialTarget: number }) {
   const user = await requireWilayahManager();
   if (input.potentialTarget < 0) {
-    throw new Error("Potensial target tidak boleh negatif.");
+    throw new AppError("Potensial target tidak boleh negatif.");
   }
   await setWilayahPotentialTarget({ ...input, userId: user.id });
   revalidatePath("/pemasaran");
@@ -145,7 +146,7 @@ export async function getMarketingVisitLogAction(
   dateISO: string
 ): Promise<MarketingVisitLogEntry | null> {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new AppError("Unauthorized");
 
   return getMarketingVisitLogForDate(businessPartnerId, dateISO);
 }
@@ -157,7 +158,7 @@ export async function saveMarketingVisitLogAction(input: {
 }) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) throw new AppError("Unauthorized");
 
   await saveMarketingVisitLog({ ...input, userId });
 }

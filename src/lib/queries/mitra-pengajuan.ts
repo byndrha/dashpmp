@@ -6,6 +6,7 @@ import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
 import { createSalesOrderFromPengajuan } from "@/lib/queries/sales-order";
 import { MARKETING_ROLE_ID, APPROVER_ROLE_IDS } from "@/lib/roles";
+import { AppError } from "@/lib/action-result";
 
 // More than 10 kantong reads as a reseller buying in bulk (Agen); 10 or
 // fewer as a direct retail outlet (Retail) — see PARTNER_TYPE_CASE in
@@ -222,7 +223,7 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
         WaktuPermintaanSampai: Date | null;
       }
     | undefined;
-  if (!row) throw new Error("Pengajuan tidak ditemukan atau sudah diproses");
+  if (!row) throw new AppError("Pengajuan tidak ditemukan atau sudah diproses");
 
   try {
     // Reuses the exact mitra-creation path the Mitra module's own "Tambah

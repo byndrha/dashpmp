@@ -7,6 +7,7 @@ import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
 import { estimateTravelMinutes, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
+import { AppError } from "@/lib/action-result";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
 // mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
@@ -458,7 +459,7 @@ async function assertWithinCapacity(pool: sql.ConnectionPool, armadaId: number, 
     .query(`SELECT KapasitasMaks FROM DashboardArmada WHERE ArmadaID = @armadaId AND IsDeleted = 0`);
   const kapasitasMaks = (armadaResult.recordset[0] as { KapasitasMaks: number | null } | undefined)?.KapasitasMaks;
   if (kapasitasMaks != null && totalQty > kapasitasMaks) {
-    throw new Error(`Total muatan (${totalQty} kantong) melebihi kapasitas maksimum armada (${kapasitasMaks} kantong).`);
+    throw new AppError(`Total muatan (${totalQty} kantong) melebihi kapasitas maksimum armada (${kapasitasMaks} kantong).`);
   }
 }
 
@@ -480,7 +481,7 @@ async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrd
   `);
   const maxTransDate = (result.recordset[0]?.MaxTransDate as Date | null) ?? null;
   if (maxTransDate && jamJadwal < maxTransDate) {
-    throw new Error(
+    throw new AppError(
       `Waktu pengiriman (${formatDate(jamJadwal)} ${formatTime(jamJadwal)}) tidak boleh sebelum waktu pemesanan SO terkait (${formatDate(maxTransDate)} ${formatTime(maxTransDate)}).`
     );
   }
@@ -662,7 +663,7 @@ async function mergeJadwalInto(
     .input("jadwalId", sql.Int, targetJadwalId)
     .query(`SELECT ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const targetRow = targetHeader.recordset[0] as { ArmadaID: number; JamJadwal: Date } | undefined;
-  if (!targetRow) throw new Error("Keberangkatan tujuan penggabungan tidak ditemukan.");
+  if (!targetRow) throw new AppError("Keberangkatan tujuan penggabungan tidak ditemukan.");
 
   const sourceDetails = await pool
     .request()
@@ -720,7 +721,7 @@ async function appendRowsToDraft(
     .input("jadwalId", sql.Int, targetJadwalId)
     .query(`SELECT ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const headerRow = header.recordset[0] as { ArmadaID: number; JamJadwal: Date } | undefined;
-  if (!headerRow) throw new Error("Keberangkatan tujuan penggabungan tidak ditemukan.");
+  if (!headerRow) throw new AppError("Keberangkatan tujuan penggabungan tidak ditemukan.");
 
   const newSalesOrderIds = rows.map((r) => r.salesOrderId);
   await overwriteOrderTimeIfAfter(pool, newSalesOrderIds, headerRow.JamJadwal);
@@ -806,7 +807,7 @@ export async function createJadwalDraft(input: {
   const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, input.armadaId, input.jamJadwal, candidateEnd, null);
   if (conflict) {
     if (conflict.status === "Terbit") {
-      throw new Error(
+      throw new AppError(
         `Armada ini diperkirakan masih dalam perjalanan (berangkat, estimasi kembali ${formatTime(conflict.end)}) — tidak bisa membuat keberangkatan baru yang tumpang tindih waktunya.`
       );
     }
@@ -903,7 +904,7 @@ export async function mergeExternalDeliveriesIntoJadwal(
   deliveryOrderIds: string[],
   jamJadwal: Date
 ): Promise<number> {
-  if (deliveryOrderIds.length === 0) throw new Error("Tidak ada DO yang dipilih.");
+  if (deliveryOrderIds.length === 0) throw new AppError("Tidak ada DO yang dipilih.");
   const pool = await getPool();
 
   const request = pool.request();
@@ -923,7 +924,7 @@ export async function mergeExternalDeliveriesIntoJadwal(
   const doRows = (doResult.recordset as { DeliveryOrderID: string; SalesOrderID: string; TransDate: Date }[]).sort(
     (a, b) => a.TransDate.getTime() - b.TransDate.getTime()
   );
-  if (doRows.length === 0) throw new Error("DO yang dipilih tidak ditemukan atau sudah masuk Jadwal lain.");
+  if (doRows.length === 0) throw new AppError("DO yang dipilih tidak ditemukan atau sudah masuk Jadwal lain.");
 
   await overwriteOrderTimeIfAfter(
     pool,
@@ -948,7 +949,7 @@ export async function mergeExternalDeliveriesIntoJadwal(
   const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, armadaId, jamJadwal, candidateEnd, null);
   if (conflict) {
     if (conflict.status === "Terbit") {
-      throw new Error(
+      throw new AppError(
         `Armada ini diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa menggabungkan DO ke keberangkatan baru yang tumpang tindih waktunya.`
       );
     }
@@ -1000,7 +1001,7 @@ export async function deleteJadwalDraft(jadwalId: number): Promise<void> {
     .query(`SELECT Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const status = (statusResult.recordset[0] as { Status: JadwalStatus } | undefined)?.Status;
   if (status !== "Draft") {
-    throw new Error("Hanya keberangkatan berstatus Draft yang bisa dibatalkan.");
+    throw new AppError("Hanya keberangkatan berstatus Draft yang bisa dibatalkan.");
   }
 
   // Header first, details second: if the second statement never runs (e.g.
@@ -1037,8 +1038,8 @@ export async function addSalesOrdersToJadwal(jadwalId: number, salesOrderIds: st
     .input("jadwalId", sql.Int, jadwalId)
     .query(`SELECT ArmadaID, Status, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const headerRow = header.recordset[0] as { ArmadaID: number; Status: JadwalStatus; JamJadwal: Date } | undefined;
-  if (!headerRow) throw new Error("Keberangkatan tidak ditemukan.");
-  if (headerRow.Status !== "Draft") throw new Error("Keberangkatan ini sudah berangkat, tidak bisa menambah SO.");
+  if (!headerRow) throw new AppError("Keberangkatan tidak ditemukan.");
+  if (headerRow.Status !== "Draft") throw new AppError("Keberangkatan ini sudah berangkat, tidak bisa menambah SO.");
   await assertJamJadwalNotBeforeOrders(pool, salesOrderIds, headerRow.JamJadwal);
 
   const existing = await pool
@@ -1114,8 +1115,8 @@ export async function updateJadwalDriverTime(
     .input("jadwalId", sql.Int, jadwalId)
     .query(`SELECT Status, ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number; JamJadwal: Date } | undefined;
-  if (!row) throw new Error("Keberangkatan tidak ditemukan.");
-  if (row.Status === "Terbit") throw new Error("Keberangkatan ini sudah rilis — tidak bisa diubah lagi.");
+  if (!row) throw new AppError("Keberangkatan tidak ditemukan.");
+  if (row.Status === "Terbit") throw new AppError("Keberangkatan ini sudah rilis — tidak bisa diubah lagi.");
 
   const detailResult = await pool
     .request()
@@ -1141,7 +1142,7 @@ export async function updateJadwalDriverTime(
     const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, row.ArmadaID, input.jamJadwal, candidateEnd, jadwalId);
     if (conflict) {
       if (conflict.status === "Terbit") {
-        throw new Error(
+        throw new AppError(
           `Waktu baru ini tumpang tindih dengan armada yang diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa diubah ke waktu tersebut.`
         );
       }
@@ -1178,8 +1179,8 @@ export async function updateJadwalArmada(jadwalId: number, newArmadaId: number, 
     .input("jadwalId", sql.Int, jadwalId)
     .query(`SELECT Status, ArmadaID, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const row = current.recordset[0] as { Status: JadwalStatus; ArmadaID: number; JamJadwal: Date } | undefined;
-  if (!row) throw new Error("Keberangkatan tidak ditemukan.");
-  if (row.Status === "Terbit") throw new Error("Keberangkatan ini sudah rilis — tidak bisa diubah lagi.");
+  if (!row) throw new AppError("Keberangkatan tidak ditemukan.");
+  if (row.Status === "Terbit") throw new AppError("Keberangkatan ini sudah rilis — tidak bisa diubah lagi.");
 
   const finalJamJadwal = jamJadwal ?? row.JamJadwal;
   if (row.ArmadaID === newArmadaId && finalJamJadwal.getTime() === row.JamJadwal.getTime()) {
@@ -1190,7 +1191,7 @@ export async function updateJadwalArmada(jadwalId: number, newArmadaId: number, 
     .request()
     .input("armadaId", sql.Int, newArmadaId)
     .query(`SELECT ArmadaID FROM DashboardArmada WHERE ArmadaID = @armadaId AND IsDeleted = 0`);
-  if (!targetArmada.recordset[0]) throw new Error("Armada tujuan tidak ditemukan.");
+  if (!targetArmada.recordset[0]) throw new AppError("Armada tujuan tidak ditemukan.");
 
   const detailResult = await pool
     .request()
@@ -1209,7 +1210,7 @@ export async function updateJadwalArmada(jadwalId: number, newArmadaId: number, 
   const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, newArmadaId, finalJamJadwal, candidateEnd, jadwalId);
   if (conflict) {
     if (conflict.status === "Terbit") {
-      throw new Error(
+      throw new AppError(
         `Armada tujuan diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa dipindah ke sana pada waktu ini.`
       );
     }
@@ -1352,9 +1353,9 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
     .input("jadwalId", sql.Int, jadwalId)
     .query(`SELECT ArmadaID, SalesmanID, Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const headerRow = header.recordset[0] as { ArmadaID: number; SalesmanID: string | null; Status: JadwalStatus } | undefined;
-  if (!headerRow) throw new Error("Keberangkatan tidak ditemukan.");
-  if (headerRow.Status !== "Draft") throw new Error("Muat untuk keberangkatan ini sudah selesai.");
-  if (!headerRow.SalesmanID) throw new Error("Driver wajib diisi sebelum menyelesaikan muat.");
+  if (!headerRow) throw new AppError("Keberangkatan tidak ditemukan.");
+  if (headerRow.Status !== "Draft") throw new AppError("Muat untuk keberangkatan ini sudah selesai.");
+  if (!headerRow.SalesmanID) throw new AppError("Driver wajib diisi sebelum menyelesaikan muat.");
 
   // Server-side mirror of the client's mandatory route-computed check
   // (design spec: checked client- AND server-side) — a direct server-action
@@ -1362,10 +1363,10 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
   // the transaction below, so a failed route check never leaves the Jadwal
   // wrongly flipped to Terbit.
   const stopsForRouteCheck = await getJadwalDetail(jadwalId);
-  if (stopsForRouteCheck.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
+  if (stopsForRouteCheck.length === 0) throw new AppError("Tidak ada SO pada keberangkatan ini.");
   const missingCoords = stopsForRouteCheck.some((s) => s.Latitude == null || s.Longitude == null);
   if (missingCoords) {
-    throw new Error("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
+    throw new AppError("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
   }
   const pabrik = await getPabrikLocation();
   let validatedRoute: MultiPointRoute;
@@ -1376,7 +1377,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
       { lat: pabrik.latitude, lng: pabrik.longitude },
     ]);
   } catch {
-    throw new Error("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
+    throw new AppError("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
   }
 
   // Server-side mirror of the capacity hard-block already enforced when SOs
@@ -1409,7 +1410,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamSelesaiMuat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
       );
     if (claim.rowsAffected[0] === 0) {
-      throw new Error("Muat untuk keberangkatan ini sudah selesai atau sedang diproses.");
+      throw new AppError("Muat untuk keberangkatan ini sudah selesai atau sedang diproses.");
     }
 
     const armadaResult = await new sql.Request(transaction)
@@ -1422,7 +1423,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
     const armadaRow = armadaResult.recordset[0] as
       | { Nama: string; ExpeditionID: string | null; VehicleNo: string | null }
       | undefined;
-    if (!armadaRow) throw new Error("Armada sudah dihapus, tidak bisa menyelesaikan muat.");
+    if (!armadaRow) throw new AppError("Armada sudah dihapus, tidak bisa menyelesaikan muat.");
     const doVehicleNo = armadaRow.VehicleNo ?? armadaRow.Nama;
     const doExpeditionId = armadaRow.ExpeditionID ?? "";
 
@@ -1434,7 +1435,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         ORDER BY Urutan
       `);
     const detailRows = details.recordset as { JadwalDetailID: number; SalesOrderID: string; DeliveryOrderID: string | null }[];
-    if (detailRows.length === 0) throw new Error("Tidak ada SO pada keberangkatan ini.");
+    if (detailRows.length === 0) throw new AppError("Tidak ada SO pada keberangkatan ini.");
 
     for (const detail of detailRows) {
       // Idempotent-retry guard: if a previous selesaiMuat attempt already
@@ -1459,7 +1460,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         .input("soId", sql.VarChar(16), detail.SalesOrderID)
         .query(`SELECT BusinessPartnerID, DueDate, TermOfPaymentID FROM SalesOrder WHERE SalesOrderID = @soId`);
       const so = soResult.recordset[0] as SalesOrderForPublish | undefined;
-      if (!so) throw new Error(`Sales Order ${detail.SalesOrderID} tidak ditemukan.`);
+      if (!so) throw new AppError(`Sales Order ${detail.SalesOrderID} tidak ditemukan.`);
 
       const sodResult = await new sql.Request(transaction)
         .input("soId", sql.VarChar(16), detail.SalesOrderID)
@@ -1600,16 +1601,16 @@ export async function konfirmasiBerangkat(jadwalId: number): Promise<void> {
     .input("jadwalId", sql.Int, jadwalId)
     .query(`SELECT Status, JamAktualBerangkat FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const headerRow = header.recordset[0] as { Status: JadwalStatus; JamAktualBerangkat: Date | null } | undefined;
-  if (!headerRow) throw new Error("Keberangkatan tidak ditemukan.");
-  if (headerRow.Status !== "Terbit") throw new Error("Keberangkatan ini belum selesai dimuat.");
-  if (headerRow.JamAktualBerangkat) throw new Error("Keberangkatan ini sudah berangkat.");
+  if (!headerRow) throw new AppError("Keberangkatan tidak ditemukan.");
+  if (headerRow.Status !== "Terbit") throw new AppError("Keberangkatan ini belum selesai dimuat.");
+  if (headerRow.JamAktualBerangkat) throw new AppError("Keberangkatan ini sudah berangkat.");
 
   const check = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .query(`SELECT VehicleCheckID FROM DashboardVehicleCheck WHERE JadwalID = @jadwalId AND Tipe = 'BERANGKAT'`);
   if (check.recordset.length === 0) {
-    throw new Error("Belum ada Cek Berangkat dari Satpam.");
+    throw new AppError("Belum ada Cek Berangkat dari Satpam.");
   }
 
   const claim = await pool
@@ -1619,7 +1620,7 @@ export async function konfirmasiBerangkat(jadwalId: number): Promise<void> {
       `UPDATE DashboardPengirimanJadwal SET JamAktualBerangkat = GETDATE(), ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Terbit' AND JamAktualBerangkat IS NULL`
     );
   if (claim.rowsAffected[0] === 0) {
-    throw new Error("Keberangkatan ini sudah berangkat atau sedang diproses.");
+    throw new AppError("Keberangkatan ini sudah berangkat atau sedang diproses.");
   }
 }
 
@@ -1637,7 +1638,7 @@ export async function removeSalesOrderFromJadwal(jadwalId: number, salesOrderId:
     .query(`SELECT Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
   const status = (header.recordset[0] as { Status: JadwalStatus } | undefined)?.Status;
   if (status !== "Draft") {
-    throw new Error("Hanya SO pada keberangkatan berstatus Draft yang bisa diubah penjadwalannya.");
+    throw new AppError("Hanya SO pada keberangkatan berstatus Draft yang bisa diubah penjadwalannya.");
   }
 
   await pool

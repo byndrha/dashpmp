@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { canView, type ModuleKey, type PermissionMap } from "@/lib/permissions";
+import { AppError } from "@/lib/action-result";
 
 export type NotificationType = "PengajuanMitraBaru" | "SOBaru" | "SITerbayar";
 
@@ -88,7 +89,7 @@ export async function getScanState(sourceType: NotificationType): Promise<Date> 
     .input("sourceType", sql.VarChar(32), sourceType)
     .query(`SELECT LastScannedAt FROM DashboardNotificationScanState WHERE SourceType = @sourceType`);
   const row = result.recordset[0] as { LastScannedAt: Date } | undefined;
-  if (!row) throw new Error(`No scan state seeded for source type ${sourceType} — run the Task 0 migration.`);
+  if (!row) throw new AppError(`No scan state seeded for source type ${sourceType} — run the Task 0 migration.`);
   return row.LastScannedAt;
 }
 

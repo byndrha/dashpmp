@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { getPgPool } from "@/lib/pg";
 import { MODULE_KEYS, type ModuleKey, type PermissionMap } from "@/lib/permissions";
+import { AppError } from "@/lib/action-result";
 
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_MINUTES = 15;
@@ -128,10 +129,10 @@ export async function changeOwnPassword(input: {
   const pool = getPgPool();
   const result = await pool.query(`SELECT password_hash FROM akun WHERE id = $1`, [input.userId]);
   const row = result.rows[0] as { password_hash: string } | undefined;
-  if (!row) throw new Error("Akun tidak ditemukan.");
+  if (!row) throw new AppError("Akun tidak ditemukan.");
 
   const currentOk = await bcrypt.compare(input.currentPassword, row.password_hash);
-  if (!currentOk) throw new Error("Password saat ini salah.");
+  if (!currentOk) throw new AppError("Password saat ini salah.");
 
   const passwordHash = await bcrypt.hash(input.newPassword, 12);
   await pool.query(`UPDATE akun SET password_hash = $1, updated_at = now() WHERE id = $2`, [passwordHash, input.userId]);

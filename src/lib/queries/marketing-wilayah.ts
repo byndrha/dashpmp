@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { getPgPool } from "@/lib/pg";
 import { MARKETING_ROLE_ID } from "@/lib/roles";
+import { AppError } from "@/lib/action-result";
 
 export interface MarketingUserOption {
   UserID: string;
@@ -107,7 +108,7 @@ export async function addMarketingWilayah(input: {
       )
     `);
   if (result.rowsAffected[0] === 0) {
-    throw new Error("Wilayah/kecamatan ini sudah menjadi tanggung jawab Marketing lain.");
+    throw new AppError("Wilayah/kecamatan ini sudah menjadi tanggung jawab Marketing lain.");
   }
 }
 
@@ -231,7 +232,7 @@ export async function addMarketingMitra(input: {
       )
     `);
   if (result.rowsAffected[0] === 0) {
-    throw new Error("Mitra ini sudah memiliki Marketing penanggung jawab prioritas.");
+    throw new AppError("Mitra ini sudah memiliki Marketing penanggung jawab prioritas.");
   }
 }
 

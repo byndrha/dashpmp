@@ -16,27 +16,28 @@ import {
 import { getPabrikLocation, setPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getSiteSettings, setSiteSettings, type SiteSettings } from "@/lib/queries/site-settings";
 import { getDocTemplate, saveDocTemplate, type DocTemplate, type DocType } from "@/lib/queries/doc-template";
+import { AppError } from "@/lib/action-result";
 
 // Enforces the invariant from the design spec: an account is either
 // cross-company Direktur (both null) or PT-scoped with a role in that PT
 // (both set) — never a mismatched combination.
 function assertScopeConsistent(perusahaanId: number | null, peranId: number | null) {
   if ((perusahaanId == null) !== (peranId == null)) {
-    throw new Error("Akun harus terhubung ke Perusahaan DAN Peran sekaligus, atau menjadi akun Direktur (tanpa keduanya).");
+    throw new AppError("Akun harus terhubung ke Perusahaan DAN Peran sekaligus, atau menjadi akun Direktur (tanpa keduanya).");
   }
 }
 
 export async function createAkunAction(input: CreateAkunInput) {
   await requireGrupAccess();
   if (!input.nama.trim() || !input.username.trim() || input.password.length < 6) {
-    throw new Error("Nama, username wajib diisi dan password minimal 6 karakter.");
+    throw new AppError("Nama, username wajib diisi dan password minimal 6 karakter.");
   }
   assertScopeConsistent(input.perusahaanId, input.peranId);
   try {
     await createAkun(input);
   } catch (err) {
     if (err instanceof Error && /username_key/i.test(err.message)) {
-      throw new Error("Username sudah digunakan, pilih username lain.");
+      throw new AppError("Username sudah digunakan, pilih username lain.");
     }
     throw err;
   }
@@ -45,7 +46,7 @@ export async function createAkunAction(input: CreateAkunInput) {
 
 export async function updateAkunAction(input: UpdateAkunInput) {
   await requireGrupAccess();
-  if (!input.nama.trim()) throw new Error("Nama wajib diisi.");
+  if (!input.nama.trim()) throw new AppError("Nama wajib diisi.");
   assertScopeConsistent(input.perusahaanId, input.peranId);
 
   // The "last active superadmin" guard must be checked against the account's
@@ -71,7 +72,7 @@ export async function updateAkunAction(input: UpdateAkunInput) {
       if (!staysActiveSuperAdminInSamePt) {
         const remaining = await countActiveSuperAdmins(currentPerusahaanId, input.id);
         if (remaining === 0) {
-          throw new Error(
+          throw new AppError(
             "Tidak bisa menonaktifkan atau mengubah peran akun ini — minimal harus ada satu Super Administrator aktif di PT tersebut."
           );
         }
@@ -85,7 +86,7 @@ export async function updateAkunAction(input: UpdateAkunInput) {
 
 export async function resetAkunPasswordAction(id: number, newPassword: string) {
   await requireGrupAccess();
-  if (newPassword.length < 6) throw new Error("Password minimal 6 karakter.");
+  if (newPassword.length < 6) throw new AppError("Password minimal 6 karakter.");
   await resetAkunPassword(id, newPassword);
   revalidatePath("/grup/akun");
 }
@@ -93,7 +94,7 @@ export async function resetAkunPasswordAction(id: number, newPassword: string) {
 export async function deleteAkunAction(id: number) {
   const session = await requireGrupAccess();
   if (Number(session.user.id) === id) {
-    throw new Error("Tidak bisa menghapus akun Anda sendiri yang sedang digunakan untuk login.");
+    throw new AppError("Tidak bisa menghapus akun Anda sendiri yang sedang digunakan untuk login.");
   }
   // Only PT-scoped accounts have the "last active superadmin" guard —
   // Direktur accounts (perusahaanId null) skip it entirely.
@@ -101,7 +102,7 @@ export async function deleteAkunAction(id: number) {
   if (target?.perusahaanId != null) {
     const remaining = await countActiveSuperAdmins(target.perusahaanId, id);
     if (remaining === 0) {
-      throw new Error("Tidak bisa menghapus akun ini — minimal harus ada satu Super Administrator aktif di PT tersebut.");
+      throw new AppError("Tidak bisa menghapus akun ini — minimal harus ada satu Super Administrator aktif di PT tersebut.");
     }
   }
   await deleteAkun(id);
@@ -126,7 +127,7 @@ export async function getSiteSettingsAction() {
 
 export async function setSiteSettingsAction(input: SiteSettings): Promise<void> {
   await requireGrupAccess();
-  if (!input.title.trim()) throw new Error("Title tidak boleh kosong.");
+  if (!input.title.trim()) throw new AppError("Title tidak boleh kosong.");
   await setSiteSettings(input);
   revalidatePath("/grup/akun");
   revalidatePath("/", "layout");
@@ -139,7 +140,7 @@ export async function getDocTemplateAction(docType: DocType): Promise<DocTemplat
 
 export async function saveDocTemplateAction(input: DocTemplate): Promise<void> {
   await requireGrupAccess();
-  if (!input.headerTitle.trim()) throw new Error("Judul kop surat tidak boleh kosong.");
+  if (!input.headerTitle.trim()) throw new AppError("Judul kop surat tidak boleh kosong.");
   await saveDocTemplate(input);
   revalidatePath("/grup/akun");
 }

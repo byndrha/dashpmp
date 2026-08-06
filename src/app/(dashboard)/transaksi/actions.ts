@@ -8,6 +8,7 @@ import {
   type ContactType,
   type MitraContactLogEntry,
 } from "@/lib/queries/mitra-contact-log";
+import { AppError } from "@/lib/action-result";
 
 export async function getDeliveryCardsAction(salesOrderIds: string[]): Promise<DeliveryCard[]> {
   return getDeliveryCardsForOrders(salesOrderIds);
@@ -18,7 +19,7 @@ export async function getMitraContactLogAction(
   dateISO: string
 ): Promise<MitraContactLogEntry[]> {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new AppError("Unauthorized");
 
   return getMitraContactLogForDate(businessPartnerId, dateISO);
 }
@@ -33,7 +34,7 @@ export async function saveMitraContactLogAction(input: {
 }) {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) throw new AppError("Unauthorized");
 
   await saveMitraContactLog({ ...input, userId });
 }

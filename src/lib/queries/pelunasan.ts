@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { PAYMENT_CHANNELS, type RecordPaymentInput, type RecordPaymentResult } from "@/lib/pelunasan-types";
+import { AppError } from "@/lib/action-result";
 
 export type { PaymentChannelId, PaymentAllocationInput, RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
 export { PAYMENT_CHANNELS };
@@ -94,7 +95,7 @@ async function nextSPVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Pr
 // silently determine how much of a real cash amount posts as Deposit.
 export async function recordPayment(input: RecordPaymentInput): Promise<RecordPaymentResult> {
   const allocations = input.allocations.filter((a) => a.amount > 0);
-  if (allocations.length === 0) throw new Error("Tidak ada alokasi pembayaran yang valid.");
+  if (allocations.length === 0) throw new AppError("Tidak ada alokasi pembayaran yang valid.");
 
   const pool = await getPool();
   const invoiceIds = allocations.map((a) => a.salesInvoiceId);

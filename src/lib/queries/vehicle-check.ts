@@ -8,6 +8,7 @@ import {
   type VehicleCheckPhoto,
   type VehicleCheckRow,
 } from "@/lib/vehicle-check-types";
+import { AppError } from "@/lib/action-result";
 
 // Re-exported so existing server-side importers (upload route, server
 // actions) can keep doing `import { ... } from "@/lib/queries/vehicle-check"`
@@ -96,7 +97,7 @@ export async function createVehicleCheck(input: {
       .query(`SELECT Status FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
     const jadwalStatus = (jadwal.recordset[0] as { Status: string } | undefined)?.Status;
     if (jadwalStatus !== "Terbit") {
-      throw new Error("Cek kendaraan hanya dapat diisi untuk keberangkatan yang sudah Terbit.");
+      throw new AppError("Cek kendaraan hanya dapat diisi untuk keberangkatan yang sudah Terbit.");
     }
 
     const existing = await new sql.Request(transaction)
@@ -104,7 +105,7 @@ export async function createVehicleCheck(input: {
       .input("tipe", sql.VarChar(10), input.tipe)
       .query(`SELECT VehicleCheckID FROM DashboardVehicleCheck WHERE JadwalID = @jadwalId AND Tipe = @tipe`);
     if (existing.recordset.length > 0) {
-      throw new Error(
+      throw new AppError(
         input.tipe === "BERANGKAT"
           ? "Cek Berangkat untuk keberangkatan ini sudah pernah diisi."
           : "Cek Datang untuk keberangkatan ini sudah pernah diisi."

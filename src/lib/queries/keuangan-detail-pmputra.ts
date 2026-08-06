@@ -5,6 +5,7 @@ import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
 import { pmputraKategoriCase } from "@/lib/queries/pnl-pmputra";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
 import type { DateRangeFilter } from "@/types/dashboard";
+import { AppError } from "@/lib/action-result";
 
 const CREDIT_NORMAL: COAKategori[] = ["Pendapatan", "PenghasilanLainnya"];
 
@@ -24,7 +25,7 @@ function parseLabeledId(labeledId: string): { label: PmputraKoneksiLabel; id: st
   const label = idx === -1 ? "" : labeledId.slice(0, idx);
   const id = idx === -1 ? "" : labeledId.slice(idx + 1);
   if (label !== "utama" && label !== "logistik") {
-    throw new Error(`ChartOfAccountID tidak valid (tidak diawali label database): "${labeledId}"`);
+    throw new AppError(`ChartOfAccountID tidak valid (tidak diawali label database): "${labeledId}"`);
   }
   return { label, id };
 }
@@ -154,7 +155,7 @@ export async function setCOABudgetPmputra(input: {
 }): Promise<void> {
   const { label, id } = parseLabeledId(input.chartOfAccountId);
   if (label === "logistik") {
-    throw new Error(
+    throw new AppError(
       "Budget tidak dapat diatur untuk akun logistik — tabel Budget hanya ada di database utama."
     );
   }

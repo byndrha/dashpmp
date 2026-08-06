@@ -45,6 +45,7 @@ import {
   type FuelBar,
   type VehicleCheckPhoto,
 } from "@/lib/queries/vehicle-check";
+import { AppError } from "@/lib/action-result";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<number> {
   const id = await createArmada(input);
@@ -224,19 +225,19 @@ export async function createVehicleCheckAction(input: {
   // not bypassed by isSuperAdmin" note. A gate-check record is a physical-presence
   // claim, not a general permission.
   if (!session.user.isSatpam) {
-    throw new Error("Hanya Satpam yang dapat mengisi Cek Berangkat/Cek Datang.");
+    throw new AppError("Hanya Satpam yang dapat mengisi Cek Berangkat/Cek Datang.");
   }
   if (input.photos.length !== 6) {
-    throw new Error("Semua 6 foto kendaraan wajib diisi.");
+    throw new AppError("Semua 6 foto kendaraan wajib diisi.");
   }
   if (!(input.odometerKM > 0)) {
-    throw new Error("Odometer wajib diisi dengan angka yang valid.");
+    throw new AppError("Odometer wajib diisi dengan angka yang valid.");
   }
   if (!(Number.isInteger(input.fuelBar) && input.fuelBar >= 0 && input.fuelBar <= 4)) {
-    throw new Error("Fuel Meter wajib diisi.");
+    throw new AppError("Fuel Meter wajib diisi.");
   }
   if (!(input.muatanQty >= 0)) {
-    throw new Error("Jumlah muatan wajib diisi dengan angka 0 atau lebih.");
+    throw new AppError("Jumlah muatan wajib diisi dengan angka 0 atau lebih.");
   }
   await createVehicleCheck({ ...input, userId: session.user.id });
   revalidatePath("/delivery");

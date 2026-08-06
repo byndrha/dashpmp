@@ -12,6 +12,7 @@ import {
   findDraftJadwalByArmadaAndTime,
   addSalesOrdersToJadwal,
 } from "@/lib/queries/pengiriman-jadwal";
+import { AppError } from "@/lib/action-result";
 
 export interface CreatePemesananInput {
   businessPartnerId: string;
@@ -258,7 +259,7 @@ export async function updateSalesOrderTransDate(salesOrderId: string, transDate:
     .input("id", sql.VarChar(16), salesOrderId)
     .input("transDate", sql.DateTime, transDate)
     .query(`UPDATE SalesOrder SET TransDate = @transDate, ModifiedDate = GETDATE() WHERE SalesOrderID = @id AND IsDeleted = 0`);
-  if (result.rowsAffected[0] === 0) throw new Error("Sales Order tidak ditemukan.");
+  if (result.rowsAffected[0] === 0) throw new AppError("Sales Order tidak ditemukan.");
 }
 
 // Soft-deletes an SO from the Pemesanan list — only for orders that haven't
@@ -274,7 +275,7 @@ export async function deletePemesanan(salesOrderId: string): Promise<void> {
     .input("soId", sql.VarChar(16), salesOrderId)
     .query(`SELECT COUNT(*) AS Cnt FROM DeliveryOrder WHERE SalesOrderID = @soId AND IsDeleted = 0`);
   if ((doCheck.recordset[0] as { Cnt: number }).Cnt > 0) {
-    throw new Error("Pesanan ini sudah terkirim (DO sudah terbit) — tidak bisa dihapus.");
+    throw new AppError("Pesanan ini sudah terkirim (DO sudah terbit) — tidak bisa dihapus.");
   }
 
   const current = await getCurrentAssignment(salesOrderId);

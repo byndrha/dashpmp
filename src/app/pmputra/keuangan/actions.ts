@@ -9,6 +9,7 @@ import {
   deleteCashFlowExpensePmputra,
 } from "@/lib/queries/cash-flow-harian-pmputra";
 import { getHPPBersihPmputra } from "@/lib/queries/hpp-bersih-pmputra";
+import { AppError } from "@/lib/action-result";
 
 export async function saveCOABudgetPmputraAction(input: {
   chartOfAccountId: string;
@@ -37,7 +38,7 @@ export async function addCashFlowExpensePmputraAction(input: {
   nominal: number;
 }) {
   const session = await requirePmputra();
-  if (!input.deskripsi.trim() || !(input.nominal > 0)) throw new Error("Data tidak valid");
+  if (!input.deskripsi.trim() || !(input.nominal > 0)) throw new AppError("Data tidak valid");
   await addCashFlowExpensePmputra({ ...input, userId: session.user.id });
   revalidatePath("/pmputra/keuangan");
 }
