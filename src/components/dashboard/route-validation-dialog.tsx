@@ -681,7 +681,10 @@ export function RouteValidationDialog({
     photos: VehicleCheckPhoto[];
   }): Promise<void> {
     if (jadwalId == null) return;
-    await createVehicleCheckAction({ jadwalId, ...input });
+    const result = await createVehicleCheckAction({ jadwalId, ...input });
+    if (!result.success) {
+      throw new Error(result.error);
+    }
     const rows = await getVehicleChecksForJadwalAction(jadwalId);
     setVehicleChecks(rows);
   }

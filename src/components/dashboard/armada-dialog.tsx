@@ -345,15 +345,24 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
   // a stale success, discarding the other armada's in-progress edit) onto
   // whichever armada is now open.
   const editingIdRef = useRef<number | null>(null);
+  // Tracks whether the create dialog is still the one currently open, read
+  // fresh inside handleCreate after the await — the create dialog can be
+  // dismissed (Escape/outside-click, not blocked while the request is
+  // pending) and reopened for another create attempt (or an edit) before
+  // the response arrives, and that stale response must not paint its error
+  // (or force-close/reopen dialog state) onto whatever is now open.
+  const creatingRef = useRef(false);
 
   function handleCreate(input: ArmadaInput) {
     setError(null);
     startTransition(async () => {
       const result = await createArmadaAction(input);
+      if (!creatingRef.current) return;
       if (!result.success) {
         setError(result.error);
         return;
       }
+      creatingRef.current = false;
       setCreating(false);
       setOpen(true);
     });
@@ -404,6 +413,7 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
               className="self-end"
               onClick={() => {
                 setOpen(false);
+                creatingRef.current = true;
                 setCreating(true);
               }}
             >
@@ -467,7 +477,10 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
           open={creating}
           onOpenChange={(next) => {
             setCreating(next);
-            if (!next) setOpen(true);
+            if (!next) {
+              creatingRef.current = false;
+              setOpen(true);
+            }
           }}
           initial={emptyForm()}
           title="Tambah Armada"
