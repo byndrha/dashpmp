@@ -5,6 +5,7 @@ import { listAkun, listPerusahaanDirektori, listAllPeran } from "@/lib/queries/a
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getSiteSettings } from "@/lib/queries/site-settings";
 import { getDocTemplate } from "@/lib/queries/doc-template";
+import { getDriverProfiles } from "@/lib/queries/driver-profile";
 import { AkunList } from "@/components/dashboard/akun-list";
 import { PabrikLocationSettings } from "@/components/dashboard/pabrik-location-settings";
 import { SiteSettingsPanel } from "@/components/dashboard/site-settings-panel";
@@ -13,13 +14,14 @@ import { Button } from "@/components/ui/button";
 
 export default async function AkunPage() {
   await requireGrupAccess();
-  const [akunList, perusahaanList, peranList, pabrikLocation, siteSettings, docTemplate] = await Promise.all([
+  const [akunList, perusahaanList, peranList, pabrikLocation, siteSettings, docTemplate, driverProfiles] = await Promise.all([
     listAkun(),
     listPerusahaanDirektori(),
     listAllPeran(),
     getPabrikLocation(),
     getSiteSettings(),
     getDocTemplate("DeliveryOrder"),
+    getDriverProfiles(),
   ]);
 
   return (
@@ -41,7 +43,7 @@ export default async function AkunPage() {
         Kelola seluruh akun untuk setiap PT, termasuk akun Direktur PMP Group — hanya Super Administrator/Direktur
         yang dapat melihat dan mengatur halaman ini.
       </p>
-      <AkunList akunList={akunList} perusahaanList={perusahaanList} peranList={peranList} />
+      <AkunList akunList={akunList} perusahaanList={perusahaanList} peranList={peranList} driverProfiles={driverProfiles} />
       <PabrikLocationSettings initial={pabrikLocation} />
       <SiteSettingsPanel initial={siteSettings} />
       <DocTemplatePanel initial={docTemplate} />

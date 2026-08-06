@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import type { AkunRow, PerusahaanDirektoriOption, PeranRow, CreateAkunInput, UpdateAkunInput } from "@/lib/queries/akun";
+import type { DriverProfileRow } from "@/lib/queries/driver-profile";
 import { createAkunAction, updateAkunAction, resetAkunPasswordAction, deleteAkunAction } from "@/app/grup/akun/actions";
 
 const DIREKTUR_FILTER = "direktur";
@@ -89,11 +90,49 @@ function ScopeFields({
   );
 }
 
+function DriverLinkField({
+  driverProfiles,
+  peranList,
+  peranId,
+  salesmanId,
+  onSalesmanIdChange,
+}: {
+  driverProfiles: DriverProfileRow[];
+  peranList: PeranRow[];
+  peranId: number | null;
+  salesmanId: string | null;
+  onSalesmanIdChange: (id: string | null) => void;
+}) {
+  const isDriverRole = peranId != null && (peranList.find((p) => p.id === peranId)?.isDriver ?? false);
+  if (!isDriverRole) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label>Driver (Salesman)</Label>
+      <Select value={salesmanId ?? ""} onValueChange={(v) => onSalesmanIdChange(v || null)}>
+        <SelectTrigger className="w-full">
+          <SelectValue>{() => driverProfiles.find((d) => d.SalesmanID === salesmanId)?.Name ?? "Pilih driver"}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {driverProfiles.map((d) => (
+            <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
+              {d.Name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        Wajib diisi agar akun ini dapat login ke Aplikasi Driver dan melihat tugas miliknya sendiri.
+      </p>
+    </div>
+  );
+}
+
 function CreateDialog({
   open,
   onOpenChange,
   perusahaanList,
   peranList,
+  driverProfiles,
   onSubmit,
   pending,
   error,
@@ -102,12 +141,14 @@ function CreateDialog({
   onOpenChange: (open: boolean) => void;
   perusahaanList: PerusahaanDirektoriOption[];
   peranList: PeranRow[];
+  driverProfiles: DriverProfileRow[];
   onSubmit: (input: CreateAkunInput) => void;
   pending: boolean;
   error: string | null;
 }) {
   const [perusahaanId, setPerusahaanId] = useState<number | null>(null);
   const [peranId, setPeranId] = useState<number | null>(null);
+  const [salesmanId, setSalesmanId] = useState<string | null>(null);
 
   function handleSubmit(formData: FormData) {
     onSubmit({
@@ -118,6 +159,7 @@ function CreateDialog({
       nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
       perusahaanId,
       peranId,
+      salesmanId,
     });
   }
 
@@ -157,6 +199,13 @@ function CreateDialog({
             onPerusahaanChange={setPerusahaanId}
             onPeranChange={setPeranId}
           />
+          <DriverLinkField
+            driverProfiles={driverProfiles}
+            peranList={peranList}
+            peranId={peranId}
+            salesmanId={salesmanId}
+            onSalesmanIdChange={setSalesmanId}
+          />
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={pending || (perusahaanId != null && peranId == null)} className="ml-auto">
@@ -173,6 +222,7 @@ function EditDialog({
   akun,
   perusahaanList,
   peranList,
+  driverProfiles,
   onOpenChange,
   onSubmit,
   pending,
@@ -181,6 +231,7 @@ function EditDialog({
   akun: AkunRow;
   perusahaanList: PerusahaanDirektoriOption[];
   peranList: PeranRow[];
+  driverProfiles: DriverProfileRow[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: UpdateAkunInput) => void;
   pending: boolean;
@@ -189,6 +240,7 @@ function EditDialog({
   const [perusahaanId, setPerusahaanId] = useState<number | null>(akun.perusahaanId);
   const [peranId, setPeranId] = useState<number | null>(akun.peranId);
   const [status, setStatus] = useState(akun.isActive ? "active" : "inactive");
+  const [salesmanId, setSalesmanId] = useState<string | null>(akun.salesmanId);
 
   function handleSubmit(formData: FormData) {
     onSubmit({
@@ -199,6 +251,7 @@ function EditDialog({
       perusahaanId,
       peranId,
       isActive: status === "active",
+      salesmanId,
     });
   }
 
@@ -229,6 +282,13 @@ function EditDialog({
             peranId={peranId}
             onPerusahaanChange={setPerusahaanId}
             onPeranChange={setPeranId}
+          />
+          <DriverLinkField
+            driverProfiles={driverProfiles}
+            peranList={peranList}
+            peranId={peranId}
+            salesmanId={salesmanId}
+            onSalesmanIdChange={setSalesmanId}
           />
           <div className="flex flex-col gap-1.5">
             <Label>Status</Label>
@@ -299,10 +359,12 @@ export function AkunList({
   akunList,
   perusahaanList,
   peranList,
+  driverProfiles,
 }: {
   akunList: AkunRow[];
   perusahaanList: PerusahaanDirektoriOption[];
   peranList: PeranRow[];
+  driverProfiles: DriverProfileRow[];
 }) {
   const [filter, setFilter] = useState<string>(ALL_FILTER);
   const [creating, setCreating] = useState(false);
@@ -478,6 +540,11 @@ export function AkunList({
                   <Mail className="size-3" /> {a.email || "-"}
                 </span>
                 <span>Login terakhir: {a.lastLoginAt ? formatDate(a.lastLoginAt) : "-"}</span>
+                {a.salesmanId && (
+                  <span className="inline-flex items-center gap-1.5">
+                    Driver: {driverProfiles.find((d) => d.SalesmanID === a.salesmanId)?.Name ?? a.salesmanId}
+                  </span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -495,6 +562,7 @@ export function AkunList({
         }}
         perusahaanList={perusahaanList}
         peranList={peranList}
+        driverProfiles={driverProfiles}
         onSubmit={handleCreate}
         pending={pending}
         error={error}
@@ -505,6 +573,7 @@ export function AkunList({
           akun={editing}
           perusahaanList={perusahaanList}
           peranList={peranList}
+          driverProfiles={driverProfiles}
           onOpenChange={(open) => {
             if (!open) {
               editingIdRef.current = null;
