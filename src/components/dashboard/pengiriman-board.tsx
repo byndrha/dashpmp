@@ -192,16 +192,16 @@ function CreateJadwalDialog({
     if (armadaId == null || selected.size === 0) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await createJadwalDraftAction({
-          armadaId,
-          jamJadwal: resolveBusinessDateTime(businessDate, time),
-          salesOrderIds: [...selected],
-        });
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal membuat draft keberangkatan.");
+      const result = await createJadwalDraftAction({
+        armadaId,
+        jamJadwal: resolveBusinessDateTime(businessDate, time),
+        salesOrderIds: [...selected],
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onOpenChange(false);
     });
   }
 
@@ -352,13 +352,13 @@ function MergeExternalDialog({
     // route-validation-dialog.tsx's own buildJamJadwal().
     const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : new Date(`${date}T${time}:00`);
     startTransition(async () => {
-      try {
-        await mergeExternalDeliveriesAction(armadaId, deliveries.map((d) => d.DeliveryOrderID), jamJadwal);
-        onOpenChange(false);
-        onDone();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menggabungkan pengiriman.");
+      const result = await mergeExternalDeliveriesAction(armadaId, deliveries.map((d) => d.DeliveryOrderID), jamJadwal);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onOpenChange(false);
+      onDone();
     });
   }
 
@@ -672,27 +672,25 @@ function ArmadaActivityFormDialog({
     if (armadaId == null) return;
     setError(null);
     startTransition(async () => {
-      try {
-        if (editing) {
-          await updateArmadaActivityAction(editing.ActivityID, {
+      const result = editing
+        ? await updateArmadaActivityAction(editing.ActivityID, {
             activityType,
             startTime: resolveBusinessDateTime(businessDate, startTime),
             endTime: resolveBusinessDateTime(businessDate, endTime),
             notes: notes.trim() || null,
-          });
-        } else {
-          await createArmadaActivityAction({
+          })
+        : await createArmadaActivityAction({
             armadaId,
             activityType,
             startTime: resolveBusinessDateTime(businessDate, startTime),
             endTime: resolveBusinessDateTime(businessDate, endTime),
             notes: notes.trim() || null,
           });
-        }
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan aktivitas.");
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onOpenChange(false);
     });
   }
 
@@ -701,12 +699,12 @@ function ArmadaActivityFormDialog({
     if (!confirm(`Hapus aktivitas ${ARMADA_ACTIVITY_LABEL[editing.ActivityType]}?`)) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await deleteArmadaActivityAction(editing.ActivityID);
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menghapus aktivitas.");
+      const result = await deleteArmadaActivityAction(editing.ActivityID);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onOpenChange(false);
     });
   }
 
@@ -972,12 +970,12 @@ function ArmadaRowBoard({
   function handleUpdateArmada(input: ArmadaInput) {
     setEditError(null);
     startEditTransition(async () => {
-      try {
-        await updateArmadaAction(armada.ArmadaID, input);
-        setEditing(false);
-      } catch (err) {
-        setEditError(err instanceof Error ? err.message : "Gagal menyimpan armada.");
+      const result = await updateArmadaAction(armada.ArmadaID, input);
+      if (!result.success) {
+        setEditError(result.error);
+        return;
       }
+      setEditing(false);
     });
   }
 
@@ -1332,25 +1330,29 @@ export function PengirimanBoard({
     if (targetArmadaId === current.ArmadaID && newTime == null) return; // dropped back where it started
 
     startTransition(async () => {
-      try {
-        if (targetArmadaId !== current.ArmadaID) {
-          // Dropped on a different armada's row — reassigns the Jadwal
-          // there, carrying the new time along too if the drag also moved
-          // horizontally (a diagonal drag changes both at once).
-          await updateJadwalArmadaAction(
-            jadwalId,
-            targetArmadaId,
-            newTime != null ? resolveBusinessDateTime(businessDate, newTime) : undefined
-          );
-        } else if (newTime != null) {
-          // Same armada, time-only reschedule-by-drag — driver stays as-is.
-          await updateJadwalDriverTimeAction(jadwalId, {
-            jamJadwal: resolveBusinessDateTime(businessDate, newTime),
-            salesmanId: current.SalesmanID,
-          });
+      if (targetArmadaId !== current.ArmadaID) {
+        // Dropped on a different armada's row — reassigns the Jadwal
+        // there, carrying the new time along too if the drag also moved
+        // horizontally (a diagonal drag changes both at once).
+        const result = await updateJadwalArmadaAction(
+          jadwalId,
+          targetArmadaId,
+          newTime != null ? resolveBusinessDateTime(businessDate, newTime) : undefined
+        );
+        if (!result.success) {
+          toast.error(result.error);
+          return;
         }
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal mengubah jadwal.");
+      } else if (newTime != null) {
+        // Same armada, time-only reschedule-by-drag — driver stays as-is.
+        const result = await updateJadwalDriverTimeAction(jadwalId, {
+          jamJadwal: resolveBusinessDateTime(businessDate, newTime),
+          salesmanId: current.SalesmanID,
+        });
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
       }
     });
   }
