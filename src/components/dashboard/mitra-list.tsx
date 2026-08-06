@@ -359,7 +359,15 @@ export function MitraList({
   const [editing, setEditing] = useState<MitraRow | null>(null);
   const [pending, startTransition] = useTransition();
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Two independent error states, not one shared `error` — the create/edit
+  // dialog and the plain list (delete/suspend) are separate surfaces, and a
+  // failure in one must never bleed into the other (e.g. showing a stale
+  // "gagal menyimpan lokasi" banner over the list after a failed create
+  // dialog is dismissed, or a previous row's edit error appearing in a
+  // freshly-opened dialog for a different row). Matches driver-manager.tsx's
+  // split between its list-level `error` and its DriverFormDialog-local one.
+  const [formError, setFormError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
 
@@ -402,24 +410,24 @@ export function MitraList({
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleCreate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
-    setError(null);
+    setFormError(null);
     startTransition(async () => {
       const createResult = await createMitraAction(input);
       if (!createResult.success) {
-        setError(createResult.error);
+        setFormError(createResult.error);
         return;
       }
       if (location) {
         const locationResult = await setMitraLocationAction({ businessPartnerId: createResult.data, ...location });
         if (!locationResult.success) {
-          setError(locationResult.error);
+          setFormError(locationResult.error);
           return;
         }
       }
       if (kompetitor) {
         const competitorResult = await setMitraCompetitorAction({ businessPartnerId: createResult.data, kompetitor });
         if (!competitorResult.success) {
-          setError(competitorResult.error);
+          setFormError(competitorResult.error);
           return;
         }
       }
@@ -429,23 +437,23 @@ export function MitraList({
 
   function handleUpdate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
     if (!editing) return;
-    setError(null);
+    setFormError(null);
     startTransition(async () => {
       const updateResult = await updateMitraAction(editing.BusinessPartnerID, input);
       if (!updateResult.success) {
-        setError(updateResult.error);
+        setFormError(updateResult.error);
         return;
       }
       if (location) {
         const locationResult = await setMitraLocationAction({ businessPartnerId: editing.BusinessPartnerID, ...location });
         if (!locationResult.success) {
-          setError(locationResult.error);
+          setFormError(locationResult.error);
           return;
         }
       }
       const competitorResult = await setMitraCompetitorAction({ businessPartnerId: editing.BusinessPartnerID, kompetitor });
       if (!competitorResult.success) {
-        setError(competitorResult.error);
+        setFormError(competitorResult.error);
         return;
       }
       setEditing(null);
@@ -454,10 +462,10 @@ export function MitraList({
 
   function handleDelete(row: MitraRow) {
     if (!confirm(`Hapus mitra "${row.Name}"? Data akan disembunyikan (bisa dipulihkan lewat database).`)) return;
-    setError(null);
+    setListError(null);
     startTransition(async () => {
       const result = await deleteMitraAction(row.BusinessPartnerID);
-      if (!result.success) setError(result.error);
+      if (!result.success) setListError(result.error);
     });
   }
 
@@ -468,10 +476,10 @@ export function MitraList({
       !confirm(`Nonaktifkan mitra "${row.Name}"? Mitra ini tidak akan bisa dipilih untuk Pemesanan baru sampai diaktifkan kembali.`)
     )
       return;
-    setError(null);
+    setListError(null);
     startTransition(async () => {
       const result = await setMitraSuspendedAction(row.BusinessPartnerID, next);
-      if (!result.success) setError(result.error);
+      if (!result.success) setListError(result.error);
     });
   }
 
@@ -604,7 +612,12 @@ export function MitraList({
           </Select>
           </div>
         </div>
-        <Button onClick={() => setCreating(true)}>
+        <Button
+          onClick={() => {
+            setFormError(null);
+            setCreating(true);
+          }}
+        >
           <Plus className="size-4" />
           Tambah Mitra
         </Button>
@@ -614,7 +627,7 @@ export function MitraList({
         Menampilkan {pageRows.length} dari {filtered.length} mitra.
       </p>
 
-      {error && !creating && !editing && <p className="text-xs text-destructive">{error}</p>}
+      {listError && <p className="text-xs text-destructive">{listError}</p>}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {pageRows.map((m) => (
@@ -651,7 +664,15 @@ export function MitraList({
                       <Ban className="size-3.5 text-muted-foreground" />
                     )}
                   </Button>
-                  <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditing(m)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => {
+                      setFormError(null);
+                      setEditing(m);
+                    }}
+                  >
                     <Pencil className="size-3.5" />
                   </Button>
                   <Button variant="ghost" size="icon" className="size-7" onClick={() => handleDelete(m)}>
@@ -701,7 +722,10 @@ export function MitraList({
 
       <MitraFormDialog
         open={creating}
-        onOpenChange={setCreating}
+        onOpenChange={(open) => {
+          setCreating(open);
+          if (!open) setFormError(null);
+        }}
         initial={emptyForm()}
         initialLocation={null}
         initialKompetitor={null}
@@ -710,12 +734,17 @@ export function MitraList({
         priceLevels={priceLevels}
         onSubmit={handleCreate}
         pending={pending}
-        error={error}
+        error={formError}
       />
       {editing && (
         <MitraFormDialog
           open={!!editing}
-          onOpenChange={(open) => !open && setEditing(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditing(null);
+              setFormError(null);
+            }
+          }}
           initial={rowToForm(editing)}
           initialLocation={rowToLocation(editing)}
           initialKompetitor={editing.Kompetitor}
@@ -724,7 +753,7 @@ export function MitraList({
           priceLevels={priceLevels}
           onSubmit={handleUpdate}
           pending={pending}
-          error={error}
+          error={formError}
         />
       )}
     </div>
