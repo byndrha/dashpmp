@@ -50,13 +50,13 @@ function PotentialTargetButton({
       return;
     }
     startTransition(async () => {
-      try {
-        await setWilayahPotentialTargetAction({ wilayah, potentialTarget: parsed });
-        setOpen(false);
-        router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menyimpan potensial target.");
+      const result = await setWilayahPotentialTargetAction({ wilayah, potentialTarget: parsed });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setOpen(false);
+      router.refresh();
     });
   }
 

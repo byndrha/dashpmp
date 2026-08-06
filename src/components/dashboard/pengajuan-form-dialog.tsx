@@ -34,12 +34,14 @@ export function PengajuanFormDialog({
   priceLevels,
   onSubmit,
   pending,
+  error,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   priceLevels: PriceLevelOption[];
   onSubmit: (input: PengajuanInput) => void;
   pending: boolean;
+  error?: string | null;
 }) {
   const [wilayah, setWilayah] = useState("");
   const [kecamatan, setKecamatan] = useState("");
@@ -197,6 +199,9 @@ export function PengajuanFormDialog({
               <p className="text-xs text-destructive">Lokasi GPS wajib diisi — geser pin atau klik peta.</p>
             )}
           </div>
+          {error && (
+            <p className="col-span-2 text-xs text-destructive sm:col-span-4">{error}</p>
+          )}
           <DialogFooter className="col-span-2 sm:col-span-4">
             <Button type="submit" disabled={pending || !location} className="ml-auto">
               {pending ? "Mengirim..." : "Kirim Pengajuan"}

@@ -83,31 +83,30 @@ export function MarketingWilayahPanel({
       return;
     }
     startTransition(async () => {
-      try {
-        await addMarketingWilayahAction({
-          marketingUserId,
-          wilayah,
-          kecamatan: seluruhWilayah ? null : kecamatan,
-        });
-        resetForm();
-        router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menambah cakupan wilayah.");
+      const result = await addMarketingWilayahAction({
+        marketingUserId,
+        wilayah,
+        kecamatan: seluruhWilayah ? null : kecamatan,
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      resetForm();
+      router.refresh();
     });
   }
 
   function handleRemove(id: number) {
     setRemovingId(id);
     startTransition(async () => {
-      try {
-        await removeMarketingWilayahAction(id);
+      const result = await removeMarketingWilayahAction(id);
+      if (!result.success) {
+        toast.error(result.error);
+      } else {
         router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menghapus cakupan wilayah.");
-      } finally {
-        setRemovingId(null);
       }
+      setRemovingId(null);
     });
   }
 
@@ -117,28 +116,27 @@ export function MarketingWilayahPanel({
       return;
     }
     startMitraTransition(async () => {
-      try {
-        await addMarketingMitraAction({ marketingUserId: mitraMarketingUserId, businessPartnerId });
-        setMitraMarketingUserId("");
-        setBusinessPartnerId("");
-        router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menambah mitra prioritas.");
+      const result = await addMarketingMitraAction({ marketingUserId: mitraMarketingUserId, businessPartnerId });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setMitraMarketingUserId("");
+      setBusinessPartnerId("");
+      router.refresh();
     });
   }
 
   function handleRemoveMitra(id: number) {
     setRemovingMitraId(id);
     startMitraTransition(async () => {
-      try {
-        await removeMarketingMitraAction(id);
+      const result = await removeMarketingMitraAction(id);
+      if (!result.success) {
+        toast.error(result.error);
+      } else {
         router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menghapus mitra prioritas.");
-      } finally {
-        setRemovingMitraId(null);
       }
+      setRemovingMitraId(null);
     });
   }
 

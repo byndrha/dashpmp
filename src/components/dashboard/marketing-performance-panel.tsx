@@ -132,23 +132,30 @@ function MitraDayCell({
     if (!next) return;
     setLoading(true);
     getMarketingVisitLogAction(businessPartnerId, dateISO)
-      .then((entry) => {
-        setHasEntry(!!entry);
-        setHasilKunjungan(entry?.HasilKunjungan ?? "");
+      .then((result) => {
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        setHasEntry(!!result.data);
+        setHasilKunjungan(result.data?.HasilKunjungan ?? "");
       })
-      .catch(() => toast.error("Gagal memuat catatan kunjungan."))
       .finally(() => setLoading(false));
   }
 
   function handleSave() {
     startTransition(async () => {
-      try {
-        await saveMarketingVisitLogAction({ businessPartnerId, dateISO, hasilKunjungan: hasilKunjungan.trim() || null });
-        setHasEntry(true);
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menyimpan catatan kunjungan.");
+      const result = await saveMarketingVisitLogAction({
+        businessPartnerId,
+        dateISO,
+        hasilKunjungan: hasilKunjungan.trim() || null,
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setHasEntry(true);
+      setOpen(false);
     });
   }
 
@@ -479,13 +486,13 @@ function PeriodSettings({ rangeStartISO, periodDays }: { rangeStartISO: string; 
       return;
     }
     startTransition(async () => {
-      try {
-        await setMarketingPeriodSettingAction({ startDate, periodDays: parsedDays });
-        setOpen(false);
-        router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menyimpan pengaturan periode.");
+      const result = await setMarketingPeriodSettingAction({ startDate, periodDays: parsedDays });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setOpen(false);
+      router.refresh();
     });
   }
 

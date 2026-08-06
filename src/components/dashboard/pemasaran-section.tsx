@@ -21,20 +21,40 @@ export function PemasaranSection({
   isSuperAdmin: boolean;
 }) {
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function handleCreate(input: PengajuanInput) {
+    setError(null);
     startTransition(async () => {
-      await createPengajuanAction(input);
+      const result = await createPengajuanAction(input);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
       setCreating(false);
     });
+  }
+
+  // Also clears `error` on every dismissal path (X button, Escape,
+  // outside-click), not just a successful submit — same lesson as
+  // revenue-target-panel.tsx (Task 11), so a failed attempt's message can't
+  // still be sitting there the next time the dialog is reopened.
+  function handleOpenChange(open: boolean) {
+    setCreating(open);
+    if (!open) setError(null);
   }
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-sm font-semibold text-muted-foreground">Daftar Pengajuan Mitra</h2>
-        <Button onClick={() => setCreating(true)}>
+        <Button
+          onClick={() => {
+            setError(null);
+            setCreating(true);
+          }}
+        >
           <Plus className="size-4" />
           Pengajuan Baru
         </Button>
@@ -44,10 +64,11 @@ export function PemasaranSection({
 
       <PengajuanFormDialog
         open={creating}
-        onOpenChange={setCreating}
+        onOpenChange={handleOpenChange}
         priceLevels={priceLevels}
         onSubmit={handleCreate}
         pending={pending}
+        error={error}
       />
     </div>
   );

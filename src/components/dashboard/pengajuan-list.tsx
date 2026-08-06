@@ -139,11 +139,8 @@ export function PengajuanList({
   function handleApprove(row: PengajuanRow) {
     if (!confirm(`Setujui pengajuan "${row.NamaCalon}"? Mitra baru akan otomatis dibuat.`)) return;
     startTransition(async () => {
-      try {
-        await approvePengajuanAction(row.PengajuanID);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Gagal memproses pengajuan");
-      }
+      const result = await approvePengajuanAction(row.PengajuanID);
+      if (!result.success) toast.error(result.error);
     });
   }
 
@@ -151,23 +148,20 @@ export function PengajuanList({
     if (!rejecting) return;
     const id = rejecting.PengajuanID;
     startTransition(async () => {
-      try {
-        await rejectPengajuanAction(id, catatan);
-        setRejecting(null);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Gagal memproses pengajuan");
+      const result = await rejectPengajuanAction(id, catatan);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setRejecting(null);
     });
   }
 
   function handleDelete(row: PengajuanRow) {
     if (!confirm(`Hapus pengajuan "${row.NamaCalon}"? Tindakan ini tidak dapat dibatalkan.`)) return;
     startTransition(async () => {
-      try {
-        await deletePengajuanAction(row.PengajuanID);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Gagal menghapus pengajuan");
-      }
+      const result = await deletePengajuanAction(row.PengajuanID);
+      if (!result.success) toast.error(result.error);
     });
   }
 
