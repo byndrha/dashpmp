@@ -10,13 +10,16 @@ import type { AkunSesiRow } from "@/lib/queries/akun";
 
 export function AkunSesiList({ sesiList }: { sesiList: AkunSesiRow[] }) {
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   function handleRevoke(sesiId: string) {
+    setError(null);
     setPendingIds((prev) => new Set(prev).add(sesiId));
     startTransition(async () => {
       try {
-        await revokeSesiAction(sesiId);
+        const result = await revokeSesiAction(sesiId);
+        if (!result.success) setError(result.error);
       } finally {
         setPendingIds((prev) => {
           const next = new Set(prev);
@@ -33,6 +36,7 @@ export function AkunSesiList({ sesiList }: { sesiList: AkunSesiRow[] }) {
 
   return (
     <div className="flex flex-col gap-2">
+      {error && <p className="text-xs text-destructive">{error}</p>}
       {sesiList.map((s) => (
         <Card key={s.sesiId} className="flex flex-row items-center justify-between gap-3 p-4">
           <div className="flex min-w-0 items-start gap-3">
