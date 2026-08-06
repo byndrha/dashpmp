@@ -1,6 +1,6 @@
 # Armada Conflict Confirmation Dialog Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the current silent auto-merge into an overlapping Draft Jadwal (armada double-booking) with an explicit confirmation popup showing candidate/existing/combined quantities and a capacity warning, across all 6 UI trigger points that share this overlap-detection logic.
 
@@ -29,7 +29,7 @@
 - Consumes: `findOverlappingJadwalForArmada` (existing, private to this file), `sumSalesOrderQty` (existing, private), `getPabrikLocation` (existing import), `estimateDeliveryMinutes` from `@/lib/delivery-duration` (not yet imported in this file — add it).
 - Produces: `export interface ArmadaConflictInfo { jadwalId: number; jamJadwal: string; existingQty: number; candidateQty: number; combinedQty: number; kapasitasMaks: number | null; wouldExceedCapacity: boolean; }` and `export async function checkArmadaConflict(armadaId: number, candidateStart: Date, candidateQty: number, excludeJadwalId: number | null): Promise<ArmadaConflictInfo | null>` — consumed by Task 2.
 
-- [ ] **Step 1: Add the `estimateDeliveryMinutes` import**
+- [x] **Step 1: Add the `estimateDeliveryMinutes` import**
 
 Add to the existing import block near the top of `src/lib/queries/pengiriman-jadwal.ts` (alongside the other `@/lib/...` imports already there):
 
@@ -37,7 +37,7 @@ Add to the existing import block near the top of `src/lib/queries/pengiriman-jad
 import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
 ```
 
-- [ ] **Step 2: Write `ArmadaConflictInfo` and `checkArmadaConflict`**
+- [x] **Step 2: Write `ArmadaConflictInfo` and `checkArmadaConflict`**
 
 Add this after `findOverlappingJadwalForArmada`'s closing brace (around line 639, right before the `mergeJadwalInto` comment block):
 
@@ -113,12 +113,12 @@ export async function checkArmadaConflict(
 
 `sumSalesOrderQty` and `findOverlappingJadwalForArmada` are both already `async function` (not exported) in this same file, above this new code — no import needed, they're in scope.
 
-- [ ] **Step 3: Type-check**
+- [x] **Step 3: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/lib/queries/pengiriman-jadwal.ts
@@ -138,7 +138,7 @@ git commit -m "Add checkArmadaConflict query for armada-conflict confirmation"
 
 This is a plain read-only passthrough — no `runAction` wrapping (it can't throw a business `AppError`; `null` already means "nothing to show", matching this plan's Global Constraint that only actually-throwing actions get wrapped).
 
-- [ ] **Step 1: Add the import and action**
+- [x] **Step 1: Add the import and action**
 
 Add `checkArmadaConflict` and `type ArmadaConflictInfo` to the existing `from "@/lib/queries/pengiriman-jadwal"` import block in `src/app/(dashboard)/delivery/actions.ts`, then add near the other read-only actions (e.g. right after `getMaxSalesOrderTransDateForDeliveriesAction`):
 
@@ -153,12 +153,12 @@ export async function checkArmadaConflictAction(
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add "src/app/(dashboard)/delivery/actions.ts"
@@ -176,7 +176,7 @@ git commit -m "Add checkArmadaConflictAction server action"
 - Consumes: `type ArmadaConflictInfo` from `@/lib/queries/pengiriman-jadwal` (Task 1), `formatTime` from `@/lib/format` (existing).
 - Produces: `export function ArmadaConflictDialog({ conflict, onConfirm, onCancel }: { conflict: ArmadaConflictInfo; onConfirm: () => void; onCancel: () => void }): JSX.Element` — consumed by Tasks 4-9. Note this component takes the conflict as a required prop (not `| null`) — every call site conditionally renders it (`{conflict && <ArmadaConflictDialog .../>}`), so the component itself never needs to handle a null/closed state.
 
-- [ ] **Step 1: Write the component**
+- [x] **Step 1: Write the component**
 
 ```tsx
 "use client";
@@ -241,12 +241,12 @@ export function ArmadaConflictDialog({
 
 Verify `formatTime` in `src/lib/format.ts` accepts an ISO string (matching `conflict.jamJadwal`'s type) before assuming — read that function's signature; if it only accepts `Date`, wrap the call as `formatTime(new Date(conflict.jamJadwal))` instead.
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors (no consumers yet).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/dashboard/armada-conflict-dialog.tsx
@@ -343,14 +343,14 @@ import { checkArmadaConflictAction } from "@/app/(dashboard)/delivery/actions"; 
 import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal"; // add to the existing import block from this path
 ```
 
-- [ ] **Step 1: Apply the changes above**
+- [x] **Step 1: Apply the changes above**
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/dashboard/pengiriman-board.tsx
@@ -442,14 +442,14 @@ Render, as a sibling after this component's own `</Dialog>` closing tag:
 )}
 ```
 
-- [ ] **Step 1: Apply the changes above**
+- [x] **Step 1: Apply the changes above**
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/dashboard/pengiriman-board.tsx
@@ -614,14 +614,14 @@ Render, as a sibling near the board's other top-level dialogs (search for where 
 )}
 ```
 
-- [ ] **Step 1: Apply the changes above**
+- [x] **Step 1: Apply the changes above**
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/dashboard/pengiriman-board.tsx
@@ -745,14 +745,14 @@ Render the dialog once, near this component's other dialog-closing JSX (e.g. rig
 )}
 ```
 
-- [ ] **Step 1: Apply the changes above to both handlers**
+- [x] **Step 1: Apply the changes above to both handlers**
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/dashboard/route-validation-dialog.tsx
@@ -886,14 +886,14 @@ Render, as a sibling after this component's own `</Dialog>`:
 )}
 ```
 
-- [ ] **Step 1: Apply the changes above**
+- [x] **Step 1: Apply the changes above**
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/dashboard/pemesanan-form-dialog.tsx
@@ -1037,14 +1037,14 @@ Render, as a sibling after this component's own `</Dialog>`:
 )}
 ```
 
-- [ ] **Step 1: Apply the changes above**
+- [x] **Step 1: Apply the changes above**
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit`
 Expected: no new errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/dashboard/ubah-pemesanan-dialog.tsx
@@ -1061,24 +1061,24 @@ git commit -m "Add armada-conflict confirmation to Ubah Pemesanan"
 **Interfaces:**
 - Consumes: everything from Tasks 1-9.
 
-- [ ] **Step 1: Full type-check**
+- [x] **Step 1: Full type-check**
 
 Run: `npx tsc --noEmit`
 Expected: zero errors anywhere in the project.
 
-- [ ] **Step 2: Full lint**
+- [x] **Step 2: Full lint**
 
 Run: `npx eslint`
 Expected: zero errors; any warnings must be pre-existing (check against `git stash`/`git diff` if in doubt — do not introduce new warnings in the 5 touched files).
 
-- [ ] **Step 3: Manual/static verification of at least 2 flows**
+- [x] **Step 3: Manual/static verification of at least 2 flows**
 
 Pick one simple flow (Gabungkan jadi Jadwal or buat keberangkatan baru) and one complex flow (Buat Pemesanan or Ubah Pemesanan). If the dev server's login can be reached (start it via the project's `.claude/launch.json` "dev" config), manually trigger a real armada-double-booking scenario for each and confirm the popup shows correct quantities and the capacity-exceeded case disables "Gabungkan". If login access is unavailable in this environment (a constraint that recurred throughout this session's prior plan), do a careful static trace instead: read each flow's final code end-to-end and confirm the conflict-check → dialog → confirm → commit sequence is wired correctly and no path skips the check.
 
-- [ ] **Step 4: Confirm Terbit-conflict behavior is unchanged**
+- [x] **Step 4: Confirm Terbit-conflict behavior is unchanged**
 
 Read `updateJadwalDriverTime`, `updateJadwalArmada`, `createJadwalDraft`, and `mergeExternalDeliveriesIntoJadwal` in `src/lib/queries/pengiriman-jadwal.ts` one more time — confirm none of them were modified by this plan (Task 1 only ADDED `checkArmadaConflict` as a new function; it must not have touched any existing function's body). `git diff` against the plan's start commit for this file and confirm the diff is purely additive.
 
-- [ ] **Step 5: Commit any fixes found during verification**
+- [x] **Step 5: Commit any fixes found during verification**
 
 If Steps 1-4 required any code changes to pass, commit them individually with descriptive messages before considering this plan complete. If everything already passed, no commit is needed for this task.
