@@ -65,7 +65,7 @@ export interface ArmadaConflictInfo {
   jadwalId: number;
   jamJadwal: string; // JamJadwal Kartu Pengiriman tujuan, untuk ditampilkan di dialog
   existingQty: number; // kuantitas yang sudah ada di Kartu Pengiriman tujuan
-  candidateQty: number; // kuantitas kandidat (yang mau ditambahkan/dipindah)
+  candidateQty: number; // kuantitas kandidat (yang mau ditambahkan/dipindah) — echo balik dari parameter, untuk kenyamanan pemanggil
   combinedQty: number; // existingQty + candidateQty
   kapasitasMaks: number | null; // KapasitasMaks armada tujuan (null = tak terbatas/tak diatur)
   wouldExceedCapacity: boolean;
@@ -74,11 +74,33 @@ export interface ArmadaConflictInfo {
 export async function checkArmadaConflict(
   armadaId: number,
   candidateStart: Date,
-  candidateEnd: Date,
-  candidateSalesOrderIds: string[],
+  candidateQty: number,
   excludeJadwalId: number | null
 ): Promise<ArmadaConflictInfo | null>
 ```
+
+**Kenapa `candidateQty: number`, bukan daftar `SalesOrderID`:** untuk titik
+5 (Buat Pemesanan), Sales Order-nya belum ada di database saat pengecekan
+ini dijalankan — baru dibuat bersamaan dengan submit order itu sendiri
+(`createSalesOrderManual` di dalam `createPemesanan`). Jadi kandidat harus
+berupa angka kuantitas yang sudah diketahui pemanggilnya secara langsung
+(dari form/state client), bukan ID yang bisa dicari di DB. Setiap dari
+ke-6 titik trigger sudah punya angka kuantitas kandidatnya sendiri di
+client (mis. `selectedQty` di dialog Keberangkatan Baru,
+`totalKantong` di dialog Gabungkan jadi Jadwal, `TotalKantong` milik kartu
+yang di-drag, dst) — tidak perlu query tambahan untuk mendapatkannya.
+
+**Perkiraan jendela waktu sibuk untuk kandidat:** fungsi-fungsi yang sudah
+ada (`createJadwalDraft` dkk) menghitung `candidateEnd` lewat
+`estimateBusyMinutes` yang butuh SalesOrderID nyata (untuk lokasi/waktu
+tempuh tiap stop). Karena `checkArmadaConflict` tidak selalu punya
+SalesOrderID nyata, `candidateEnd` di sini dihitung lebih sederhana:
+`candidateStart + estimateDeliveryMinutes(candidateQty)` (formula durasi
+bongkar satu-stop yang sudah ada di `delivery-duration.ts`, tanpa
+tambahan waktu tempuh). Ini SENGAJA berupa perkiraan kasar — cukup akurat
+untuk memutuskan "perlu tampilkan popup konfirmasi atau tidak", karena
+penegakan aturan yang sesungguhnya (kapasitas & overlap presisi penuh)
+tetap ada di action mutasi asli seperti sekarang, tidak berubah.
 
 Memakai ulang `findOverlappingJadwalForArmada` (sudah ada, tidak diubah).
 Kalau tidak ada konflik, atau konfliknya berstatus Terbit, kembalikan `null`
