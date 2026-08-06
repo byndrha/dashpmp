@@ -30,16 +30,16 @@ function ProfileForm({ profile }: { profile: OwnProfile }) {
     setError(null);
     setSuccess(false);
     startTransition(async () => {
-      try {
-        await updateOwnProfileAction({
-          nama: String(formData.get("nama") ?? ""),
-          nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
-          email: String(formData.get("email") ?? "") || null,
-        });
-        setSuccess(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan profil.");
+      const result = await updateOwnProfileAction({
+        nama: String(formData.get("nama") ?? ""),
+        nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
+        email: String(formData.get("email") ?? "") || null,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setSuccess(true);
     });
   }
 
@@ -86,13 +86,13 @@ function PasswordForm() {
       return;
     }
     startTransition(async () => {
-      try {
-        await changeOwnPasswordAction({ currentPassword, newPassword });
-        setSuccess(true);
-        (document.getElementById("changePasswordForm") as HTMLFormElement | null)?.reset();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal mengubah password.");
+      const result = await changeOwnPasswordAction({ currentPassword, newPassword });
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setSuccess(true);
+      (document.getElementById("changePasswordForm") as HTMLFormElement | null)?.reset();
     });
   }
 
