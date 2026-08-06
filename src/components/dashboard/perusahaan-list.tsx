@@ -44,29 +44,36 @@ export function PerusahaanList({
   function handleSubmit(input: PerusahaanInput, koneksiBlocks: UpsertKoneksiInput[]) {
     setError(null);
     startTransition(async () => {
-      try {
-        if (target === "new") {
-          await createPerusahaanAction(input);
-        } else if (target) {
-          await updatePerusahaanAction(target.PerusahaanID, input);
+      if (target === "new") {
+        const result = await createPerusahaanAction(input);
+        if (!result.success) {
+          setError(result.error);
+          return;
         }
-        for (const block of koneksiBlocks) {
-          await upsertKoneksiAction(block);
+      } else if (target) {
+        const result = await updatePerusahaanAction(target.PerusahaanID, input);
+        if (!result.success) {
+          setError(result.error);
+          return;
         }
-        setTarget(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan PT.");
       }
+      for (const block of koneksiBlocks) {
+        const result = await upsertKoneksiAction(block);
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
+      }
+      setTarget(null);
     });
   }
 
   function handleDelete(row: PerusahaanRow) {
     if (!confirm(`Hapus PT "${row.Nama}"? Tindakan ini tidak dapat dibatalkan.`)) return;
     startTransition(async () => {
-      try {
-        await deletePerusahaanAction(row.PerusahaanID);
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Gagal menghapus PT.");
+      const result = await deletePerusahaanAction(row.PerusahaanID);
+      if (!result.success) {
+        alert(result.error);
       }
     });
   }
