@@ -638,6 +638,74 @@ async function findOverlappingJadwalForArmada(
   return null;
 }
 
+export interface ArmadaConflictInfo {
+  jadwalId: number;
+  jamJadwal: string;
+  existingQty: number;
+  candidateQty: number;
+  combinedQty: number;
+  kapasitasMaks: number | null;
+  wouldExceedCapacity: boolean;
+}
+
+// Decision-support check for the 6 UI flows that can silently fold a new
+// stop/departure into an already-Draft Jadwal for the same armada
+// (mergeExternalDeliveriesIntoJadwal, updateJadwalDriverTime,
+// updateJadwalArmada, createJadwalDraft, and pemesanan.ts's
+// createPemesanan/reschedulePemesanan, which call createJadwalDraft
+// internally). Returns non-null ONLY for a genuine Draft-status conflict —
+// a Terbit conflict returns null here so the caller proceeds straight to
+// the real mutating action, which still rejects it hard exactly as before
+// (this function never changes that behavior, it only adds a confirmation
+// step in front of the Draft-merge case that previously happened silently).
+//
+// candidateEnd is a deliberate approximation
+// (candidateStart + estimateDeliveryMinutes(candidateQty), no travel time)
+// rather than the full estimateBusyMinutes used elsewhere — candidateQty
+// is sometimes for an order that doesn't have a real SalesOrderID (and
+// therefore no known stop coordinates) yet, e.g. Buat Pemesanan. This is
+// fine because this function is purely "should we show a confirmation
+// popup", never the actual capacity/overlap gate — that stays in the real
+// mutating action, called after the user confirms, with full precision.
+export async function checkArmadaConflict(
+  armadaId: number,
+  candidateStart: Date,
+  candidateQty: number,
+  excludeJadwalId: number | null
+): Promise<ArmadaConflictInfo | null> {
+  const pool = await getPool();
+  const pabrikLocation = await getPabrikLocation();
+  const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
+  const candidateEnd = new Date(candidateStart.getTime() + estimateDeliveryMinutes(candidateQty) * 60 * 1000);
+  const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, armadaId, candidateStart, candidateEnd, excludeJadwalId);
+  if (!conflict || conflict.status !== "Draft") return null;
+
+  const detailResult = await pool
+    .request()
+    .input("jadwalId", sql.Int, conflict.jadwalId)
+    .query(`SELECT SalesOrderID FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const existingSalesOrderIds = (detailResult.recordset as { SalesOrderID: string }[]).map((r) => r.SalesOrderID);
+  const existingQty = await sumSalesOrderQty(pool, existingSalesOrderIds);
+
+  const armadaResult = await pool
+    .request()
+    .input("armadaId", sql.Int, armadaId)
+    .query(`SELECT KapasitasMaks FROM DashboardArmada WHERE ArmadaID = @armadaId AND IsDeleted = 0`);
+  const kapasitasMaks = (armadaResult.recordset[0] as { KapasitasMaks: number | null } | undefined)?.KapasitasMaks ?? null;
+
+  const combinedQty = existingQty + candidateQty;
+
+  return {
+    jadwalId: conflict.jadwalId,
+    jamJadwal: conflict.start.toISOString(),
+    existingQty,
+    candidateQty,
+    combinedQty,
+    kapasitasMaks,
+    wouldExceedCapacity: kapasitasMaks != null && combinedQty > kapasitasMaks,
+  };
+}
+
 // Moves every JadwalDetail row from `sourceJadwalId` onto `targetJadwalId`
 // (continuing target's own Urutan) and soft-deletes the now-empty source
 // header — used when updateJadwalDriverTime retimes a Draft into another
