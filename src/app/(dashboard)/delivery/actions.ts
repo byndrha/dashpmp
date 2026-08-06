@@ -18,8 +18,10 @@ import {
   getAvailableSalesOrders,
   mergeExternalDeliveriesIntoJadwal,
   getMaxSalesOrderTransDateForDeliveries,
+  checkArmadaConflict,
   type JadwalDetailRow,
   type AvailableSalesOrder,
+  type ArmadaConflictInfo,
 } from "@/lib/queries/pengiriman-jadwal";
 import {
   getArmadaActivities,
@@ -143,6 +145,15 @@ export async function updateJadwalArmadaAction(jadwalId: number, newArmadaId: nu
 export async function getMaxSalesOrderTransDateForDeliveriesAction(deliveryOrderIds: string[]): Promise<string | null> {
   const date = await getMaxSalesOrderTransDateForDeliveries(deliveryOrderIds);
   return date ? date.toISOString() : null;
+}
+
+export async function checkArmadaConflictAction(
+  armadaId: number,
+  candidateStart: Date,
+  candidateQty: number,
+  excludeJadwalId: number | null
+): Promise<ArmadaConflictInfo | null> {
+  return checkArmadaConflict(armadaId, candidateStart, candidateQty, excludeJadwalId);
 }
 
 export async function mergeExternalDeliveriesAction(
