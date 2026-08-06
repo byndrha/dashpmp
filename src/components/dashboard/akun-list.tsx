@@ -320,46 +320,45 @@ export function AkunList({
   function handleCreate(input: CreateAkunInput) {
     setError(null);
     startTransition(async () => {
-      try {
-        await createAkunAction(input);
-        setCreating(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan akun.");
+      const result = await createAkunAction(input);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setCreating(false);
     });
   }
 
   function handleUpdate(input: UpdateAkunInput) {
     setError(null);
     startTransition(async () => {
-      try {
-        await updateAkunAction(input);
-        setEditing(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan akun.");
+      const result = await updateAkunAction(input);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setEditing(null);
     });
   }
 
   function handleResetPassword(id: number, password: string) {
     setError(null);
     startTransition(async () => {
-      try {
-        await resetAkunPasswordAction(id, password);
-        setResetting(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal reset password.");
+      const result = await resetAkunPasswordAction(id, password);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setResetting(null);
     });
   }
 
   function handleDelete(akun: AkunRow) {
     if (!confirm(`Hapus akun "${akun.nama}" (@${akun.username})? Tindakan ini tidak dapat dibatalkan.`)) return;
     startTransition(async () => {
-      try {
-        await deleteAkunAction(akun.id);
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Gagal menghapus akun.");
+      const result = await deleteAkunAction(akun.id);
+      if (!result.success) {
+        alert(result.error);
       }
     });
   }

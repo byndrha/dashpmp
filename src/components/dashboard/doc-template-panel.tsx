@@ -75,25 +75,25 @@ export function DocTemplatePanel({ initial }: { initial: DocTemplate }) {
     setSaved(false);
     setError(null);
     startTransition(async () => {
-      try {
-        await saveDocTemplateAction({
-          docType: "DeliveryOrder",
-          paperSize,
-          customWidthMM: paperSize === "Custom" && customWidthMM ? Number(customWidthMM) : null,
-          customHeightMM: paperSize === "Custom" && customHeightMM ? Number(customHeightMM) : null,
-          headerTitle: headerTitle.trim(),
-          headerAddress: headerAddress.trim() || null,
-          logoPath,
-          showDriverInfo,
-          showArmadaInfo,
-          showBonusColumn,
-          showSignatureBlock,
-          footerNotes: footerNotes.trim() || null,
-        });
-        setSaved(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan template dokumen.");
+      const result = await saveDocTemplateAction({
+        docType: "DeliveryOrder",
+        paperSize,
+        customWidthMM: paperSize === "Custom" && customWidthMM ? Number(customWidthMM) : null,
+        customHeightMM: paperSize === "Custom" && customHeightMM ? Number(customHeightMM) : null,
+        headerTitle: headerTitle.trim(),
+        headerAddress: headerAddress.trim() || null,
+        logoPath,
+        showDriverInfo,
+        showArmadaInfo,
+        showBonusColumn,
+        showSignatureBlock,
+        footerNotes: footerNotes.trim() || null,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setSaved(true);
     });
   }
 

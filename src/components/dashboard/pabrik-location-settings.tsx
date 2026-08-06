@@ -15,15 +15,21 @@ export function PabrikLocationSettings({ initial }: { initial: MitraLocationValu
   const [value, setValue] = useState<MitraLocationValue>(initial);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function handleSave() {
     setSaved(false);
+    setError(null);
     startTransition(async () => {
-      await setPabrikLocationAction({
+      const result = await setPabrikLocationAction({
         latitude: value.latitude,
         longitude: value.longitude,
         alamat: value.alamat,
       });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
       setSaved(true);
     });
   }
@@ -38,6 +44,7 @@ export function PabrikLocationSettings({ initial }: { initial: MitraLocationValu
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <MitraLocationField value={value} onChange={setValue} />
+        {error && <p className="text-xs text-destructive">{error}</p>}
         <Button size="sm" className="self-end" disabled={pending} onClick={handleSave}>
           <Save className="size-3.5" />
           {pending ? "Menyimpan..." : "Simpan Lokasi Pabrik"}

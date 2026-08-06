@@ -90,17 +90,17 @@ export function SiteSettingsPanel({ initial }: { initial: SiteSettings }) {
     setSaved(false);
     setError(null);
     startTransition(async () => {
-      try {
-        await setSiteSettingsAction({
-          title: title.trim(),
-          description: description.trim() || null,
-          faviconPath,
-          ogImagePath,
-        });
-        setSaved(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan pengaturan situs.");
+      const result = await setSiteSettingsAction({
+        title: title.trim(),
+        description: description.trim() || null,
+        faviconPath,
+        ogImagePath,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      setSaved(true);
     });
   }
 
