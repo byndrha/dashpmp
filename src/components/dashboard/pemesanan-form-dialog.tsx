@@ -109,34 +109,38 @@ export function PemesananFormDialog({
     if (!canSubmit || !mitra) return;
     setError(null);
     startTransition(async () => {
-      try {
-        if (isTakeAway) {
-          const result = await createTakeAwayPemesananAction({
-            businessPartnerId: mitra.BusinessPartnerID,
-            variant,
-            qtyKantong: qtyNumber,
-            bonusQty: bonusQtyNumber,
-            deliveryDateTime: new Date(`${date}T${time}:00`),
-          });
-          // "langsung Cetak PDF" — opens the freshly-issued DO's print
-          // endpoint right away, inside this same click's user-gesture
-          // window so the browser doesn't treat it as an unrequested popup.
-          window.open(`/api/print/delivery-order/${result.deliveryOrderId}`, "_blank");
-        } else {
-          await createPemesananAction({
-            businessPartnerId: mitra.BusinessPartnerID,
-            variant,
-            qtyKantong: qtyNumber,
-            bonusQty: bonusQtyNumber,
-            deliveryDateTime: new Date(`${date}T${time}:00`),
-            armadaId: Number(armadaId),
-            salesmanId: salesmanId === UNSET ? null : salesmanId,
-          });
+      if (isTakeAway) {
+        const result = await createTakeAwayPemesananAction({
+          businessPartnerId: mitra.BusinessPartnerID,
+          variant,
+          qtyKantong: qtyNumber,
+          bonusQty: bonusQtyNumber,
+          deliveryDateTime: new Date(`${date}T${time}:00`),
+        });
+        if (!result.success) {
+          setError(result.error);
+          return;
         }
-        handleOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal membuat pemesanan.");
+        // "langsung Cetak PDF" — opens the freshly-issued DO's print
+        // endpoint right away, inside this same click's user-gesture
+        // window so the browser doesn't treat it as an unrequested popup.
+        window.open(`/api/print/delivery-order/${result.data.deliveryOrderId}`, "_blank");
+      } else {
+        const result = await createPemesananAction({
+          businessPartnerId: mitra.BusinessPartnerID,
+          variant,
+          qtyKantong: qtyNumber,
+          bonusQty: bonusQtyNumber,
+          deliveryDateTime: new Date(`${date}T${time}:00`),
+          armadaId: Number(armadaId),
+          salesmanId: salesmanId === UNSET ? null : salesmanId,
+        });
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
       }
+      handleOpenChange(false);
     });
   }
 

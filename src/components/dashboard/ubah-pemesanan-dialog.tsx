@@ -109,23 +109,31 @@ export function UbahPemesananDialog({
     if (!target || !canSubmit) return;
     setError(null);
     startTransition(async () => {
-      try {
-        if (initialQty10KG != null && Number(qty10KG) !== initialQty10KG) {
-          await updateSalesOrderQtyAction(target.salesOrderId, "10kg", Number(qty10KG));
+      if (initialQty10KG != null && Number(qty10KG) !== initialQty10KG) {
+        const result = await updateSalesOrderQtyAction(target.salesOrderId, "10kg", Number(qty10KG));
+        if (!result.success) {
+          setError(result.error);
+          return;
         }
-        if (initialQty5KG != null && Number(qty5KG) !== initialQty5KG) {
-          await updateSalesOrderQtyAction(target.salesOrderId, "5kg", Number(qty5KG));
-        }
-        await reschedulePemesananAction({
-          salesOrderId: target.salesOrderId,
-          armadaId: Number(armadaId),
-          deliveryDateTime: new Date(`${date}T${time}:00`),
-          salesmanId: salesmanId === UNSET ? null : salesmanId,
-        });
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal mengubah pemesanan.");
       }
+      if (initialQty5KG != null && Number(qty5KG) !== initialQty5KG) {
+        const result = await updateSalesOrderQtyAction(target.salesOrderId, "5kg", Number(qty5KG));
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
+      }
+      const result = await reschedulePemesananAction({
+        salesOrderId: target.salesOrderId,
+        armadaId: Number(armadaId),
+        deliveryDateTime: new Date(`${date}T${time}:00`),
+        salesmanId: salesmanId === UNSET ? null : salesmanId,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      onOpenChange(false);
     });
   }
 

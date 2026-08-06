@@ -45,12 +45,12 @@ function PemesananRow({
   function handleDelete() {
     if (!confirm(`Hapus pesanan ${row.CustomerName} (${row.VoucherNo})?`)) return;
     startTransition(async () => {
-      try {
-        await deletePemesananAction(row.SalesOrderID);
-        onDeleted();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menghapus pesanan.");
+      const result = await deletePemesananAction(row.SalesOrderID);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      onDeleted();
     });
   }
 

@@ -58,12 +58,12 @@ export function UbahTanggalPemesananDialog({
     if (!target || !canSubmit) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await updateSalesOrderTransDateAction(target.salesOrderId, new Date(`${date}T${time}:00`));
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal mengubah tanggal pemesanan.");
+      const result = await updateSalesOrderTransDateAction(target.salesOrderId, new Date(`${date}T${time}:00`));
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onOpenChange(false);
     });
   }
 

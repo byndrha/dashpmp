@@ -18,32 +18,41 @@ import {
   type EditableSalesOrderQty,
   type KantongVariant,
 } from "@/lib/queries/sales-order";
+import { runAction, type ActionResult } from "@/lib/action-result";
 
-export async function createPemesananAction(input: CreatePemesananInput): Promise<CreatePemesananResult> {
-  const result = await createPemesanan(input);
-  revalidatePath("/pemesanan");
-  revalidatePath("/delivery");
-  return result;
+export async function createPemesananAction(input: CreatePemesananInput): Promise<ActionResult<CreatePemesananResult>> {
+  return runAction(async () => {
+    const result = await createPemesanan(input);
+    revalidatePath("/pemesanan");
+    revalidatePath("/delivery");
+    return result;
+  });
 }
 
-export async function deletePemesananAction(salesOrderId: string): Promise<void> {
-  await deletePemesanan(salesOrderId);
-  revalidatePath("/pemesanan");
-  revalidatePath("/delivery");
+export async function deletePemesananAction(salesOrderId: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await deletePemesanan(salesOrderId);
+    revalidatePath("/pemesanan");
+    revalidatePath("/delivery");
+  });
 }
 
-export async function createTakeAwayPemesananAction(input: CreateTakeAwayInput): Promise<CreateTakeAwayResult> {
-  const result = await createTakeAwayPemesanan(input);
-  revalidatePath("/pemesanan");
-  revalidatePath("/delivery");
-  return result;
+export async function createTakeAwayPemesananAction(input: CreateTakeAwayInput): Promise<ActionResult<CreateTakeAwayResult>> {
+  return runAction(async () => {
+    const result = await createTakeAwayPemesanan(input);
+    revalidatePath("/pemesanan");
+    revalidatePath("/delivery");
+    return result;
+  });
 }
 
-export async function reschedulePemesananAction(input: ReschedulePemesananInput): Promise<{ jadwalId: number }> {
-  const result = await reschedulePemesanan(input);
-  revalidatePath("/pemesanan");
-  revalidatePath("/delivery");
-  return result;
+export async function reschedulePemesananAction(input: ReschedulePemesananInput): Promise<ActionResult<{ jadwalId: number }>> {
+  return runAction(async () => {
+    const result = await reschedulePemesanan(input);
+    revalidatePath("/pemesanan");
+    revalidatePath("/delivery");
+    return result;
+  });
 }
 
 // Read-only — no revalidatePath needed, fetched on demand when the "Ubah
@@ -52,10 +61,12 @@ export async function getCurrentAssignmentAction(salesOrderId: string): Promise<
   return getCurrentAssignment(salesOrderId);
 }
 
-export async function updateSalesOrderTransDateAction(salesOrderId: string, transDate: Date): Promise<void> {
-  await updateSalesOrderTransDate(salesOrderId, transDate);
-  revalidatePath("/pemesanan");
-  revalidatePath("/delivery");
+export async function updateSalesOrderTransDateAction(salesOrderId: string, transDate: Date): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await updateSalesOrderTransDate(salesOrderId, transDate);
+    revalidatePath("/pemesanan");
+    revalidatePath("/delivery");
+  });
 }
 
 // Read-only — no revalidatePath needed, fetched on demand when "Ubah
@@ -64,8 +75,14 @@ export async function getEditableSalesOrderQtyAction(salesOrderId: string): Prom
   return getEditableSalesOrderQty(salesOrderId);
 }
 
-export async function updateSalesOrderQtyAction(salesOrderId: string, variant: KantongVariant, newQty: number): Promise<void> {
-  await updateSalesOrderDetailQty(salesOrderId, variant, newQty);
-  revalidatePath("/pemesanan");
-  revalidatePath("/delivery");
+export async function updateSalesOrderQtyAction(
+  salesOrderId: string,
+  variant: KantongVariant,
+  newQty: number
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await updateSalesOrderDetailQty(salesOrderId, variant, newQty);
+    revalidatePath("/pemesanan");
+    revalidatePath("/delivery");
+  });
 }
