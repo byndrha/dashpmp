@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { HPPBersihData } from "@/lib/queries/hpp-bersih";
+import type { ActionResult } from "@/lib/action-result";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -27,7 +28,7 @@ export function HPPBersihPanel({
   formulaAccountsLabel = "5000, 6103, 6105, 6108, 6110, 6115, 6126, 6101",
 }: {
   initialData: HPPBersihData;
-  onNavigateYear: (year: number) => Promise<HPPBersihData>;
+  onNavigateYear: (year: number) => Promise<ActionResult<HPPBersihData>>;
   unitLabel?: string;
   formulaAccountsLabel?: string;
 }) {
@@ -37,7 +38,11 @@ export function HPPBersihPanel({
   function navigate(nextYear: number) {
     startTransition(async () => {
       const result = await onNavigateYear(nextYear);
-      setData(result);
+      if (result.success) {
+        setData(result.data);
+      }
+      // Background navigation refetch — on failure, just leave the
+      // currently-displayed year's data in place (no new error UI).
     });
   }
 

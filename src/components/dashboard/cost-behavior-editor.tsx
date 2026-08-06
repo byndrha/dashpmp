@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CostBehaviorRow } from "@/lib/queries/keuangan-detail-pmputra";
+import type { ActionResult } from "@/lib/action-result";
 
 const OPTIONS: { value: "FIXED" | "VARIABLE" | "MIXED" | "NONE"; label: string }[] = [
   { value: "NONE", label: "Belum ditandai" },
@@ -20,7 +21,10 @@ export function CostBehaviorEditor({
   onSetCostBehavior,
 }: {
   rows: CostBehaviorRow[];
-  onSetCostBehavior: (chartOfAccountId: string, costBehavior: "FIXED" | "VARIABLE" | "MIXED" | null) => Promise<void>;
+  onSetCostBehavior: (
+    chartOfAccountId: string,
+    costBehavior: "FIXED" | "VARIABLE" | "MIXED" | null
+  ) => Promise<ActionResult<void>>;
 }) {
   const [localRows, setLocalRows] = useState(rows);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -33,12 +37,14 @@ export function CostBehaviorEditor({
     setPendingId(row.ChartOfAccountID);
     startTransition(async () => {
       try {
-        await onSetCostBehavior(row.ChartOfAccountID, next);
-        setLocalRows((prev) =>
-          prev.map((r) => (r.ChartOfAccountID === row.ChartOfAccountID ? { ...r, CostBehavior: next } : r))
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan klasifikasi.");
+        const result = await onSetCostBehavior(row.ChartOfAccountID, next);
+        if (result.success) {
+          setLocalRows((prev) =>
+            prev.map((r) => (r.ChartOfAccountID === row.ChartOfAccountID ? { ...r, CostBehavior: next } : r))
+          );
+        } else {
+          setError(result.error);
+        }
       } finally {
         setPendingId(null);
       }

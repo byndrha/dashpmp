@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatRupiah, formatDate } from "@/lib/format";
 import type { CashFlowHarian } from "@/lib/queries/cash-flow-harian";
+import type { ActionResult } from "@/lib/action-result";
 
 export function CashFlowHarianPanel({
   data,
@@ -17,14 +18,15 @@ export function CashFlowHarianPanel({
   onDeleteExpense,
 }: {
   data: CashFlowHarian;
-  onSaveFigures: (input: { businessDate: string; kasDiTangan: number; pengeluaranKasDiTangan: number }) => Promise<void>;
-  onAddExpense: (input: { businessDate: string; deskripsi: string; nominal: number }) => Promise<void>;
-  onDeleteExpense: (id: number) => Promise<void>;
+  onSaveFigures: (input: { businessDate: string; kasDiTangan: number; pengeluaranKasDiTangan: number }) => Promise<ActionResult<void>>;
+  onAddExpense: (input: { businessDate: string; deskripsi: string; nominal: number }) => Promise<ActionResult<void>>;
+  onDeleteExpense: (id: number) => Promise<ActionResult<void>>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const [date, setDate] = useState(data.businessDate);
   const [kasDiTangan, setKasDiTangan] = useState(data.kasDiTangan?.toString() ?? "");
@@ -48,31 +50,40 @@ export function CashFlowHarianPanel({
   }
 
   function handleSaveFigures() {
+    setError(null);
     startTransition(async () => {
-      await onSaveFigures({
+      const result = await onSaveFigures({
         businessDate: data.businessDate,
         kasDiTangan: Number(kasDiTangan) || 0,
         pengeluaranKasDiTangan: Number(pengeluaranKasDiTangan) || 0,
       });
+      if (!result.success) setError(result.error);
     });
   }
 
   function handleAddExpense() {
     if (!deskripsi.trim() || !(Number(nominal) > 0)) return;
+    setError(null);
     startTransition(async () => {
-      await onAddExpense({
+      const result = await onAddExpense({
         businessDate: data.businessDate,
         deskripsi: deskripsi.trim(),
         nominal: Number(nominal),
       });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
       setDeskripsi("");
       setNominal("");
     });
   }
 
   function handleDeleteExpense(id: number) {
+    setError(null);
     startTransition(async () => {
-      await onDeleteExpense(id);
+      const result = await onDeleteExpense(id);
+      if (!result.success) setError(result.error);
     });
   }
 
@@ -100,6 +111,7 @@ export function CashFlowHarianPanel({
           Pencatatan kas manual untuk {formatDate(data.businessDate)}
           {data.updatedAt && ` — terakhir disimpan ${formatDate(data.updatedAt)}`}.
         </p>
+        {error && <p className="text-xs text-destructive">{error}</p>}
 
         <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-card/50 p-3 @sm:grid-cols-3">
           <div>

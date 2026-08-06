@@ -25,6 +25,7 @@ import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
 import { COA_KATEGORI_LABEL } from "@/lib/coa-labels";
+import type { ActionResult } from "@/lib/action-result";
 
 const KATEGORI_ORDER: COAKategori[] = [
   "Pendapatan",
@@ -45,17 +46,33 @@ export function COADetailTable({
   rows: COADetailRow[];
   year: number;
   month: number;
-  onSaveBudget: (input: { chartOfAccountId: string; year: number; month: number; amount: number }) => Promise<void>;
+  onSaveBudget: (input: { chartOfAccountId: string; year: number; month: number; amount: number }) => Promise<ActionResult<void>>;
 }) {
   const [editing, setEditing] = useState<COADetailRow | null>(null);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function openEditor(row: COADetailRow) {
+    setError(null);
+    setEditing(row);
+  }
+
+  function closeEditor() {
+    setError(null);
+    setEditing(null);
+  }
 
   function handleSubmit(formData: FormData) {
     if (!editing) return;
     const amount = Number(formData.get("amount"));
+    setError(null);
     startTransition(async () => {
-      await onSaveBudget({ chartOfAccountId: editing.ChartOfAccountID, year, month, amount });
-      setEditing(null);
+      const result = await onSaveBudget({ chartOfAccountId: editing.ChartOfAccountID, year, month, amount });
+      if (result.success) {
+        setEditing(null);
+      } else {
+        setError(result.error);
+      }
     });
   }
 
@@ -121,7 +138,7 @@ export function COADetailTable({
                       {formatRupiah(r.ProyeksiAkhirBulan)}
                     </TableCell>
                     <TableCell className="px-1 py-1.5">
-                      <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditing(r)}>
+                      <Button variant="ghost" size="icon" className="size-6" onClick={() => openEditor(r)}>
                         <PiggyBank className="size-3" />
                       </Button>
                     </TableCell>
@@ -137,7 +154,7 @@ export function COADetailTable({
         <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada mutasi akun pada periode ini.</p>
       )}
 
-      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+      <Dialog open={!!editing} onOpenChange={(open) => !open && closeEditor()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Anggaran &mdash; {editing?.AccountName}</DialogTitle>
@@ -157,6 +174,7 @@ export function COADetailTable({
                 required
               />
             </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={pending} className="ml-auto">
                 {pending ? "Menyimpan..." : "Simpan Anggaran"}
