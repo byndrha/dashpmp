@@ -434,10 +434,9 @@ export function RouteValidationDialog({
     if (jadwalId != null) {
       setError(null);
       startTransition(async () => {
-        try {
-          await updateJadwalUrutanAction(jadwalId, next.map((d) => d.JadwalDetailID));
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Gagal menyimpan urutan tujuan.");
+        const result = await updateJadwalUrutanAction(jadwalId, next.map((d) => d.JadwalDetailID));
+        if (!result.success) {
+          setError(result.error);
         }
       });
     }
@@ -450,23 +449,23 @@ export function RouteValidationDialog({
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
-      try {
-        const resultId = await updateJadwalDriverTimeAction(
-          jadwalId,
-          { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
-          { skipOrderTimeCheck: true }
-        );
-        // The new time landed inside another Draft's estimated busy window
-        // for the same armada — this Jadwal got folded into that one
-        // instead (see updateJadwalDriverTime), so there's nothing left
-        // under jadwalId to keep showing here.
-        if (resultId !== jadwalId) {
-          toast.success(`Digabung dengan keberangkatan lain di jam yang sama untuk armada ini.`);
-          onDeleted?.();
-          onOpenChange(false);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyimpan driver/waktu.");
+      const result = await updateJadwalDriverTimeAction(
+        jadwalId,
+        { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
+        { skipOrderTimeCheck: true }
+      );
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      // The new time landed inside another Draft's estimated busy window
+      // for the same armada — this Jadwal got folded into that one
+      // instead (see updateJadwalDriverTime), so there's nothing left
+      // under jadwalId to keep showing here.
+      if (result.data !== jadwalId) {
+        toast.success(`Digabung dengan keberangkatan lain di jam yang sama untuk armada ini.`);
+        onDeleted?.();
+        onOpenChange(false);
       }
     });
   }
@@ -479,18 +478,18 @@ export function RouteValidationDialog({
     if (!confirm(`Keluarkan "${detail.CustomerName}" dari draft ini?`)) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await removeSalesOrderFromJadwalAction(jadwalId, detail.SalesOrderID);
-        if (order.length <= 1) {
-          onDeleted?.();
-          onOpenChange(false);
-          return;
-        }
-        const rows = await getJadwalDetailAction(jadwalId);
-        setOrder(rows);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal mengeluarkan tujuan.");
+      const result = await removeSalesOrderFromJadwalAction(jadwalId, detail.SalesOrderID);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      if (order.length <= 1) {
+        onDeleted?.();
+        onOpenChange(false);
+        return;
+      }
+      const rows = await getJadwalDetailAction(jadwalId);
+      setOrder(rows);
     });
   }
 
@@ -498,13 +497,13 @@ export function RouteValidationDialog({
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await deleteJadwalDraftAction(jadwalId);
-        onDeleted?.();
-        onOpenChange(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal membatalkan draft.");
+      const result = await deleteJadwalDraftAction(jadwalId);
+      if (!result.success) {
+        setError(result.error);
+        return;
       }
+      onDeleted?.();
+      onOpenChange(false);
     });
   }
 
@@ -512,10 +511,9 @@ export function RouteValidationDialog({
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await startMuatAction(jadwalId);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal mencatat mulai muat.");
+      const result = await startMuatAction(jadwalId);
+      if (!result.success) {
+        setError(result.error);
       }
     });
   }
@@ -538,35 +536,39 @@ export function RouteValidationDialog({
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
-      try {
-        const resultId = await updateJadwalDriverTimeAction(
-          jadwalId,
-          { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
-          { skipOrderTimeCheck: true }
-        );
-        // The new time landed inside another Draft's estimated busy window
-        // for the same armada — this Jadwal got folded into that one
-        // instead (see updateJadwalDriverTime), so there's nothing left
-        // under jadwalId to run selesaiMuat against anymore.
-        if (resultId !== jadwalId) {
-          toast.success(
-            "Waktu ini tumpang tindih dengan keberangkatan lain untuk armada ini — sudah digabung. Buka kembali untuk melanjutkan keberangkatan."
-          );
-          onDeleted?.();
-          onOpenChange(false);
-          return;
-        }
-        const tokens = await selesaiMuatAction(jadwalId);
-        for (const t of tokens) {
-          if (printSelected.has(t.jadwalDetailId)) {
-            window.open(`/invoice/${t.invoiceToken}`, "_blank");
-          }
-        }
-        const rows = await getJadwalDetailAction(jadwalId);
-        setOrder(rows);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal menyelesaikan muat.");
+      const driverTimeResult = await updateJadwalDriverTimeAction(
+        jadwalId,
+        { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
+        { skipOrderTimeCheck: true }
+      );
+      if (!driverTimeResult.success) {
+        setError(driverTimeResult.error);
+        return;
       }
+      // The new time landed inside another Draft's estimated busy window
+      // for the same armada — this Jadwal got folded into that one
+      // instead (see updateJadwalDriverTime), so there's nothing left
+      // under jadwalId to run selesaiMuat against anymore.
+      if (driverTimeResult.data !== jadwalId) {
+        toast.success(
+          "Waktu ini tumpang tindih dengan keberangkatan lain untuk armada ini — sudah digabung. Buka kembali untuk melanjutkan keberangkatan."
+        );
+        onDeleted?.();
+        onOpenChange(false);
+        return;
+      }
+      const selesaiMuatResult = await selesaiMuatAction(jadwalId);
+      if (!selesaiMuatResult.success) {
+        setError(selesaiMuatResult.error);
+        return;
+      }
+      for (const t of selesaiMuatResult.data) {
+        if (printSelected.has(t.jadwalDetailId)) {
+          window.open(`/invoice/${t.invoiceToken}`, "_blank");
+        }
+      }
+      const rows = await getJadwalDetailAction(jadwalId);
+      setOrder(rows);
     });
   }
 
@@ -574,10 +576,9 @@ export function RouteValidationDialog({
     if (jadwalId == null) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await konfirmasiBerangkatAction(jadwalId);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Gagal mengonfirmasi keberangkatan.");
+      const result = await konfirmasiBerangkatAction(jadwalId);
+      if (!result.success) {
+        setError(result.error);
       }
     });
   }
@@ -607,14 +608,14 @@ export function RouteValidationDialog({
     if (jadwalId == null || selectedToAdd.size === 0) return;
     setAddError(null);
     startTransition(async () => {
-      try {
-        await addSalesOrdersToJadwalAction(jadwalId, [...selectedToAdd]);
-        const rows = await getJadwalDetailAction(jadwalId);
-        setOrder(rows);
-        setAdding(false);
-      } catch (err) {
-        setAddError(err instanceof Error ? err.message : "Gagal menambahkan SO.");
+      const result = await addSalesOrdersToJadwalAction(jadwalId, [...selectedToAdd]);
+      if (!result.success) {
+        setAddError(result.error);
+        return;
       }
+      const rows = await getJadwalDetailAction(jadwalId);
+      setOrder(rows);
+      setAdding(false);
     });
   }
 
