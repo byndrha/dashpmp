@@ -117,33 +117,36 @@ function ContactLogButton({
     if (!next) return;
     setLoading(true);
     getMitraContactLogAction(businessPartnerId, dateISO)
-      .then((entries) => {
-        const found = entries.find((e) => e.ContactType === contactType) ?? null;
+      .then((result) => {
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        const found = result.data.find((e) => e.ContactType === contactType) ?? null;
         setHasEntry(!!found);
         setHasilPenawaran(found?.HasilPenawaran ?? "");
         setAngkaPemesanan(found?.AngkaPemesanan != null ? String(found.AngkaPemesanan) : "");
         setAlasanTidakSesuai(found?.AlasanTidakSesuai ?? "");
       })
-      .catch(() => toast.error("Gagal memuat catatan."))
       .finally(() => setLoading(false));
   }
 
   function handleSave() {
     startTransition(async () => {
-      try {
-        await saveMitraContactLogAction({
-          businessPartnerId,
-          dateISO,
-          contactType,
-          hasilPenawaran: hasilPenawaran.trim() || null,
-          angkaPemesanan: angkaPemesanan.trim() ? Number(angkaPemesanan) : null,
-          alasanTidakSesuai: alasanTidakSesuai.trim() || null,
-        });
-        setHasEntry(true);
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Gagal menyimpan catatan.");
+      const result = await saveMitraContactLogAction({
+        businessPartnerId,
+        dateISO,
+        contactType,
+        hasilPenawaran: hasilPenawaran.trim() || null,
+        angkaPemesanan: angkaPemesanan.trim() ? Number(angkaPemesanan) : null,
+        alasanTidakSesuai: alasanTidakSesuai.trim() || null,
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
+      setHasEntry(true);
+      setOpen(false);
     });
   }
 
