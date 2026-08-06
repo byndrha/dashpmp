@@ -36,6 +36,13 @@ export default async function BerandaPage() {
     redirect("/pemasaran");
   }
 
+  // Driver accounts always land on the standalone Aplikasi Driver instead of
+  // this dashboard's Beranda — mirrors the Marketing redirect immediately
+  // above, same reasoning (this page's KPIs aren't relevant to their work).
+  if (!session.user.isSuperAdmin && session.user.isDriver) {
+    redirect("/driver-app");
+  }
+
   const businessToday = getBusinessDate();
   const businessMonthFilter = {
     startDate: monthBoundary(businessToday).toISOString().slice(0, 10),
