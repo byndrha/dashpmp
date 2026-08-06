@@ -82,12 +82,23 @@ function StatTile({
 export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) setError(null);
+  }
 
   function handleSubmit(formData: FormData) {
     const targetNominal = Number(formData.get("targetNominal"));
     const targetQty = Number(formData.get("targetQty"));
+    setError(null);
     startTransition(async () => {
-      await saveMonthlyTargetAction({ year: target.Year, month: target.Month, targetNominal, targetQty });
+      const result = await saveMonthlyTargetAction({ year: target.Year, month: target.Month, targetNominal, targetQty });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
       setOpen(false);
     });
   }
@@ -113,7 +124,7 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
             Hari ke-{target.CurrentDay} dari {target.DaysInMonth} hari ({formatDate(target.Today)})
           </CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Button variant="outline" size="sm" onClick={() => handleOpenChange(true)}>
           <Target className="size-3.5" />
           Set Target
         </Button>
@@ -192,7 +203,7 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
         </div>
       </CardContent>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Set Target Bulan Ini</DialogTitle>
@@ -223,6 +234,7 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
                 required
               />
             </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={pending} className="ml-auto">
                 {pending ? "Menyimpan..." : "Simpan Target"}
