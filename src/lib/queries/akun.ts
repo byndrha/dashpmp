@@ -18,6 +18,8 @@ export interface AkunAuthRow {
   perusahaanKode: string | null; // null only for Direktur accounts
   isSuperAdmin: boolean;
   isSatpam: boolean;
+  isDriver: boolean;
+  salesmanId: string | null;
   isActive: boolean;
   failedLoginCount: number;
   lockedUntil: Date | null;
@@ -29,6 +31,8 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
     `SELECT a.id, a.username, a.password_hash, a.nama, a.peran_id, a.perusahaan_id, p.kode AS perusahaan_kode,
             COALESCE(r.is_super_admin, false) AS is_super_admin,
             COALESCE(r.is_satpam, false) AS is_satpam,
+            COALESCE(r.is_driver, false) AS is_driver,
+            a.salesman_id,
             a.is_active, a.failed_login_count, a.locked_until
      FROM akun a
      LEFT JOIN perusahaan p ON p.id = a.perusahaan_id
@@ -48,6 +52,8 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
     perusahaanKode: row.perusahaan_kode,
     isSuperAdmin: row.is_super_admin,
     isSatpam: row.is_satpam,
+    isDriver: row.is_driver,
+    salesmanId: row.salesman_id,
     isActive: row.is_active,
     failedLoginCount: row.failed_login_count,
     lockedUntil: row.locked_until,
@@ -166,6 +172,7 @@ export interface AkunRow {
   perusahaanKode: string | null; // null for Direktur
   peranId: number | null;
   peranNama: string | null; // null for Direktur
+  salesmanId: string | null;
   isActive: boolean;
   lastLoginAt: Date | null;
 }
@@ -175,7 +182,7 @@ export async function listAkun(): Promise<AkunRow[]> {
   const result = await pool.query(`
     SELECT a.id, a.username, a.nama, a.email, a.nomor_telepon,
            a.perusahaan_id, p.nama AS perusahaan_nama, p.kode AS perusahaan_kode,
-           a.peran_id, r.nama AS peran_nama,
+           a.peran_id, r.nama AS peran_nama, a.salesman_id,
            a.is_active, a.last_login_at
     FROM akun a
     LEFT JOIN perusahaan p ON p.id = a.perusahaan_id
@@ -193,6 +200,7 @@ export async function listAkun(): Promise<AkunRow[]> {
     perusahaanKode: row.perusahaan_kode,
     peranId: row.peran_id,
     peranNama: row.peran_nama,
+    salesmanId: row.salesman_id,
     isActive: row.is_active,
     lastLoginAt: row.last_login_at,
   }));
@@ -225,15 +233,16 @@ export interface CreateAkunInput {
   nomorTelepon: string | null;
   perusahaanId: number | null; // null = Direktur
   peranId: number | null; // null = Direktur
+  salesmanId: string | null;
 }
 
 export async function createAkun(input: CreateAkunInput): Promise<void> {
   const pool = getPgPool();
   const passwordHash = await bcrypt.hash(input.password, 12);
   await pool.query(
-    `INSERT INTO akun (username, password_hash, nama, email, nomor_telepon, perusahaan_id, peran_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [input.username, passwordHash, input.nama, input.email, input.nomorTelepon, input.perusahaanId, input.peranId]
+    `INSERT INTO akun (username, password_hash, nama, email, nomor_telepon, perusahaan_id, peran_id, salesman_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [input.username, passwordHash, input.nama, input.email, input.nomorTelepon, input.perusahaanId, input.peranId, input.salesmanId]
   );
 }
 
@@ -244,15 +253,17 @@ export interface UpdateAkunInput {
   nomorTelepon: string | null;
   perusahaanId: number | null;
   peranId: number | null;
+  salesmanId: string | null;
   isActive: boolean;
 }
 
 export async function updateAkun(input: UpdateAkunInput): Promise<void> {
   const pool = getPgPool();
   await pool.query(
-    `UPDATE akun SET nama = $1, email = $2, nomor_telepon = $3, perusahaan_id = $4, peran_id = $5, is_active = $6, updated_at = now()
-     WHERE id = $7`,
-    [input.nama, input.email, input.nomorTelepon, input.perusahaanId, input.peranId, input.isActive, input.id]
+    `UPDATE akun SET nama = $1, email = $2, nomor_telepon = $3, perusahaan_id = $4, peran_id = $5,
+       salesman_id = $6, is_active = $7, updated_at = now()
+     WHERE id = $8`,
+    [input.nama, input.email, input.nomorTelepon, input.perusahaanId, input.peranId, input.salesmanId, input.isActive, input.id]
   );
 }
 
@@ -281,13 +292,14 @@ export interface PeranRow {
   nama: string;
   isSuperAdmin: boolean;
   isSatpam: boolean;
+  isDriver: boolean;
   akunCount: number;
 }
 
 export async function listAllPeran(): Promise<PeranRow[]> {
   const pool = getPgPool();
   const result = await pool.query(`
-    SELECT r.id, r.perusahaan_id, r.nama, r.is_super_admin, r.is_satpam,
+    SELECT r.id, r.perusahaan_id, r.nama, r.is_super_admin, r.is_satpam, r.is_driver,
            (SELECT count(*) FROM akun a WHERE a.peran_id = r.id) AS akun_count
     FROM peran r
     ORDER BY r.perusahaan_id, r.is_super_admin DESC, r.nama
@@ -298,6 +310,7 @@ export async function listAllPeran(): Promise<PeranRow[]> {
     nama: row.nama,
     isSuperAdmin: row.is_super_admin,
     isSatpam: row.is_satpam,
+    isDriver: row.is_driver,
     akunCount: Number(row.akun_count),
   }));
 }
@@ -349,6 +362,11 @@ export async function setPeranIzin(input: {
 export async function setPeranSatpam(peranId: number, isSatpam: boolean): Promise<void> {
   const pool = getPgPool();
   await pool.query(`UPDATE peran SET is_satpam = $1 WHERE id = $2`, [isSatpam, peranId]);
+}
+
+export async function setPeranDriver(peranId: number, isDriver: boolean): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE peran SET is_driver = $1 WHERE id = $2`, [isDriver, peranId]);
 }
 
 // ---------- Sesi login aktif (consumed by auth.ts's jwt callback) ----------
