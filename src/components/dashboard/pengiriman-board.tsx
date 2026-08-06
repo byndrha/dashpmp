@@ -164,6 +164,7 @@ function CreateJadwalDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [time, setTime] = useState("08:00");
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; jamJadwal: Date } | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -174,6 +175,7 @@ function CreateJadwalDialog({
     setSelected(new Set());
     setTime("08:00");
     setError(null);
+    setConflict(null);
     getAvailableSalesOrdersAction(businessDate).then(setAvailable);
   }, [open, businessDate]);
 
@@ -195,13 +197,12 @@ function CreateJadwalDialog({
     });
   }
 
-  function handleSubmit() {
-    if (armadaId == null || selected.size === 0) return;
-    setError(null);
+  function doCreate(jamJadwal: Date) {
+    if (armadaId == null) return;
     startTransition(async () => {
       const result = await createJadwalDraftAction({
         armadaId,
-        jamJadwal: resolveBusinessDateTime(businessDate, time),
+        jamJadwal,
         salesOrderIds: [...selected],
       });
       if (!result.success) {
@@ -212,7 +213,22 @@ function CreateJadwalDialog({
     });
   }
 
+  function handleSubmit() {
+    if (armadaId == null || selected.size === 0) return;
+    setError(null);
+    const jamJadwal = resolveBusinessDateTime(businessDate, time);
+    startTransition(async () => {
+      const check = await checkArmadaConflictAction(armadaId, jamJadwal, selectedQty, null);
+      if (check) {
+        setConflict({ info: check, jamJadwal });
+        return;
+      }
+      doCreate(jamJadwal);
+    });
+  }
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
@@ -276,6 +292,18 @@ function CreateJadwalDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {conflict && (
+      <ArmadaConflictDialog
+        conflict={conflict.info}
+        onCancel={() => setConflict(null)}
+        onConfirm={() => {
+          const jamJadwal = conflict.jamJadwal;
+          setConflict(null);
+          doCreate(jamJadwal);
+        }}
+      />
+    )}
+    </>
   );
 }
 
