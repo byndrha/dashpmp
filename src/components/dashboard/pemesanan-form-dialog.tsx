@@ -20,12 +20,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MitraSelect } from "@/components/dashboard/mitra-select";
+import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { formatRupiah } from "@/lib/format";
 import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { KantongVariant } from "@/lib/queries/sales-order";
+import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import { createPemesananAction, createTakeAwayPemesananAction } from "@/app/(dashboard)/pemesanan/actions";
+import { checkArmadaConflictAction } from "@/app/(dashboard)/delivery/actions";
 
 // Sentinel for "not chosen yet" — Select items can't use an empty string as
 // a value (established convention, see the "all" sentinel in
@@ -58,6 +61,7 @@ export function PemesananFormDialog({
   const [salesmanId, setSalesmanId] = useState<string>(UNSET);
   const [isTakeAway, setIsTakeAway] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; deliveryDateTime: Date } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const mitra = useMemo(
@@ -98,6 +102,7 @@ export function PemesananFormDialog({
     setSalesmanId(UNSET);
     setIsTakeAway(false);
     setError(null);
+    setConflict(null);
   }
 
   function handleOpenChange(next: boolean) {
@@ -105,11 +110,31 @@ export function PemesananFormDialog({
     if (!next) resetForm();
   }
 
+  function doCreatePemesanan(deliveryDateTime: Date) {
+    if (!mitra) return;
+    startTransition(async () => {
+      const result = await createPemesananAction({
+        businessPartnerId: mitra.BusinessPartnerID,
+        variant,
+        qtyKantong: qtyNumber,
+        bonusQty: bonusQtyNumber,
+        deliveryDateTime,
+        armadaId: Number(armadaId),
+        salesmanId: salesmanId === UNSET ? null : salesmanId,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      handleOpenChange(false);
+    });
+  }
+
   function handleSubmit() {
     if (!canSubmit || !mitra) return;
     setError(null);
-    startTransition(async () => {
-      if (isTakeAway) {
+    if (isTakeAway) {
+      startTransition(async () => {
         const result = await createTakeAwayPemesananAction({
           businessPartnerId: mitra.BusinessPartnerID,
           variant,
@@ -125,22 +150,19 @@ export function PemesananFormDialog({
         // endpoint right away, inside this same click's user-gesture
         // window so the browser doesn't treat it as an unrequested popup.
         window.open(`/api/print/delivery-order/${result.data.deliveryOrderId}`, "_blank");
-      } else {
-        const result = await createPemesananAction({
-          businessPartnerId: mitra.BusinessPartnerID,
-          variant,
-          qtyKantong: qtyNumber,
-          bonusQty: bonusQtyNumber,
-          deliveryDateTime: new Date(`${date}T${time}:00`),
-          armadaId: Number(armadaId),
-          salesmanId: salesmanId === UNSET ? null : salesmanId,
-        });
-        if (!result.success) {
-          setError(result.error);
-          return;
-        }
+        handleOpenChange(false);
+      });
+      return;
+    }
+    const candidateQty = qtyNumber + bonusQtyNumber;
+    const deliveryDateTime = new Date(`${date}T${time}:00`);
+    startTransition(async () => {
+      const check = await checkArmadaConflictAction(Number(armadaId), deliveryDateTime, candidateQty, null);
+      if (check) {
+        setConflict({ info: check, deliveryDateTime });
+        return;
       }
-      handleOpenChange(false);
+      doCreatePemesanan(deliveryDateTime);
     });
   }
 
@@ -335,6 +357,18 @@ export function PemesananFormDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {conflict && (
+        <ArmadaConflictDialog
+          conflict={conflict.info}
+          onCancel={() => setConflict(null)}
+          onConfirm={() => {
+            const deliveryDateTime = conflict.deliveryDateTime;
+            setConflict(null);
+            doCreatePemesanan(deliveryDateTime);
+          }}
+        />
+      )}
     </>
   );
 }
