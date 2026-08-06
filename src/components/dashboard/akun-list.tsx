@@ -150,6 +150,17 @@ function CreateDialog({
   const [peranId, setPeranId] = useState<number | null>(null);
   const [salesmanId, setSalesmanId] = useState<string | null>(null);
 
+  // Clears the driver link the moment the selected Peran stops being a
+  // driver role (including via ScopeFields' own onPerusahaanChange, which
+  // calls this with null) — otherwise a stale salesmanId from an earlier
+  // driver-role selection would silently ride along in the submit payload
+  // and get persisted onto a non-driver account.
+  function handlePeranChange(newPeranId: number | null) {
+    setPeranId(newPeranId);
+    const isDriverRole = newPeranId != null && (peranList.find((p) => p.id === newPeranId)?.isDriver ?? false);
+    if (!isDriverRole) setSalesmanId(null);
+  }
+
   function handleSubmit(formData: FormData) {
     onSubmit({
       nama: String(formData.get("nama") ?? ""),
@@ -197,7 +208,7 @@ function CreateDialog({
             perusahaanId={perusahaanId}
             peranId={peranId}
             onPerusahaanChange={setPerusahaanId}
-            onPeranChange={setPeranId}
+            onPeranChange={handlePeranChange}
           />
           <DriverLinkField
             driverProfiles={driverProfiles}
@@ -242,6 +253,16 @@ function EditDialog({
   const [status, setStatus] = useState(akun.isActive ? "active" : "inactive");
   const [salesmanId, setSalesmanId] = useState<string | null>(akun.salesmanId);
 
+  // Same reset rule as CreateDialog: drop the driver link the moment the
+  // selected Peran is no longer a driver role, so a stale salesmanId from
+  // an earlier driver-role selection can't ride along in the submit
+  // payload and get persisted onto a non-driver account.
+  function handlePeranChange(newPeranId: number | null) {
+    setPeranId(newPeranId);
+    const isDriverRole = newPeranId != null && (peranList.find((p) => p.id === newPeranId)?.isDriver ?? false);
+    if (!isDriverRole) setSalesmanId(null);
+  }
+
   function handleSubmit(formData: FormData) {
     onSubmit({
       id: akun.id,
@@ -281,7 +302,7 @@ function EditDialog({
             perusahaanId={perusahaanId}
             peranId={peranId}
             onPerusahaanChange={setPerusahaanId}
-            onPeranChange={setPeranId}
+            onPeranChange={handlePeranChange}
           />
           <DriverLinkField
             driverProfiles={driverProfiles}
