@@ -282,10 +282,10 @@ function handleSubmit() {
 }
 ```
 
-Add a new `conflict` state to `MergeExternalDialog`, insert the check before calling `mergeExternalDeliveriesAction`, and extract the actual merge call into its own function so both "no conflict" and "user confirmed" paths can call it:
+Add a new `conflict` state to `MergeExternalDialog`, insert the check before calling `mergeExternalDeliveriesAction`, and extract the actual merge call into its own function so both "no conflict" and "user confirmed" paths can call it. **Store the checked `jamJadwal` alongside the conflict info** (not a bare `ArmadaConflictInfo`) — `onConfirm` must reuse the exact value that was validated, not recompute `!timeEdited && defaultJamJadwal ? ... : new Date(...)` a second time. This matters concretely here: `deliveries` is passed into this component as a freshly-filtered array on every parent render, which retriggers this component's own `[open, deliveries]` effect (resetting `timeEdited` and re-fetching `defaultJamJadwal`) even while the conflict popup is showing on top — recomputing on confirm can silently merge using a different time than what was actually checked:
 
 ```ts
-const [conflict, setConflict] = useState<ArmadaConflictInfo | null>(null);
+const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; jamJadwal: Date } | null>(null);
 
 function doMerge(jamJadwal: Date) {
   if (armadaId == null) return;
@@ -307,7 +307,7 @@ function handleSubmit() {
   startTransition(async () => {
     const check = await checkArmadaConflictAction(armadaId, jamJadwal, totalKantong, null);
     if (check) {
-      setConflict(check);
+      setConflict({ info: check, jamJadwal });
       return;
     }
     doMerge(jamJadwal);
@@ -317,15 +317,17 @@ function handleSubmit() {
 
 `totalKantong` is already computed in this component (`const totalKantong = deliveries.reduce((sum, d) => sum + d.TotalKantong, 0);`) — reuse it as `candidateQty`. `excludeJadwalId` is `null` here since this flow always creates or appends into an existing Draft, never retiming an existing one.
 
+Also add `setConflict(null)` to this component's existing `[open, deliveries]` reset effect (the one that already resets `error`/`timeEdited` when the dialog opens), so a stale conflict popup can never resurface on reopen.
+
 Render the dialog at the end of `MergeExternalDialog`'s JSX, as a sibling after the closing `</Dialog>`:
 
 ```tsx
 {conflict && (
   <ArmadaConflictDialog
-    conflict={conflict}
+    conflict={conflict.info}
     onCancel={() => setConflict(null)}
     onConfirm={() => {
-      const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : new Date(`${date}T${time}:00`);
+      const jamJadwal = conflict.jamJadwal;
       setConflict(null);
       doMerge(jamJadwal);
     }}
@@ -386,10 +388,10 @@ function handleSubmit() {
 }
 ```
 
-Apply the same conflict-check-then-confirm restructuring, using `selectedQty` (already computed in this component) as `candidateQty`:
+Apply the same conflict-check-then-confirm restructuring, using `selectedQty` (already computed in this component) as `candidateQty`. **Store the checked `jamJadwal` alongside the conflict info** (not a bare `ArmadaConflictInfo`) so `onConfirm` reuses the exact value that was validated, rather than recomputing `resolveBusinessDateTime(businessDate, time)` a second time against whatever `time` state happens to hold when the user clicks confirm — the two evaluations are not guaranteed to agree if any re-render resets `time` in between (this exact gap was found and fixed in Task 4's review; apply its lesson here from the start):
 
 ```ts
-const [conflict, setConflict] = useState<ArmadaConflictInfo | null>(null);
+const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; jamJadwal: Date } | null>(null);
 
 function doCreate(jamJadwal: Date) {
   if (armadaId == null) return;
@@ -414,7 +416,7 @@ function handleSubmit() {
   startTransition(async () => {
     const check = await checkArmadaConflictAction(armadaId, jamJadwal, selectedQty, null);
     if (check) {
-      setConflict(check);
+      setConflict({ info: check, jamJadwal });
       return;
     }
     doCreate(jamJadwal);
@@ -422,16 +424,19 @@ function handleSubmit() {
 }
 ```
 
+Also add `setConflict(null)` alongside this component's existing open-reset logic (wherever it currently resets `error`/`selected`/`time` when the dialog opens), so a stale conflict popup can never resurface on reopen.
+
 Render, as a sibling after this component's own `</Dialog>` closing tag:
 
 ```tsx
 {conflict && (
   <ArmadaConflictDialog
-    conflict={conflict}
+    conflict={conflict.info}
     onCancel={() => setConflict(null)}
     onConfirm={() => {
+      const jamJadwal = conflict.jamJadwal;
       setConflict(null);
-      doCreate(resolveBusinessDateTime(businessDate, time));
+      doCreate(jamJadwal);
     }}
   />
 )}
@@ -637,10 +642,10 @@ Add the same 3 imports used in Task 4 to this file's import block.
 
 This file already has `totalQty` computed (used for its own capacity display) and `jadwalIdRef`/`armadaId` in scope — read the actual current file to confirm exact variable names before editing (it has evolved across several tasks this session; the excerpts below are from the plan-writing pass and should match, but confirm).
 
-Add dialog-local state:
+Add dialog-local state. **Store the checked `jamJadwal` (and a discriminant for which handler triggered it — see below) alongside the conflict info**, not a bare `ArmadaConflictInfo` — `onConfirm` must reuse the exact value that was validated, never recompute `buildJamJadwal()` a second time against possibly-changed `date`/`time` state (this exact gap was found and fixed in Task 4's review; this task adopts the fix from the start):
 
 ```ts
-const [conflict, setConflict] = useState<ArmadaConflictInfo | null>(null);
+const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; jamJadwal: Date; then: "save" | "selesaiMuat" } | null>(null);
 ```
 
 **`handleSaveDriverTime`** — current shape:
@@ -704,7 +709,7 @@ function handleSaveDriverTime() {
     const check = await checkArmadaConflictAction(armadaId, jamJadwal, totalQty, targetId);
     if (jadwalIdRef.current !== targetId) return;
     if (check) {
-      setConflict(check);
+      setConflict({ info: check, jamJadwal, then: "save" });
       return;
     }
     doSaveDriverTime(targetId, jamJadwal);
@@ -714,26 +719,31 @@ function handleSaveDriverTime() {
 
 Read the file to confirm `armadaId` is actually in scope in this component (it's used elsewhere in this file per earlier reads, e.g. capacity display) — if it's named differently, adjust accordingly.
 
-**`handleSelesaiMuat`** — apply the identical check-then-commit restructuring around its own `updateJadwalDriverTimeAction` call (the FIRST of its two sequential awaited calls — `selesaiMuatAction` afterward is unaffected, it doesn't touch armada scheduling). Read the current full function before editing; extract the driver-time-save portion into a `doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal)` helper (or reuse `doSaveDriverTime` if its shape fits — but `handleSelesaiMuat` continues on to `selesaiMuatAction` afterward on success, which `doSaveDriverTime` does not do, so this needs its own small helper, not literal reuse) that runs the existing post-save logic (the fold-into-another-Draft toast/close, or on non-folded success, proceeding to `selesaiMuatAction` and the invoice-printing loop), guarded by the same `checkArmadaConflictAction` pre-check pattern shown above.
+**`handleSelesaiMuat`** — apply the identical check-then-commit restructuring around its own `updateJadwalDriverTimeAction` call (the FIRST of its two sequential awaited calls — `selesaiMuatAction` afterward is unaffected, it doesn't touch armada scheduling). Read the current full function before editing; extract the driver-time-save portion into a `doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal)` helper (or reuse `doSaveDriverTime` if its shape fits — but `handleSelesaiMuat` continues on to `selesaiMuatAction` afterward on success, which `doSaveDriverTime` does not do, so this needs its own small helper, not literal reuse) that runs the existing post-save logic (the fold-into-another-Draft toast/close, or on non-folded success, proceeding to `selesaiMuatAction` and the invoice-printing loop), guarded by the same `checkArmadaConflictAction` pre-check pattern shown above, storing `{ info: check, jamJadwal, then: "selesaiMuat" }` on conflict (same as `handleSaveDriverTime` but with `then: "selesaiMuat"`).
+
+Also add `setConflict(null)` alongside this component's existing `jadwalId`-change reset logic (the effect that already resets `order`/`error`/etc. when a different Jadwal opens), so a stale conflict popup from a previous Jadwal can never resurface.
 
 Render the dialog once, near this component's other dialog-closing JSX (e.g. right before or after the vehicle-check dialog render, inside the outer `<Dialog>`'s content but as a sibling — a nested `Dialog` inside `DialogContent` is fine, this codebase already does this elsewhere for similar cases):
 
 ```tsx
 {conflict && (
   <ArmadaConflictDialog
-    conflict={conflict}
+    conflict={conflict.info}
     onCancel={() => setConflict(null)}
     onConfirm={() => {
       if (jadwalId == null) return;
       const targetId = jadwalId;
+      const { jamJadwal, then } = conflict;
       setConflict(null);
-      doSaveDriverTime(targetId, buildJamJadwal());
+      if (then === "save") {
+        doSaveDriverTime(targetId, jamJadwal);
+      } else {
+        doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal);
+      }
     }}
   />
 )}
 ```
-
-Note: since `handleSelesaiMuat`'s check shares the same `conflict` state, its `onConfirm` needs to know which of the two flows (`doSaveDriverTime` vs the `handleSelesaiMuat` variant) triggered the pending conflict. Add a small discriminant, e.g. store `{ info: ArmadaConflictInfo; then: "save" | "selesaiMuat" }` in the state instead of a bare `ArmadaConflictInfo`, and branch in `onConfirm` accordingly.
 
 - [ ] **Step 1: Apply the changes above to both handlers**
 
@@ -799,12 +809,12 @@ function handleSubmit() {
 }
 ```
 
-Add state and restructure the non-take-away branch:
+Add state and restructure the non-take-away branch. **Store the checked `deliveryDateTime` alongside the conflict info** (not a bare `ArmadaConflictInfo`), and have `doCreatePemesanan` take it as a parameter instead of re-deriving `new Date(\`${date}T${time}:00\`)` from current state a second time — same lesson as Task 4's review found (recomputing risks using a different value than what was actually checked if `date`/`time` state changes between the check and the confirm click):
 
 ```ts
-const [conflict, setConflict] = useState<ArmadaConflictInfo | null>(null);
+const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; deliveryDateTime: Date } | null>(null);
 
-function doCreatePemesanan() {
+function doCreatePemesanan(deliveryDateTime: Date) {
   if (!mitra) return;
   startTransition(async () => {
     const result = await createPemesananAction({
@@ -812,7 +822,7 @@ function doCreatePemesanan() {
       variant,
       qtyKantong: qtyNumber,
       bonusQty: bonusQtyNumber,
-      deliveryDateTime: new Date(`${date}T${time}:00`),
+      deliveryDateTime,
       armadaId: Number(armadaId),
       salesmanId: salesmanId === UNSET ? null : salesmanId,
     });
@@ -846,22 +856,33 @@ function handleSubmit() {
     return;
   }
   const candidateQty = qtyNumber + bonusQtyNumber;
+  const deliveryDateTime = new Date(`${date}T${time}:00`);
   startTransition(async () => {
-    const check = await checkArmadaConflictAction(Number(armadaId), new Date(`${date}T${time}:00`), candidateQty, null);
+    const check = await checkArmadaConflictAction(Number(armadaId), deliveryDateTime, candidateQty, null);
     if (check) {
-      setConflict(check);
+      setConflict({ info: check, deliveryDateTime });
       return;
     }
-    doCreatePemesanan();
+    doCreatePemesanan(deliveryDateTime);
   });
 }
 ```
+
+Also add `setConflict(null)` alongside this component's `resetForm()` (called on dialog close) so a stale conflict popup can never resurface on reopen.
 
 Render, as a sibling after this component's own `</Dialog>`:
 
 ```tsx
 {conflict && (
-  <ArmadaConflictDialog conflict={conflict} onCancel={() => setConflict(null)} onConfirm={() => { setConflict(null); doCreatePemesanan(); }} />
+  <ArmadaConflictDialog
+    conflict={conflict.info}
+    onCancel={() => setConflict(null)}
+    onConfirm={() => {
+      const deliveryDateTime = conflict.deliveryDateTime;
+      setConflict(null);
+      doCreatePemesanan(deliveryDateTime);
+    }}
+  />
 )}
 ```
 
@@ -929,10 +950,10 @@ function handleSubmit() {
 }
 ```
 
-Extract the qty-updates + reschedule tail into its own function so the conflict-check can sit in front of just the reschedule step (the qty updates themselves don't move the Jadwal, only `reschedulePemesananAction` does):
+Extract the qty-updates + reschedule tail into its own function so the conflict-check can sit in front of just the reschedule step (the qty updates themselves don't move the Jadwal, only `reschedulePemesananAction` does). **Store the checked `deliveryDateTime` alongside the conflict info** (not a bare `ArmadaConflictInfo`), and have `doReschedule` take it as a parameter instead of re-deriving `new Date(\`${date}T${time}:00\`)` a second time on confirm — same lesson as Task 4's review found:
 
 ```ts
-const [conflict, setConflict] = useState<ArmadaConflictInfo | null>(null);
+const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; deliveryDateTime: Date } | null>(null);
 
 async function applyQtyChanges(targetId: string): Promise<boolean> {
   if (initialQty10KG != null && Number(qty10KG) !== initialQty10KG) {
@@ -954,12 +975,12 @@ async function applyQtyChanges(targetId: string): Promise<boolean> {
   return true;
 }
 
-function doReschedule(targetId: string) {
+function doReschedule(targetId: string, deliveryDateTime: Date) {
   startTransition(async () => {
     const result = await reschedulePemesananAction({
       salesOrderId: targetId,
       armadaId: Number(armadaId),
-      deliveryDateTime: new Date(`${date}T${time}:00`),
+      deliveryDateTime,
       salesmanId: salesmanId === UNSET ? null : salesmanId,
     });
     if (targetIdRef.current !== targetId) return;
@@ -986,28 +1007,31 @@ function handleSubmit() {
     const check = await checkArmadaConflictAction(Number(armadaId), deliveryDateTime, candidateQty, null);
     if (targetIdRef.current !== targetId) return;
     if (check) {
-      setConflict(check);
+      setConflict({ info: check, deliveryDateTime });
       return;
     }
-    doReschedule(targetId);
+    doReschedule(targetId, deliveryDateTime);
   });
 }
 ```
 
 Note `excludeJadwalId` is `null` here (not the Jadwal's own id) — this flow doesn't know the SO's *current* JadwalID at this point without an extra lookup, and `reschedulePemesananAction` internally handles the "already on the right Jadwal" case itself via `findDraftJadwalByArmadaAndTime`; treating it as `null` here means the confirmation may show up slightly more often than strictly necessary in the (uncommon) case of rescheduling to the SAME slot it's already on, which is an acceptable false-positive for a decision-support dialog, not a correctness bug.
 
+Also add `setConflict(null)` to this component's existing `[target]`-keyed reset effect (the one that already resets `date`/`time`/`armadaId`/qty fields when `target` changes), so a stale conflict popup from a previous SO can never resurface.
+
 Render, as a sibling after this component's own `</Dialog>`:
 
 ```tsx
 {conflict && (
   <ArmadaConflictDialog
-    conflict={conflict}
+    conflict={conflict.info}
     onCancel={() => setConflict(null)}
     onConfirm={() => {
       if (!target) return;
       const targetId = target.salesOrderId;
+      const { deliveryDateTime } = conflict;
       setConflict(null);
-      doReschedule(targetId);
+      doReschedule(targetId, deliveryDateTime);
     }}
   />
 )}
