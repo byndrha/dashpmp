@@ -72,6 +72,12 @@ export default async function PemasaranPage() {
   const mitraAssignmentsForSession = isPlainMarketing
     ? mitraAssignments.filter((a) => a.MarketingUserID === session.user.id)
     : mitraAssignments;
+  // Daftar Data Pengajuan Mitra: Marketing sees only submissions they
+  // themselves created — Approver/Wilayah-manager roles and Super Admin
+  // still see every submission, since they're the ones who approve/reject
+  // and need visibility across the whole team (unaffected: isPlainMarketing
+  // is false for APPROVER_ROLE_IDS/WILAYAH_MANAGER_ROLE_IDS by definition).
+  const pengajuanRowsForSession = isPlainMarketing ? rows.filter((r) => r.MarketingUserID === session.user.id) : rows;
 
   return (
     <div className="flex flex-col gap-4">
@@ -105,7 +111,7 @@ export default async function PemasaranPage() {
       />
 
       <PemasaranSection
-        rows={rows}
+        rows={pengajuanRowsForSession}
         priceLevels={priceLevels}
         canApprove={canApprove}
         isSuperAdmin={session.user.isSuperAdmin}
