@@ -56,3 +56,10 @@ export async function requireSatpam() {
   if (!session.user.isSatpam) redirect("/akses-ditolak");
   return session;
 }
+
+export async function requireDriver() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!session.user.isDriver) redirect("/akses-ditolak");
+  return session;
+}

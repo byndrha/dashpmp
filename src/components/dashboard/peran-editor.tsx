@@ -10,7 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MODULE_KEYS, MODULE_LABEL, type ModuleKey, type PermissionMap } from "@/lib/permissions";
 import type { PeranRow, PeranIzinRow, PerusahaanDirektoriOption } from "@/lib/queries/akun";
-import { createPeranAction, deletePeranAction, setPeranIzinAction, setPeranSatpamAction } from "@/app/grup/akun/peran/actions";
+import {
+  createPeranAction,
+  deletePeranAction,
+  setPeranIzinAction,
+  setPeranSatpamAction,
+  setPeranDriverAction,
+} from "@/app/grup/akun/peran/actions";
 
 function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
   const map: PermissionMap = {};
@@ -24,6 +30,7 @@ function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
 function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: PermissionMap }) {
   const [map, setMap] = useState(initialMap);
   const [isSatpam, setIsSatpam] = useState(peran.isSatpam);
+  const [isDriver, setIsDriverState] = useState(peran.isDriver);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -44,6 +51,11 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     setDirty(true);
   }
 
+  function toggleDriver() {
+    setIsDriverState((prev) => !prev);
+    setDirty(true);
+  }
+
   function handleSave() {
     setError(null);
     startTransition(async () => {
@@ -57,6 +69,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
           })
         ),
         setPeranSatpamAction(peran.id, isSatpam),
+        setPeranDriverAction(peran.id, isDriver),
       ]);
       const failed = results.find((r) => !r.success);
       if (failed && !failed.success) {
@@ -119,6 +132,16 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
             Peran Khusus: Satpam
             <span className="block text-muted-foreground">
               Hanya akun dengan peran ini yang bisa mengisi Cek Berangkat/Cek Datang di Validasi Rute.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
+          <input type="checkbox" className="accent-primary" checked={isDriver} onChange={toggleDriver} />
+          <span>
+            Peran Khusus: Driver
+            <span className="block text-muted-foreground">
+              Akun dengan peran ini diarahkan ke Aplikasi Driver setelah login, dan hanya melihat tugas milik dirinya
+              sendiri (perlu ditautkan ke identitas Driver lewat halaman Akun).
             </span>
           </span>
         </label>
