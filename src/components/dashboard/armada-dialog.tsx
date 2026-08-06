@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -337,6 +337,14 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
   const [editing, setEditing] = useState<ArmadaRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Tracks which armada's edit dialog is currently open, read fresh inside
+  // handleUpdate after the await — the edit dialog can be dismissed
+  // (Escape/outside-click, not blocked while the request is pending) and
+  // reopened for a different armada before the response arrives, and that
+  // stale response must not paint its error (or force-close the dialog on
+  // a stale success, discarding the other armada's in-progress edit) onto
+  // whichever armada is now open.
+  const editingIdRef = useRef<number | null>(null);
 
   function handleCreate(input: ArmadaInput) {
     setError(null);
@@ -353,13 +361,16 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
 
   function handleUpdate(input: ArmadaInput) {
     if (!editing) return;
+    const targetId = editing.ArmadaID;
     setError(null);
     startTransition(async () => {
-      const result = await updateArmadaAction(editing.ArmadaID, input);
+      const result = await updateArmadaAction(targetId, input);
+      if (editingIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;
       }
+      editingIdRef.current = null;
       setEditing(null);
       setOpen(true);
     });
@@ -430,6 +441,7 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
                       className="size-7"
                       onClick={() => {
                         setOpen(false);
+                        editingIdRef.current = a.ArmadaID;
                         setEditing(a);
                       }}
                     >
@@ -470,6 +482,7 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
           open={!!editing}
           onOpenChange={(next) => {
             if (!next) {
+              editingIdRef.current = null;
               setEditing(null);
               setOpen(true);
             }

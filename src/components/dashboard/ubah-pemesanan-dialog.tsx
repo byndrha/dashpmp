@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,6 +68,18 @@ export function UbahPemesananDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // UbahPemesananDialog is a single persistent instance whose `target` is
+  // swapped by the caller (Papan Pengiriman's stop list, the Pemesanan
+  // list) rather than remounted per SO — so this ref tracks which SO it is
+  // CURRENTLY showing, resynced on every render straight from the `target`
+  // prop rather than from an open/close event, since a dialog opened
+  // externally never fires this component's own onOpenChange. handleSubmit
+  // makes up to three sequential awaited calls, so it's checked after EACH
+  // one — the dialog could move on to a different SO between any two of
+  // them, and a stale response must not paint its error (or close the
+  // dialog on stale success) over whichever SO is now open.
+  const targetIdRef = useRef<string | null>(target?.salesOrderId ?? null);
+  targetIdRef.current = target?.salesOrderId ?? null;
 
   useEffect(() => {
     if (!target) return;
@@ -107,28 +119,32 @@ export function UbahPemesananDialog({
 
   function handleSubmit() {
     if (!target || !canSubmit) return;
+    const targetId = target.salesOrderId;
     setError(null);
     startTransition(async () => {
       if (initialQty10KG != null && Number(qty10KG) !== initialQty10KG) {
-        const result = await updateSalesOrderQtyAction(target.salesOrderId, "10kg", Number(qty10KG));
+        const result = await updateSalesOrderQtyAction(targetId, "10kg", Number(qty10KG));
+        if (targetIdRef.current !== targetId) return;
         if (!result.success) {
           setError(result.error);
           return;
         }
       }
       if (initialQty5KG != null && Number(qty5KG) !== initialQty5KG) {
-        const result = await updateSalesOrderQtyAction(target.salesOrderId, "5kg", Number(qty5KG));
+        const result = await updateSalesOrderQtyAction(targetId, "5kg", Number(qty5KG));
+        if (targetIdRef.current !== targetId) return;
         if (!result.success) {
           setError(result.error);
           return;
         }
       }
       const result = await reschedulePemesananAction({
-        salesOrderId: target.salesOrderId,
+        salesOrderId: targetId,
         armadaId: Number(armadaId),
         deliveryDateTime: new Date(`${date}T${time}:00`),
         salesmanId: salesmanId === UNSET ? null : salesmanId,
       });
+      if (targetIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;

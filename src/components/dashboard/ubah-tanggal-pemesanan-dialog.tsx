@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +40,14 @@ export function UbahTanggalPemesananDialog({
   const [time, setTime] = useState("00:00");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Same persistent-instance/prop-swapped pattern as UbahPemesananDialog —
+  // this ref tracks which SO the dialog is CURRENTLY showing, resynced on
+  // every render from the `target` prop (an externally-driven open never
+  // fires this component's own onOpenChange), so a stale response can't
+  // paint its error (or close the dialog on stale success) over whichever
+  // SO is now open.
+  const targetIdRef = useRef<string | null>(target?.salesOrderId ?? null);
+  targetIdRef.current = target?.salesOrderId ?? null;
 
   useEffect(() => {
     if (!target) return;
@@ -56,9 +64,11 @@ export function UbahTanggalPemesananDialog({
 
   function handleSubmit() {
     if (!target || !canSubmit) return;
+    const targetId = target.salesOrderId;
     setError(null);
     startTransition(async () => {
-      const result = await updateSalesOrderTransDateAction(target.salesOrderId, new Date(`${date}T${time}:00`));
+      const result = await updateSalesOrderTransDateAction(targetId, new Date(`${date}T${time}:00`));
+      if (targetIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;

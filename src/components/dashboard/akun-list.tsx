@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { Plus, Pencil, KeyRound, Trash2, Phone, Mail, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -310,6 +310,16 @@ export function AkunList({
   const [resetting, setResetting] = useState<AkunRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // The Create/Edit/Reset dialogs are mutually exclusive but all three
+  // share this component's single `error` state. Each ref below is set
+  // when its own dialog opens and cleared when it closes, so a request
+  // whose dialog has since been dismissed (or replaced by a different
+  // dialog/row) can be detected inside the async handlers below and
+  // skipped, instead of painting its stale error (or closing the dialog
+  // on a stale success) over whatever is now showing.
+  const creatingActiveRef = useRef(false);
+  const editingIdRef = useRef<number | null>(null);
+  const resettingIdRef = useRef<number | null>(null);
 
   const filtered = useMemo(() => {
     if (filter === ALL_FILTER) return akunList;
@@ -321,22 +331,27 @@ export function AkunList({
     setError(null);
     startTransition(async () => {
       const result = await createAkunAction(input);
+      if (!creatingActiveRef.current) return;
       if (!result.success) {
         setError(result.error);
         return;
       }
+      creatingActiveRef.current = false;
       setCreating(false);
     });
   }
 
   function handleUpdate(input: UpdateAkunInput) {
+    const targetId = input.id;
     setError(null);
     startTransition(async () => {
       const result = await updateAkunAction(input);
+      if (editingIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;
       }
+      editingIdRef.current = null;
       setEditing(null);
     });
   }
@@ -345,10 +360,12 @@ export function AkunList({
     setError(null);
     startTransition(async () => {
       const result = await resetAkunPasswordAction(id, password);
+      if (resettingIdRef.current !== id) return;
       if (!result.success) {
         setError(result.error);
         return;
       }
+      resettingIdRef.current = null;
       setResetting(null);
     });
   }
@@ -392,6 +409,7 @@ export function AkunList({
         <Button
           onClick={() => {
             setError(null);
+            creatingActiveRef.current = true;
             setCreating(true);
           }}
         >
@@ -416,6 +434,7 @@ export function AkunList({
                     className="size-7"
                     onClick={() => {
                       setError(null);
+                      editingIdRef.current = a.id;
                       setEditing(a);
                     }}
                   >
@@ -427,6 +446,7 @@ export function AkunList({
                     className="size-7"
                     onClick={() => {
                       setError(null);
+                      resettingIdRef.current = a.id;
                       setResetting(a);
                     }}
                   >
@@ -469,7 +489,10 @@ export function AkunList({
 
       <CreateDialog
         open={creating}
-        onOpenChange={setCreating}
+        onOpenChange={(open) => {
+          if (!open) creatingActiveRef.current = false;
+          setCreating(open);
+        }}
         perusahaanList={perusahaanList}
         peranList={peranList}
         onSubmit={handleCreate}
@@ -482,7 +505,12 @@ export function AkunList({
           akun={editing}
           perusahaanList={perusahaanList}
           peranList={peranList}
-          onOpenChange={(open) => !open && setEditing(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              editingIdRef.current = null;
+              setEditing(null);
+            }
+          }}
           onSubmit={handleUpdate}
           pending={pending}
           error={error}
@@ -491,7 +519,12 @@ export function AkunList({
       {resetting && (
         <ResetPasswordDialog
           akun={resetting}
-          onOpenChange={(open) => !open && setResetting(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              resettingIdRef.current = null;
+              setResetting(null);
+            }
+          }}
           onSubmit={handleResetPassword}
           pending={pending}
           error={error}

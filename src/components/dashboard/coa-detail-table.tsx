@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { ChevronDown, PiggyBank } from "lucide-react";
 import {
   Table,
@@ -51,25 +51,36 @@ export function COADetailTable({
   const [editing, setEditing] = useState<COADetailRow | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Tracks which row's budget dialog is currently open, read fresh inside
+  // handleSubmit after the await — the dialog can be dismissed (Escape/
+  // outside-click, not blocked while the request is pending) and reopened
+  // for a different account before the response arrives, and that stale
+  // response must not paint its error (or close-on-success) onto whichever
+  // row is now showing.
+  const editingIdRef = useRef<string | null>(null);
 
   function openEditor(row: COADetailRow) {
+    editingIdRef.current = row.ChartOfAccountID;
     setError(null);
     setEditing(row);
   }
 
   function closeEditor() {
+    editingIdRef.current = null;
     setError(null);
     setEditing(null);
   }
 
   function handleSubmit(formData: FormData) {
     if (!editing) return;
+    const targetId = editing.ChartOfAccountID;
     const amount = Number(formData.get("amount"));
     setError(null);
     startTransition(async () => {
-      const result = await onSaveBudget({ chartOfAccountId: editing.ChartOfAccountID, year, month, amount });
+      const result = await onSaveBudget({ chartOfAccountId: targetId, year, month, amount });
+      if (editingIdRef.current !== targetId) return;
       if (result.success) {
-        setEditing(null);
+        closeEditor();
       } else {
         setError(result.error);
       }

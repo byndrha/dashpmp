@@ -282,6 +282,25 @@ export function RouteValidationDialog({
   }
 
   const jadwalId = jadwal?.JadwalID ?? null;
+  // RouteValidationDialog is a single persistent instance whose `jadwal`
+  // prop is swapped by pengiriman-board.tsx's detailJadwalId state, not
+  // remounted per card — so this ref tracks which Jadwal it is CURRENTLY
+  // showing, resynced on every render straight from jadwalId rather than
+  // from an open/close event, since an externally-driven open never fires
+  // this component's own onOpenChange. Every async handler below captures
+  // its own `targetId` at call time and re-checks this ref after each
+  // await before touching setError/setAddError or any dialog-closing
+  // state (onDeleted/onOpenChange) — a request in flight for one Jadwal
+  // whose dialog got dismissed (or replaced by a different Jadwal card)
+  // before the response arrives must not paint its stale error, or
+  // silently close whichever Jadwal is now open, discarding its
+  // in-progress state. Side effects that are true regardless of what's
+  // currently displayed (toast notifications, opening a printed invoice
+  // for a stop that really was just invoiced) are deliberately left
+  // unguarded — the underlying action genuinely happened and skipping
+  // them would change business behavior, not just avoid a stale paint.
+  const jadwalIdRef = useRef<number | null>(jadwalId);
+  jadwalIdRef.current = jadwalId;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const totalQty = useMemo(() => order.reduce((sum, o) => sum + o.Qty, 0), [order]);
   const totalBonusQty = useMemo(() => order.reduce((sum, o) => sum + o.BonusQty, 0), [order]);
@@ -432,9 +451,11 @@ export function RouteValidationDialog({
     const next = arrayMove(order, oldIndex, newIndex);
     setOrder(next);
     if (jadwalId != null) {
+      const targetId = jadwalId;
       setError(null);
       startTransition(async () => {
-        const result = await updateJadwalUrutanAction(jadwalId, next.map((d) => d.JadwalDetailID));
+        const result = await updateJadwalUrutanAction(targetId, next.map((d) => d.JadwalDetailID));
+        if (jadwalIdRef.current !== targetId) return;
         if (!result.success) {
           setError(result.error);
         }
@@ -447,25 +468,28 @@ export function RouteValidationDialog({
   // existing DOs) doesn't go through handleSelesaiMuat/handleKonfirmasiBerangkat.
   function handleSaveDriverTime() {
     if (jadwalId == null) return;
+    const targetId = jadwalId;
     setError(null);
     startTransition(async () => {
       const result = await updateJadwalDriverTimeAction(
-        jadwalId,
+        targetId,
         { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
         { skipOrderTimeCheck: true }
       );
       if (!result.success) {
-        setError(result.error);
+        if (jadwalIdRef.current === targetId) setError(result.error);
         return;
       }
       // The new time landed inside another Draft's estimated busy window
       // for the same armada — this Jadwal got folded into that one
       // instead (see updateJadwalDriverTime), so there's nothing left
       // under jadwalId to keep showing here.
-      if (result.data !== jadwalId) {
+      if (result.data !== targetId) {
         toast.success(`Digabung dengan keberangkatan lain di jam yang sama untuk armada ini.`);
-        onDeleted?.();
-        onOpenChange(false);
+        if (jadwalIdRef.current === targetId) {
+          onDeleted?.();
+          onOpenChange(false);
+        }
       }
     });
   }
@@ -476,44 +500,51 @@ export function RouteValidationDialog({
   function handleRemoveStop(detail: JadwalDetailRow) {
     if (jadwalId == null) return;
     if (!confirm(`Keluarkan "${detail.CustomerName}" dari draft ini?`)) return;
+    const targetId = jadwalId;
     setError(null);
     startTransition(async () => {
-      const result = await removeSalesOrderFromJadwalAction(jadwalId, detail.SalesOrderID);
+      const result = await removeSalesOrderFromJadwalAction(targetId, detail.SalesOrderID);
       if (!result.success) {
-        setError(result.error);
+        if (jadwalIdRef.current === targetId) setError(result.error);
         return;
       }
       if (order.length <= 1) {
-        onDeleted?.();
-        onOpenChange(false);
+        if (jadwalIdRef.current === targetId) {
+          onDeleted?.();
+          onOpenChange(false);
+        }
         return;
       }
-      const rows = await getJadwalDetailAction(jadwalId);
-      setOrder(rows);
+      const rows = await getJadwalDetailAction(targetId);
+      if (jadwalIdRef.current === targetId) setOrder(rows);
     });
   }
 
   function handleDeleteDraft() {
     if (jadwalId == null) return;
+    const targetId = jadwalId;
     setError(null);
     startTransition(async () => {
-      const result = await deleteJadwalDraftAction(jadwalId);
+      const result = await deleteJadwalDraftAction(targetId);
       if (!result.success) {
-        setError(result.error);
+        if (jadwalIdRef.current === targetId) setError(result.error);
         return;
       }
-      onDeleted?.();
-      onOpenChange(false);
+      if (jadwalIdRef.current === targetId) {
+        onDeleted?.();
+        onOpenChange(false);
+      }
     });
   }
 
   function handleMuat() {
     if (jadwalId == null) return;
+    const targetId = jadwalId;
     setError(null);
     startTransition(async () => {
-      const result = await startMuatAction(jadwalId);
+      const result = await startMuatAction(targetId);
       if (!result.success) {
-        setError(result.error);
+        if (jadwalIdRef.current === targetId) setError(result.error);
       }
     });
   }
@@ -534,51 +565,59 @@ export function RouteValidationDialog({
   // (updateJadwalDriverTime refuses any edit once not Draft).
   function handleSelesaiMuat() {
     if (jadwalId == null) return;
+    const targetId = jadwalId;
     setError(null);
     startTransition(async () => {
       const driverTimeResult = await updateJadwalDriverTimeAction(
-        jadwalId,
+        targetId,
         { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
         { skipOrderTimeCheck: true }
       );
       if (!driverTimeResult.success) {
-        setError(driverTimeResult.error);
+        if (jadwalIdRef.current === targetId) setError(driverTimeResult.error);
         return;
       }
       // The new time landed inside another Draft's estimated busy window
       // for the same armada — this Jadwal got folded into that one
       // instead (see updateJadwalDriverTime), so there's nothing left
       // under jadwalId to run selesaiMuat against anymore.
-      if (driverTimeResult.data !== jadwalId) {
+      if (driverTimeResult.data !== targetId) {
         toast.success(
           "Waktu ini tumpang tindih dengan keberangkatan lain untuk armada ini — sudah digabung. Buka kembali untuk melanjutkan keberangkatan."
         );
-        onDeleted?.();
-        onOpenChange(false);
+        if (jadwalIdRef.current === targetId) {
+          onDeleted?.();
+          onOpenChange(false);
+        }
         return;
       }
-      const selesaiMuatResult = await selesaiMuatAction(jadwalId);
+      const selesaiMuatResult = await selesaiMuatAction(targetId);
       if (!selesaiMuatResult.success) {
-        setError(selesaiMuatResult.error);
+        if (jadwalIdRef.current === targetId) setError(selesaiMuatResult.error);
         return;
       }
+      // The DO/SI documents were genuinely created regardless of which
+      // Jadwal this dialog has since moved on to show — auto-opening their
+      // invoices is a real consequence of a real action, not display state
+      // tied to this dialog, so it's deliberately not gated on jadwalIdRef.
       for (const t of selesaiMuatResult.data) {
         if (printSelected.has(t.jadwalDetailId)) {
           window.open(`/invoice/${t.invoiceToken}`, "_blank");
         }
       }
-      const rows = await getJadwalDetailAction(jadwalId);
-      setOrder(rows);
+      const rows = await getJadwalDetailAction(targetId);
+      if (jadwalIdRef.current === targetId) setOrder(rows);
     });
   }
 
   function handleKonfirmasiBerangkat() {
     if (jadwalId == null) return;
+    const targetId = jadwalId;
     setError(null);
     startTransition(async () => {
-      const result = await konfirmasiBerangkatAction(jadwalId);
+      const result = await konfirmasiBerangkatAction(targetId);
       if (!result.success) {
-        setError(result.error);
+        if (jadwalIdRef.current === targetId) setError(result.error);
       }
     });
   }
@@ -606,16 +645,19 @@ export function RouteValidationDialog({
 
   function handleConfirmAdd() {
     if (jadwalId == null || selectedToAdd.size === 0) return;
+    const targetId = jadwalId;
     setAddError(null);
     startTransition(async () => {
-      const result = await addSalesOrdersToJadwalAction(jadwalId, [...selectedToAdd]);
+      const result = await addSalesOrdersToJadwalAction(targetId, [...selectedToAdd]);
       if (!result.success) {
-        setAddError(result.error);
+        if (jadwalIdRef.current === targetId) setAddError(result.error);
         return;
       }
-      const rows = await getJadwalDetailAction(jadwalId);
-      setOrder(rows);
-      setAdding(false);
+      const rows = await getJadwalDetailAction(targetId);
+      if (jadwalIdRef.current === targetId) {
+        setOrder(rows);
+        setAdding(false);
+      }
     });
   }
 

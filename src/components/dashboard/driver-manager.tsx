@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Pencil, X, EyeOff, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,19 @@ function DriverFormDialog({
   const [simDraft, setSimDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // DriverFormDialog is a single persistent instance reused across every
+  // driver (DriverManager renders it unconditionally, swapping `driver` via
+  // its own `editing` state rather than mounting a fresh instance per
+  // row) — so this ref tracks which driver it is CURRENTLY showing,
+  // resynced on every render straight from the `driver` prop rather than
+  // from an open/close event, since a dialog opened externally (parent
+  // sets `editing`) never fires this component's own onOpenChange. A save
+  // request in flight for driver A whose dialog got dismissed (or replaced
+  // by driver B's) before the response arrives must not paint A's stale
+  // error over B's form, and — worse — a late SUCCESS must not silently
+  // close B's now-open, in-progress dialog.
+  const driverIdRef = useRef<string | null>(driver?.SalesmanID ?? null);
+  driverIdRef.current = driver?.SalesmanID ?? null;
 
   function resetFromDriver(d: DriverProfileRow | null) {
     setTempatLahir(d?.TempatLahir ?? "");
@@ -88,6 +101,7 @@ function DriverFormDialog({
 
   function handleSubmit() {
     if (!driver) return;
+    const targetId = driver.SalesmanID;
     setError(null);
     const input: SaveDriverProfileInput = {
       salesmanId: driver.SalesmanID,
@@ -104,6 +118,11 @@ function DriverFormDialog({
     };
     startTransition(async () => {
       const result = await saveDriverProfileAction(input);
+      // This dialog may have been dismissed and reopened for a different
+      // driver while the request was in flight — only touch state (and
+      // especially: don't close the dialog) if it's still showing the
+      // driver this request was actually for.
+      if (driverIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
         return;
