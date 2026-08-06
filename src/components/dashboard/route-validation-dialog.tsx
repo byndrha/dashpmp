@@ -28,11 +28,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah, formatTime, formatKemasanQty } from "@/lib/format";
 import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
-import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder } from "@/lib/queries/pengiriman-jadwal";
+import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder, ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
 import type { FuelType } from "@/lib/armada-fuel";
 import { VehicleCheckDialog } from "@/components/dashboard/vehicle-check-dialog";
+import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import type {
   VehicleCheckRow,
   VehicleCheckTipe,
@@ -53,6 +54,7 @@ import {
   konfirmasiBerangkatAction,
   getVehicleChecksForJadwalAction,
   createVehicleCheckAction,
+  checkArmadaConflictAction,
 } from "@/app/(dashboard)/delivery/actions";
 
 const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((m) => m.RouteMap), {
@@ -227,6 +229,15 @@ export function RouteValidationDialog({
   const [routeLoading, setRouteLoading] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Set when checkArmadaConflictAction finds an overlapping Draft for this
+  // armada — pauses the save (see handleSaveDriverTime/handleSelesaiMuat)
+  // until the user confirms merging via ArmadaConflictDialog. Stores the
+  // exact jamJadwal that was checked (not a bare ArmadaConflictInfo) so
+  // onConfirm below reuses that validated value instead of recomputing
+  // buildJamJadwal() again against possibly-changed date/time state, and
+  // `then` discriminates which of the two handlers to resume since both
+  // share this one piece of state.
+  const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; jamJadwal: Date; then: "save" | "selesaiMuat" } | null>(null);
   // Lets staff drop the map panel entirely (no Leaflet init, no OSRM wait) —
   // useful on a slow connection when all they need is the stop list/totals
   // to check or share, matching what's already in buildShareText.
@@ -322,6 +333,9 @@ export function RouteValidationDialog({
     setPrintSelected(new Set());
     setPrintError(null);
     setShowMap(true);
+    // A conflict popup left open from a previously-shown Jadwal must never
+    // resurface against whichever Jadwal is opened next.
+    setConflict(null);
 
     if (jadwalId == null) {
       setOrder([]);
@@ -463,17 +477,14 @@ export function RouteValidationDialog({
     }
   }
 
-  // Standalone "Simpan" path — still needed on its own since editing
-  // driver/time while already Terbit (re-assigning driver/vehicle onto
-  // existing DOs) doesn't go through handleSelesaiMuat/handleKonfirmasiBerangkat.
-  function handleSaveDriverTime() {
-    if (jadwalId == null) return;
-    const targetId = jadwalId;
-    setError(null);
+  // Actual driver/time persist, split out of handleSaveDriverTime so it can
+  // run either immediately (no conflict) or after the user confirms merging
+  // via ArmadaConflictDialog (see the conflict-check pre-flight below).
+  function doSaveDriverTime(targetId: number, jamJadwal: Date) {
     startTransition(async () => {
       const result = await updateJadwalDriverTimeAction(
         targetId,
-        { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
+        { jamJadwal, salesmanId: driverId || null },
         { skipOrderTimeCheck: true }
       );
       if (!result.success) {
@@ -491,6 +502,28 @@ export function RouteValidationDialog({
           onOpenChange(false);
         }
       }
+    });
+  }
+
+  // Standalone "Simpan" path — still needed on its own since editing
+  // driver/time while already Terbit (re-assigning driver/vehicle onto
+  // existing DOs) doesn't go through handleSelesaiMuat/handleKonfirmasiBerangkat.
+  // Pre-checks for an armada conflict (an overlapping Draft on the same
+  // armada) before persisting — if found, pauses on ArmadaConflictDialog
+  // instead of saving straight away (see conflict state above).
+  function handleSaveDriverTime() {
+    if (jadwalId == null || armadaId == null) return;
+    const targetId = jadwalId;
+    const jamJadwal = buildJamJadwal();
+    setError(null);
+    startTransition(async () => {
+      const check = await checkArmadaConflictAction(armadaId, jamJadwal, totalQty, targetId);
+      if (jadwalIdRef.current !== targetId) return;
+      if (check) {
+        setConflict({ info: check, jamJadwal, then: "save" });
+        return;
+      }
+      doSaveDriverTime(targetId, jamJadwal);
     });
   }
 
@@ -563,14 +596,17 @@ export function RouteValidationDialog({
   // persisted — on a real DeliveryOrder/SalesInvoice, once Status flips to
   // Terbit, that misattribution can no longer be corrected through the UI
   // (updateJadwalDriverTime refuses any edit once not Draft).
-  function handleSelesaiMuat() {
-    if (jadwalId == null) return;
-    const targetId = jadwalId;
-    setError(null);
+  // Actual driver/time persist + follow-on selesaiMuat, split out of
+  // handleSelesaiMuat so it can run either immediately (no conflict) or
+  // after the user confirms merging via ArmadaConflictDialog. Unlike
+  // doSaveDriverTime, a successful save here continues on to
+  // selesaiMuatAction and the invoice-printing loop — that's why this
+  // isn't just a call to doSaveDriverTime.
+  function doSaveDriverTimeThenSelesaiMuat(targetId: number, jamJadwal: Date) {
     startTransition(async () => {
       const driverTimeResult = await updateJadwalDriverTimeAction(
         targetId,
-        { jamJadwal: buildJamJadwal(), salesmanId: driverId || null },
+        { jamJadwal, salesmanId: driverId || null },
         { skipOrderTimeCheck: true }
       );
       if (!driverTimeResult.success) {
@@ -607,6 +643,26 @@ export function RouteValidationDialog({
       }
       const rows = await getJadwalDetailAction(targetId);
       if (jadwalIdRef.current === targetId) setOrder(rows);
+    });
+  }
+
+  // Pre-checks for an armada conflict (an overlapping Draft on the same
+  // armada) before persisting — if found, pauses on ArmadaConflictDialog
+  // instead of proceeding straight to save + selesaiMuat (see conflict
+  // state above and doSaveDriverTimeThenSelesaiMuat).
+  function handleSelesaiMuat() {
+    if (jadwalId == null || armadaId == null) return;
+    const targetId = jadwalId;
+    const jamJadwal = buildJamJadwal();
+    setError(null);
+    startTransition(async () => {
+      const check = await checkArmadaConflictAction(armadaId, jamJadwal, totalQty, targetId);
+      if (jadwalIdRef.current !== targetId) return;
+      if (check) {
+        setConflict({ info: check, jamJadwal, then: "selesaiMuat" });
+        return;
+      }
+      doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal);
     });
   }
 
@@ -1197,6 +1253,23 @@ export function RouteValidationDialog({
           </div>
         </div>
         </div>
+        {conflict && (
+          <ArmadaConflictDialog
+            conflict={conflict.info}
+            onCancel={() => setConflict(null)}
+            onConfirm={() => {
+              if (jadwalId == null) return;
+              const targetId = jadwalId;
+              const { jamJadwal, then } = conflict;
+              setConflict(null);
+              if (then === "save") {
+                doSaveDriverTime(targetId, jamJadwal);
+              } else {
+                doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal);
+              }
+            }}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
