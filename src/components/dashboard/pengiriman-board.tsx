@@ -20,6 +20,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ArmadaManager, ArmadaFormDialog, STATUS_BADGE, rowToForm } from "@/components/dashboard/armada-dialog";
+import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { DriverManager } from "@/components/dashboard/driver-manager";
 import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
@@ -28,7 +29,12 @@ import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime } from "@/lib/busi
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
 import type { ExpeditionVehicleOption } from "@/lib/queries/expedition";
-import type { JadwalCard as JadwalCardData, AvailableSalesOrder, ExternalDelivery } from "@/lib/queries/pengiriman-jadwal";
+import type {
+  JadwalCard as JadwalCardData,
+  AvailableSalesOrder,
+  ExternalDelivery,
+  ArmadaConflictInfo,
+} from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { ArmadaActivity, ArmadaActivityType } from "@/lib/armada-activity-types";
 import { ARMADA_ACTIVITY_TYPES, ARMADA_ACTIVITY_LABEL } from "@/lib/armada-activity-types";
@@ -44,6 +50,7 @@ import {
   deleteArmadaActivityAction,
   mergeExternalDeliveriesAction,
   getMaxSalesOrderTransDateForDeliveriesAction,
+  checkArmadaConflictAction,
 } from "@/app/(dashboard)/delivery/actions";
 
 // 24-hour axis, but the per-hour width is now derived from the available
@@ -309,6 +316,7 @@ function MergeExternalDialog({
   const [defaultJamJadwal, setDefaultJamJadwal] = useState<Date | null>(null);
   const [timeEdited, setTimeEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<ArmadaConflictInfo | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -343,14 +351,8 @@ function MergeExternalDialog({
 
   const totalKantong = deliveries.reduce((sum, d) => sum + d.TotalKantong, 0);
 
-  function handleSubmit() {
-    if (armadaId == null || deliveries.length === 0) return;
-    setError(null);
-    // Untouched default -> reuse the exact ceiled SalesOrder.TransDate Date
-    // directly, date and all. Once the user touches either field, `date` and
-    // `time` combine directly (free, un-derived) — same shape as
-    // route-validation-dialog.tsx's own buildJamJadwal().
-    const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : new Date(`${date}T${time}:00`);
+  function doMerge(jamJadwal: Date) {
+    if (armadaId == null) return;
     startTransition(async () => {
       const result = await mergeExternalDeliveriesAction(armadaId, deliveries.map((d) => d.DeliveryOrderID), jamJadwal);
       if (!result.success) {
@@ -362,7 +364,26 @@ function MergeExternalDialog({
     });
   }
 
+  function handleSubmit() {
+    if (armadaId == null || deliveries.length === 0) return;
+    setError(null);
+    // Untouched default -> reuse the exact ceiled SalesOrder.TransDate Date
+    // directly, date and all. Once the user touches either field, `date` and
+    // `time` combine directly (free, un-derived) — same shape as
+    // route-validation-dialog.tsx's own buildJamJadwal().
+    const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : new Date(`${date}T${time}:00`);
+    startTransition(async () => {
+      const check = await checkArmadaConflictAction(armadaId, jamJadwal, totalKantong, null);
+      if (check) {
+        setConflict(check);
+        return;
+      }
+      doMerge(jamJadwal);
+    });
+  }
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
@@ -413,6 +434,18 @@ function MergeExternalDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {conflict && (
+      <ArmadaConflictDialog
+        conflict={conflict}
+        onCancel={() => setConflict(null)}
+        onConfirm={() => {
+          const jamJadwal = !timeEdited && defaultJamJadwal ? defaultJamJadwal : new Date(`${date}T${time}:00`);
+          setConflict(null);
+          doMerge(jamJadwal);
+        }}
+      />
+    )}
+    </>
   );
 }
 
