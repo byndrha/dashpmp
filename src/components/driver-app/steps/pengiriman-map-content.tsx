@@ -7,13 +7,18 @@ import L from "leaflet";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 
-// Same CDN-hosted marker icon workaround as marketing-location-map.tsx (and
-// every other Leaflet marker component in this codebase) — Leaflet's
-// default icon paths break under Next.js's bundler otherwise.
+// Leaflet's default icon paths break under Next.js's bundler otherwise.
+// Served from /public/leaflet/ (copied from node_modules/leaflet/dist/images
+// at the same version this project depends on) rather than the unpkg.com
+// CDN other Leaflet components in this codebase still use — confirmed live
+// that browser tracking-prevention features (e.g. Microsoft Edge's, on by
+// default) block storage access for that CDN's marker images, leaving the
+// map with no visible markers. Self-hosting removes the third-party
+// dependency entirely.
 const driverIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl: "/leaflet/marker-icon.png",
+  iconRetinaUrl: "/leaflet/marker-icon-2x.png",
+  shadowUrl: "/leaflet/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
