@@ -1,7 +1,7 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, Popup } from "react-leaflet";
 import L from "leaflet";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
@@ -63,26 +63,35 @@ export default function PetaOverviewMapContent({
   }, [routes, pabrik]);
 
   return (
-    <MapContainer center={[pabrik.lat, pabrik.lng]} zoom={12} className="h-full w-full rounded-lg">
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {routes.map((r) => {
-        const geometry = geometries.get(r.jadwalId);
-        return (
-          <div key={r.jadwalId}>
-            {geometry && (
-              <Polyline positions={geometry.geometry.map(([lng, lat]) => [lat, lng])} pathOptions={{ color: r.color, weight: 4 }} />
-            )}
-            {r.stops
-              .filter((s) => s.Latitude != null && s.Longitude != null)
-              .map((s) => (
-                <Marker key={s.JadwalDetailID} position={[s.Latitude as number, s.Longitude as number]} icon={driverIcon}>
-                  <Popup>{s.CustomerName}</Popup>
-                </Marker>
-              ))}
-          </div>
-        );
-      })}
-      {position && <Marker position={[position.lat, position.lng]} icon={driverIcon} />}
-    </MapContainer>
+    // relative z-0 contains Leaflet's own panes (z-index up to 1000
+    // internally) within this local stacking context — without it they
+    // compare directly against the driver-app's fixed bottom nav (z-40)
+    // and render on top of it. Same fix as marketing-location-map.tsx.
+    <div className="relative z-0 h-full w-full">
+      <MapContainer center={[pabrik.lat, pabrik.lng]} zoom={12} className="h-full w-full">
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <Marker position={[pabrik.lat, pabrik.lng]} icon={driverIcon}>
+          <Popup>Pabrik</Popup>
+        </Marker>
+        {routes.map((r) => {
+          const geometry = geometries.get(r.jadwalId);
+          return (
+            <Fragment key={r.jadwalId}>
+              {geometry && (
+                <Polyline positions={geometry.geometry.map(([lng, lat]) => [lat, lng])} pathOptions={{ color: r.color, weight: 4 }} />
+              )}
+              {r.stops
+                .filter((s) => s.Latitude != null && s.Longitude != null)
+                .map((s) => (
+                  <Marker key={s.JadwalDetailID} position={[s.Latitude as number, s.Longitude as number]} icon={driverIcon}>
+                    <Popup>{s.CustomerName}</Popup>
+                  </Marker>
+                ))}
+            </Fragment>
+          );
+        })}
+        {position && <Marker position={[position.lat, position.lng]} icon={driverIcon} />}
+      </MapContainer>
+    </div>
   );
 }

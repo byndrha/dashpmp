@@ -23,13 +23,8 @@ export default async function DriverPetaPage() {
   );
 
   return (
-    <div className="flex h-dvh flex-col">
-      <div className="p-4 pb-0">
-        <h1 className="font-display text-lg font-semibold">Peta Hari Ini</h1>
-      </div>
-      <div className="flex-1 p-4">
-        <PetaOverviewMap pabrik={{ lat: pabrik.latitude, lng: pabrik.longitude }} routes={routes} />
-      </div>
+    <div className="h-full w-full">
+      <PetaOverviewMap pabrik={{ lat: pabrik.latitude, lng: pabrik.longitude }} routes={routes} />
     </div>
   );
 }
