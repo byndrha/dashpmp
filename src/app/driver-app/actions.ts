@@ -80,10 +80,26 @@ export async function confirmStopDeliveryAction(
 export async function recordDriverPaymentAction(input: RecordPaymentInput): Promise<ActionResult<RecordPaymentResult>> {
   return runAction(async () => {
     const salesmanId = await requireOwnSalesmanId();
+    // Real current outstanding for every invoice of this mitra, fetched
+    // once and reused for every allocation below — the Tunai flow is
+    // "pay this invoice in full", so the submitted amount must match the
+    // server-computed Outstanding exactly (within rounding tolerance).
+    // This closes an under-reporting gap: without it, a caller bypassing
+    // the Pembayaran UI (direct action call, modified client) could submit
+    // an artificially low amount and have it recorded as a legitimate
+    // partial payment, with no server-side check catching the mismatch.
+    const outstandingInvoices = await getOutstandingInvoicesForMitra(input.businessPartnerId);
     for (const alloc of input.allocations) {
       const invoiceSalesmanId = await getInvoiceSalesmanId(alloc.salesInvoiceId);
       if (invoiceSalesmanId !== salesmanId) {
         throw new AppError("Anda tidak memiliki akses ke salah satu invoice ini.");
+      }
+      const invoice = outstandingInvoices.find((i) => i.SalesInvoiceID === alloc.salesInvoiceId);
+      if (!invoice) {
+        throw new AppError("Invoice ini sudah lunas atau tidak ditemukan.");
+      }
+      if (Math.abs(alloc.amount - invoice.Outstanding) > 1) {
+        throw new AppError("Jumlah pembayaran tidak sesuai dengan sisa tagihan invoice ini.");
       }
     }
     return recordPayment(input);
