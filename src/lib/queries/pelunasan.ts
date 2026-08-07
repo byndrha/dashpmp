@@ -12,6 +12,19 @@ const DEPARTMENT_ID = "0110";
 // ("MKE/SP/002354/2026-07/003/001").
 const DOC_SUFFIX = "003/001";
 
+// Ownership gate for driver-app payment actions — SalesInvoice.SalesmanID
+// is stamped at invoice creation (see selesaiMuat in pengiriman-jadwal.ts)
+// and is the authoritative link back to which driver's delivery this
+// invoice belongs to.
+export async function getInvoiceSalesmanId(salesInvoiceId: string): Promise<string | null> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.VarChar(16), salesInvoiceId)
+    .query(`SELECT SalesmanID FROM SalesInvoice WHERE SalesInvoiceID = @id AND IsDeleted = 0`);
+  return (result.recordset[0] as { SalesmanID: string | null } | undefined)?.SalesmanID ?? null;
+}
+
 export interface OutstandingInvoice {
   SalesInvoiceID: string;
   VoucherNo: string;

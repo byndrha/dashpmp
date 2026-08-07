@@ -1970,6 +1970,35 @@ export async function recordStopArrival(jadwalDetailId: number): Promise<number>
   }
 }
 
+// Ownership gate for driver-app actions: throws unless jadwalId's own
+// SalesmanID matches the calling driver's session salesmanId. Every
+// per-Jadwal driver-app action must call this before touching any data.
+export async function assertOwnsJadwal(jadwalId: number, salesmanId: string): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT SalesmanID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const row = result.recordset[0] as { SalesmanID: string | null } | undefined;
+  if (!row || row.SalesmanID !== salesmanId) throw new AppError("Anda tidak memiliki akses ke Jadwal ini.");
+}
+
+// Same gate, one level deeper — for actions keyed by JadwalDetailID
+// (a stop) instead of JadwalID directly.
+export async function assertOwnsJadwalDetail(jadwalDetailId: number, salesmanId: string): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.Int, jadwalDetailId).query(`
+      SELECT j.SalesmanID
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN DashboardPengirimanJadwal j ON j.JadwalID = jd.JadwalID
+      WHERE jd.JadwalDetailID = @id AND jd.IsDeleted = 0 AND j.IsDeleted = 0
+    `);
+  const row = result.recordset[0] as { SalesmanID: string | null } | undefined;
+  if (!row || row.SalesmanID !== salesmanId) throw new AppError("Anda tidak memiliki akses ke stop ini.");
+}
+
 export interface StopDeliveryItemInput {
   salesOrderDetailId: string;
   qtyDiterima: number;

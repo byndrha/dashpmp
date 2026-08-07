@@ -8,13 +8,21 @@ import {
   getStopOrderItems,
   recordStopArrival,
   confirmStopDelivery,
+  assertOwnsJadwal,
+  assertOwnsJadwalDetail,
   type DriverJadwalCard,
   type DriverStopRow,
   type StopOrderItem,
   type ConfirmStopDeliveryInput,
 } from "@/lib/queries/pengiriman-jadwal";
 import { getDriverProfiles, type DriverProfileRow } from "@/lib/queries/driver-profile";
-import { getOutstandingInvoicesForMitra, recordPayment, type RecordPaymentInput, type RecordPaymentResult } from "@/lib/queries/pelunasan";
+import {
+  getOutstandingInvoicesForMitra,
+  recordPayment,
+  getInvoiceSalesmanId,
+  type RecordPaymentInput,
+  type RecordPaymentResult,
+} from "@/lib/queries/pelunasan";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 async function requireOwnSalesmanId(): Promise<string> {
@@ -34,21 +42,24 @@ export async function getDriverJadwalListAction(dateISO: string): Promise<Action
 
 export async function getDriverJadwalStopsAction(jadwalId: number): Promise<ActionResult<DriverStopRow[]>> {
   return runAction(async () => {
-    await requireOwnSalesmanId();
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwal(jadwalId, salesmanId);
     return getDriverJadwalStops(jadwalId);
   });
 }
 
 export async function getStopOrderItemsAction(jadwalDetailId: number): Promise<ActionResult<StopOrderItem[]>> {
   return runAction(async () => {
-    await requireOwnSalesmanId();
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwalDetail(jadwalDetailId, salesmanId);
     return getStopOrderItems(jadwalDetailId);
   });
 }
 
 export async function recordStopArrivalAction(jadwalDetailId: number): Promise<ActionResult<number>> {
   return runAction(async () => {
-    await requireOwnSalesmanId();
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwalDetail(jadwalDetailId, salesmanId);
     const id = await recordStopArrival(jadwalDetailId);
     revalidatePath("/driver-app");
     return id;
@@ -59,7 +70,8 @@ export async function confirmStopDeliveryAction(
   input: ConfirmStopDeliveryInput
 ): Promise<ActionResult<{ stopDeliveryId: number; salesInvoiceId: string | null }>> {
   return runAction(async () => {
-    await requireOwnSalesmanId();
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwalDetail(input.jadwalDetailId, salesmanId);
     const result = await confirmStopDelivery(input);
     revalidatePath("/driver-app");
     return result;
@@ -76,7 +88,13 @@ export async function getOwnDriverProfileAction(): Promise<ActionResult<DriverPr
 
 export async function recordDriverPaymentAction(input: RecordPaymentInput): Promise<ActionResult<RecordPaymentResult>> {
   return runAction(async () => {
-    await requireOwnSalesmanId();
+    const salesmanId = await requireOwnSalesmanId();
+    for (const alloc of input.allocations) {
+      const invoiceSalesmanId = await getInvoiceSalesmanId(alloc.salesInvoiceId);
+      if (invoiceSalesmanId !== salesmanId) {
+        throw new AppError("Anda tidak memiliki akses ke salah satu invoice ini.");
+      }
+    }
     return recordPayment(input);
   });
 }
@@ -92,7 +110,11 @@ export async function getInvoiceOutstandingAction(
   salesInvoiceId: string
 ): Promise<ActionResult<number>> {
   return runAction(async () => {
-    await requireOwnSalesmanId();
+    const salesmanId = await requireOwnSalesmanId();
+    const invoiceSalesmanId = await getInvoiceSalesmanId(salesInvoiceId);
+    if (invoiceSalesmanId !== salesmanId) {
+      throw new AppError("Anda tidak memiliki akses ke invoice ini.");
+    }
     const invoices = await getOutstandingInvoicesForMitra(businessPartnerId);
     const invoice = invoices.find((i) => i.SalesInvoiceID === salesInvoiceId);
     if (!invoice) throw new AppError("Invoice ini sudah lunas atau tidak ditemukan.");
