@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,12 +28,21 @@ export function TugasList({
   const [dateISO, setDateISO] = useState(initialDateISO);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Guards against a stale response overwriting a newer one when the date
+  // picker is changed twice in quick succession (nothing disables the
+  // Input while pending). Same pattern as
+  // ubah-tanggal-pemesanan-dialog.tsx's targetIdRef: capture which date
+  // this in-flight request is FOR, and discard the result if a newer
+  // request has since superseded it.
+  const requestedDateRef = useRef(initialDateISO);
 
   function handleDateChange(next: string) {
+    requestedDateRef.current = next;
     setDateISO(next);
     setError(null);
     startTransition(async () => {
       const result = await getDriverJadwalListAction(next);
+      if (requestedDateRef.current !== next) return;
       if (!result.success) {
         setError(result.error);
         return;
@@ -42,24 +51,19 @@ export function TugasList({
     });
   }
 
-  const totalHariKerja = new Set(jadwal.map((j) => String(j.JamJadwal).slice(0, 10))).size;
-
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
-        <Card size="sm">
-          <CardContent className="flex flex-col gap-0.5 px-3 py-2">
-            <span className="text-[10px] uppercase text-muted-foreground">Total Hari Kerja</span>
-            <span className="text-lg font-semibold">{totalHariKerja} Hari</span>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="flex flex-col gap-0.5 px-3 py-2">
-            <span className="text-[10px] uppercase text-muted-foreground">Tugas Hari Ini</span>
-            <span className="text-lg font-semibold">{jadwal.length}</span>
-          </CardContent>
-        </Card>
-      </div>
+      {/* "Total Hari Kerja" stat card was removed here: getDriverJadwalList
+          filters to a single date, so a distinct-day count over `jadwal`
+          could only ever be 0 or 1 — not a meaningful metric. A real
+          multi-day count needs historical data out of scope for this
+          single-date Tugas view (belongs in Riwayat instead). */}
+      <Card size="sm" className="w-fit">
+        <CardContent className="flex flex-col gap-0.5 px-3 py-2">
+          <span className="text-[10px] uppercase text-muted-foreground">Tugas Hari Ini</span>
+          <span className="text-lg font-semibold">{jadwal.length}</span>
+        </CardContent>
+      </Card>
 
       <Input type="date" value={dateISO} onChange={(e) => handleDateChange(e.target.value)} className="w-fit" />
 
