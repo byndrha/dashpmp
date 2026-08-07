@@ -1440,6 +1440,32 @@ async function nextSIVoucherSeq(pool: PoolOrTransaction, yearMonth: string): Pro
   return String(maxSeq + 1).padStart(6, "0");
 }
 
+async function nextSalesReturnId(pool: PoolOrTransaction): Promise<string> {
+  const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesReturnID AS INT)) AS MaxID FROM SalesReturn`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextSalesReturnDetailId(pool: PoolOrTransaction): Promise<string> {
+  const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesReturnDetailID AS INT)) AS MaxID FROM SalesReturnDetail`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+// Same numbering shape as nextDOVoucherSeq/nextSIVoucherSeq, MKE/SR/ prefix
+// (SalesReturn is a real, pre-existing ERP document type — 9,567 historical
+// rows confirmed via direct schema inspection — never written by this
+// dashboard until now).
+async function nextSRVoucherSeq(pool: PoolOrTransaction, yearMonth: string): Promise<string> {
+  const result = await pool
+    .request()
+    .input("pattern", sql.VarChar(64), `MKE/SR/%/${yearMonth}/${DOC_SUFFIX}`).query(`
+      SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq FROM SalesReturn WHERE VoucherNo LIKE @pattern
+    `);
+  const maxSeq = (result.recordset[0]?.MaxSeq as number | null) ?? 0;
+  return String(maxSeq + 1).padStart(6, "0");
+}
+
 interface SalesOrderForPublish {
   BusinessPartnerID: string;
   DueDate: Date | null;
@@ -1941,5 +1967,239 @@ export async function recordStopArrival(jadwalDetailId: number): Promise<number>
     const winnerRow = winner.recordset[0] as { StopDeliveryID: number } | undefined;
     if (!winnerRow) throw err;
     return winnerRow.StopDeliveryID;
+  }
+}
+
+export interface StopDeliveryItemInput {
+  salesOrderDetailId: string;
+  qtyDiterima: number;
+  fotoReturUrl: string | null;
+}
+
+export interface ConfirmStopDeliveryInput {
+  jadwalDetailId: number;
+  items: StopDeliveryItemInput[];
+  fotoBuktiPengirimanUrl: string;
+  fotoBuktiMuatanUrl: string;
+  tandaTanganUrl: string;
+  tanpaPembayaran: boolean;
+}
+
+interface SalesOrderDetailForReturn {
+  SalesOrderDetailID: string;
+  ItemID: string;
+  Name: string;
+  Qty: number;
+  Price: number;
+}
+
+// The core "retur" transaction (Layar Konfir Terima's "Konfirmasi
+// Penerima"): downward-only adjustment of what was already invoiced at
+// selesaiMuat, driven by what the driver actually confirms was received.
+// See the design spec's "Retur & penyesuaian Invoice" section for why
+// SalesInvoice.Amount/Netto (not just SalesInvoiceDetail) must be
+// recomputed — vCustomerStatement (aging.ts, the basis for every
+// Outstanding/Piutang figure in the app, including Pelunasan's
+// recordPayment) reads SalesInvoice.Netto directly, not a live SUM.
+export async function confirmStopDelivery(
+  input: ConfirmStopDeliveryInput
+): Promise<{ stopDeliveryId: number; salesInvoiceId: string | null }> {
+  const pool = await getPool();
+
+  const detailResult = await pool
+    .request()
+    .input("id", sql.Int, input.jadwalDetailId)
+    .query(
+      `SELECT JadwalID, SalesOrderID, DeliveryOrderID, SalesInvoiceID FROM DashboardPengirimanJadwalDetail WHERE JadwalDetailID = @id AND IsDeleted = 0`
+    );
+  const detailRow = detailResult.recordset[0] as
+    | { JadwalID: number; SalesOrderID: string; DeliveryOrderID: string | null; SalesInvoiceID: string | null }
+    | undefined;
+  if (!detailRow) throw new AppError("Stop pengiriman tidak ditemukan.");
+  if (!detailRow.DeliveryOrderID || !detailRow.SalesInvoiceID) {
+    throw new AppError("Muat untuk stop ini belum diselesaikan, tidak bisa konfirmasi penerimaan.");
+  }
+
+  const existingStop = await pool
+    .request()
+    .input("id", sql.Int, input.jadwalDetailId)
+    .query(`SELECT StopDeliveryID, JamSelesai FROM DashboardPengirimanStopDelivery WHERE JadwalDetailID = @id`);
+  const existingStopRow = existingStop.recordset[0] as { StopDeliveryID: number; JamSelesai: Date | null } | undefined;
+  if (!existingStopRow) throw new AppError("Belum ada catatan kedatangan untuk stop ini — geser 'Tiba' terlebih dahulu.");
+  if (existingStopRow.JamSelesai) throw new AppError("Stop ini sudah dikonfirmasi selesai.");
+
+  const headerResult = await pool
+    .request()
+    .input("jadwalId", sql.Int, detailRow.JadwalID)
+    .query(`SELECT SalesmanID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const headerRow = headerResult.recordset[0] as { SalesmanID: string | null } | undefined;
+  if (!headerRow) throw new AppError("Keberangkatan tidak ditemukan.");
+
+  const soResult = await pool
+    .request()
+    .input("soId", sql.VarChar(16), detailRow.SalesOrderID)
+    .query(`SELECT BusinessPartnerID FROM SalesOrder WHERE SalesOrderID = @soId`);
+  const soRow = soResult.recordset[0] as { BusinessPartnerID: string } | undefined;
+  if (!soRow) throw new AppError(`Sales Order ${detailRow.SalesOrderID} tidak ditemukan.`);
+
+  const sodResult = await pool
+    .request()
+    .input("soId", sql.VarChar(16), detailRow.SalesOrderID)
+    .query(`SELECT SalesOrderDetailID, ItemID, Name, Qty, Price FROM SalesOrderDetail WHERE SalesOrderID = @soId`);
+  const soDetails = sodResult.recordset as SalesOrderDetailForReturn[];
+  const soDetailById = new Map(soDetails.map((d) => [d.SalesOrderDetailID, d]));
+
+  // Validate every input item against its real loaded quantity BEFORE
+  // opening the transaction — retur can only ever reduce, never exceed,
+  // what was actually loaded.
+  for (const item of input.items) {
+    const sod = soDetailById.get(item.salesOrderDetailId);
+    if (!sod) throw new AppError(`Item pesanan ${item.salesOrderDetailId} tidak ditemukan pada Sales Order ini.`);
+    if (item.qtyDiterima < 0) throw new AppError(`Kuantitas diterima untuk ${sod.Name} tidak boleh negatif.`);
+    if (item.qtyDiterima > sod.Qty) {
+      throw new AppError(`Kuantitas diterima untuk ${sod.Name} tidak boleh melebihi kuantitas yang dimuat (${sod.Qty}).`);
+    }
+  }
+
+  const now = new Date();
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const hasRetur = input.items.some((item) => item.qtyDiterima < (soDetailById.get(item.salesOrderDetailId)?.Qty ?? 0));
+
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
+  try {
+    // Atomically claim: only succeeds if JamSelesai is still NULL — guards
+    // the same double-submit race selesaiMuat's own claim UPDATE guards
+    // against.
+    const claim = await new sql.Request(transaction)
+      .input("id", sql.Int, input.jadwalDetailId)
+      .input("foto1", sql.VarChar(255), input.fotoBuktiPengirimanUrl)
+      .input("foto2", sql.VarChar(255), input.fotoBuktiMuatanUrl)
+      .input("ttd", sql.VarChar(255), input.tandaTanganUrl)
+      .input("tanpaBayar", sql.Bit, input.tanpaPembayaran).query(`
+        UPDATE DashboardPengirimanStopDelivery
+        SET JamSelesai = GETDATE(), FotoBuktiPengirimanUrl = @foto1, FotoBuktiMuatanUrl = @foto2,
+            TandaTanganUrl = @ttd, TanpaPembayaran = @tanpaBayar, ModifiedDate = GETDATE()
+        WHERE JadwalDetailID = @id AND JamSelesai IS NULL
+      `);
+    if (claim.rowsAffected[0] === 0) {
+      throw new AppError("Stop ini sudah dikonfirmasi selesai atau sedang diproses.");
+    }
+
+    let salesReturnId: string | null = null;
+    if (hasRetur) {
+      salesReturnId = await nextSalesReturnId(transaction);
+      const srVoucherSeq = await nextSRVoucherSeq(transaction, yearMonth);
+      const srVoucherNo = `MKE/SR/${srVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+      const returAmount = input.items.reduce((sum, item) => {
+        const sod = soDetailById.get(item.salesOrderDetailId)!;
+        return sum + (sod.Qty - item.qtyDiterima) * sod.Price;
+      }, 0);
+
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), salesReturnId)
+        .input("voucherNo", sql.VarChar(128), srVoucherNo)
+        .input("soId", sql.VarChar(16), detailRow.SalesOrderID)
+        .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
+        .input("bpId", sql.VarChar(16), soRow.BusinessPartnerID)
+        .input("branchId", sql.VarChar(16), BRANCH_ID)
+        .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+        .input("amount", sql.Decimal(23, 4), returAmount)
+        .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID).query(`
+          INSERT INTO SalesReturn
+            (SalesReturnID, VoucherNo, TransDate, SalesOrderID, DeliveryOrderID, BusinessPartnerID, BranchID,
+             DepartmentID, Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, Paid, Deposit, IsClosed,
+             IsDeleted, ModifiedDate, SalesmanID, Rate, IsInvoiced)
+          VALUES
+            (@id, @voucherNo, GETDATE(), @soId, @doId, @bpId, @branchId,
+             @departmentId, @amount, 0, 0, 0, 0, 0, @amount, 0, 0, 0,
+             0, GETDATE(), @salesmanId, 1, 1)
+        `);
+
+      for (const item of input.items) {
+        const sod = soDetailById.get(item.salesOrderDetailId)!;
+        const qtyRetur = sod.Qty - item.qtyDiterima;
+        if (qtyRetur <= 0) continue;
+        const srDetailId = await nextSalesReturnDetailId(transaction);
+        await new sql.Request(transaction)
+          .input("id", sql.VarChar(16), srDetailId)
+          .input("srId", sql.VarChar(16), salesReturnId)
+          .input("itemId", sql.VarChar(160), sod.ItemID)
+          .input("name", sql.VarChar(150), sod.Name)
+          .input("qty", sql.Decimal(23, 4), qtyRetur)
+          .input("price", sql.Decimal(23, 4), sod.Price)
+          .input("amount", sql.Decimal(23, 4), qtyRetur * sod.Price)
+          .input("soDetailId", sql.VarChar(16), sod.SalesOrderDetailID).query(`
+            INSERT INTO SalesReturnDetail
+              (SalesReturnDetailID, SalesReturnID, ItemID, Qty, Unit, Ratio, UnitRatio, Price, Disc, DiscValue,
+               DiscRp, Amount, Name, Value, Netto, Retur, SalesOrderDetailID)
+            VALUES
+              (@id, @srId, @itemId, @qty, 'PCS', 1, 1, @price, 0, 0,
+               0, @amount, @name, @amount, @amount, @qty, @soDetailId)
+          `);
+      }
+
+      await new sql.Request(transaction)
+        .input("id", sql.Int, existingStopRow.StopDeliveryID)
+        .input("srId", sql.VarChar(16), salesReturnId)
+        .query(`UPDATE DashboardPengirimanStopDelivery SET SalesReturnID = @srId WHERE StopDeliveryID = @id`);
+    }
+
+    for (const item of input.items) {
+      const sod = soDetailById.get(item.salesOrderDetailId)!;
+      const qtyRetur = sod.Qty - item.qtyDiterima;
+      const newAmount = item.qtyDiterima * sod.Price;
+
+      await new sql.Request(transaction)
+        .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
+        .input("soDetailId", sql.VarChar(16), sod.SalesOrderDetailID)
+        .input("delivered", sql.Decimal(23, 4), item.qtyDiterima)
+        .query(
+          `UPDATE DeliveryOrderDetail SET Delivered = @delivered WHERE DeliveryOrderID = @doId AND SalesOrderDetailID = @soDetailId`
+        );
+
+      await new sql.Request(transaction)
+        .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+        .input("itemId", sql.VarChar(160), sod.ItemID)
+        .input("qty", sql.Decimal(23, 4), item.qtyDiterima)
+        .input("amount", sql.Decimal(23, 4), newAmount)
+        .input("retur", sql.Decimal(23, 4), qtyRetur)
+        .query(
+          `UPDATE SalesInvoiceDetail SET Qty = @qty, Amount = @amount, Netto = @amount, Value = @amount, Retur = @retur
+           WHERE SalesInvoiceID = @siId AND ItemID = @itemId`
+        );
+
+      await new sql.Request(transaction)
+        .input("stopDeliveryId", sql.Int, existingStopRow.StopDeliveryID)
+        .input("soDetailId", sql.VarChar(16), sod.SalesOrderDetailID)
+        .input("itemId", sql.VarChar(160), sod.ItemID)
+        .input("qtyDimuat", sql.Decimal(23, 4), sod.Qty)
+        .input("qtyDiterima", sql.Decimal(23, 4), item.qtyDiterima)
+        .input("qtyRetur", sql.Decimal(23, 4), qtyRetur)
+        .input("fotoRetur", sql.VarChar(255), item.fotoReturUrl).query(`
+          INSERT INTO DashboardPengirimanStopDeliveryItem
+            (StopDeliveryID, SalesOrderDetailID, ItemID, QtyDimuat, QtyDiterima, QtyRetur, FotoReturUrl)
+          VALUES
+            (@stopDeliveryId, @soDetailId, @itemId, @qtyDimuat, @qtyDiterima, @qtyRetur, @fotoRetur)
+        `);
+    }
+
+    // Recompute the invoice header from its now-updated detail rows —
+    // the step vCustomerStatement's Outstanding calculation depends on.
+    const totalResult = await new sql.Request(transaction)
+      .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+      .query(`SELECT SUM(Amount) AS Total FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId`);
+    const newTotal = (totalResult.recordset[0]?.Total as number | null) ?? 0;
+    await new sql.Request(transaction)
+      .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+      .input("total", sql.Decimal(23, 4), newTotal)
+      .query(`UPDATE SalesInvoice SET Amount = @total, Netto = @total WHERE SalesInvoiceID = @siId`);
+
+    await transaction.commit();
+    return { stopDeliveryId: existingStopRow.StopDeliveryID, salesInvoiceId: detailRow.SalesInvoiceID };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
   }
 }
