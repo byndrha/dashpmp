@@ -2146,18 +2146,59 @@ export async function confirmStopDelivery(
         .query(`UPDATE DashboardPengirimanStopDelivery SET SalesReturnID = @srId WHERE StopDeliveryID = @id`);
     }
 
+    // SalesInvoiceDetail has no SalesOrderDetailID (or any other) column
+    // that directly keys back to the SalesOrderDetail row it was billed
+    // from, and — confirmed live — an invoice can carry multiple detail
+    // rows sharing the same ItemID (e.g. two separately-priced lines for
+    // the same product), so `WHERE SalesInvoiceID = @siId AND ItemID =
+    // @itemId` is NOT safe: it can match several rows at once and clobber
+    // every one of them with a single line's Qty/Amount. DeliveryOrderDetail
+    // DOES carry SalesOrderDetailID, and selesaiMuat (this file, above)
+    // creates one DeliveryOrderDetail row then, immediately after in the
+    // same soDetails loop iteration, one SalesInvoiceDetail row — both IDs
+    // assigned via sequential MAX+1 at creation time. That means the Kth
+    // DeliveryOrderDetail row for this DO (ordered by DeliveryOrderDetailID)
+    // was created in the same iteration as, and therefore corresponds
+    // positionally to, the Kth SalesInvoiceDetail row for its sibling SI
+    // (ordered by SalesInvoiceDetailID) — true regardless of any other
+    // concurrent activity elsewhere in the DB, since only relative order
+    // within this one already-filtered DO/SI pair is used, never a global
+    // ID comparison. This gives a real, safe key (SalesInvoiceDetailID, the
+    // actual primary key) to update on instead.
+    const doDetailsResult = await new sql.Request(transaction)
+      .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
+      .query(`SELECT DeliveryOrderDetailID, SalesOrderDetailID FROM DeliveryOrderDetail WHERE DeliveryOrderID = @doId ORDER BY DeliveryOrderDetailID`);
+    const doDetailRows = doDetailsResult.recordset as { DeliveryOrderDetailID: string; SalesOrderDetailID: string }[];
+
+    const siDetailsResult = await new sql.Request(transaction)
+      .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+      .query(`SELECT SalesInvoiceDetailID FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId ORDER BY SalesInvoiceDetailID`);
+    const siDetailRows = siDetailsResult.recordset as { SalesInvoiceDetailID: string }[];
+
+    if (doDetailRows.length !== siDetailRows.length) {
+      throw new AppError("Jumlah baris DeliveryOrderDetail dan SalesInvoiceDetail tidak sama, tidak bisa memproses konfirmasi ini.");
+    }
+
+    const salesInvoiceDetailIdBySoDetailId = new Map<string, string>();
+    doDetailRows.forEach((doDetail, i) => {
+      salesInvoiceDetailIdBySoDetailId.set(doDetail.SalesOrderDetailID, siDetailRows[i].SalesInvoiceDetailID);
+    });
+
     for (const item of input.items) {
       const sod = soDetailById.get(item.salesOrderDetailId)!;
       const qtyRetur = sod.Qty - item.qtyDiterima;
       const newAmount = item.qtyDiterima * sod.Price;
 
-      await new sql.Request(transaction)
+      const dodUpdate = await new sql.Request(transaction)
         .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
         .input("soDetailId", sql.VarChar(16), sod.SalesOrderDetailID)
         .input("delivered", sql.Decimal(23, 4), item.qtyDiterima)
         .query(
           `UPDATE DeliveryOrderDetail SET Delivered = @delivered WHERE DeliveryOrderID = @doId AND SalesOrderDetailID = @soDetailId`
         );
+      if (dodUpdate.rowsAffected[0] === 0) {
+        throw new AppError(`Baris DeliveryOrderDetail untuk item ${sod.Name} tidak ditemukan, tidak bisa menyimpan konfirmasi ini.`);
+      }
 
       // NOTE: SalesInvoiceDetail has no Retur column on the live schema
       // (confirmed via INFORMATION_SCHEMA.COLUMNS — its 19 live columns are
@@ -2171,15 +2212,20 @@ export async function confirmStopDelivery(
       // this line is still fully recorded elsewhere: SalesReturnDetail.Retur
       // (the formal ERP document) and DashboardPengirimanStopDeliveryItem.QtyRetur
       // (this dashboard's own per-stop record).
-      await new sql.Request(transaction)
-        .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
-        .input("itemId", sql.VarChar(160), sod.ItemID)
+      const salesInvoiceDetailId = salesInvoiceDetailIdBySoDetailId.get(sod.SalesOrderDetailID);
+      if (!salesInvoiceDetailId) throw new AppError(`Baris invoice untuk item ${sod.Name} tidak ditemukan.`);
+
+      const sidUpdate = await new sql.Request(transaction)
+        .input("siDetailId", sql.VarChar(16), salesInvoiceDetailId)
         .input("qty", sql.Decimal(23, 4), item.qtyDiterima)
         .input("amount", sql.Decimal(23, 4), newAmount)
         .query(
           `UPDATE SalesInvoiceDetail SET Qty = @qty, Amount = @amount, Netto = @amount, Value = @amount
-           WHERE SalesInvoiceID = @siId AND ItemID = @itemId`
+           WHERE SalesInvoiceDetailID = @siDetailId`
         );
+      if (sidUpdate.rowsAffected[0] === 0) {
+        throw new AppError(`Baris SalesInvoiceDetail untuk item ${sod.Name} tidak ditemukan, tidak bisa menyimpan konfirmasi ini.`);
+      }
 
       await new sql.Request(transaction)
         .input("stopDeliveryId", sql.Int, existingStopRow.StopDeliveryID)
