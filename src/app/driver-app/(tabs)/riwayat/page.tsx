@@ -11,6 +11,11 @@ export default async function DriverRiwayatPage() {
   return (
     <div className="flex flex-col gap-3 p-4">
       <h1 className="font-display text-lg font-semibold">Riwayat</h1>
+      {!salesmanId && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+          Akun ini belum ditautkan ke data Driver, hubungi Admin.
+        </p>
+      )}
       {history.map((j) => (
         <Card key={j.JadwalID} className="py-3">
           <CardContent className="flex flex-col gap-1 px-4">

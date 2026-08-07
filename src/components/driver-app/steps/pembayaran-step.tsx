@@ -18,6 +18,12 @@ export function PembayaranStep({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by the "Coba Lagi" button below to re-run the effect. Without
+  // this, a failed getInvoiceOutstandingAction call (network blip, transient
+  // DB error) left the driver stuck forever: amount stays null so the
+  // submit button is permanently disabled, and there was no way to
+  // re-trigger the fetch short of leaving and re-entering the flow.
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +39,7 @@ export function PembayaranStep({
     return () => {
       cancelled = true;
     };
-  }, [businessPartnerId, salesInvoiceId]);
+  }, [businessPartnerId, salesInvoiceId, retryToken]);
 
   async function handleTunai() {
     if (amount == null) return;
@@ -76,9 +82,23 @@ export function PembayaranStep({
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">Konfirmasi telah menerima pembayaran tunai dari mitra untuk pengiriman ini.</p>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button className="w-full" disabled={submitting || loading || amount == null} onClick={handleTunai}>
-          {submitting ? "Menyimpan..." : "Selesaikan Pembayaran"}
-        </Button>
+        {error && amount == null && !loading ? (
+          <Button
+            className="w-full"
+            variant="outline"
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              setRetryToken((t) => t + 1);
+            }}
+          >
+            Coba Lagi
+          </Button>
+        ) : (
+          <Button className="w-full" disabled={submitting || loading || amount == null} onClick={handleTunai}>
+            {submitting ? "Menyimpan..." : "Selesaikan Pembayaran"}
+          </Button>
+        )}
       </div>
     </div>
   );

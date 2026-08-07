@@ -15,7 +15,6 @@ import {
   type StopOrderItem,
   type ConfirmStopDeliveryInput,
 } from "@/lib/queries/pengiriman-jadwal";
-import { getDriverProfiles, type DriverProfileRow } from "@/lib/queries/driver-profile";
 import {
   getOutstandingInvoicesForMitra,
   recordPayment,
@@ -75,14 +74,6 @@ export async function confirmStopDeliveryAction(
     const result = await confirmStopDelivery(input);
     revalidatePath("/driver-app");
     return result;
-  });
-}
-
-export async function getOwnDriverProfileAction(): Promise<ActionResult<DriverProfileRow | null>> {
-  return runAction(async () => {
-    const salesmanId = await requireOwnSalesmanId();
-    const all = await getDriverProfiles();
-    return all.find((d) => d.SalesmanID === salesmanId) ?? null;
   });
 }
 
