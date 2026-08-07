@@ -3,7 +3,13 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export function SignaturePad({ onCapture }: { onCapture: (file: File) => void }) {
+export function SignaturePad({
+  onCapture,
+  onClear,
+}: {
+  onCapture: (file: File) => void;
+  onClear?: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -47,6 +53,7 @@ export function SignaturePad({ onCapture }: { onCapture: (file: File) => void })
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasDrawn(false);
+    onClear?.();
   }
 
   return (

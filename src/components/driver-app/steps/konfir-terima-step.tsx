@@ -64,9 +64,13 @@ export function KonfirTerimaStep({
     <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-border bg-background p-4 shadow-lg">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-base font-semibold">Tanda Tangan Penerima</h2>
+        {/* Decorative only: this component has no onCancel/onBack prop from
+            its caller (stop-flow.tsx's KonfirTerimaStep usage defines no
+            cancel path), so no action is wired here pending a defined
+            cancel/back flow. */}
         <X className="size-4 text-muted-foreground" />
       </div>
-      <SignaturePad onCapture={setSignatureFile} />
+      <SignaturePad onCapture={setSignatureFile} onClear={() => setSignatureFile(null)} />
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
       <Button className="mt-3 w-full" disabled={submitting} onClick={handleConfirm}>
         {submitting ? "Menyimpan..." : "Konfirmasi Penerima"}
