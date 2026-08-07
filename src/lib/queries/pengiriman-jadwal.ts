@@ -321,6 +321,49 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
   }));
 }
 
+// Riwayat tab — every Selesai Jadwal for this driver, most recent first,
+// capped since there's no pagination UI yet (a driver's realistic history
+// depth is small enough that a flat cap is fine for v1). Same StopAgg
+// pre-aggregation as getDriverJadwalList, for the same fan-out reason.
+export async function getDriverJadwalHistory(salesmanId: string, limit = 50): Promise<DriverJadwalCard[]> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("salesmanId", sql.VarChar(16), salesmanId)
+    .input("limit", sql.Int, limit).query(`
+      WITH StopAgg AS (
+          SELECT jd.JadwalID, jd.JadwalDetailID,
+                 ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Kantong,
+                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai
+          FROM DashboardPengirimanJadwalDetail jd
+          LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+          LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+          WHERE jd.IsDeleted = 0
+          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai
+      )
+      SELECT TOP (@limit)
+          j.JadwalID,
+          a.Nama AS ArmadaNama,
+          ed.VehicleNo,
+          j.JamJadwal,
+          j.Status,
+          j.JamSelesaiMuat,
+          j.JamAktualBerangkat,
+          COUNT(sa.JadwalDetailID) AS TotalStop,
+          SUM(sa.IsSelesai) AS StopSelesai,
+          SUM(sa.Kantong) AS TotalKantong
+      FROM DashboardPengirimanJadwal j
+      JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+      JOIN StopAgg sa ON sa.JadwalID = j.JadwalID
+      WHERE j.SalesmanID = @salesmanId AND j.IsDeleted = 0
+      GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamJadwal, j.Status, j.JamSelesaiMuat, j.JamAktualBerangkat
+      HAVING COUNT(sa.JadwalDetailID) = SUM(sa.IsSelesai)
+      ORDER BY j.JamJadwal DESC
+    `);
+  return (result.recordset as Omit<DriverJadwalCard, "IsSelesai">[]).map((r) => ({ ...r, IsSelesai: true }));
+}
+
 // Bulk-resolves the travel-time component of EstimasiDurasiMenit for every
 // Jadwal on the board in a single extra query (rather than one round-trip
 // per Jadwal) — fetches every stop's coordinates grouped by JadwalID
