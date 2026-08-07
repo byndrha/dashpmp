@@ -321,6 +321,31 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
   }));
 }
 
+export interface JadwalHeader {
+  ArmadaNama: string;
+  VehicleNo: string | null;
+}
+
+// Vehicle info for the Pengiriman screen's floating top bar ("Hino Truck •
+// AE 9045 TK") — same Armada/ExpeditionDetail join as getDriverJadwalList
+// above, just keyed directly by JadwalID since that screen already has the
+// ID from the URL rather than a driver+date pair.
+export async function getJadwalHeader(jadwalId: number): Promise<JadwalHeader> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId).query(`
+      SELECT a.Nama AS ArmadaNama, ed.VehicleNo
+      FROM DashboardPengirimanJadwal j
+      JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+      WHERE j.JadwalID = @jadwalId AND j.IsDeleted = 0
+    `);
+  const row = result.recordset[0] as JadwalHeader | undefined;
+  if (!row) throw new AppError("Jadwal tidak ditemukan.");
+  return row;
+}
+
 // Riwayat tab — every Selesai Jadwal for this driver, most recent first,
 // capped since there's no pagination UI yet (a driver's realistic history
 // depth is small enough that a flat cap is fine for v1). Same StopAgg

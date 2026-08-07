@@ -20,11 +20,15 @@ export interface KonfirKirimResult {
 
 export function StopFlow({
   jadwalId,
+  armadaNama,
+  vehicleNo,
   initialStops,
   pabrik,
   driverName,
 }: {
   jadwalId: number;
+  armadaNama: string;
+  vehicleNo: string | null;
   initialStops: DriverStopRow[];
   pabrik: { lat: number; lng: number };
   driverName: string;
@@ -35,7 +39,12 @@ export function StopFlow({
   const [konfirKirimResult, setKonfirKirimResult] = useState<KonfirKirimResult | null>(null);
   const [salesInvoiceId, setSalesInvoiceId] = useState<string | null>(null);
 
-  const activeStop = stops.find((s) => s.JamSelesai == null) ?? null;
+  // Every not-yet-delivered stop, in order — activeStop is always the
+  // first of these. Passed down whole (not just a count) so the Pengiriman
+  // screen's map markers and "Lihat Daftar Tujuan" list share one source
+  // of truth with whatever "N lokasi tersisa" it displays.
+  const remainingStops = stops.filter((s) => s.JamSelesai == null);
+  const activeStop = remainingStops[0] ?? null;
 
   if (!activeStop) {
     router.replace("/driver-app");
@@ -77,7 +86,23 @@ export function StopFlow({
 
   switch (step) {
     case "peta":
-      return <PengirimanStep jadwalId={jadwalId} stop={activeStop} remainingCount={stops.length} pabrik={pabrik} driverName={driverName} onArrived={handleArrived} />;
+      // Keyed by JadwalDetailID so switching to the NEXT stop after
+      // handleBerhasilDone mounts a fresh PengirimanStep instance —
+      // otherwise its per-stop local state (kendalaReported, dialog open
+      // flags, ETA) would silently carry over from the previous stop.
+      return (
+        <PengirimanStep
+          key={activeStop.JadwalDetailID}
+          jadwalId={jadwalId}
+          armadaNama={armadaNama}
+          vehicleNo={vehicleNo}
+          activeStop={activeStop}
+          remainingStops={remainingStops}
+          pabrik={pabrik}
+          driverName={driverName}
+          onArrived={handleArrived}
+        />
+      );
     case "konfirKirim":
       return <KonfirKirimStep jadwalDetailId={activeStop.JadwalDetailID} onNext={handleKonfirKirimNext} />;
     case "konfirTerima":

@@ -25,6 +25,9 @@ import {
 } from "@/lib/queries/pelunasan";
 import { getDriverProfiles, type DriverProfileRow } from "@/lib/queries/driver-profile";
 import { getPabrikLocation, type PabrikLocation } from "@/lib/queries/pabrik-location";
+import { recordFuelLog } from "@/lib/queries/driver-fuel";
+import { recordKendala } from "@/lib/queries/driver-kendala";
+import type { JenisKendala } from "@/lib/kendala-options";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 async function requireOwnSalesmanId(): Promise<string> {
@@ -161,5 +164,31 @@ export async function getPabrikLocationForDriverAction(): Promise<ActionResult<P
   return runAction(async () => {
     await requireOwnSalesmanId();
     return getPabrikLocation();
+  });
+}
+
+export async function recordFuelLogAction(jadwalId: number, liter: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwal(jadwalId, salesmanId);
+    if (!(liter > 0)) throw new AppError("Jumlah liter harus lebih dari 0.");
+    await recordFuelLog(jadwalId, salesmanId, liter);
+  });
+}
+
+// Persists the SOS dialog's report (Task per user's live-testing feedback
+// on the Pengiriman screen) — the driver-app screen stops its own ETA
+// countdown locally once this succeeds; an admin-facing viewer for these
+// reports is a separate, not-yet-built follow-up.
+export async function reportKendalaAction(
+  jadwalId: number,
+  jadwalDetailId: number,
+  jenisKendala: JenisKendala,
+  hubungiTeknisi: boolean
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwalDetail(jadwalDetailId, salesmanId);
+    await recordKendala(jadwalId, jadwalDetailId, salesmanId, jenisKendala, hubungiTeknisi);
   });
 }

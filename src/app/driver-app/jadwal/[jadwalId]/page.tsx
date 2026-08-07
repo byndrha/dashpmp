@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireDriver } from "@/lib/require-access";
-import { getDriverJadwalStops, assertOwnsJadwal } from "@/lib/queries/pengiriman-jadwal";
+import { getDriverJadwalStops, getJadwalHeader, assertOwnsJadwal } from "@/lib/queries/pengiriman-jadwal";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { StopFlow } from "@/components/driver-app/stop-flow";
 
@@ -32,11 +32,13 @@ export default async function DriverJadwalPage({ params }: { params: Promise<{ j
   const stops = await getDriverJadwalStops(id);
   if (stops.length === 0) notFound();
 
-  const pabrik = await getPabrikLocation();
+  const [pabrik, header] = await Promise.all([getPabrikLocation(), getJadwalHeader(id)]);
 
   return (
     <StopFlow
       jadwalId={id}
+      armadaNama={header.ArmadaNama}
+      vehicleNo={header.VehicleNo}
       initialStops={stops}
       pabrik={{ lat: pabrik.latitude, lng: pabrik.longitude }}
       driverName={session.user.name ?? session.user.username}
