@@ -8,6 +8,7 @@ import { SwipeToConfirm } from "@/components/driver-app/swipe-to-confirm";
 import { PengirimanMap } from "./pengiriman-map";
 import { BbmDialog } from "./bbm-dialog";
 import { KendalaDialog } from "./kendala-dialog";
+import { CallChoiceDialog } from "./call-choice-dialog";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { recordStopArrivalAction } from "@/app/driver-app/actions";
@@ -48,6 +49,7 @@ export function PengirimanStep({
   const [bbmOpen, setBbmOpen] = useState(false);
   const [kendalaOpen, setKendalaOpen] = useState(false);
   const [kendalaReported, setKendalaReported] = useState(false);
+  const [callOpen, setCallOpen] = useState(false);
 
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [route, setRoute] = useState<MultiPointRoute | null>(null);
@@ -278,23 +280,25 @@ export function PengirimanStep({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 px-4 pb-3">
+          <div className="flex items-center gap-2 px-4">
             <SwipeToConfirm label="Geser untuk Tiba" pending={pending} onConfirm={handleArrived} className="flex-1" />
             {activeStop.MobileNo && (
-              <a
-                href={`tel:${activeStop.MobileNo}`}
+              <button
+                type="button"
+                onClick={() => setCallOpen(true)}
                 className="flex size-12 shrink-0 items-center justify-center rounded-full bg-green-600 text-white shadow-md"
-                title="Telepon Pelanggan"
+                title="Hubungi Pelanggan"
               >
                 <Phone className="size-5" />
-              </a>
+              </button>
             )}
           </div>
+          <p className="px-4 pt-1 pb-3 text-center text-xs text-muted-foreground">{remainingStops.length} lokasi tersisa</p>
 
           {error && <p className="px-4 pb-2 text-sm text-destructive">{error}</p>}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-2">
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-2">
           {remainingStops.map((s, i) => {
             const distanceKm = distanceByDetailId.get(s.JadwalDetailID);
             return (
@@ -315,6 +319,7 @@ export function PengirimanStep({
         </div>
       </div>
 
+      {activeStop.MobileNo && <CallChoiceDialog open={callOpen} onOpenChange={setCallOpen} mobileNo={activeStop.MobileNo} />}
       <BbmDialog open={bbmOpen} onOpenChange={setBbmOpen} jadwalId={jadwalId} />
       <KendalaDialog
         open={kendalaOpen}

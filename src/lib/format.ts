@@ -17,6 +17,16 @@ export function formatPercentPoints(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+// "0812..." -> "https://wa.me/62812..." — WhatsApp's deep-link format needs
+// the country code instead of the domestic leading 0. Only strips a single
+// leading 0 (not all non-digits) since Indonesian mobile numbers always
+// start with exactly one.
+export function toWhatsAppUrl(mobileNo: string): string {
+  const digits = mobileNo.replace(/\D/g, "");
+  const local = digits.startsWith("0") ? digits.slice(1) : digits;
+  return `https://wa.me/62${local}`;
+}
+
 export function formatQty(value: number | null): string {
   if (value === null || Number.isNaN(value)) return "-";
   return `±${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}`;

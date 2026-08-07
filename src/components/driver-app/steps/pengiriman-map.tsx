@@ -21,7 +21,6 @@ export interface RecenterTarget {
 // Gap kept between the floating controls and the bottom sheet's current
 // (possibly mid-drag) top edge.
 const CONTROL_GAP = 12;
-const LOCATE_BUTTON_HEIGHT = 32;
 
 // Owns map style + the "Lokasi Saya" recenter button; live position
 // tracking now lives in PengirimanStep (shared with its ETA/distance-list
@@ -77,12 +76,7 @@ export function PengirimanMap({
     // floating chrome and any real <Dialog> (z-50).
     <div className={cn("relative z-0 h-full w-full", className)}>
       <PengirimanMapContent origin={origin} stops={stops} route={route} position={position} mapStyle={mapStyle} recenter={recenter} />
-      <MapStyleSwitcher
-        mapStyle={mapStyle}
-        onChange={setMapStyle}
-        className="right-2 flex-col"
-        style={{ bottom: controlsBottom + LOCATE_BUTTON_HEIGHT + CONTROL_GAP }}
-      />
+      <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="left-2 flex-col" style={{ bottom: controlsBottom }} />
       <Button
         type="button"
         size="icon"
@@ -96,10 +90,10 @@ export function PengirimanMap({
         <Locate className={cn("size-3.5", locating && "animate-spin")} />
       </Button>
       {locateError && (
-        <p
-          className="absolute left-2 z-1000 max-w-64 rounded bg-destructive/90 px-2 py-1 text-[10px] text-destructive-foreground shadow-md"
-          style={{ bottom: controlsBottom }}
-        >
+        // Fixed near the top rather than tied to controlsBottom: the style
+        // switcher now also sits at left-2/controlsBottom (moved there per
+        // request), so anchoring this at the same spot would overlap it.
+        <p className="absolute top-16 left-2 z-1000 max-w-64 rounded bg-destructive/90 px-2 py-1 text-[10px] text-destructive-foreground shadow-md">
           {locateError}
         </p>
       )}
