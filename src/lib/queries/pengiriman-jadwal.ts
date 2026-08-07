@@ -249,6 +249,78 @@ export async function getPengirimanBoard(
   return { armada, jadwal, externalDeliveries: externalResult.recordset };
 }
 
+// Card status shown on the driver's own Tugas list — a 4th value not
+// present in JadwalStatus itself ("Selesai") is derived here, never
+// stored: true once every one of this Jadwal's stops has a
+// DashboardPengirimanStopDelivery row with JamSelesai populated. See the
+// design spec's "Perubahan Data Model" section for why this is computed
+// rather than a new Jadwal.Status value.
+export interface DriverJadwalCard {
+  JadwalID: number;
+  ArmadaNama: string;
+  VehicleNo: string | null;
+  JamJadwal: string | Date;
+  Status: JadwalStatus;
+  JamSelesaiMuat: string | Date | null;
+  JamAktualBerangkat: string | Date | null;
+  TotalStop: number;
+  StopSelesai: number;
+  TotalKantong: number;
+  IsSelesai: boolean;
+}
+
+// businessDate here is a plain calendar date (JamJadwal's own DATE), not
+// the 14:00-WIB-rollover "business date" used elsewhere on the Papan
+// Pengiriman board — the driver picks a literal calendar date from a date
+// picker on the Tugas screen, so no rollover translation applies.
+//
+// The StopAgg CTE pre-aggregates to exactly one row per JadwalDetailID
+// BEFORE joining up to the Jadwal level — same reason getPengirimanBoard's
+// own StopQty/StopDuration CTEs exist in this file: SalesOrderDetail is
+// one-to-many per stop, so joining it directly at the Jadwal-grouped level
+// would fan out and make COUNT(jd.JadwalDetailID)/SUM(...) count each stop
+// once per its own SalesOrderDetail line instead of once per stop.
+export async function getDriverJadwalList(salesmanId: string, dateISO: string): Promise<DriverJadwalCard[]> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("salesmanId", sql.VarChar(16), salesmanId)
+    .input("date", sql.Date, dateISO).query(`
+      WITH StopAgg AS (
+          SELECT jd.JadwalID, jd.JadwalDetailID,
+                 ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Kantong,
+                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai
+          FROM DashboardPengirimanJadwalDetail jd
+          LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+          LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+          WHERE jd.IsDeleted = 0
+          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai
+      )
+      SELECT
+          j.JadwalID,
+          a.Nama AS ArmadaNama,
+          ed.VehicleNo,
+          j.JamJadwal,
+          j.Status,
+          j.JamSelesaiMuat,
+          j.JamAktualBerangkat,
+          COUNT(sa.JadwalDetailID) AS TotalStop,
+          SUM(sa.IsSelesai) AS StopSelesai,
+          SUM(sa.Kantong) AS TotalKantong
+      FROM DashboardPengirimanJadwal j
+      JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+      JOIN StopAgg sa ON sa.JadwalID = j.JadwalID
+      WHERE j.SalesmanID = @salesmanId AND j.IsDeleted = 0 AND CAST(j.JamJadwal AS DATE) = @date
+      GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamJadwal, j.Status, j.JamSelesaiMuat, j.JamAktualBerangkat
+      ORDER BY j.JamJadwal
+    `);
+  return (result.recordset as Omit<DriverJadwalCard, "IsSelesai">[]).map((r) => ({
+    ...r,
+    IsSelesai: r.TotalStop > 0 && r.StopSelesai === r.TotalStop,
+  }));
+}
+
 // Bulk-resolves the travel-time component of EstimasiDurasiMenit for every
 // Jadwal on the board in a single extra query (rather than one round-trip
 // per Jadwal) — fetches every stop's coordinates grouped by JadwalID
