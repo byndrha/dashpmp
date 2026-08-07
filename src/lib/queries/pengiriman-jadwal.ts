@@ -2159,14 +2159,25 @@ export async function confirmStopDelivery(
           `UPDATE DeliveryOrderDetail SET Delivered = @delivered WHERE DeliveryOrderID = @doId AND SalesOrderDetailID = @soDetailId`
         );
 
+      // NOTE: SalesInvoiceDetail has no Retur column on the live schema
+      // (confirmed via INFORMATION_SCHEMA.COLUMNS — its 19 live columns are
+      // SalesInvoiceDetailID/SalesInvoiceID/ItemID/Qty/Unit/Ratio/UnitRatio/
+      // Price/Disc/DiscValue/DiscRp/Amount/Name/Value/Netto/Description/
+      // WaiterName/Cashback/Total). The brief's original draft included
+      // `Retur = @retur` here, transcribed from SalesReturnDetail (which DOES
+      // have a real Retur column, used correctly below) — that was a
+      // schema-snapshot transcription mistake caught by this task's own
+      // mandatory Step 4 live-schema diff and removed. The retur quantity for
+      // this line is still fully recorded elsewhere: SalesReturnDetail.Retur
+      // (the formal ERP document) and DashboardPengirimanStopDeliveryItem.QtyRetur
+      // (this dashboard's own per-stop record).
       await new sql.Request(transaction)
         .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
         .input("itemId", sql.VarChar(160), sod.ItemID)
         .input("qty", sql.Decimal(23, 4), item.qtyDiterima)
         .input("amount", sql.Decimal(23, 4), newAmount)
-        .input("retur", sql.Decimal(23, 4), qtyRetur)
         .query(
-          `UPDATE SalesInvoiceDetail SET Qty = @qty, Amount = @amount, Netto = @amount, Value = @amount, Retur = @retur
+          `UPDATE SalesInvoiceDetail SET Qty = @qty, Amount = @amount, Netto = @amount, Value = @amount
            WHERE SalesInvoiceID = @siId AND ItemID = @itemId`
         );
 
