@@ -2,10 +2,13 @@
 
 import "leaflet/dist/leaflet.css";
 import { Fragment, useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
+import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
+import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
+import type { RecenterTarget } from "./peta-overview-map";
 
 interface ColoredRoute {
   jadwalId: number;
@@ -33,16 +36,36 @@ const driverIcon = L.icon({
   shadowSize: [41, 41],
 });
 
+// Imperatively pans/zooms on every new `recenter.key` (search result or
+// "Lokasi Saya") — must live inside <MapContainer> to use useMap(). Same
+// pattern as mitra-location-map.tsx's own recenterKey handling.
+function RecenterHandler({ recenter }: { recenter: RecenterTarget | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!recenter) return;
+    map.setView([recenter.lat, recenter.lng], 15);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recenter?.key]);
+  return null;
+}
+
 export default function PetaOverviewMapContent({
   pabrik,
   routes,
   position,
+  mapStyle,
+  onMapStyleChange,
+  recenter,
 }: {
   pabrik: { lat: number; lng: number };
   routes: ColoredRoute[];
   position: { lat: number; lng: number } | null;
+  mapStyle: MapStyle;
+  onMapStyleChange: (style: MapStyle) => void;
+  recenter: RecenterTarget | null;
 }) {
   const [geometries, setGeometries] = useState<Map<number, MultiPointRoute>>(new Map());
+  const tile = TILE_SOURCES[mapStyle];
 
   useEffect(() => {
     let cancelled = false;
@@ -73,8 +96,15 @@ export default function PetaOverviewMapContent({
     // compare directly against the driver-app's fixed bottom nav (z-40)
     // and render on top of it. Same fix as marketing-location-map.tsx.
     <div className="relative z-0 h-full w-full">
-      <MapContainer center={[pabrik.lat, pabrik.lng]} zoom={12} className="h-full w-full">
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <MapContainer center={[pabrik.lat, pabrik.lng]} zoom={12} zoomControl={false} attributionControl={false} className="h-full w-full">
+        {/* key={mapStyle} forces a fresh TileLayer instance per style —
+            same reasoning as marketing-location-map.tsx, Leaflet doesn't
+            reliably diff/reuse tiles across completely different servers. */}
+        <TileLayer key={mapStyle} url={tile.url} attribution={tile.attribution} subdomains={tile.subdomains ?? "abc"} />
+        <MapZoomControl className="top-2 left-2" />
+        <MapStyleSwitcher mapStyle={mapStyle} onChange={onMapStyleChange} className="top-2 right-2" />
+        <MapAttribution className="bottom-12 left-2" />
+        <RecenterHandler recenter={recenter} />
         <Marker position={[pabrik.lat, pabrik.lng]} icon={driverIcon}>
           <Popup>Pabrik</Popup>
         </Marker>
