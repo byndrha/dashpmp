@@ -1894,10 +1894,25 @@ export async function getStopOrderItems(jadwalDetailId: number): Promise<StopOrd
   return result.recordset;
 }
 
+// SQL Server error number for a unique-constraint/PK violation — thrown by
+// the INSERT below when two near-simultaneous recordStopArrival calls for
+// the same jadwalDetailId both pass the initial SELECT (TOCTOU race) and
+// then race on the insert itself. mssql's RequestError exposes this
+// directly as `.number` (and also mirrors it at
+// `.originalError.info.number`) — checked defensively at both spots since
+// only the top-level `.number` is documented as stable.
+const SQL_UNIQUE_VIOLATION = 2627;
+
 // "Geser untuk Tiba" (Layar Pengiriman) — idempotent: calling this again
 // for a stop that already has a row just returns the existing
 // StopDeliveryID rather than erroring, so a duplicate tap or a retried
-// request after a dropped connection can't fail loudly.
+// request after a dropped connection can't fail loudly. The SELECT-then-
+// INSERT below still has a TOCTOU race window between two near-simultaneous
+// calls (both can pass the "no existing row" SELECT before either INSERTs)
+// — the losing INSERT hits UQ_DashboardPengirimanStopDelivery_JadwalDetailID
+// instead of creating a duplicate row, and is caught here and turned into a
+// re-SELECT of the winner's row, so the race resolves to the same
+// "can't fail loudly" outcome instead of an uncaught exception.
 export async function recordStopArrival(jadwalDetailId: number): Promise<number> {
   const pool = await getPool();
   const existing = await pool
@@ -1907,11 +1922,24 @@ export async function recordStopArrival(jadwalDetailId: number): Promise<number>
   const existingRow = existing.recordset[0] as { StopDeliveryID: number } | undefined;
   if (existingRow) return existingRow.StopDeliveryID;
 
-  const result = await pool
-    .request()
-    .input("id", sql.Int, jadwalDetailId)
-    .query(
-      `INSERT INTO DashboardPengirimanStopDelivery (JadwalDetailID, JamTiba) OUTPUT INSERTED.StopDeliveryID VALUES (@id, GETDATE())`
-    );
-  return (result.recordset[0] as { StopDeliveryID: number }).StopDeliveryID;
+  try {
+    const result = await pool
+      .request()
+      .input("id", sql.Int, jadwalDetailId)
+      .query(
+        `INSERT INTO DashboardPengirimanStopDelivery (JadwalDetailID, JamTiba) OUTPUT INSERTED.StopDeliveryID VALUES (@id, GETDATE())`
+      );
+    return (result.recordset[0] as { StopDeliveryID: number }).StopDeliveryID;
+  } catch (err) {
+    const errorNumber = (err as { number?: number; originalError?: { info?: { number?: number } } }).number ?? (err as { originalError?: { info?: { number?: number } } }).originalError?.info?.number;
+    if (errorNumber !== SQL_UNIQUE_VIOLATION) throw err;
+
+    const winner = await pool
+      .request()
+      .input("id", sql.Int, jadwalDetailId)
+      .query(`SELECT StopDeliveryID FROM DashboardPengirimanStopDelivery WHERE JadwalDetailID = @id`);
+    const winnerRow = winner.recordset[0] as { StopDeliveryID: number } | undefined;
+    if (!winnerRow) throw err;
+    return winnerRow.StopDeliveryID;
+  }
 }
