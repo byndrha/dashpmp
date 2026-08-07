@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus } from "lucide-react";
+import { Camera, Minus, Plus } from "lucide-react";
 import { LiveCameraCaptureField } from "@/components/dashboard/live-camera-capture-field";
 import { formatRupiah } from "@/lib/format";
 import { getStopOrderItemsAction } from "@/app/driver-app/actions";
@@ -26,6 +26,7 @@ export function KonfirKirimStep({ jadwalDetailId, onNext }: { jadwalDetailId: nu
   const [returFotoFiles, setReturFotoFiles] = useState<Record<string, File>>({});
   const [fotoPengirimanFile, setFotoPengirimanFile] = useState<File | null>(null);
   const [fotoMuatanFile, setFotoMuatanFile] = useState<File | null>(null);
+  const [activeReturSlot, setActiveReturSlot] = useState<string | null>(null);
   const [tanpaPembayaran, setTanpaPembayaran] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -100,7 +101,7 @@ export function KonfirKirimStep({ jadwalDetailId, onNext }: { jadwalDetailId: nu
           <div className="h-32">
             <LiveCameraCaptureField
               label="Bukti Pengiriman"
-              photoUrl={fotoPengirimanFile ? URL.createObjectURL(fotoPengirimanFile) : null}
+              photoUrl={null}
               size="main"
               active
               onCapture={setFotoPengirimanFile}
@@ -109,7 +110,7 @@ export function KonfirKirimStep({ jadwalDetailId, onNext }: { jadwalDetailId: nu
           <div className="h-32">
             <LiveCameraCaptureField
               label="Bukti Muatan"
-              photoUrl={fotoMuatanFile ? URL.createObjectURL(fotoMuatanFile) : null}
+              photoUrl={null}
               size="main"
               active
               onCapture={setFotoMuatanFile}
@@ -146,13 +147,27 @@ export function KonfirKirimStep({ jadwalDetailId, onNext }: { jadwalDetailId: nu
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-destructive/5 p-2">
                   <p className="text-xs text-destructive">Retur: {retur}</p>
                   <div className="h-14 w-14">
-                    <LiveCameraCaptureField
-                      label="Foto Retur"
-                      photoUrl={returFotoFiles[item.SalesOrderDetailID] ? URL.createObjectURL(returFotoFiles[item.SalesOrderDetailID]) : null}
-                      size="main"
-                      active
-                      onCapture={(file) => setReturFotoFiles((prev) => ({ ...prev, [item.SalesOrderDetailID]: file }))}
-                    />
+                    {activeReturSlot === item.SalesOrderDetailID || returFotoFiles[item.SalesOrderDetailID] ? (
+                      <LiveCameraCaptureField
+                        label="Foto Retur"
+                        photoUrl={null}
+                        size="main"
+                        active
+                        onCapture={(file) => {
+                          setReturFotoFiles((prev) => ({ ...prev, [item.SalesOrderDetailID]: file }));
+                          setActiveReturSlot(null);
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setActiveReturSlot(item.SalesOrderDetailID)}
+                        className="flex h-14 w-14 shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border border-border bg-muted/30 text-[10px] text-muted-foreground"
+                      >
+                        <Camera className="size-4" style={{ transform: "rotate(15deg)" }} />
+                        <span className="px-1 text-center leading-tight">Foto Retur</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
