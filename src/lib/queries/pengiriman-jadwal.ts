@@ -1827,3 +1827,91 @@ export async function getCurrentAssignment(salesOrderId: string): Promise<Curren
   if (!row) return null;
   return { jadwalId: row.JadwalID, armadaId: row.ArmadaID, jamJadwal: row.JamJadwal, salesmanId: row.SalesmanID };
 }
+
+export interface DriverStopRow extends JadwalDetailRow {
+  JamTiba: string | Date | null;
+  JamSelesai: string | Date | null;
+  // Needed by the driver-app's Pembayaran screen to call recordPayment()
+  // (SalesPayment.BusinessPartnerID) — fetched here rather than making
+  // that screen do its own extra round-trip.
+  BusinessPartnerID: string;
+}
+
+// Merges getJadwalDetail's existing per-stop data (customer/qty/address —
+// unchanged, still the read path for the dashboard's own Validasi Rute)
+// with this stop's own completion timestamps and BusinessPartnerID, for
+// the driver-app's Pengiriman/Konfir/Pembayaran screens.
+export async function getDriverJadwalStops(jadwalId: number): Promise<DriverStopRow[]> {
+  const pool = await getPool();
+  const [stops, extraRows] = await Promise.all([
+    getJadwalDetail(jadwalId),
+    pool
+      .request()
+      .input("jadwalId", sql.Int, jadwalId).query(`
+        SELECT jd.JadwalDetailID, sd.JamTiba, sd.JamSelesai, so.BusinessPartnerID
+        FROM DashboardPengirimanJadwalDetail jd
+        JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+        LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+        WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
+      `),
+  ]);
+  const extraByDetailId = new Map(
+    (
+      extraRows.recordset as { JadwalDetailID: number; JamTiba: Date | null; JamSelesai: Date | null; BusinessPartnerID: string }[]
+    ).map((r) => [r.JadwalDetailID, r])
+  );
+  return stops.map((s) => ({
+    ...s,
+    JamTiba: extraByDetailId.get(s.JadwalDetailID)?.JamTiba ?? null,
+    JamSelesai: extraByDetailId.get(s.JadwalDetailID)?.JamSelesai ?? null,
+    BusinessPartnerID: extraByDetailId.get(s.JadwalDetailID)?.BusinessPartnerID ?? "",
+  }));
+}
+
+export interface StopOrderItem {
+  SalesOrderDetailID: string;
+  ItemID: string;
+  Name: string;
+  Qty: number;
+  Price: number;
+}
+
+// Line-item breakdown for one stop (Layar "Konfir Kirim") — unlike
+// JadwalDetailRow's aggregated Qty/Qty10KG/Qty5KG (used for card totals),
+// this is one row per real SalesOrderDetail so the driver can adjust each
+// item's received quantity independently.
+export async function getStopOrderItems(jadwalDetailId: number): Promise<StopOrderItem[]> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("jadwalDetailId", sql.Int, jadwalDetailId).query(`
+      SELECT sod.SalesOrderDetailID, sod.ItemID, sod.Name, sod.Qty, sod.Price
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+      WHERE jd.JadwalDetailID = @jadwalDetailId AND jd.IsDeleted = 0
+      ORDER BY sod.Name
+    `);
+  return result.recordset;
+}
+
+// "Geser untuk Tiba" (Layar Pengiriman) — idempotent: calling this again
+// for a stop that already has a row just returns the existing
+// StopDeliveryID rather than erroring, so a duplicate tap or a retried
+// request after a dropped connection can't fail loudly.
+export async function recordStopArrival(jadwalDetailId: number): Promise<number> {
+  const pool = await getPool();
+  const existing = await pool
+    .request()
+    .input("id", sql.Int, jadwalDetailId)
+    .query(`SELECT StopDeliveryID FROM DashboardPengirimanStopDelivery WHERE JadwalDetailID = @id`);
+  const existingRow = existing.recordset[0] as { StopDeliveryID: number } | undefined;
+  if (existingRow) return existingRow.StopDeliveryID;
+
+  const result = await pool
+    .request()
+    .input("id", sql.Int, jadwalDetailId)
+    .query(
+      `INSERT INTO DashboardPengirimanStopDelivery (JadwalDetailID, JamTiba) OUTPUT INSERTED.StopDeliveryID VALUES (@id, GETDATE())`
+    );
+  return (result.recordset[0] as { StopDeliveryID: number }).StopDeliveryID;
+}
