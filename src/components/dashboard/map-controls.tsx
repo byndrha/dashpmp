@@ -15,13 +15,18 @@ export function MapStyleSwitcher({
   mapStyle,
   onChange,
   className,
+  style,
 }: {
   mapStyle: MapStyle;
   onChange: (style: MapStyle) => void;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   return (
-    <div className={cn("absolute z-1000 flex gap-1 rounded-md bg-card/90 p-1 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm", className)}>
+    <div
+      style={style}
+      className={cn("absolute z-1000 flex gap-1 rounded-md bg-card/90 p-1 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm", className)}
+    >
       {STYLE_OPTIONS.map((opt) => (
         <button
           key={opt.key}

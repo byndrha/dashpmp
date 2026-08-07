@@ -1,11 +1,11 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
-import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
-import { MapZoomControl } from "@/components/dashboard/map-controls";
+import type { MultiPointRoute } from "@/lib/osrm";
+import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
 import type { RecenterTarget } from "./pengiriman-map";
 
 // Small decorative marker for the route's starting point (distinct from the
@@ -29,7 +29,10 @@ function numberedIcon(n: number) {
 
 // Inline SVG rather than a self-hosted PNG (the pattern used for the
 // destination pin elsewhere in driver-app) since this needs a distinct
-// truck glyph, not Leaflet's default marker shape.
+// truck glyph, not Leaflet's default marker shape. Position tracks the
+// `position` prop reactively (react-leaflet calls setLatLng() under the
+// hood when a Marker's position prop changes), so this marker follows
+// whatever live GPS fix PengirimanStep's watchPosition last produced.
 const truckIcon = L.divIcon({
   className: "",
   html: `<div style="width:36px;height:36px;border-radius:9999px;background:#111827;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4)">
@@ -57,36 +60,29 @@ function RecenterHandler({ recenter }: { recenter: RecenterTarget | null }) {
 export default function PengirimanMapContent({
   origin,
   stops,
+  route,
   position,
+  mapStyle,
   recenter,
 }: {
   origin: { lat: number; lng: number };
   stops: { lat: number; lng: number; label: number }[];
+  // Fetched once by PengirimanStep (shared with its ETA/distance-list
+  // calculations) rather than this component fetching its own copy — one
+  // OSRM call instead of two for the same route.
+  route: MultiPointRoute | null;
   position: { lat: number; lng: number } | null;
+  mapStyle: MapStyle;
   recenter: RecenterTarget | null;
 }) {
-  const [route, setRoute] = useState<MultiPointRoute | null>(null);
   const truckPosition = position ?? origin;
-
-  // Re-fetches on every live position change (that's the "live route"
-  // effect) — stops' own coordinates never change within one screen visit.
-  useEffect(() => {
-    if (stops.length === 0) return;
-    let cancelled = false;
-    getMultiPointRoute([truckPosition, ...stops])
-      .then((r) => {
-        if (!cancelled) setRoute(r);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [truckPosition.lat, truckPosition.lng]);
+  const tile = TILE_SOURCES[mapStyle];
 
   return (
     <MapContainer center={[truckPosition.lat, truckPosition.lng]} zoom={14} zoomControl={false} attributionControl={false} className="h-full w-full">
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" subdomains="abc" />
+      {/* keyed by mapStyle: same reasoning as marketing-location-map.tsx,
+          Leaflet doesn't reliably diff/reuse tiles across different servers. */}
+      <TileLayer key={mapStyle} url={tile.url} attribution={tile.attribution} subdomains={tile.subdomains ?? "abc"} />
       <Marker position={[origin.lat, origin.lng]} icon={originIcon} />
       <Marker position={[truckPosition.lat, truckPosition.lng]} icon={truckIcon} />
       {stops.map((s) => (
@@ -98,7 +94,6 @@ export default function PengirimanMapContent({
           pathOptions={{ color: "#16a34a", weight: 4, dashArray: "8 8" }}
         />
       )}
-      <MapZoomControl className="top-24 right-2 flex-col" />
       <RecenterHandler recenter={recenter} />
     </MapContainer>
   );

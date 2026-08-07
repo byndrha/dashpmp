@@ -6,17 +6,20 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 const TABS = [
   { value: "papan", label: "Papan Pengiriman" },
   { value: "terbuka", label: "Pengiriman Terbuka" },
+  { value: "kendala", label: "Laporan Kendala" },
 ] as const;
 
 // Same pattern as piutang-tabs.tsx: pure client-side tab state, no URL
-// param, no navigation on switch — both panels' data is already fetched
+// param, no navigation on switch — all panels' data is already fetched
 // upfront by the server page.
 export function PengirimanTabs({
   terbukaPanel,
   papanPanel,
+  kendalaPanel,
 }: {
   terbukaPanel: React.ReactNode;
   papanPanel: React.ReactNode;
+  kendalaPanel: React.ReactNode;
 }) {
   const [activeTab, setActiveTab] = useState<string>("papan");
 
@@ -31,6 +34,7 @@ export function PengirimanTabs({
       </TabsList>
       <TabsContent value="papan">{papanPanel}</TabsContent>
       <TabsContent value="terbuka">{terbukaPanel}</TabsContent>
+      <TabsContent value="kendala">{kendalaPanel}</TabsContent>
     </Tabs>
   );
 }
