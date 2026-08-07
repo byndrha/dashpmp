@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 
@@ -27,7 +27,10 @@ export function PetaOverviewMap({
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  const coloredRoutes = routes.map((r, i) => ({ ...r, color: ROUTE_COLORS[i % ROUTE_COLORS.length] }));
+  const coloredRoutes = useMemo(
+    () => routes.map((r, i) => ({ ...r, color: ROUTE_COLORS[i % ROUTE_COLORS.length] })),
+    [routes]
+  );
 
   return <MapContent pabrik={pabrik} routes={coloredRoutes} position={position} />;
 }
