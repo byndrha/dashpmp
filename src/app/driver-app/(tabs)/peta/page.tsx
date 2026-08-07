@@ -23,7 +23,15 @@ export default async function DriverPetaPage() {
   );
 
   return (
-    <div className="h-full w-full">
+    // Explicit height, not h-full: confirmed live (DOM inspector showed the
+    // Leaflet container at "425 x 0") that a plain `h-full` chain never
+    // resolves here — this div's ancestor chain up to (tabs)/layout.tsx's
+    // outer wrapper only has `min-h-dvh` (a minimum, not a definite height)
+    // on a flex column, and a flex-1 child's own height isn't reliably
+    // "definite" for percentage-height descendants to resolve against in
+    // that setup. 4rem matches that layout's own `pb-16` reserved for the
+    // fixed bottom nav.
+    <div className="h-[calc(100dvh-4rem)] w-full">
       <PetaOverviewMap pabrik={{ lat: pabrik.latitude, lng: pabrik.longitude }} routes={routes} />
     </div>
   );
