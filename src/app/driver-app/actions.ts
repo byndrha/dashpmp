@@ -5,6 +5,7 @@ import { requireDriver } from "@/lib/require-access";
 import {
   getDriverJadwalList,
   getDriverJadwalStops,
+  getDriverJadwalHistory,
   getStopOrderItems,
   recordStopArrival,
   confirmStopDelivery,
@@ -22,6 +23,8 @@ import {
   type RecordPaymentInput,
   type RecordPaymentResult,
 } from "@/lib/queries/pelunasan";
+import { getDriverProfiles, type DriverProfileRow } from "@/lib/queries/driver-profile";
+import { getPabrikLocation, type PabrikLocation } from "@/lib/queries/pabrik-location";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 async function requireOwnSalesmanId(): Promise<string> {
@@ -126,5 +129,37 @@ export async function getInvoiceOutstandingAction(
     const invoice = invoices.find((i) => i.SalesInvoiceID === salesInvoiceId);
     if (!invoice) throw new AppError("Invoice ini sudah lunas atau tidak ditemukan.");
     return invoice.Outstanding;
+  });
+}
+
+// Client-callable versions of what the 4 tab pages used to fetch only in
+// their own Server Component — needed now that DriverTabShell lazily
+// fetches a tab's data client-side the first time it's switched to
+// (every tab except whichever route the driver actually landed on still
+// starts with no data at all).
+
+export async function getDriverJadwalHistoryAction(limit?: number): Promise<ActionResult<DriverJadwalCard[]>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    return getDriverJadwalHistory(salesmanId, limit);
+  });
+}
+
+export async function getOwnDriverProfileAction(): Promise<ActionResult<DriverProfileRow | null>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    const all = await getDriverProfiles();
+    return all.find((d) => d.SalesmanID === salesmanId) ?? null;
+  });
+}
+
+// Pabrik location is a single global setting, not per-driver data, but the
+// existing getPabrikLocationAction (src/app/grup/akun/actions.ts) is gated
+// by requireGrupAccess() and unusable by a driver session — this is the
+// same read, just behind requireDriver() instead.
+export async function getPabrikLocationForDriverAction(): Promise<ActionResult<PabrikLocation>> {
+  return runAction(async () => {
+    await requireOwnSalesmanId();
+    return getPabrikLocation();
   });
 }

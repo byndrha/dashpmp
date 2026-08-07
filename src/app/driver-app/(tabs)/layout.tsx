@@ -1,12 +1,9 @@
 import { requireDriver } from "@/lib/require-access";
-import { DriverBottomNav } from "@/components/driver-app/bottom-nav";
 
+// DriverTabShell (rendered by each tab's own page.tsx) now owns the bottom
+// nav, the h-dvh flex layout, and cross-tab keep-alive state — this layout
+// is just the shared auth gate.
 export default async function DriverTabsLayout({ children }: { children: React.ReactNode }) {
   await requireDriver();
-  return (
-    <div className="flex min-h-dvh flex-col bg-background pb-16">
-      <div className="flex-1">{children}</div>
-      <DriverBottomNav />
-    </div>
-  );
+  return children;
 }

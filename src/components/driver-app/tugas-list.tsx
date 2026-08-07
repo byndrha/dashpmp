@@ -52,7 +52,8 @@ export function TugasList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 p-4">
+      <h1 className="font-display text-lg font-semibold">Beranda Driver</h1>
       {/* "Total Hari Kerja" stat card was removed here: getDriverJadwalList
           filters to a single date, so a distinct-day count over `jadwal`
           could only ever be 0 or 1 — not a meaningful metric. A real
