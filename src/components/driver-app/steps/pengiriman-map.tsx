@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { useTheme } from "next-themes";
 import { Geolocation } from "@capacitor/geolocation";
 import { Locate } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,15 @@ export function PengirimanMap({
   const [recenter, setRecenter] = useState<RecenterTarget | null>(null);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
+  const { setTheme } = useTheme();
+
+  // Picking a map style also switches the whole app's UI theme — satellite
+  // has no light/dark UI equivalent, so it leaves the current UI theme
+  // alone and only changes the tiles.
+  function handleMapStyleChange(style: MapStyle) {
+    setMapStyle(style);
+    if (style === "light" || style === "dark") setTheme(style);
+  }
 
   async function handleLocateMe() {
     setLocateError(null);
@@ -76,7 +86,7 @@ export function PengirimanMap({
     // floating chrome and any real <Dialog> (z-50).
     <div className={cn("relative z-0 h-full w-full", className)}>
       <PengirimanMapContent origin={origin} stops={stops} route={route} position={position} mapStyle={mapStyle} recenter={recenter} />
-      <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="left-2 flex-col" style={{ bottom: controlsBottom }} />
+      <MapStyleSwitcher mapStyle={mapStyle} onChange={handleMapStyleChange} className="left-2 flex-col" style={{ bottom: controlsBottom }} />
       <Button
         type="button"
         size="icon"

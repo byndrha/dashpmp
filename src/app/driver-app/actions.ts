@@ -25,7 +25,7 @@ import {
 } from "@/lib/queries/pelunasan";
 import { getDriverProfiles, type DriverProfileRow } from "@/lib/queries/driver-profile";
 import { getPabrikLocation, type PabrikLocation } from "@/lib/queries/pabrik-location";
-import { recordFuelLog } from "@/lib/queries/driver-fuel";
+import { recordMasukSpbu, updateFuelLog } from "@/lib/queries/driver-fuel";
 import { recordKendala } from "@/lib/queries/driver-kendala";
 import type { JenisKendala } from "@/lib/kendala-options";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
@@ -167,12 +167,24 @@ export async function getPabrikLocationForDriverAction(): Promise<ActionResult<P
   });
 }
 
-export async function recordFuelLogAction(jadwalId: number, liter: number): Promise<ActionResult<void>> {
+export async function recordMasukSpbuAction(jadwalId: number): Promise<ActionResult<number>> {
   return runAction(async () => {
     const salesmanId = await requireOwnSalesmanId();
     await assertOwnsJadwal(jadwalId, salesmanId);
+    return recordMasukSpbu(jadwalId, salesmanId);
+  });
+}
+
+export async function updateFuelLogAction(
+  bbmId: number,
+  liter: number,
+  nominalAsli: number,
+  nominalEkstra: number
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
     if (!(liter > 0)) throw new AppError("Jumlah liter harus lebih dari 0.");
-    await recordFuelLog(jadwalId, salesmanId, liter);
+    await updateFuelLog(bbmId, salesmanId, liter, nominalAsli, nominalEkstra);
   });
 }
 

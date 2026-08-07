@@ -39,6 +39,12 @@ export default async function DriverJadwalPage({ params }: { params: Promise<{ j
       jadwalId={id}
       armadaNama={header.ArmadaNama}
       vehicleNo={header.VehicleNo}
+      bbmContext={{
+        jarakKM: header.JarakKM,
+        konsumsiBBM: header.KonsumsiBBM,
+        biayaBBMPerLiter: header.BiayaBBMPerLiter,
+        qrMyPertaminaPath: header.QrMyPertaminaPath,
+      }}
       initialStops={stops}
       pabrik={{ lat: pabrik.latitude, lng: pabrik.longitude }}
       driverName={session.user.name ?? session.user.username}

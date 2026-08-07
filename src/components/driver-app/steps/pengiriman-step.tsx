@@ -10,6 +10,7 @@ import { BbmDialog } from "./bbm-dialog";
 import { KendalaDialog } from "./kendala-dialog";
 import { CallChoiceDialog } from "./call-choice-dialog";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
+import type { BbmContext } from "@/components/driver-app/stop-flow";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { recordStopArrivalAction } from "@/app/driver-app/actions";
 
@@ -23,6 +24,7 @@ export function PengirimanStep({
   jadwalId,
   armadaNama,
   vehicleNo,
+  bbmContext,
   activeStop,
   remainingStops,
   pabrik,
@@ -32,6 +34,7 @@ export function PengirimanStep({
   jadwalId: number;
   armadaNama: string;
   vehicleNo: string | null;
+  bbmContext: BbmContext;
   activeStop: DriverStopRow;
   // Every currently-incomplete stop for this Jadwal, in delivery order —
   // activeStop is remainingStops[0]. Drives both the map's numbered
@@ -320,7 +323,7 @@ export function PengirimanStep({
       </div>
 
       {activeStop.MobileNo && <CallChoiceDialog open={callOpen} onOpenChange={setCallOpen} mobileNo={activeStop.MobileNo} />}
-      <BbmDialog open={bbmOpen} onOpenChange={setBbmOpen} jadwalId={jadwalId} />
+      <BbmDialog open={bbmOpen} onOpenChange={setBbmOpen} jadwalId={jadwalId} bbmContext={bbmContext} />
       <KendalaDialog
         open={kendalaOpen}
         onOpenChange={setKendalaOpen}

@@ -324,6 +324,16 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
 export interface JadwalHeader {
   ArmadaNama: string;
   VehicleNo: string | null;
+  // BBM budget inputs for the driver-app's Isi BBM screen: quota liters =
+  // JarakKM * KonsumsiBBM (L/km), quota cost = quota liters *
+  // BiayaBBMPerLiter. Any of these can be null (JarakKM unset on a Draft
+  // Jadwal, or KonsumsiBBM/BiayaBBMPerLiter never configured on this
+  // Armada) — the dialog falls back to "no split" when the quota can't be
+  // computed.
+  JarakKM: number | null;
+  KonsumsiBBM: number | null;
+  BiayaBBMPerLiter: number | null;
+  QrMyPertaminaPath: string | null;
 }
 
 // Vehicle info for the Pengiriman screen's floating top bar ("Hino Truck •
@@ -335,7 +345,7 @@ export async function getJadwalHeader(jadwalId: number): Promise<JadwalHeader> {
   const result = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId).query(`
-      SELECT a.Nama AS ArmadaNama, ed.VehicleNo
+      SELECT a.Nama AS ArmadaNama, ed.VehicleNo, j.JarakKM, a.KonsumsiBBM, a.BiayaBBMPerLiter, a.QrMyPertaminaPath
       FROM DashboardPengirimanJadwal j
       JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
       LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
@@ -2071,13 +2081,17 @@ export interface StopDeliveryItemInput {
   salesOrderDetailId: string;
   qtyDiterima: number;
   fotoReturUrl: string | null;
+  // Driver's own note on why this item is being returned — shown next to
+  // the retur photo on the "Konfirmasi Pengiriman" screen.
+  keteranganRetur: string | null;
 }
 
 export interface ConfirmStopDeliveryInput {
   jadwalDetailId: number;
   items: StopDeliveryItemInput[];
-  fotoBuktiPengirimanUrl: string;
-  fotoBuktiMuatanUrl: string;
+  // Merged "Bukti Pengiriman" + "Bukti Muatan" into one multi-photo
+  // category (was two separate single-photo-only required fields).
+  fotoBuktiUrls: string[];
   tandaTanganUrl: string;
   tanpaPembayaran: boolean;
 }
@@ -2171,12 +2185,11 @@ export async function confirmStopDelivery(
     // against.
     const claim = await new sql.Request(transaction)
       .input("id", sql.Int, input.jadwalDetailId)
-      .input("foto1", sql.VarChar(255), input.fotoBuktiPengirimanUrl)
-      .input("foto2", sql.VarChar(255), input.fotoBuktiMuatanUrl)
+      .input("fotoBuktiUrls", sql.VarChar(sql.MAX), JSON.stringify(input.fotoBuktiUrls))
       .input("ttd", sql.VarChar(255), input.tandaTanganUrl)
       .input("tanpaBayar", sql.Bit, input.tanpaPembayaran).query(`
         UPDATE DashboardPengirimanStopDelivery
-        SET JamSelesai = GETDATE(), FotoBuktiPengirimanUrl = @foto1, FotoBuktiMuatanUrl = @foto2,
+        SET JamSelesai = GETDATE(), FotoBuktiUrls = @fotoBuktiUrls,
             TandaTanganUrl = @ttd, TanpaPembayaran = @tanpaBayar, ModifiedDate = GETDATE()
         WHERE JadwalDetailID = @id AND JamSelesai IS NULL
       `);
@@ -2331,11 +2344,12 @@ export async function confirmStopDelivery(
         .input("qtyDimuat", sql.Decimal(23, 4), sod.Qty)
         .input("qtyDiterima", sql.Decimal(23, 4), item.qtyDiterima)
         .input("qtyRetur", sql.Decimal(23, 4), qtyRetur)
-        .input("fotoRetur", sql.VarChar(255), item.fotoReturUrl).query(`
+        .input("fotoRetur", sql.VarChar(255), item.fotoReturUrl)
+        .input("keteranganRetur", sql.VarChar(500), item.keteranganRetur).query(`
           INSERT INTO DashboardPengirimanStopDeliveryItem
-            (StopDeliveryID, SalesOrderDetailID, ItemID, QtyDimuat, QtyDiterima, QtyRetur, FotoReturUrl)
+            (StopDeliveryID, SalesOrderDetailID, ItemID, QtyDimuat, QtyDiterima, QtyRetur, FotoReturUrl, KeteranganRetur)
           VALUES
-            (@stopDeliveryId, @soDetailId, @itemId, @qtyDimuat, @qtyDiterima, @qtyRetur, @fotoRetur)
+            (@stopDeliveryId, @soDetailId, @itemId, @qtyDimuat, @qtyDiterima, @qtyRetur, @fotoRetur, @keteranganRetur)
         `);
     }
 

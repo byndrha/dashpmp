@@ -43,8 +43,7 @@ export function KonfirTerimaStep({
       const actionResult = await confirmStopDeliveryAction({
         jadwalDetailId,
         items: result.items,
-        fotoBuktiPengirimanUrl: result.fotoBuktiPengirimanUrl,
-        fotoBuktiMuatanUrl: result.fotoBuktiMuatanUrl,
+        fotoBuktiUrls: result.fotoBuktiUrls,
         tandaTanganUrl,
         tanpaPembayaran: result.tanpaPembayaran,
       });

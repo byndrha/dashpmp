@@ -43,6 +43,7 @@ function emptyForm(): ArmadaInput {
     pajakLimaTahunan: null,
     biayaPajakLimaTahunan: null,
     expeditionDetailId: null,
+    qrMyPertaminaPath: null,
   };
 }
 
@@ -61,6 +62,7 @@ export function rowToForm(row: ArmadaRow): ArmadaInput {
     pajakLimaTahunan: row.PajakLimaTahunan ? new Date(row.PajakLimaTahunan).toISOString().slice(0, 10) : null,
     biayaPajakLimaTahunan: row.BiayaPajakLimaTahunan,
     expeditionDetailId: row.ExpeditionDetailID,
+    qrMyPertaminaPath: row.QrMyPertaminaPath,
   };
 }
 
@@ -97,6 +99,13 @@ export function ArmadaFormDialog({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Same deferred-upload pattern as the vehicle photo above, for the
+  // MyPertamina QR shown on the driver-app's Isi BBM screen.
+  const [qrMyPertaminaPath, setQrMyPertaminaPath] = useState(initial.qrMyPertaminaPath);
+  const [selectedQrFile, setSelectedQrFile] = useState<File | null>(null);
+  const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
+  const [qrUploading, setQrUploading] = useState(false);
+  const [qrUploadError, setQrUploadError] = useState<string | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -104,6 +113,17 @@ export function ArmadaFormDialog({
     setUploadError(null);
     setSelectedFile(file);
     setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+  }
+
+  function handleQrFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setQrUploadError(null);
+    setSelectedQrFile(file);
+    setQrPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return URL.createObjectURL(file);
     });
@@ -128,6 +148,24 @@ export function ArmadaFormDialog({
       }
       setUploading(false);
     }
+    let savedQrMyPertaminaPath = qrMyPertaminaPath;
+    if (selectedQrFile) {
+      setQrUploading(true);
+      setQrUploadError(null);
+      try {
+        const uploadData = new FormData();
+        uploadData.append("file", selectedQrFile);
+        const res = await fetch("/api/upload/armada-foto", { method: "POST", body: uploadData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah QR");
+        savedQrMyPertaminaPath = data.path;
+      } catch (err) {
+        setQrUploadError(err instanceof Error ? err.message : "Gagal mengunggah QR");
+        setQrUploading(false);
+        return;
+      }
+      setQrUploading(false);
+    }
     onSubmit({
       nama: String(formData.get("nama") ?? ""),
       platNomor: String(formData.get("platNomor") ?? "") || null,
@@ -142,6 +180,7 @@ export function ArmadaFormDialog({
       pajakLimaTahunan: String(formData.get("pajakLimaTahunan") ?? "") || null,
       biayaPajakLimaTahunan: formData.get("biayaPajakLimaTahunan") ? Number(formData.get("biayaPajakLimaTahunan")) : null,
       expeditionDetailId,
+      qrMyPertaminaPath: savedQrMyPertaminaPath,
     });
   }
 
@@ -161,6 +200,13 @@ export function ArmadaFormDialog({
             return null;
           });
           setUploadError(null);
+          setQrMyPertaminaPath(initial.qrMyPertaminaPath);
+          setSelectedQrFile(null);
+          setQrPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return null;
+          });
+          setQrUploadError(null);
         }
       }}
     >
@@ -316,10 +362,35 @@ export function ArmadaFormDialog({
               <img src={previewUrl ?? fotoPath ?? undefined} alt="Pratinjau foto armada" className="h-24 w-24 rounded-lg object-cover" />
             )}
           </div>
+          <div className="col-span-2 flex flex-col gap-1.5">
+            <Label htmlFor="qrMyPertamina" className="text-xs text-muted-foreground">
+              QR MyPertamina
+            </Label>
+            <Input
+              id="qrMyPertamina"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleQrFileChange}
+              disabled={qrUploading}
+            />
+            <p className="text-[11px] text-muted-foreground">Ditampilkan di layar Isi BBM driver-app untuk di-scan di SPBU.</p>
+            {selectedQrFile && !qrUploading && (
+              <p className="text-xs text-muted-foreground">QR baru dipilih — diunggah saat &quot;Simpan&quot; ditekan.</p>
+            )}
+            {qrUploadError && <p className="text-xs text-destructive">{qrUploadError}</p>}
+            {(qrPreviewUrl ?? qrMyPertaminaPath) && !qrUploading && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={qrPreviewUrl ?? qrMyPertaminaPath ?? undefined}
+                alt="Pratinjau QR MyPertamina"
+                className="h-24 w-24 rounded-lg object-cover"
+              />
+            )}
+          </div>
           {error && <p className="col-span-2 text-xs text-destructive">{error}</p>}
           <DialogFooter className="col-span-2">
-            <Button type="submit" disabled={pending || uploading} className="ml-auto">
-              {uploading ? "Mengunggah..." : pending ? "Menyimpan..." : "Simpan"}
+            <Button type="submit" disabled={pending || uploading || qrUploading} className="ml-auto">
+              {uploading || qrUploading ? "Mengunggah..." : pending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
         </form>

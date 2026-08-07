@@ -12,16 +12,28 @@ import { BerhasilStep } from "@/components/driver-app/steps/berhasil-step";
 type StepName = "peta" | "konfirKirim" | "konfirTerima" | "pembayaran" | "berhasil";
 
 export interface KonfirKirimResult {
-  items: { salesOrderDetailId: string; qtyDiterima: number; fotoReturUrl: string | null }[];
-  fotoBuktiPengirimanUrl: string;
-  fotoBuktiMuatanUrl: string;
+  items: { salesOrderDetailId: string; qtyDiterima: number; fotoReturUrl: string | null; keteranganRetur: string | null }[];
+  // Merged "Bukti Pengiriman" + "Bukti Muatan" into one multi-photo
+  // category — the driver captures as many proof photos as needed in one
+  // input instead of two separate single-photo-only fields.
+  fotoBuktiUrls: string[];
   tanpaPembayaran: boolean;
+}
+
+// BBM budget inputs for this Jadwal's Armada — null fields fall back to
+// "no asli/ekstra split" in BbmDialog rather than blocking the flow.
+export interface BbmContext {
+  jarakKM: number | null;
+  konsumsiBBM: number | null;
+  biayaBBMPerLiter: number | null;
+  qrMyPertaminaPath: string | null;
 }
 
 export function StopFlow({
   jadwalId,
   armadaNama,
   vehicleNo,
+  bbmContext,
   initialStops,
   pabrik,
   driverName,
@@ -29,6 +41,7 @@ export function StopFlow({
   jadwalId: number;
   armadaNama: string;
   vehicleNo: string | null;
+  bbmContext: BbmContext;
   initialStops: DriverStopRow[];
   pabrik: { lat: number; lng: number };
   driverName: string;
@@ -96,6 +109,7 @@ export function StopFlow({
           jadwalId={jadwalId}
           armadaNama={armadaNama}
           vehicleNo={vehicleNo}
+          bbmContext={bbmContext}
           activeStop={activeStop}
           remainingStops={remainingStops}
           pabrik={pabrik}
@@ -104,7 +118,7 @@ export function StopFlow({
         />
       );
     case "konfirKirim":
-      return <KonfirKirimStep jadwalDetailId={activeStop.JadwalDetailID} onNext={handleKonfirKirimNext} />;
+      return <KonfirKirimStep jadwalDetailId={activeStop.JadwalDetailID} stop={activeStop} onNext={handleKonfirKirimNext} />;
     case "konfirTerima":
       return (
         <KonfirTerimaStep

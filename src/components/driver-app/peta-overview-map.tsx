@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { useTheme } from "next-themes";
 import { Geolocation } from "@capacitor/geolocation";
 import { Locate, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,15 @@ export function PetaOverviewMap({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
+  const { setTheme } = useTheme();
+
+  // Same as the Pengiriman screen's map: picking a map style also switches
+  // the app's UI theme — satellite has no light/dark UI equivalent, so it
+  // leaves the current UI theme alone.
+  function handleMapStyleChange(style: MapStyle) {
+    setMapStyle(style);
+    if (style === "light" || style === "dark") setTheme(style);
+  }
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -100,7 +110,7 @@ export function PetaOverviewMap({
         routes={coloredRoutes}
         position={position}
         mapStyle={mapStyle}
-        onMapStyleChange={setMapStyle}
+        onMapStyleChange={handleMapStyleChange}
         recenter={recenter}
       />
       {/* Bottom-left, mirrors mitra-location-field.tsx's search box exactly
