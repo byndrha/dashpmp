@@ -26,6 +26,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/satpam-app");
   }
 
+  // Same reasoning as Satpam above, and NOT redundant with the isDriver
+  // check that used to live in (dashboard)/page.tsx (BerandaPage) — that
+  // page-level check ran AFTER requireModuleAccess("beranda"), so a Driver
+  // Peran with no "beranda" module permission granted (the normal,
+  // expected setup for a role that only ever uses the driver-app) got
+  // bounced to /akses-ditolak before the isDriver redirect ever executed.
+  // Confirmed live: a real test account (is_driver=true, salesman_id set,
+  // beranda permission withheld) hit exactly this dead end. This
+  // layout-level check runs before any page's own permission gate, so it
+  // can't be short-circuited by a missing module permission.
+  if (!session?.user?.isSuperAdmin && session?.user?.isDriver) {
+    redirect("/driver-app");
+  }
+
   const [profile, perusahaanList] = await Promise.all([
     session?.user?.id ? getUserById(Number(session.user.id)) : Promise.resolve(null),
     listPerusahaanForSwitcher(),

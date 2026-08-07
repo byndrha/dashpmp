@@ -36,12 +36,15 @@ export default async function BerandaPage() {
     redirect("/pemasaran");
   }
 
-  // Driver accounts always land on the standalone Aplikasi Driver instead of
-  // this dashboard's Beranda — mirrors the Marketing redirect immediately
-  // above, same reasoning (this page's KPIs aren't relevant to their work).
-  if (!session.user.isSuperAdmin && session.user.isDriver) {
-    redirect("/driver-app");
-  }
+  // Driver-account confinement to /driver-app now lives in
+  // (dashboard)/layout.tsx instead of here — a check placed at this
+  // page-level ran AFTER requireModuleAccess("beranda") above, so a Driver
+  // Peran without "beranda" module permission (the normal setup, since a
+  // driver-only role has no reason to need dashboard access) got bounced
+  // to /akses-ditolak before ever reaching this line. The layout-level
+  // check runs before any page's own permission gate and can't be
+  // short-circuited that way — same reasoning as the existing Satpam
+  // confinement there.
 
   const businessToday = getBusinessDate();
   const businessMonthFilter = {
