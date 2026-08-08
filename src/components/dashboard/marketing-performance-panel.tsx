@@ -367,7 +367,7 @@ function MarketingCard({
     <div className="flex flex-col">
       <div className="flex items-stretch">
         <Link
-          href={`/transaksi?marketing=${encodeURIComponent(row.MarketingNama)}`}
+          href={`/mkesindo/transaksi?marketing=${encodeURIComponent(row.MarketingNama)}`}
           className={cn(
             "sticky left-0 z-10 flex shrink-0 flex-col justify-center gap-1.5 bg-card py-3 pr-3 transition-colors hover:bg-accent/50",
             INFO_COL_CLASS
