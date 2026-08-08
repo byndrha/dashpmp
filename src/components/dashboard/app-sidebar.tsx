@@ -76,20 +76,25 @@ export function AppSidebar({
             alt="PMP Group"
             className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
           />
-          <div className="flex min-w-0 items-center gap-1.5 truncate group-data-[collapsible=icon]:hidden">
-            <p className="font-display font-semibold leading-tight">PMP Group</p>
-            <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
-              Ponorogo
-            </Badge>
+          <div className="flex min-w-0 flex-col gap-0.5 truncate group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center gap-1.5">
+              <p className="font-display font-semibold leading-tight">PT Mitra Kelola Esindo</p>
+              <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
+                Es Kristal
+              </Badge>
+            </div>
+            <p className="text-[11px] leading-tight text-muted-foreground">Ponorogo</p>
           </div>
         </div>
-        <div className="px-2 group-data-[collapsible=icon]:px-0">
-          {/* "PMP Group" (holding-level Administrasi: Akun/Perusahaan/Akun
-              Direktori) lives inside this dropdown, not as its own sidebar
-              group — see PTSwitcher. requireGrupAccess on the /grup side
-              still enforces who's actually let through. */}
-          <PTSwitcher list={perusahaanList} isSuperAdmin={isSuperAdmin} />
-        </div>
+        {isSuperAdmin && (
+          <div className="px-2 group-data-[collapsible=icon]:px-0">
+            {/* Cross-PT navigation is superadmin-only — every other account
+                is confined to its own PT's route tree by the accountScope
+                checks in requirePmputra()/(dashboard)/layout.tsx/
+                requireGrupAccess(), so this is never rendered for them. */}
+            <PTSwitcher list={perusahaanList} current="mkesindo" />
+          </div>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

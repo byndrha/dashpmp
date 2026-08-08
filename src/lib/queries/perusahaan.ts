@@ -53,6 +53,9 @@ export interface PerusahaanInput {
 export interface PerusahaanSwitcherEntry {
   PerusahaanID: number;
   Nama: string;
+  // Links to PT_ROUTES (src/lib/pt-routes.ts) so the switcher knows which
+  // route tree an "AktifPenuh" entry actually navigates to.
+  Kode: string | null;
   Status: PerusahaanStatus;
   StandaloneUrl: string | null;
 }
@@ -77,7 +80,7 @@ export async function listPerusahaan(): Promise<PerusahaanRow[]> {
 export async function listPerusahaanForSwitcher(): Promise<PerusahaanSwitcherEntry[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT PerusahaanID, Nama, Status, StandaloneUrl
+    SELECT PerusahaanID, Nama, Kode, Status, StandaloneUrl
     FROM DashboardPerusahaan
     WHERE IsDeleted = 0 AND Status <> 'Draft'
     ORDER BY Status DESC, Nama

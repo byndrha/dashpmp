@@ -40,6 +40,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/driver-app");
   }
 
+  // Cross-PT access is superadmin-only — an account scoped to another PT
+  // (or the holding-level "direktur" scope) is confined to its own route
+  // tree, mirroring requirePmputra()'s equivalent check. Redirects to that
+  // account's own home rather than /akses-ditolak, consistent with the
+  // Satpam/Driver redirects just above.
+  if (!session?.user?.isSuperAdmin && session?.user?.accountScope === "pmputra") {
+    redirect("/pmputra");
+  }
+  if (!session?.user?.isSuperAdmin && session?.user?.accountScope === "direktur") {
+    redirect("/grup");
+  }
+
   const [profile, perusahaanList] = await Promise.all([
     session?.user?.id ? getUserById(Number(session.user.id)) : Promise.resolve(null),
     listPerusahaanForSwitcher(),

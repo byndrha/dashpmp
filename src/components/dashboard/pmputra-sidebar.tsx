@@ -16,7 +16,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
+import { PTSwitcher } from "@/components/dashboard/pt-switcher";
 import { PMPUTRA_MODULES } from "@/lib/pmputra-modules";
+import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
 // Mirrors AppSidebar's module list (same labels/icons as the Es Kristal
 // dashboard) as a placeholder shell — none of these query FINAC_ES_PO/
@@ -35,7 +37,13 @@ const MODULE_ICONS: Record<string, typeof LineChart> = {
 };
 const NAV_ITEMS = Object.entries(PMPUTRA_MODULES).map(([slug, label]) => ({ slug, label, icon: MODULE_ICONS[slug] }));
 
-export function PmputraSidebar() {
+export function PmputraSidebar({
+  isSuperAdmin,
+  perusahaanList,
+}: {
+  isSuperAdmin: boolean;
+  perusahaanList: PerusahaanSwitcherEntry[];
+}) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -53,13 +61,22 @@ export function PmputraSidebar() {
             alt="PMP Group"
             className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
           />
-          <div className="flex min-w-0 items-center gap-1.5 truncate group-data-[collapsible=icon]:hidden">
-            <p className="font-display font-semibold leading-tight">Prima Maesa Putra</p>
-            <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
-              Es Balok
-            </Badge>
+          <div className="flex min-w-0 flex-col gap-0.5 truncate group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center gap-1.5">
+              <p className="font-display font-semibold leading-tight">PT Prima Maesa Putra</p>
+              <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
+                Es Balok
+              </Badge>
+            </div>
+            <p className="text-[11px] leading-tight text-muted-foreground">Ponorogo</p>
           </div>
         </div>
+        {isSuperAdmin && (
+          <div className="px-2 group-data-[collapsible=icon]:px-0">
+            {/* Only a bridged superadmin sees this — see PTSwitcher. */}
+            <PTSwitcher list={perusahaanList} current="pmputra" />
+          </div>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

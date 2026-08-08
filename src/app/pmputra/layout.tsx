@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth";
 import { requirePmputra } from "@/lib/require-access";
+import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { PmputraSidebar } from "@/components/dashboard/pmputra-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -7,15 +7,16 @@ import { Separator } from "@/components/ui/separator";
 
 // Reuses the same Sidebar shell shape as the MKEsindo (Es Kristal) dashboard
 // — per the user's explicit choice — but with its own nav (module
-// placeholders, no live data yet) and no PT Switcher, since this account
-// scope only ever sees this one company.
+// placeholders, no live data yet). PTSwitcher only renders for a bridged
+// superadmin visiting this PT — a native pmputra-scoped account only ever
+// sees this one company, so it never shows for them.
 export default async function PmputraLayout({ children }: { children: React.ReactNode }) {
-  await requirePmputra();
-  const session = await auth();
+  const session = await requirePmputra();
+  const perusahaanList = await listPerusahaanForSwitcher();
 
   return (
     <SidebarProvider>
-      <PmputraSidebar />
+      <PmputraSidebar isSuperAdmin={session.user.isSuperAdmin} perusahaanList={perusahaanList} />
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
           <div className="flex items-center gap-2">

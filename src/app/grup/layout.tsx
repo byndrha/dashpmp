@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { requireGrupAccess } from "@/lib/require-access";
+import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { GrupSidebar } from "@/components/dashboard/grup-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -11,11 +12,11 @@ import { Separator } from "@/components/ui/separator";
 // Direktur account, or today's MSSQL superadmin bridging in).
 export default async function GrupLayout({ children }: { children: React.ReactNode }) {
   await requireGrupAccess();
-  const session = await auth();
+  const [session, perusahaanList] = await Promise.all([auth(), listPerusahaanForSwitcher()]);
 
   return (
     <SidebarProvider>
-      <GrupSidebar />
+      <GrupSidebar isSuperAdmin={session?.user?.isSuperAdmin ?? false} perusahaanList={perusahaanList} />
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
           <div className="flex items-center gap-2">

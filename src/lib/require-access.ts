@@ -46,7 +46,7 @@ export async function requireGrupAccess() {
 export async function requirePmputra() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.accountScope !== "pmputra") redirect("/akses-ditolak");
+  if (session.user.accountScope !== "pmputra" && !session.user.isSuperAdmin) redirect("/akses-ditolak");
   return session;
 }
 
