@@ -24,7 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // for every route in this environment — this layout-level check is the
   // real guarantee, proxy is best-effort UX only.)
   if (session?.user?.isSatpam) {
-    redirect("/satpam-app");
+    redirect("/mkesindo/satpam-app");
   }
 
   // Same reasoning as Satpam above, and NOT redundant with the isDriver
@@ -38,7 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // layout-level check runs before any page's own permission gate, so it
   // can't be short-circuited by a missing module permission.
   if (!session?.user?.isSuperAdmin && session?.user?.isDriver) {
-    redirect("/driver-app");
+    redirect("/mkesindo/driver-app");
   }
 
   // A native pmputra account with no cross-PT authority is confined to its

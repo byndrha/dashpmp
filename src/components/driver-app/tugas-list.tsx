@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatTime } from "@/lib/format";
 import type { DriverJadwalCard } from "@/lib/queries/pengiriman-jadwal";
-import { getDriverJadwalListAction } from "@/app/driver-app/actions";
+import { getDriverJadwalListAction } from "@/app/mkesindo/driver-app/actions";
 
 function statusLabel(j: DriverJadwalCard): { label: string; variant: "outline" | "default" | "secondary" } {
   if (j.IsSelesai) return { label: "Selesai", variant: "secondary" };

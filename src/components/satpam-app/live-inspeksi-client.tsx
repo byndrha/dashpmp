@@ -210,7 +210,7 @@ export function LiveInspeksiClient({
         setError(result.error);
         return;
       }
-      router.push("/satpam-app");
+      router.push("/mkesindo/satpam-app");
     });
   }
 

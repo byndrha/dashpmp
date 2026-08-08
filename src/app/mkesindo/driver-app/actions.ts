@@ -66,7 +66,7 @@ export async function recordStopArrivalAction(jadwalDetailId: number): Promise<A
     const salesmanId = await requireOwnSalesmanId();
     await assertOwnsJadwalDetail(jadwalDetailId, salesmanId);
     const id = await recordStopArrival(jadwalDetailId);
-    revalidatePath("/driver-app");
+    revalidatePath("/mkesindo/driver-app");
     return id;
   });
 }
@@ -78,7 +78,7 @@ export async function confirmStopDeliveryAction(
     const salesmanId = await requireOwnSalesmanId();
     await assertOwnsJadwalDetail(input.jadwalDetailId, salesmanId);
     const result = await confirmStopDelivery(input);
-    revalidatePath("/driver-app");
+    revalidatePath("/mkesindo/driver-app");
     return result;
   });
 }

@@ -15,7 +15,7 @@ import {
   getDriverJadwalHistoryAction,
   getOwnDriverProfileAction,
   getPabrikLocationForDriverAction,
-} from "@/app/driver-app/actions";
+} from "@/app/mkesindo/driver-app/actions";
 import type { DriverJadwalCard, DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverProfileRow } from "@/lib/queries/driver-profile";
 
@@ -37,10 +37,10 @@ interface PetaData {
 }
 
 const TAB_PATHS: Record<DriverTabKey, string> = {
-  tugas: "/driver-app",
-  peta: "/driver-app/peta",
-  riwayat: "/driver-app/riwayat",
-  profil: "/driver-app/profil",
+  tugas: "/mkesindo/driver-app",
+  peta: "/mkesindo/driver-app/peta",
+  riwayat: "/mkesindo/driver-app/riwayat",
+  profil: "/mkesindo/driver-app/profil",
 };
 
 // Keep-alive tab shell: every tab visited so far stays mounted (CSS `hidden`

@@ -40,7 +40,7 @@ function InspectionCard({ card }: { card: SatpamInspectionCard }) {
             <Button
               size="sm"
               className="bg-warning text-warning-foreground hover:bg-warning/90"
-              onClick={() => router.push(`/satpam-app/inspeksi/${card.jadwalId}?tipe=${card.tipe}`)}
+              onClick={() => router.push(`/mkesindo/satpam-app/inspeksi/${card.jadwalId}?tipe=${card.tipe}`)}
             >
               Inspeksi
             </Button>

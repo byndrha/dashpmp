@@ -60,7 +60,7 @@ export function StopFlow({
   const activeStop = remainingStops[0] ?? null;
 
   if (!activeStop) {
-    router.replace("/driver-app");
+    router.replace("/mkesindo/driver-app");
     return null;
   }
 
