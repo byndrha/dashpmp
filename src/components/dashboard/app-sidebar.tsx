@@ -46,18 +46,21 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
 
 export function AppSidebar({
   permissions,
-  isSuperAdmin,
   canSwitchPt,
   perusahaanList,
 }: {
   permissions: PermissionMap;
-  isSuperAdmin: boolean;
   canSwitchPt: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
-  const visibleItems = isSuperAdmin
+  // canSwitchPt already covers isSuperAdmin (see (dashboard)/layout.tsx) —
+  // a PMP Group-scoped account has no per-module permissions of its own
+  // (permissions is always {} for it), so it needs the same full-nav
+  // bypass isSuperAdmin gets, or it would land on a module page with no
+  // way to navigate to any other one.
+  const visibleItems = canSwitchPt
     ? NAV_ITEMS
     : NAV_ITEMS.filter((item) => permissions[item.moduleKey]?.canView);
 

@@ -61,7 +61,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <SidebarProvider>
       <AppSidebar
         permissions={session?.user?.permissions ?? {}}
-        isSuperAdmin={session?.user?.isSuperAdmin ?? false}
         canSwitchPt={groupLevelAccess}
         perusahaanList={perusahaanList}
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Building2, ExternalLink, LayoutGrid } from "lucide-react";
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ export type PtSwitcherLocation = "mkesindo" | "pmputra" | "grup";
 // the old hardcoded STATIC_REPORTS list did. "Draft" entries are never in
 // `list` — listPerusahaanForSwitcher() already excludes them.
 export function PTSwitcher({ list, current }: { list: PerusahaanSwitcherEntry[]; current: PtSwitcherLocation }) {
+  const router = useRouter();
   const aktif = list.filter((p) => p.Status === "AktifPenuh");
   const standalone = list.filter((p) => p.Status === "StandaloneHTML");
   const active = aktif.find((p) => p.Kode === current);
@@ -39,7 +40,7 @@ export function PTSwitcher({ list, current }: { list: PerusahaanSwitcherEntry[];
         <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuItem render={<Link href="/grup" />} className="justify-between text-xs">
+        <DropdownMenuItem onClick={() => router.push("/grup")} className="justify-between text-xs">
           <span className="flex items-center gap-2">
             <LayoutGrid className="size-3.5 text-muted-foreground" />
             PMP Group
@@ -47,16 +48,19 @@ export function PTSwitcher({ list, current }: { list: PerusahaanSwitcherEntry[];
           {current === "grup" && <Check className="size-3.5 text-primary" />}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        {aktif.map((entity) => (
-          <DropdownMenuItem
-            key={entity.PerusahaanID}
-            render={<Link href={(entity.Kode && PT_ROUTES[entity.Kode]) ?? "#"} />}
-            className="justify-between text-xs"
-          >
-            {entity.Nama}
-            {entity.Kode === current && <Check className="size-3.5 text-primary" />}
-          </DropdownMenuItem>
-        ))}
+        {aktif.map((entity) => {
+          const href = entity.Kode ? PT_ROUTES[entity.Kode] : undefined;
+          return (
+            <DropdownMenuItem
+              key={entity.PerusahaanID}
+              onClick={() => href && router.push(href)}
+              className="justify-between text-xs"
+            >
+              {entity.Nama}
+              {entity.Kode === current && <Check className="size-3.5 text-primary" />}
+            </DropdownMenuItem>
+          );
+        })}
         {standalone.length > 0 && <DropdownMenuSeparator />}
         {standalone.map((entity) => (
           <DropdownMenuItem

@@ -130,9 +130,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // documented here intentionally, not an oversight. If request/device
       // volume grows significantly, revisit.
       if (typeof token.sessionId !== "string") return null;
-      const valid = await checkAkunSesi(token.sessionId);
-      if (!valid) return null;
-      await touchAkunSesiLastSeen(token.sessionId);
+      // Fail open on a DB error: a transient Postgres connectivity blip
+      // (observed in practice — connections dropping under load) must not
+      // sign every active user out or block every navigation in the app.
+      // A truly revoked session is still caught the moment this query
+      // successfully returns revoked_at set; only the "can't tell right
+      // now" case is treated as "assume still valid".
+      try {
+        const valid = await checkAkunSesi(token.sessionId);
+        if (!valid) return null;
+        await touchAkunSesiLastSeen(token.sessionId);
+      } catch (err) {
+        console.error("[auth] Session revocation check failed, allowing session through:", err);
+      }
       return token;
     },
     async session({ session, token }) {

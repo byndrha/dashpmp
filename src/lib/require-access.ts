@@ -18,7 +18,11 @@ export function canAccessAllPT(user: { isSuperAdmin: boolean; accountScope: stri
 export async function requireModuleAccess(moduleKey: ModuleKey) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!session.user.isSuperAdmin && !canView(session.user.permissions, moduleKey)) {
+  // A PMP Group-scoped account has no per-PT peran (permissions is always
+  // {} for it — see auth.ts), so it must bypass this check the same way
+  // isSuperAdmin does, or every module page in this PT's dashboard would
+  // wrongly deny it.
+  if (!canAccessAllPT(session.user) && !canView(session.user.permissions, moduleKey)) {
     redirect("/akses-ditolak");
   }
   return session;
