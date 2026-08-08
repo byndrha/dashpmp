@@ -19,9 +19,20 @@ import { auth } from "@/lib/auth";
 // here where it's easy to audit.
 const PUBLIC_PREFIXES = ["/login", "/api", "/mkesindo/invoice", "/mkesindo/payment"];
 
+// Shared across every PT and exempt from the per-PT confinement below, but
+// NOT public like PUBLIC_PREFIXES above — these still rely on their own
+// guard to be reached correctly: "/akses-ditolak" is only ever reached by
+// an already-authenticated session per require-access.ts's guards, and
+// "/static/prima-maesa-putra"'s route handler runs its own auth() check
+// internally.
+const SHARED_PREFIXES = ["/akses-ditolak", "/static"];
+
 export const proxy = auth((req) => {
   const path = req.nextUrl.pathname;
   if (PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
+    return NextResponse.next();
+  }
+  if (SHARED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
     return NextResponse.next();
   }
 
