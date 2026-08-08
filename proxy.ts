@@ -15,7 +15,7 @@ import { auth } from "@/lib/auth";
 // matcher regex alone — the matcher below only trims obvious static-asset
 // traffic for performance; the real "is this route gated" decision lives
 // here where it's easy to audit.
-const PUBLIC_PREFIXES = ["/login", "/api", "/invoice", "/payment"];
+const PUBLIC_PREFIXES = ["/login", "/api", "/mkesindo/invoice", "/mkesindo/payment"];
 
 export const proxy = auth((req) => {
   const path = req.nextUrl.pathname;

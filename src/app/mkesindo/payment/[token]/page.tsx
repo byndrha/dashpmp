@@ -57,7 +57,7 @@ export default async function PublicPaymentPage({ params }: { params: Promise<{ 
               {payment.Invoices.map((inv) => (
                 <Link
                   key={inv.SalesInvoiceID}
-                  href={`/invoice/${inv.Token}`}
+                  href={`/mkesindo/invoice/${inv.Token}`}
                   className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors hover:bg-accent/50"
                 >
                   <span className="min-w-0 truncate text-muted-foreground">{inv.VoucherNo}</span>

@@ -12,7 +12,7 @@ const REDIRECT_SECONDS = 5;
 export function InvoicePaymentRedirect({ paymentToken }: { paymentToken: string }) {
   const router = useRouter();
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
-  const href = `/payment/${paymentToken}`;
+  const href = `/mkesindo/payment/${paymentToken}`;
 
   useEffect(() => {
     if (secondsLeft <= 0) {

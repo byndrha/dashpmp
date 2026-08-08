@@ -65,7 +65,7 @@ function StatusBadges({ delivery }: { delivery: DeliveryCard }) {
           <TooltipTrigger
             render={
               <a
-                href={`/invoice/${delivery.InvoiceToken}`}
+                href={`/mkesindo/invoice/${delivery.InvoiceToken}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}

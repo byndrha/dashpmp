@@ -280,7 +280,7 @@ export function RouteValidationDialog({
     for (const d of order) {
       if (!printSelected.has(d.JadwalDetailID)) continue;
       if (d.InvoiceToken) {
-        window.open(`/invoice/${d.InvoiceToken}`, "_blank");
+        window.open(`/mkesindo/invoice/${d.InvoiceToken}`, "_blank");
       } else {
         missingCount++;
       }
@@ -638,7 +638,7 @@ export function RouteValidationDialog({
       // tied to this dialog, so it's deliberately not gated on jadwalIdRef.
       for (const t of selesaiMuatResult.data) {
         if (printSelected.has(t.jadwalDetailId)) {
-          window.open(`/invoice/${t.invoiceToken}`, "_blank");
+          window.open(`/mkesindo/invoice/${t.invoiceToken}`, "_blank");
         }
       }
       const rows = await getJadwalDetailAction(targetId);

@@ -451,7 +451,7 @@ export interface JadwalDetailRow {
   // encodeInvoiceToken(SalesInvoiceID) when a SalesInvoice exists for this
   // stop (set at selesaiMuat, alongside DeliveryOrderID) — null otherwise.
   // The client never sees the raw SalesInvoiceID, only this opaque token,
-  // used to build the print URL /invoice/{InvoiceToken}.
+  // used to build the print URL /mkesindo/invoice/{InvoiceToken}.
   InvoiceToken: string | null;
   Urutan: number;
   CustomerName: string;

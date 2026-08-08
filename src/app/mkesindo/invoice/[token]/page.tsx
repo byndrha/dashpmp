@@ -138,7 +138,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
               {invoice.OtherOutstanding.map((other) => (
                 <Link
                   key={other.SalesInvoiceID}
-                  href={`/invoice/${other.Token}`}
+                  href={`/mkesindo/invoice/${other.Token}`}
                   className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors hover:bg-accent/50"
                 >
                   <span className="min-w-0 truncate text-muted-foreground">
