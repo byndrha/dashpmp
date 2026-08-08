@@ -1,4 +1,6 @@
-import { requirePmputra, canAccessAllPT } from "@/lib/require-access";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { canAccessAllPT } from "@/lib/require-access";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { PmputraSidebar } from "@/components/dashboard/pmputra-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
@@ -12,7 +14,23 @@ import { Separator } from "@/components/ui/separator";
 // PT — a native pmputra-scoped account only ever sees this one company, so
 // it never shows for them.
 export default async function PmputraLayout({ children }: { children: React.ReactNode }) {
-  const session = await requirePmputra();
+  // TEMPORARY: inlined requirePmputra() with a visible debug page instead
+  // of a silent redirect, to see exactly what production's session data
+  // looks like at this exact point — Coolify's "Logs" tab isn't showing
+  // application console.log output, so server-side logging alone hasn't
+  // been enough to diagnose the /pmputra → /grup redirect. Remove once
+  // resolved.
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const hasAccess = session.user.accountScope === "pmputra" || canAccessAllPT(session.user);
+  if (!hasAccess) {
+    return (
+      <pre style={{ padding: 24, whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
+        DEBUG — requirePmputra would deny access here.{"\n"}
+        {JSON.stringify(session.user, null, 2)}
+      </pre>
+    );
+  }
   const perusahaanList = await listPerusahaanForSwitcher();
   const canSwitchPt = canAccessAllPT(session.user);
 
