@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, ShieldCheck, Building2, Network } from "lucide-react";
+import { LayoutGrid, ShieldCheck, Building2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -19,9 +19,15 @@ import { Badge } from "@/components/ui/badge";
 import { PTSwitcher } from "@/components/dashboard/pt-switcher";
 import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
-// PMP Group (holding) — the one place Akun/Perusahaan/Akun Direktori
-// administration lives, reachable by a real Direktur account or by today's
-// MSSQL superadmin bridging in (see requireGrupAccess in require-access.ts).
+// PMP Group (holding) — the one place Akun/Perusahaan administration
+// lives, reachable by a real Direktur account or by today's MSSQL
+// superadmin bridging in (see requireGrupAccess in require-access.ts).
+// "Akun Direktori" was removed from this nav — the page it linked to
+// (/grup/akun/direktori) was never built, and Next.js's automatic Link
+// prefetch for it (always in viewport) 404'd on every load, which
+// corrupted the client router enough to break other router.push() calls
+// on this page (confirmed live: every PTSwitcher navigation attempt was
+// silently swallowed by a repeating failed refetch of that dead route).
 // Deliberately not the per-PT AppSidebar: administration is holding-level,
 // not something that belongs inside PT Mitra Kelola Esindo's own sidebar.
 export function GrupSidebar({
@@ -99,16 +105,6 @@ export function GrupSidebar({
                 >
                   <Building2 className="shrink-0" />
                   <span>Perusahaan</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={<Link href="/grup/akun/direktori" onClick={closeOnMobile} />}
-                  isActive={pathname.startsWith("/grup/akun/direktori")}
-                  tooltip="Akun Direktori"
-                >
-                  <Network className="shrink-0" />
-                  <span>Akun Direktori</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
