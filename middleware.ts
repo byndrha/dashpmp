@@ -1,16 +1,41 @@
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authConfig } from "@/lib/auth.config";
 
-// Next.js 16 renamed Middleware to Proxy (file/behavior otherwise
-// identical) — see node_modules/next/dist/docs/01-app/01-getting-started/
-// 16-proxy.md. Routes a session's accountScope (see auth.ts / next-auth.d.ts)
-// to its own home: "pmputra" -> /pmputra, "mkesindo" -> /mkesindo. An
-// account with cross-PT authority — isSuperAdmin, or accountScope
-// "direktur" (Perusahaan "PMP Group", which sits above every PT) — is
-// exempt from the per-PT confinement below and may go anywhere; it still
-// gets bounced off bare "/" to /mkesindo, since nothing is served there
-// anymore (MKEsindo's dashboard moved to /mkesindo). See canAccessAllPT
-// in require-access.ts for the same rule applied at the page/layout level.
+// This file MUST be named middleware.ts, not proxy.ts. Next.js's own
+// vendored docs (node_modules/next/dist/docs/01-app/01-getting-started/
+// 16-proxy.md) claim Next.js 16 renamed Middleware to Proxy and that
+// proxy.ts is the current convention — but empirically, in this exact
+// installed Next.js build, a root-level proxy.ts is NEVER picked up:
+// .next/server/middleware-manifest.json comes out completely empty
+// (`{"middleware":{},"sortedMiddleware":[],"functions":{}}`) even for a
+// trivial proxy.ts with zero imports, both in local builds and on the
+// actual Coolify production deployment (confirmed via matching commit SHA
+// with a plain 404 and no redirect Location header on "/"). Renaming the
+// identical file/content to middleware.ts (this file) — with the exported
+// function renamed from `proxy` to `middleware` — immediately produces a
+// populated manifest and working redirects. Do not rename this back to
+// proxy.ts without re-verifying against a real deployment first.
+//
+// Uses its own light `auth()` built from auth.config.ts, NOT the full one
+// exported by @/lib/auth — middleware runs in the Edge runtime, which
+// can't load bcryptjs (the Credentials provider's authorize()) or pg
+// (auth.ts's jwt() revocation check), both pulled in transitively by the
+// full config. Confirmed by a real crash here ("Native module not found:
+// node:util/types") before this split existed. Session revocation is
+// still enforced on every real page load via auth.ts's own full auth() in
+// Server Components; this file's redirects are UX convenience only, not
+// the security boundary — see require-access.ts for the actual gates.
+const { auth } = NextAuth(authConfig);
+
+// Routes a session's accountScope (see auth.ts / next-auth.d.ts) to its own
+// home: "pmputra" -> /pmputra, "mkesindo" -> /mkesindo. An account with
+// cross-PT authority — isSuperAdmin, or accountScope "direktur" (Perusahaan
+// "PMP Group", which sits above every PT) — is exempt from the per-PT
+// confinement below and may go anywhere; it still gets bounced off bare "/"
+// to /mkesindo, since nothing is served there anymore (MKEsindo's dashboard
+// moved to /mkesindo). See canAccessAllPT in require-access.ts for the same
+// rule applied at the page/layout level.
 //
 // Public routes (login, API, static assets, public token pages) are
 // checked explicitly in the function body rather than relied on via the
@@ -27,7 +52,7 @@ const PUBLIC_PREFIXES = ["/login", "/api", "/mkesindo/invoice", "/mkesindo/payme
 // internally.
 const SHARED_PREFIXES = ["/akses-ditolak", "/static"];
 
-export const proxy = auth((req) => {
+export const middleware = auth((req) => {
   const path = req.nextUrl.pathname;
   if (PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
     return NextResponse.next();

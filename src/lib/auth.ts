@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { authConfig } from "@/lib/auth.config";
 import {
   findAkunByUsername,
   recordFailedLogin,
@@ -30,8 +31,7 @@ interface AuthorizedUser {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -145,21 +145,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return token;
     },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-        session.user.username = token.username as string;
-        session.user.roleId = token.roleId as number;
-        session.user.isSuperAdmin = token.isSuperAdmin as boolean;
-        session.user.isSatpam = token.isSatpam as boolean;
-        session.user.isDriver = token.isDriver as boolean;
-        session.user.salesmanId = token.salesmanId as string | null;
-        session.user.permissions = token.permissions as ReturnType<typeof fullPermissionMap>;
-        session.user.accountScope = token.accountScope as AccountScope;
-        session.user.perusahaanId = token.perusahaanId as number | null;
-        session.user.sessionId = token.sessionId as string;
-      }
-      return session;
-    },
+    // Field-copying session() callback is identical to the light
+    // auth.config.ts's own — reused from there rather than duplicated.
+    ...authConfig.callbacks,
   },
 });
