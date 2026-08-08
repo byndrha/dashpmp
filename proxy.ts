@@ -4,10 +4,12 @@ import { auth } from "@/lib/auth";
 // Next.js 16 renamed Middleware to Proxy (file/behavior otherwise
 // identical) — see node_modules/next/dist/docs/01-app/01-getting-started/
 // 16-proxy.md. Routes a session's accountScope (see auth.ts / next-auth.d.ts)
-// to its own home: "pmputra" -> /pmputra, "mkesindo" -> everything except
-// /grup and /pmputra. An account with cross-PT authority — isSuperAdmin, or
-// accountScope "direktur" (Perusahaan "PMP Group", which sits above every
-// PT) — is exempt from all of this and may go anywhere; see canAccessAllPT
+// to its own home: "pmputra" -> /pmputra, "mkesindo" -> /mkesindo. An
+// account with cross-PT authority — isSuperAdmin, or accountScope
+// "direktur" (Perusahaan "PMP Group", which sits above every PT) — is
+// exempt from the per-PT confinement below and may go anywhere; it still
+// gets bounced off bare "/" to /mkesindo, since nothing is served there
+// anymore (MKEsindo's dashboard moved to /mkesindo). See canAccessAllPT
 // in require-access.ts for the same rule applied at the page/layout level.
 //
 // Public routes (login, API, static assets, public token pages) are
@@ -36,24 +38,17 @@ export const proxy = auth((req) => {
   const isSuperAdmin = req.auth?.user?.isSuperAdmin ?? false;
   const hasGroupAccess = isSuperAdmin || scope === "direktur";
   if (hasGroupAccess) {
+    if (path === "/") {
+      return NextResponse.redirect(new URL("/mkesindo", req.nextUrl));
+    }
     return NextResponse.next();
   }
 
   if (scope === "pmputra" && !path.startsWith("/pmputra")) {
     return NextResponse.redirect(new URL("/pmputra", req.nextUrl));
   }
-  if (scope === "mkesindo") {
-    if (path.startsWith("/pmputra")) {
-      return NextResponse.redirect(new URL("/", req.nextUrl));
-    }
-    // /grup (PMP Group — holding-level ringkasan + Akun/Perusahaan
-    // administration, see require-access.ts's requireGrupAccess) is a
-    // bridge only an account with cross-PT authority may cross — already
-    // handled by the hasGroupAccess check above, so any mkesindo-scoped
-    // account still reaching this line is not one.
-    if (path.startsWith("/grup")) {
-      return NextResponse.redirect(new URL("/", req.nextUrl));
-    }
+  if (scope === "mkesindo" && !path.startsWith("/mkesindo")) {
+    return NextResponse.redirect(new URL("/mkesindo", req.nextUrl));
   }
 
   return NextResponse.next();
