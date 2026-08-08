@@ -58,6 +58,17 @@ export async function requireGrupAccess() {
 export async function requirePmputra() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  // TEMPORARY diagnostic — remove once the production redirect-to-/grup
+  // mystery is solved. Prints straight to server stdout (Coolify "Logs"
+  // tab), since this exact check passes locally but production somehow
+  // still ends up back on /grup for a "direktur"-scoped account.
+  console.log(
+    "[requirePmputra]",
+    "username=", session.user.username,
+    "accountScope=", session.user.accountScope,
+    "isSuperAdmin=", session.user.isSuperAdmin,
+    "canAccessAllPT=", canAccessAllPT(session.user)
+  );
   if (session.user.accountScope !== "pmputra" && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
   return session;
 }
