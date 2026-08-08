@@ -75,7 +75,7 @@ export function TugasList({
         {jadwal.map((j) => {
           const status = statusLabel(j);
           return (
-            <Link key={j.JadwalID} href={`/driver-app/jadwal/${j.JadwalID}`}>
+            <Link key={j.JadwalID} href={`/mkesindo/driver-app/jadwal/${j.JadwalID}`}>
               <Card className="py-3">
                 <CardContent className="flex flex-col gap-1.5 px-4">
                   <div className="flex items-center justify-between">
