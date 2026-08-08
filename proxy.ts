@@ -38,9 +38,17 @@ export const proxy = auth((req) => {
 
   const scope = req.auth?.user?.accountScope;
   // No session (or a session predating this field) — let existing
-  // page-level guards / the login page's own redirect handle it, same as
-  // before this file existed.
-  if (!scope) return NextResponse.next();
+  // page-level guards handle every other route. Bare "/" is the one
+  // exception: it has no page of its own since MKEsindo's dashboard moved
+  // to /mkesindo, so there's nothing left to 404 into or for a page-level
+  // guard to redirect from — this must send an unauthenticated visit to
+  // /login explicitly, or it 404s instead.
+  if (!scope) {
+    if (path === "/") {
+      return NextResponse.redirect(new URL("/login", req.nextUrl));
+    }
+    return NextResponse.next();
+  }
 
   // Inlined rather than imported from require-access.ts's canAccessAllPT()
   // to keep this file's own dependency graph self-contained (it runs in
