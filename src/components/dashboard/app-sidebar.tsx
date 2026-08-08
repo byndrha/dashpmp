@@ -32,16 +32,16 @@ import type { ModuleKey, PermissionMap } from "@/lib/permissions";
 import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
 const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?: boolean; moduleKey: ModuleKey }[] = [
-  { href: "/", label: "Beranda", icon: LayoutGrid, exact: true, moduleKey: "beranda" },
-  { href: "/pnl", label: "Keuangan", icon: LineChart, moduleKey: "pnl" },
-  { href: "/aging", label: "Piutang", icon: Receipt, moduleKey: "aging" },
-  { href: "/sales", label: "Penjualan", icon: ShoppingCart, moduleKey: "sales" },
-  { href: "/transaksi", label: "Transaksi", icon: ArrowLeftRight, moduleKey: "transaksi" },
-  { href: "/electricity", label: "Biaya Listrik", icon: Zap, moduleKey: "electricity" },
-  { href: "/delivery", label: "Pengiriman", icon: Truck, moduleKey: "delivery" },
-  { href: "/pemesanan", label: "Pemesanan", icon: ClipboardList, moduleKey: "pemesanan" },
-  { href: "/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
-  { href: "/pemasaran", label: "Pemasaran", icon: Megaphone, moduleKey: "pemasaran" },
+  { href: "/mkesindo", label: "Beranda", icon: LayoutGrid, exact: true, moduleKey: "beranda" },
+  { href: "/mkesindo/pnl", label: "Keuangan", icon: LineChart, moduleKey: "pnl" },
+  { href: "/mkesindo/aging", label: "Piutang", icon: Receipt, moduleKey: "aging" },
+  { href: "/mkesindo/sales", label: "Penjualan", icon: ShoppingCart, moduleKey: "sales" },
+  { href: "/mkesindo/transaksi", label: "Transaksi", icon: ArrowLeftRight, moduleKey: "transaksi" },
+  { href: "/mkesindo/electricity", label: "Biaya Listrik", icon: Zap, moduleKey: "electricity" },
+  { href: "/mkesindo/delivery", label: "Pengiriman", icon: Truck, moduleKey: "delivery" },
+  { href: "/mkesindo/pemesanan", label: "Pemesanan", icon: ClipboardList, moduleKey: "pemesanan" },
+  { href: "/mkesindo/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
+  { href: "/mkesindo/pemasaran", label: "Pemasaran", icon: Megaphone, moduleKey: "pemasaran" },
 ];
 
 export function AppSidebar({

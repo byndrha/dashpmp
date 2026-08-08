@@ -4,6 +4,6 @@
 // dynamic, company-parametrized dashboard — so switching PT means
 // navigating here, not mutating any session/request state.
 export const PT_ROUTES: Record<string, string> = {
-  mkesindo: "/",
+  mkesindo: "/mkesindo",
   pmputra: "/pmputra",
 };

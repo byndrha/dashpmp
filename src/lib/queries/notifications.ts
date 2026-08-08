@@ -117,7 +117,7 @@ export async function scanPengajuanMitraBaru(since: Date, until: Date): Promise<
     targetModuleKey: "pemasaran",
     title: "Pengajuan Mitra Baru",
     message: row.NamaCalon,
-    linkUrl: "/pemasaran",
+    linkUrl: "/mkesindo/pemasaran",
     sourceType: "PengajuanMitraBaru",
     sourceId: String(row.PengajuanID),
   }));
@@ -139,7 +139,7 @@ export async function scanSOBaru(since: Date, until: Date): Promise<NewNotificat
     targetModuleKey: "transaksi",
     title: "SO Baru",
     message: `${row.Name ?? "Tanpa Nama"} · ${row.VoucherNo}`,
-    linkUrl: "/transaksi",
+    linkUrl: "/mkesindo/transaksi",
     sourceType: "SOBaru",
     sourceId: row.SalesOrderID,
   }));
@@ -172,7 +172,7 @@ export async function scanSITerbayar(since: Date, until: Date): Promise<NewNotif
     targetModuleKey: "transaksi",
     title: "SI Terbayar",
     message: `${row.Name ?? "Tanpa Nama"} · ${row.SIVoucherNo} lunas via ${row.SPVoucherNo}`,
-    linkUrl: "/transaksi",
+    linkUrl: "/mkesindo/transaksi",
     sourceType: "SITerbayar",
     sourceId: `${row.SalesPaymentID}:${row.SalesInvoiceID}`,
   }));
