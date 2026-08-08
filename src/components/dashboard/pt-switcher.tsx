@@ -30,6 +30,13 @@ export function PTSwitcher({ list, current }: { list: PerusahaanSwitcherEntry[];
   const standalone = list.filter((p) => p.Status === "StandaloneHTML");
   const active = aktif.find((p) => p.Kode === current);
 
+  // TEMPORARY diagnostic — remove once the production navigation issue is
+  // confirmed fixed. Logs exactly what data this component receives, since
+  // production shows no JS error at all when navigation silently fails.
+  if (typeof window !== "undefined") {
+    console.log("[PTSwitcher] list=", JSON.stringify(list), "aktif=", JSON.stringify(aktif));
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center">
@@ -53,7 +60,10 @@ export function PTSwitcher({ list, current }: { list: PerusahaanSwitcherEntry[];
           return (
             <DropdownMenuItem
               key={entity.PerusahaanID}
-              onClick={() => href && router.push(href)}
+              onClick={() => {
+                console.log("[PTSwitcher] clicked", entity.Nama, "Kode=", entity.Kode, "href=", href);
+                if (href) router.push(href);
+              }}
               className="justify-between text-xs"
             >
               {entity.Nama}
