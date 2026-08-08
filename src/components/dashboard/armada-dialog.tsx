@@ -91,7 +91,7 @@ export function ArmadaFormDialog({
   const [expeditionDetailId, setExpeditionDetailId] = useState<string | null>(initial.expeditionDetailId);
   // The actual upload is deferred until "Simpan" (see handleSubmit) instead
   // of firing on file-select — picking a photo then cancelling the dialog
-  // used to POST it to /api/upload/armada-foto immediately, leaving an
+  // used to POST it to /api/mkesindo/upload/armada-foto immediately, leaving an
   // orphaned file in public/uploads/armada/ with no ArmadaID ever
   // referencing it. selectedFile/previewUrl hold the pick locally until a
   // real save happens.
@@ -137,7 +137,7 @@ export function ArmadaFormDialog({
       try {
         const uploadData = new FormData();
         uploadData.append("file", selectedFile);
-        const res = await fetch("/api/upload/armada-foto", { method: "POST", body: uploadData });
+        const res = await fetch("/api/mkesindo/upload/armada-foto", { method: "POST", body: uploadData });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah foto");
         savedFotoPath = data.path;
@@ -155,7 +155,7 @@ export function ArmadaFormDialog({
       try {
         const uploadData = new FormData();
         uploadData.append("file", selectedQrFile);
-        const res = await fetch("/api/upload/armada-foto", { method: "POST", body: uploadData });
+        const res = await fetch("/api/mkesindo/upload/armada-foto", { method: "POST", body: uploadData });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah QR");
         savedQrMyPertaminaPath = data.path;

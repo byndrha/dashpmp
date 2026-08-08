@@ -26,7 +26,7 @@ async function uploadPhoto(file: File, jenisFoto: JenisFotoKendaraan, armadaId: 
   formData.append("file", file);
   formData.append("armadaId", String(armadaId));
   formData.append("jenisFoto", jenisFoto);
-  const res = await fetch("/api/upload/satpam-check", { method: "POST", body: formData });
+  const res = await fetch("/api/mkesindo/upload/satpam-check", { method: "POST", body: formData });
   const data = (await res.json()) as { path?: string; error?: string };
   if (!res.ok || !data.path) throw new Error(data.error ?? "Gagal mengunggah foto.");
   return data.path;

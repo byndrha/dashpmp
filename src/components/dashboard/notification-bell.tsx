@@ -56,7 +56,7 @@ export function NotificationBell() {
     getNotificationsAction().then((rows) => {
       if (cancelled) return;
       setNotifications(rows);
-      source = new EventSource("/api/notifications/stream");
+      source = new EventSource("/api/mkesindo/notifications/stream");
       source.onmessage = (e) => {
         // The ": connected\n\n" keepalive comment never fires onmessage (it
         // has no "data:" line), so every message here is a genuine

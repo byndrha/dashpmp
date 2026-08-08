@@ -149,7 +149,7 @@ export function PemesananFormDialog({
         // "langsung Cetak PDF" — opens the freshly-issued DO's print
         // endpoint right away, inside this same click's user-gesture
         // window so the browser doesn't treat it as an unrequested popup.
-        window.open(`/api/print/delivery-order/${result.data.deliveryOrderId}`, "_blank");
+        window.open(`/api/mkesindo/print/delivery-order/${result.data.deliveryOrderId}`, "_blank");
         handleOpenChange(false);
       });
       return;

@@ -39,7 +39,7 @@ function ImageUploadField({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("kind", kind);
-      const res = await fetch("/api/upload/site-asset", { method: "POST", body: formData });
+      const res = await fetch("/api/mkesindo/upload/site-asset", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah file");
       onUploaded(data.path);

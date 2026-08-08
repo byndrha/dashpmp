@@ -396,7 +396,7 @@ export function RouteValidationDialog({
 
   useEffect(() => {
     if (jadwalId == null) return;
-    fetch("/api/pabrik-location")
+    fetch("/api/mkesindo/pabrik-location")
       .then((res) => res.json())
       .then((data: { latitude: number; longitude: number }) => setPabrik(data))
       .catch(() => setPabrik(null));
@@ -427,7 +427,7 @@ export function RouteValidationDialog({
       ...order.map((o) => ({ lat: o.Latitude as number, lng: o.Longitude as number })),
       { lat: pabrik.latitude, lng: pabrik.longitude },
     ];
-    fetch("/api/routing/multi", {
+    fetch("/api/mkesindo/routing/multi", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ points }),
@@ -723,7 +723,7 @@ export function RouteValidationDialog({
     formData.append("file", file);
     formData.append("armadaId", String(armadaId));
     formData.append("jenisFoto", jenisFoto);
-    const res = await fetch("/api/upload/satpam-check", { method: "POST", body: formData });
+    const res = await fetch("/api/mkesindo/upload/satpam-check", { method: "POST", body: formData });
     const data = (await res.json()) as { path?: string; error?: string };
     if (!res.ok || !data.path) throw new Error(data.error ?? "Gagal mengunggah foto.");
     return data.path;

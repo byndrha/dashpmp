@@ -31,7 +31,7 @@ export interface MitraGeocodeSuggestion {
   kecamatan: string | null;
 }
 
-// Last-resort fallback while /api/pabrik-location hasn't resolved yet (or
+// Last-resort fallback while /api/mkesindo/pabrik-location hasn't resolved yet (or
 // if it errors) — same coordinate DashboardPabrikLocation is seeded with.
 // A sensible starting pin for a mitra with no saved location either way,
 // since mitra are all within driving distance of the pabrik.
@@ -70,7 +70,7 @@ export function MitraLocationField({
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/pabrik-location")
+    fetch("/api/mkesindo/pabrik-location")
       .then((res) => res.json())
       .then((data: { latitude: number; longitude: number; alamat: string | null }) => {
         if (!cancelled) setPabrik(data);

@@ -60,7 +60,7 @@ export function DocTemplatePanel({ initial }: { initial: DocTemplate }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/upload/doc-template", { method: "POST", body: formData });
+      const res = await fetch("/api/mkesindo/upload/doc-template", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah logo");
       setLogoPath(data.path);

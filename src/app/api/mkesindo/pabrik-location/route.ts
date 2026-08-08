@@ -1,4 +1,4 @@
-// app/api/pabrik-location/route.ts
+// app/api/mkesindo/pabrik-location/route.ts
 import { NextResponse } from "next/server";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 

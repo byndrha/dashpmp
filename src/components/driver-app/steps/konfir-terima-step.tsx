@@ -12,7 +12,7 @@ async function uploadSignature(jadwalDetailId: number, file: File): Promise<stri
   formData.append("file", file);
   formData.append("jadwalDetailId", String(jadwalDetailId));
   formData.append("jenisFoto", "tanda-tangan");
-  const res = await fetch("/api/upload/driver-app", { method: "POST", body: formData });
+  const res = await fetch("/api/mkesindo/upload/driver-app", { method: "POST", body: formData });
   const data = (await res.json()) as { path?: string; error?: string };
   if (!res.ok || !data.path) throw new Error(data.error ?? "Gagal mengunggah tanda tangan");
   return data.path;
