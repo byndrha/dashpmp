@@ -18,7 +18,7 @@ import { formatRupiah, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PAYMENT_CHANNELS, type PaymentChannelId } from "@/lib/pelunasan-types";
 import type { OutstandingInvoice } from "@/lib/queries/pelunasan";
-import { getOutstandingInvoicesAction, recordPaymentAction } from "@/app/(dashboard)/aging/actions";
+import { getOutstandingInvoicesAction, recordPaymentAction } from "@/app/mkesindo/aging/actions";
 import { toast } from "sonner";
 
 interface LineState {

@@ -38,7 +38,7 @@ import {
   setMitraSuspendedAction,
   setMitraLocationAction,
   setMitraCompetitorAction,
-} from "@/app/(dashboard)/mitra/actions";
+} from "@/app/mkesindo/mitra/actions";
 
 const PAGE_SIZE = 12;
 

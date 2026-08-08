@@ -17,7 +17,7 @@ export async function updateOwnProfileAction(input: {
     if (!input.nama.trim()) throw new AppError("Nama wajib diisi.");
 
     await updateOwnProfile({ userId: Number(userId), ...input });
-    revalidatePath("/", "layout");
+    revalidatePath("/mkesindo", "layout");
   });
 }
 

@@ -22,6 +22,6 @@ export async function saveMonthlyTargetAction(input: {
     if (!userId) throw new AppError("Unauthorized");
 
     await setMonthlyTarget({ ...input, userId });
-    revalidatePath("/sales");
+    revalidatePath("/mkesindo/sales");
   });
 }

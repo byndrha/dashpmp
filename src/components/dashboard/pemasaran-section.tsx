@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PengajuanFormDialog } from "@/components/dashboard/pengajuan-form-dialog";
 import { PengajuanList } from "@/components/dashboard/pengajuan-list";
-import { createPengajuanAction } from "@/app/(dashboard)/pemasaran/actions";
+import { createPengajuanAction } from "@/app/mkesindo/pemasaran/actions";
 import type { PengajuanRow, PengajuanInput } from "@/lib/queries/mitra-pengajuan";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 

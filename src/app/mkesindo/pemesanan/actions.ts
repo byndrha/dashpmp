@@ -23,8 +23,8 @@ import { runAction, type ActionResult } from "@/lib/action-result";
 export async function createPemesananAction(input: CreatePemesananInput): Promise<ActionResult<CreatePemesananResult>> {
   return runAction(async () => {
     const result = await createPemesanan(input);
-    revalidatePath("/pemesanan");
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/pemesanan");
+    revalidatePath("/mkesindo/delivery");
     return result;
   });
 }
@@ -32,16 +32,16 @@ export async function createPemesananAction(input: CreatePemesananInput): Promis
 export async function deletePemesananAction(salesOrderId: string): Promise<ActionResult<void>> {
   return runAction(async () => {
     await deletePemesanan(salesOrderId);
-    revalidatePath("/pemesanan");
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/pemesanan");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
 export async function createTakeAwayPemesananAction(input: CreateTakeAwayInput): Promise<ActionResult<CreateTakeAwayResult>> {
   return runAction(async () => {
     const result = await createTakeAwayPemesanan(input);
-    revalidatePath("/pemesanan");
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/pemesanan");
+    revalidatePath("/mkesindo/delivery");
     return result;
   });
 }
@@ -49,8 +49,8 @@ export async function createTakeAwayPemesananAction(input: CreateTakeAwayInput):
 export async function reschedulePemesananAction(input: ReschedulePemesananInput): Promise<ActionResult<{ jadwalId: number }>> {
   return runAction(async () => {
     const result = await reschedulePemesanan(input);
-    revalidatePath("/pemesanan");
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/pemesanan");
+    revalidatePath("/mkesindo/delivery");
     return result;
   });
 }
@@ -64,8 +64,8 @@ export async function getCurrentAssignmentAction(salesOrderId: string): Promise<
 export async function updateSalesOrderTransDateAction(salesOrderId: string, transDate: Date): Promise<ActionResult<void>> {
   return runAction(async () => {
     await updateSalesOrderTransDate(salesOrderId, transDate);
-    revalidatePath("/pemesanan");
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/pemesanan");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -82,7 +82,7 @@ export async function updateSalesOrderQtyAction(
 ): Promise<ActionResult<void>> {
   return runAction(async () => {
     await updateSalesOrderDetailQty(salesOrderId, variant, newQty);
-    revalidatePath("/pemesanan");
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/pemesanan");
+    revalidatePath("/mkesindo/delivery");
   });
 }

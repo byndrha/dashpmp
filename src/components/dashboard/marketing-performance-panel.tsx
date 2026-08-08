@@ -21,7 +21,7 @@ import {
   setMarketingPeriodSettingAction,
   getMarketingVisitLogAction,
   saveMarketingVisitLogAction,
-} from "@/app/(dashboard)/pemasaran/actions";
+} from "@/app/mkesindo/pemasaran/actions";
 
 // Absorbed from the old MarketingKPIPanel ("Pencapaian Marketing — Bulan
 // Berjalan", now removed) — Jumlah Kunjungan/Konversi Transaksi live inside

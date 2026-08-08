@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useLiveCameraCapture } from "@/hooks/use-live-camera-capture";
-import { createVehicleCheckAction } from "@/app/(dashboard)/delivery/actions";
+import { createVehicleCheckAction } from "@/app/mkesindo/delivery/actions";
 import {
   JENIS_FOTO_LIST,
   JENIS_FOTO_LABEL,

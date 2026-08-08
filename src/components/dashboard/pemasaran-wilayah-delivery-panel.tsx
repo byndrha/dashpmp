@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CollapsibleCard } from "@/components/dashboard/collapsible-card";
 import { formatPercentPoints } from "@/lib/format";
 import type { PemasaranWilayahDeliveryRow } from "@/lib/queries/pemasaran-wilayah-delivery";
-import { setWilayahPotentialTargetAction } from "@/app/(dashboard)/pemasaran/actions";
+import { setWilayahPotentialTargetAction } from "@/app/mkesindo/pemasaran/actions";
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });

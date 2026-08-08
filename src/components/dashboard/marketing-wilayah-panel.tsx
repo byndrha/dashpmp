@@ -22,7 +22,7 @@ import {
   removeMarketingWilayahAction,
   addMarketingMitraAction,
   removeMarketingMitraAction,
-} from "@/app/(dashboard)/pemasaran/actions";
+} from "@/app/mkesindo/pemasaran/actions";
 import type {
   MarketingWilayahAssignment,
   MarketingMitraAssignment,

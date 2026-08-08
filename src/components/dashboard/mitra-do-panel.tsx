@@ -34,8 +34,8 @@ import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
 import type { ContactType } from "@/lib/queries/mitra-contact-log";
-import { updateMitraCapacityAction } from "@/app/(dashboard)/mitra/actions";
-import { getMitraContactLogAction, saveMitraContactLogAction } from "@/app/(dashboard)/transaksi/actions";
+import { updateMitraCapacityAction } from "@/app/mkesindo/mitra/actions";
+import { getMitraContactLogAction, saveMitraContactLogAction } from "@/app/mkesindo/transaksi/actions";
 
 type SortMode = "target" | "persentase" | "terbanyak" | "tren" | "terbaru";
 

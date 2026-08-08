@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { CollectionPriorityRow } from "@/lib/queries/collection-priority";
 import type { PiutangStatus } from "@/lib/queries/aging";
-import { saveCollectionTargetAction, removeCollectionTargetAction } from "@/app/(dashboard)/aging/actions";
+import { saveCollectionTargetAction, removeCollectionTargetAction } from "@/app/mkesindo/aging/actions";
 
 const PAGE_SIZE = 9;
 

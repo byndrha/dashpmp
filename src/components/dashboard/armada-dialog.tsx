@@ -19,7 +19,7 @@ import { ARMADA_STATUS, type ArmadaStatus } from "@/lib/armada-status";
 import { FUEL_TYPES, type FuelType } from "@/lib/armada-fuel";
 import { type ArmadaRow, type ArmadaInput } from "@/lib/queries/armada";
 import { type ExpeditionVehicleOption } from "@/lib/queries/expedition";
-import { createArmadaAction, updateArmadaAction, deleteArmadaAction } from "@/app/(dashboard)/delivery/actions";
+import { createArmadaAction, updateArmadaAction, deleteArmadaAction } from "@/app/mkesindo/delivery/actions";
 
 export const STATUS_BADGE: Record<ArmadaStatus, string> = {
   Baik: "bg-primary/15 text-primary",

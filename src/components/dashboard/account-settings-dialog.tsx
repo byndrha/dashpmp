@@ -12,7 +12,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { updateOwnProfileAction, changeOwnPasswordAction } from "@/app/(dashboard)/profile-actions";
+import { updateOwnProfileAction, changeOwnPasswordAction } from "@/app/mkesindo/profile-actions";
 
 export interface OwnProfile {
   nama: string;

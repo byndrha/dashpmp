@@ -23,7 +23,7 @@ export async function saveCOABudgetAction(input: {
     if (!userId) throw new AppError("Unauthorized");
 
     await setCOABudget({ ...input, userId });
-    revalidatePath("/pnl");
+    revalidatePath("/mkesindo/pnl");
   });
 }
 
@@ -38,7 +38,7 @@ export async function saveCashFlowDailyFiguresAction(input: {
     if (!userId) throw new AppError("Unauthorized");
 
     await saveCashFlowDailyFigures({ ...input, userId });
-    revalidatePath("/pnl");
+    revalidatePath("/mkesindo/pnl");
   });
 }
 
@@ -54,7 +54,7 @@ export async function addCashFlowExpenseAction(input: {
     if (!input.deskripsi.trim() || !(input.nominal > 0)) throw new AppError("Data tidak valid");
 
     await addCashFlowExpense({ ...input, userId });
-    revalidatePath("/pnl");
+    revalidatePath("/mkesindo/pnl");
   });
 }
 
@@ -64,7 +64,7 @@ export async function deleteCashFlowExpenseAction(id: number): Promise<ActionRes
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
     await deleteCashFlowExpense(id);
-    revalidatePath("/pnl");
+    revalidatePath("/mkesindo/pnl");
   });
 }
 

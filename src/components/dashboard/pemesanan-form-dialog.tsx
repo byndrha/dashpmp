@@ -27,8 +27,8 @@ import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { KantongVariant } from "@/lib/queries/sales-order";
 import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
-import { createPemesananAction, createTakeAwayPemesananAction } from "@/app/(dashboard)/pemesanan/actions";
-import { checkArmadaConflictAction } from "@/app/(dashboard)/delivery/actions";
+import { createPemesananAction, createTakeAwayPemesananAction } from "@/app/mkesindo/pemesanan/actions";
+import { checkArmadaConflictAction } from "@/app/mkesindo/delivery/actions";
 
 // Sentinel for "not chosen yet" — Select items can't use an empty string as
 // a value (established convention, see the "all" sentinel in

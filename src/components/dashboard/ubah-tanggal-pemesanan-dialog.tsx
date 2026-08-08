@@ -12,7 +12,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { updateSalesOrderTransDateAction } from "@/app/(dashboard)/pemesanan/actions";
+import { updateSalesOrderTransDateAction } from "@/app/mkesindo/pemesanan/actions";
 
 export interface UbahTanggalPemesananTarget {
   salesOrderId: string;

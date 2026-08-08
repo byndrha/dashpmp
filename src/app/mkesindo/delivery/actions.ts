@@ -52,7 +52,7 @@ import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
   return runAction(async () => {
     const id = await createArmada(input);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
     return id;
   });
 }
@@ -60,14 +60,14 @@ export async function createArmadaAction(input: ArmadaInput): Promise<ActionResu
 export async function updateArmadaAction(id: number, input: ArmadaInput): Promise<ActionResult<void>> {
   return runAction(async () => {
     await updateArmada(id, input);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
 export async function deleteArmadaAction(id: number): Promise<ActionResult<void>> {
   return runAction(async () => {
     await deleteArmada(id);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -78,7 +78,7 @@ export async function createJadwalDraftAction(input: {
 }): Promise<ActionResult<number>> {
   return runAction(async () => {
     const id = await createJadwalDraft(input);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
     return id;
   });
 }
@@ -86,28 +86,28 @@ export async function createJadwalDraftAction(input: {
 export async function deleteJadwalDraftAction(jadwalId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
     await deleteJadwalDraft(jadwalId);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
 export async function addSalesOrdersToJadwalAction(jadwalId: number, salesOrderIds: string[]): Promise<ActionResult<void>> {
   return runAction(async () => {
     await addSalesOrdersToJadwal(jadwalId, salesOrderIds);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
 export async function removeSalesOrderFromJadwalAction(jadwalId: number, salesOrderId: string): Promise<ActionResult<void>> {
   return runAction(async () => {
     await removeSalesOrderFromJadwal(jadwalId, salesOrderId);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
 export async function updateJadwalUrutanAction(jadwalId: number, orderedDetailIds: number[]): Promise<ActionResult<void>> {
   return runAction(async () => {
     await updateJadwalUrutan(jadwalId, orderedDetailIds);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -122,7 +122,7 @@ export async function updateJadwalDriverTimeAction(
 ): Promise<ActionResult<number>> {
   return runAction(async () => {
     const resultId = await updateJadwalDriverTime(jadwalId, input, options);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
     return resultId;
   });
 }
@@ -134,7 +134,7 @@ export async function updateJadwalDriverTimeAction(
 export async function updateJadwalArmadaAction(jadwalId: number, newArmadaId: number, jamJadwal?: Date): Promise<ActionResult<number>> {
   return runAction(async () => {
     const resultId = await updateJadwalArmada(jadwalId, newArmadaId, jamJadwal);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
     return resultId;
   });
 }
@@ -163,7 +163,7 @@ export async function mergeExternalDeliveriesAction(
 ): Promise<ActionResult<number>> {
   return runAction(async () => {
     const id = await mergeExternalDeliveriesIntoJadwal(armadaId, deliveryOrderIds, jamJadwal);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
     return id;
   });
 }
@@ -171,14 +171,14 @@ export async function mergeExternalDeliveriesAction(
 export async function startMuatAction(jadwalId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
     await startMuat(jadwalId);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
 export async function selesaiMuatAction(jadwalId: number): Promise<ActionResult<{ jadwalDetailId: number; invoiceToken: string }[]>> {
   return runAction(async () => {
     const result = await selesaiMuat(jadwalId);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
     return result;
   });
 }
@@ -186,7 +186,7 @@ export async function selesaiMuatAction(jadwalId: number): Promise<ActionResult<
 export async function konfirmasiBerangkatAction(jadwalId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
     await konfirmasiBerangkat(jadwalId);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -214,7 +214,7 @@ export async function createArmadaActivityAction(input: {
   return runAction(async () => {
     const session = await requireModuleAccess("delivery");
     const id = await createArmadaActivity({ ...input, createdByUserId: String(session.user.id) });
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
     return id;
   });
 }
@@ -223,7 +223,7 @@ export async function updateArmadaActivityAction(activityId: number, input: Upda
   return runAction(async () => {
     await requireModuleAccess("delivery");
     await updateArmadaActivity(activityId, input);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -231,7 +231,7 @@ export async function deleteArmadaActivityAction(activityId: number): Promise<Ac
   return runAction(async () => {
     await requireModuleAccess("delivery");
     await deleteArmadaActivity(activityId);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -244,7 +244,7 @@ export async function saveDriverProfileAction(input: SaveDriverProfileInput): Pr
   await requireModuleAccess("delivery");
   return runAction(async () => {
     await saveDriverProfile(input);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -252,7 +252,7 @@ export async function deleteDriverProfileAction(salesmanId: string): Promise<Act
   await requireModuleAccess("delivery");
   return runAction(async () => {
     await deleteDriverProfile(salesmanId);
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 
@@ -290,6 +290,6 @@ export async function createVehicleCheckAction(input: {
       throw new AppError("Jumlah muatan wajib diisi dengan angka 0 atau lebih.");
     }
     await createVehicleCheck({ ...input, userId: session.user.id });
-    revalidatePath("/delivery");
+    revalidatePath("/mkesindo/delivery");
   });
 }

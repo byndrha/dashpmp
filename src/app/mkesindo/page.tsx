@@ -19,11 +19,11 @@ import { formatRupiah } from "@/lib/format";
 import { MARKETING_ROLE_ID } from "@/lib/roles";
 
 const MODULE_LINKS = [
-  { href: "/pnl", label: "Keuangan", desc: "Laba rugi dan titik impas", icon: LineChart },
-  { href: "/aging", label: "Piutang", desc: "Umur piutang per mitra", icon: Receipt },
-  { href: "/sales", label: "Penjualan", desc: "Penjualan harian per wilayah", icon: ShoppingCart },
-  { href: "/electricity", label: "Biaya Listrik", desc: "Biaya listrik vs pendapatan", icon: Zap },
-  { href: "/delivery", label: "Pengiriman", desc: "Delivery order terbuka", icon: Truck },
+  { href: "/mkesindo/pnl", label: "Keuangan", desc: "Laba rugi dan titik impas", icon: LineChart },
+  { href: "/mkesindo/aging", label: "Piutang", desc: "Umur piutang per mitra", icon: Receipt },
+  { href: "/mkesindo/sales", label: "Penjualan", desc: "Penjualan harian per wilayah", icon: ShoppingCart },
+  { href: "/mkesindo/electricity", label: "Biaya Listrik", desc: "Biaya listrik vs pendapatan", icon: Zap },
+  { href: "/mkesindo/delivery", label: "Pengiriman", desc: "Delivery order terbuka", icon: Truck },
 ];
 
 export default async function BerandaPage() {
@@ -33,11 +33,11 @@ export default async function BerandaPage() {
   // right after login or from navigating/clicking back to "/" later, since
   // Beranda's KPIs aren't relevant to their day-to-day work.
   if (!session.user.isSuperAdmin && session.user.roleId === MARKETING_ROLE_ID) {
-    redirect("/pemasaran");
+    redirect("/mkesindo/pemasaran");
   }
 
-  // Driver-account confinement to /driver-app now lives in
-  // (dashboard)/layout.tsx instead of here — a check placed at this
+  // Driver-account confinement to /mkesindo/driver-app now lives in
+  // mkesindo/layout.tsx instead of here — a check placed at this
   // page-level ran AFTER requireModuleAccess("beranda") above, so a Driver
   // Peran without "beranda" module permission (the normal setup, since a
   // driver-only role has no reason to need dashboard access) got bounced

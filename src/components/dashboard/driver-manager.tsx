@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { DriverProfileRow, SaveDriverProfileInput } from "@/lib/queries/driver-profile";
-import { saveDriverProfileAction, deleteDriverProfileAction } from "@/app/(dashboard)/delivery/actions";
+import { saveDriverProfileAction, deleteDriverProfileAction } from "@/app/mkesindo/delivery/actions";
 
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 

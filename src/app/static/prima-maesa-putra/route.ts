@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 // recognizes, so it needs an explicit handler. Gated behind login (any
 // authenticated user, no specific module permission — this isn't part of
 // the module system, just a standalone report), same baseline as every
-// other page in (dashboard); layout.tsx itself doesn't enforce auth, each
+// other page in mkesindo; layout.tsx itself doesn't enforce auth, each
 // route does.
 export async function GET() {
   const session = await auth();
@@ -15,7 +15,7 @@ export async function GET() {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const filePath = path.join(process.cwd(), "src/app/(dashboard)/static/prima-maesa-putra.html");
+  const filePath = path.join(process.cwd(), "src/app/static/prima-maesa-putra.html");
   const html = await readFile(filePath, "utf-8");
   return new Response(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },

@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
 import type { MitraRow } from "@/lib/queries/mitra";
-import { getMitraDetailAction, setMitraLocationAction } from "@/app/(dashboard)/mitra/actions";
+import { getMitraDetailAction, setMitraLocationAction } from "@/app/mkesindo/mitra/actions";
 
 const MitraLocationMap = dynamic(
   () => import("@/components/dashboard/mitra-location-map").then((m) => m.MitraLocationMap),

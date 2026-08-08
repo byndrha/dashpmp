@@ -33,7 +33,7 @@ export async function createPengajuanAction(input: PengajuanInput): Promise<Acti
     if (!userId) throw new AppError("Unauthorized");
 
     await createPengajuan(input, userId);
-    revalidatePath("/pemasaran");
+    revalidatePath("/mkesindo/pemasaran");
   });
 }
 
@@ -53,8 +53,8 @@ export async function approvePengajuanAction(pengajuanId: number): Promise<Actio
   return runAction(async () => {
     const user = await requireApprover();
     await approvePengajuan(pengajuanId, user.id);
-    revalidatePath("/pemasaran");
-    revalidatePath("/mitra");
+    revalidatePath("/mkesindo/pemasaran");
+    revalidatePath("/mkesindo/mitra");
   });
 }
 
@@ -65,7 +65,7 @@ export async function rejectPengajuanAction(
   return runAction(async () => {
     const user = await requireApprover();
     await rejectPengajuan(pengajuanId, user.id, catatan);
-    revalidatePath("/pemasaran");
+    revalidatePath("/mkesindo/pemasaran");
   });
 }
 
@@ -80,7 +80,7 @@ export async function deletePengajuanAction(pengajuanId: number): Promise<Action
     if (!user.isSuperAdmin) throw new AppError("Hanya Super Admin yang dapat menghapus pengajuan");
 
     await deletePengajuan(pengajuanId);
-    revalidatePath("/pemasaran");
+    revalidatePath("/mkesindo/pemasaran");
   });
 }
 
@@ -106,9 +106,9 @@ export async function addMarketingWilayahAction(input: {
   return runAction(async () => {
     const user = await requireWilayahManager();
     await addMarketingWilayah({ ...input, createdByUserId: user.id });
-    revalidatePath("/pemasaran");
-    revalidatePath("/mitra");
-    revalidatePath("/transaksi");
+    revalidatePath("/mkesindo/pemasaran");
+    revalidatePath("/mkesindo/mitra");
+    revalidatePath("/mkesindo/transaksi");
   });
 }
 
@@ -116,9 +116,9 @@ export async function removeMarketingWilayahAction(id: number): Promise<ActionRe
   return runAction(async () => {
     await requireWilayahManager();
     await removeMarketingWilayah(id);
-    revalidatePath("/pemasaran");
-    revalidatePath("/mitra");
-    revalidatePath("/transaksi");
+    revalidatePath("/mkesindo/pemasaran");
+    revalidatePath("/mkesindo/mitra");
+    revalidatePath("/mkesindo/transaksi");
   });
 }
 
@@ -129,9 +129,9 @@ export async function addMarketingMitraAction(input: {
   return runAction(async () => {
     const user = await requireWilayahManager();
     await addMarketingMitra({ ...input, createdByUserId: user.id });
-    revalidatePath("/pemasaran");
-    revalidatePath("/mitra");
-    revalidatePath("/transaksi");
+    revalidatePath("/mkesindo/pemasaran");
+    revalidatePath("/mkesindo/mitra");
+    revalidatePath("/mkesindo/transaksi");
   });
 }
 
@@ -139,9 +139,9 @@ export async function removeMarketingMitraAction(id: number): Promise<ActionResu
   return runAction(async () => {
     await requireWilayahManager();
     await removeMarketingMitra(id);
-    revalidatePath("/pemasaran");
-    revalidatePath("/mitra");
-    revalidatePath("/transaksi");
+    revalidatePath("/mkesindo/pemasaran");
+    revalidatePath("/mkesindo/mitra");
+    revalidatePath("/mkesindo/transaksi");
   });
 }
 
@@ -155,7 +155,7 @@ export async function setMarketingPeriodSettingAction(input: {
       throw new AppError("Panjang periode harus antara 1 dan 62 hari.");
     }
     await setMarketingPeriodSetting({ ...input, userId: user.id });
-    revalidatePath("/pemasaran");
+    revalidatePath("/mkesindo/pemasaran");
   });
 }
 
@@ -169,7 +169,7 @@ export async function setWilayahPotentialTargetAction(input: {
       throw new AppError("Potensial target tidak boleh negatif.");
     }
     await setWilayahPotentialTarget({ ...input, userId: user.id });
-    revalidatePath("/pemasaran");
+    revalidatePath("/mkesindo/pemasaran");
   });
 }
 

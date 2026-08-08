@@ -26,8 +26,8 @@ import {
   reschedulePemesananAction,
   getEditableSalesOrderQtyAction,
   updateSalesOrderQtyAction,
-} from "@/app/(dashboard)/pemesanan/actions";
-import { checkArmadaConflictAction } from "@/app/(dashboard)/delivery/actions";
+} from "@/app/mkesindo/pemesanan/actions";
+import { checkArmadaConflictAction } from "@/app/mkesindo/delivery/actions";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import { formatKemasanQty } from "@/lib/format";

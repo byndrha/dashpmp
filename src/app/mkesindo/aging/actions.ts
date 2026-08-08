@@ -19,7 +19,7 @@ export async function saveCollectionTargetAction(input: {
     if (!userId) throw new AppError("Unauthorized");
 
     await setCollectionTarget({ ...input, userId });
-    revalidatePath("/aging");
+    revalidatePath("/mkesindo/aging");
   });
 }
 
@@ -29,7 +29,7 @@ export async function removeCollectionTargetAction(businessPartnerId: string): P
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
     await removeCollectionTarget(businessPartnerId);
-    revalidatePath("/aging");
+    revalidatePath("/mkesindo/aging");
   });
 }
 
@@ -45,8 +45,8 @@ export async function setMitraNoteAction(input: {
     if (!userId) throw new AppError("Unauthorized");
 
     await setMitraNote(input.businessPartnerId, input.note, userId);
-    revalidatePath("/aging");
-    revalidatePath("/");
+    revalidatePath("/mkesindo/aging");
+    revalidatePath("/mkesindo");
   });
 }
 
@@ -67,8 +67,8 @@ export async function recordPaymentAction(input: RecordPaymentInput): Promise<Ac
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
     const result = await recordPayment(input);
-    revalidatePath("/aging");
-    revalidatePath("/");
+    revalidatePath("/mkesindo/aging");
+    revalidatePath("/mkesindo");
     return result;
   });
 }
