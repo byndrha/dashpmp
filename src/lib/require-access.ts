@@ -2,6 +2,14 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canView, type ModuleKey } from "@/lib/permissions";
 
+// An account has cross-PT authority if it's superadmin, OR its Perusahaan
+// is "PMP Group" itself (accountScope "direktur", the holding level above
+// every PT) — the holding company naturally oversees all PTs beneath it,
+// not just accounts with the isSuperAdmin flag set.
+export function canAccessAllPT(user: { isSuperAdmin: boolean; accountScope: string }): boolean {
+  return user.isSuperAdmin || user.accountScope === "direktur";
+}
+
 // Permissions are baked into the JWT at sign-in (see auth.ts) rather than
 // re-queried on every request, so a role/permission change made via the
 // Peran editor takes effect the next time the affected user logs in, not
@@ -46,7 +54,7 @@ export async function requireGrupAccess() {
 export async function requirePmputra() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.accountScope !== "pmputra" && !session.user.isSuperAdmin) redirect("/akses-ditolak");
+  if (session.user.accountScope !== "pmputra" && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
   return session;
 }
 

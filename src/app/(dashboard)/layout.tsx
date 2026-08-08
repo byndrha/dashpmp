@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
+import { canAccessAllPT } from "@/lib/require-access";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { AutoRefresh } from "@/components/dashboard/auto-refresh";
@@ -40,16 +41,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/driver-app");
   }
 
-  // Cross-PT access is superadmin-only — an account scoped to another PT
-  // (or the holding-level "direktur" scope) is confined to its own route
-  // tree, mirroring requirePmputra()'s equivalent check. Redirects to that
-  // account's own home rather than /akses-ditolak, consistent with the
-  // Satpam/Driver redirects just above.
-  if (!session?.user?.isSuperAdmin && session?.user?.accountScope === "pmputra") {
+  // A native pmputra account with no cross-PT authority is confined to its
+  // own route tree, mirroring requirePmputra()'s equivalent check. Redirects
+  // to its own home rather than /akses-ditolak, consistent with the Satpam/
+  // Driver redirects just above. Accounts with cross-PT authority (superadmin,
+  // or "direktur" scope — Perusahaan "PMP Group", which sits above every PT)
+  // are NOT redirected away: they're allowed to view this dashboard directly.
+  const groupLevelAccess = session?.user ? canAccessAllPT(session.user) : false;
+  if (!groupLevelAccess && session?.user?.accountScope === "pmputra") {
     redirect("/pmputra");
-  }
-  if (!session?.user?.isSuperAdmin && session?.user?.accountScope === "direktur") {
-    redirect("/grup");
   }
 
   const [profile, perusahaanList] = await Promise.all([
@@ -62,6 +62,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <AppSidebar
         permissions={session?.user?.permissions ?? {}}
         isSuperAdmin={session?.user?.isSuperAdmin ?? false}
+        canSwitchPt={groupLevelAccess}
         perusahaanList={perusahaanList}
       />
       <SidebarInset>

@@ -22,7 +22,7 @@ export function LocationTrackingBootstrap() {
     BackgroundGeolocation.start(
       {
         backgroundTitle: "PMP Group",
-        backgroundMessage: "Melacak lokasi untuk keperluan operasional",
+        backgroundMessage: "Menjadi Pabrik Es Terbesar di Indonesia",
         requestPermissions: true,
         stale: false,
         distanceFilter: 0,

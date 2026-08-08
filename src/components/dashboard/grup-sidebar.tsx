@@ -25,10 +25,10 @@ import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 // Deliberately not the per-PT AppSidebar: administration is holding-level,
 // not something that belongs inside PT Mitra Kelola Esindo's own sidebar.
 export function GrupSidebar({
-  isSuperAdmin,
+  canSwitchPt,
   perusahaanList,
 }: {
-  isSuperAdmin: boolean;
+  canSwitchPt: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
@@ -55,9 +55,9 @@ export function GrupSidebar({
             </Badge>
           </div>
         </div>
-        {isSuperAdmin && (
+        {canSwitchPt && (
           <div className="px-2 group-data-[collapsible=icon]:px-0">
-            {/* Cross-PT navigation is superadmin-only — see PTSwitcher. */}
+            {/* Cross-PT navigation requires authority over every PT — see PTSwitcher. */}
             <PTSwitcher list={perusahaanList} current="grup" />
           </div>
         )}

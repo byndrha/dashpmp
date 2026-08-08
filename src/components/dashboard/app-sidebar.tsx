@@ -47,10 +47,12 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
 export function AppSidebar({
   permissions,
   isSuperAdmin,
+  canSwitchPt,
   perusahaanList,
 }: {
   permissions: PermissionMap;
   isSuperAdmin: boolean;
+  canSwitchPt: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
@@ -86,12 +88,14 @@ export function AppSidebar({
             <p className="text-[11px] leading-tight text-muted-foreground">Ponorogo</p>
           </div>
         </div>
-        {isSuperAdmin && (
+        {canSwitchPt && (
           <div className="px-2 group-data-[collapsible=icon]:px-0">
-            {/* Cross-PT navigation is superadmin-only — every other account
-                is confined to its own PT's route tree by the accountScope
-                checks in requirePmputra()/(dashboard)/layout.tsx/
-                requireGrupAccess(), so this is never rendered for them. */}
+            {/* Cross-PT navigation is limited to accounts with authority
+                over every PT (superadmin, or "direktur" scope — Perusahaan
+                "PMP Group") — every other account is confined to its own
+                PT's route tree by the accountScope checks in
+                requirePmputra()/(dashboard)/layout.tsx/requireGrupAccess(),
+                so this is never rendered for them. */}
             <PTSwitcher list={perusahaanList} current="mkesindo" />
           </div>
         )}

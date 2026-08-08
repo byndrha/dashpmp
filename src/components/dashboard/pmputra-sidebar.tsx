@@ -38,10 +38,10 @@ const MODULE_ICONS: Record<string, typeof LineChart> = {
 const NAV_ITEMS = Object.entries(PMPUTRA_MODULES).map(([slug, label]) => ({ slug, label, icon: MODULE_ICONS[slug] }));
 
 export function PmputraSidebar({
-  isSuperAdmin,
+  canSwitchPt,
   perusahaanList,
 }: {
-  isSuperAdmin: boolean;
+  canSwitchPt: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
@@ -71,9 +71,9 @@ export function PmputraSidebar({
             <p className="text-[11px] leading-tight text-muted-foreground">Ponorogo</p>
           </div>
         </div>
-        {isSuperAdmin && (
+        {canSwitchPt && (
           <div className="px-2 group-data-[collapsible=icon]:px-0">
-            {/* Only a bridged superadmin sees this — see PTSwitcher. */}
+            {/* Only an account with cross-PT authority sees this — see PTSwitcher. */}
             <PTSwitcher list={perusahaanList} current="pmputra" />
           </div>
         )}
