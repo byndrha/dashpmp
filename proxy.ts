@@ -4,10 +4,11 @@ import { auth } from "@/lib/auth";
 // Next.js 16 renamed Middleware to Proxy (file/behavior otherwise
 // identical) — see node_modules/next/dist/docs/01-app/01-getting-started/
 // 16-proxy.md. Routes a session's accountScope (see auth.ts / next-auth.d.ts)
-// to its own home: "direktur" -> /grup, "pmputra" -> /pmputra, "mkesindo"
-// (every account that exists today) -> everything else, unchanged — except
-// the MSSQL superadmin, who may also cross into /grup (see requireGrupAccess
-// in require-access.ts for why).
+// to its own home: "pmputra" -> /pmputra, "mkesindo" -> everything except
+// /grup and /pmputra. An account with cross-PT authority — isSuperAdmin, or
+// accountScope "direktur" (Perusahaan "PMP Group", which sits above every
+// PT) — is exempt from all of this and may go anywhere; see canAccessAllPT
+// in require-access.ts for the same rule applied at the page/layout level.
 //
 // Public routes (login, API, static assets, public token pages) are
 // checked explicitly in the function body rather than relied on via the
@@ -28,9 +29,16 @@ export const proxy = auth((req) => {
   // before this file existed.
   if (!scope) return NextResponse.next();
 
-  if (scope === "direktur" && !path.startsWith("/grup")) {
-    return NextResponse.redirect(new URL("/grup", req.nextUrl));
+  // Inlined rather than imported from require-access.ts's canAccessAllPT()
+  // to keep this file's own dependency graph self-contained (it runs in
+  // the Edge runtime, unlike that module's other exports which use
+  // next/navigation's redirect()) — keep the two definitions in sync.
+  const isSuperAdmin = req.auth?.user?.isSuperAdmin ?? false;
+  const hasGroupAccess = isSuperAdmin || scope === "direktur";
+  if (hasGroupAccess) {
+    return NextResponse.next();
   }
+
   if (scope === "pmputra" && !path.startsWith("/pmputra")) {
     return NextResponse.redirect(new URL("/pmputra", req.nextUrl));
   }
@@ -38,11 +46,12 @@ export const proxy = auth((req) => {
     if (path.startsWith("/pmputra")) {
       return NextResponse.redirect(new URL("/", req.nextUrl));
     }
-    // /grup (PMP Group — holding-level ringkasan + Akun/Perusahaan/Akun
-    // Direktori administration, see require-access.ts's requireGrupAccess)
-    // is a bridge only the MSSQL superadmin may cross — every other
-    // MKEsindo account is bounced back to its own dashboard.
-    if (path.startsWith("/grup") && !req.auth?.user?.isSuperAdmin) {
+    // /grup (PMP Group — holding-level ringkasan + Akun/Perusahaan
+    // administration, see require-access.ts's requireGrupAccess) is a
+    // bridge only an account with cross-PT authority may cross — already
+    // handled by the hasGroupAccess check above, so any mkesindo-scoped
+    // account still reaching this line is not one.
+    if (path.startsWith("/grup")) {
       return NextResponse.redirect(new URL("/", req.nextUrl));
     }
   }

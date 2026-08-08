@@ -36,39 +36,22 @@ export async function requireSuperAdmin() {
 }
 
 // Page-level defense-in-depth for /grup (and everything nested under it,
-// including Akun/Perusahaan/Akun Direktori administration — see
-// docs/superpowers/specs/2026-07-30-postgres-directory-multi-company.md) —
-// proxy.ts already redirects by accountScope on every navigation, but a
-// page component shouldn't rely on that alone.
-//
-// Deliberately a hybrid: a real Postgres "direktur" account, OR today's
-// MSSQL superadmin (accountScope "mkesindo" + isSuperAdmin). Without the
-// second branch, moving Administrasi under /grup would lock out the only
-// admin account that exists until someone creates a direktur account
-// through /grup/akun/direktori — which itself lives under /grup. The
-// superadmin bridge is what makes that first-account bootstrap possible.
+// including Akun/Perusahaan administration — see docs/superpowers/specs/
+// 2026-07-30-postgres-directory-multi-company.md) — proxy.ts (repo root,
+// not src/proxy.ts — see that file's own comment) already redirects by
+// accountScope on every navigation, but a page component shouldn't rely
+// on that alone. Uses canAccessAllPT() so any account with cross-PT
+// authority reaches this, not just today's bootstrap mkesindo superadmin.
 export async function requireGrupAccess() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const isBridgedSuperAdmin = session.user.accountScope === "mkesindo" && session.user.isSuperAdmin;
-  if (session.user.accountScope !== "direktur" && !isBridgedSuperAdmin) redirect("/akses-ditolak");
+  if (session.user.accountScope !== "direktur" && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
   return session;
 }
 
 export async function requirePmputra() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // TEMPORARY diagnostic — remove once the production redirect-to-/grup
-  // mystery is solved. Prints straight to server stdout (Coolify "Logs"
-  // tab), since this exact check passes locally but production somehow
-  // still ends up back on /grup for a "direktur"-scoped account.
-  console.log(
-    "[requirePmputra]",
-    "username=", session.user.username,
-    "accountScope=", session.user.accountScope,
-    "isSuperAdmin=", session.user.isSuperAdmin,
-    "canAccessAllPT=", canAccessAllPT(session.user)
-  );
   if (session.user.accountScope !== "pmputra" && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
   return session;
 }
