@@ -66,3 +66,6 @@ public/uploads/
 
 # superpowers scratch workspaces (SDD ledgers, brainstorm mockups)
 /.superpowers/
+
+# git worktrees for isolated feature work
+/.worktrees/
