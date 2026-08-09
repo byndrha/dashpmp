@@ -34,9 +34,10 @@ const { auth } = NextAuth(authConfig);
 // cross-PT authority — isSuperAdmin, or accountScope "direktur" (Perusahaan
 // "PMP Group", which sits above every PT) — is exempt from the per-PT
 // confinement below and may go anywhere; it still gets bounced off bare "/"
-// to /mkesindo, since nothing is served there anymore (MKEsindo's dashboard
-// moved to /mkesindo). See canAccessAllPT in require-access.ts for the same
-// rule applied at the page/layout level.
+// to /grup (the PMP Group holding overview — its natural home, not any one
+// PT's dashboard), since nothing is served at bare "/" anymore. See
+// canAccessAllPT in require-access.ts for the same rule applied at the
+// page/layout level.
 //
 // Public routes (login, API, static assets, public token pages) are
 // checked explicitly in the function body rather than relied on via the
@@ -98,7 +99,7 @@ export const middleware = auth((req) => {
   const hasGroupAccess = isSuperAdmin || scope === "direktur";
   if (hasGroupAccess) {
     if (path === "/") {
-      return NextResponse.redirect(new URL("/mkesindo", req.nextUrl));
+      return NextResponse.redirect(new URL("/grup", req.nextUrl));
     }
     return passThrough(req);
   }

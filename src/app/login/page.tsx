@@ -11,8 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Always safe to default to "/" now — the Beranda page itself redirects
-  // Marketing on to /pemasaran, so this doesn't need its own role check.
+  // Always safe to default to "/" — middleware.ts dispatches bare "/" by
+  // accountScope right after login (mkesindo -> /mkesindo, pmputra ->
+  // /pmputra, cross-PT accounts -> /grup), so this doesn't need its own
+  // role check.
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
   const [username, setUsername] = useState("");
