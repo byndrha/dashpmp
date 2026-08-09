@@ -69,3 +69,10 @@ export async function requireDriver() {
   if (!session.user.isDriver) redirect("/akses-ditolak");
   return session;
 }
+
+export async function requireProduksi() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!session.user.isProduksi) redirect("/akses-ditolak");
+  return session;
+}

@@ -16,6 +16,7 @@ import {
   setPeranIzinAction,
   setPeranSatpamAction,
   setPeranDriverAction,
+  setPeranProduksiAction,
 } from "@/app/grup/akun/peran/actions";
 
 function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
@@ -31,6 +32,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
   const [map, setMap] = useState(initialMap);
   const [isSatpam, setIsSatpam] = useState(peran.isSatpam);
   const [isDriver, setIsDriverState] = useState(peran.isDriver);
+  const [isProduksi, setIsProduksiState] = useState(peran.isProduksi);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -56,6 +58,11 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     setDirty(true);
   }
 
+  function toggleProduksi() {
+    setIsProduksiState((prev) => !prev);
+    setDirty(true);
+  }
+
   function handleSave() {
     setError(null);
     startTransition(async () => {
@@ -70,6 +77,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
         ),
         setPeranSatpamAction(peran.id, isSatpam),
         setPeranDriverAction(peran.id, isDriver),
+        setPeranProduksiAction(peran.id, isProduksi),
       ]);
       const failed = results.find((r) => !r.success);
       if (failed && !failed.success) {
@@ -142,6 +150,16 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
             <span className="block text-muted-foreground">
               Akun dengan peran ini diarahkan ke Aplikasi Driver setelah login, dan hanya melihat tugas milik dirinya
               sendiri (perlu ditautkan ke identitas Driver lewat halaman Akun).
+            </span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
+          <input type="checkbox" className="accent-primary" checked={isProduksi} onChange={toggleProduksi} />
+          <span>
+            Peran Khusus: Produksi
+            <span className="block text-muted-foreground">
+              Akun dengan peran ini diarahkan ke Modul Produksi (peta warehouse, mesin, riwayat) dan Aplikasi Produksi
+              (isi muatan, catat hasil produksi) setelah login.
             </span>
           </span>
         </label>
