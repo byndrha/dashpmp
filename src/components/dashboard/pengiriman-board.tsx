@@ -51,7 +51,7 @@ import {
   mergeExternalDeliveriesAction,
   getMaxSalesOrderTransDateForDeliveriesAction,
   checkArmadaConflictAction,
-} from "@/app/mkesindo/delivery/actions";
+} from "@/app/mkesindo/(dashboard)/delivery/actions";
 
 // 24-hour axis, but the per-hour width is now derived from the available
 // container width at render time (see useContainerWidth below) instead of a

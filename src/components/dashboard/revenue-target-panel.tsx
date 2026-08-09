@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { formatRupiah, formatDate, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RevenueTarget } from "@/lib/queries/revenue-target";
-import { saveMonthlyTargetAction } from "@/app/mkesindo/sales/actions";
+import { saveMonthlyTargetAction } from "@/app/mkesindo/(dashboard)/sales/actions";
 
 function formatQtyPlain(value: number | null): string {
   if (value == null) return "-";

@@ -10,7 +10,7 @@ import { DocChip } from "@/components/dashboard/sales-chips";
 import { formatRupiah, formatRupiahAvg, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesToday } from "@/lib/queries/sales-overview";
-import { getSalesForDayAction } from "@/app/mkesindo/sales/actions";
+import { getSalesForDayAction } from "@/app/mkesindo/(dashboard)/sales/actions";
 
 function toISO(date: Date): string {
   return format(date, "yyyy-MM-dd");

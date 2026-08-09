@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
 import { canAccessAllPT } from "@/lib/require-access";
@@ -15,15 +16,27 @@ import { Separator } from "@/components/ui/separator";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
 
+  // Since the /mkesindo route restructuring, this layout physically wraps
+  // driver-app and satpam-app too (they live at src/app/mkesindo/driver-app
+  // and src/app/mkesindo/satpam-app — Next.js's App Router nests every
+  // descendant folder under its nearest layout.tsx, with no way to opt a
+  // subfolder out while keeping the same URL prefix). Read the real request
+  // path (forwarded by middleware.ts as a header, since Server Components
+  // don't otherwise see it) so these redirects don't fire against their own
+  // destination — without this guard, a Satpam/Driver account landing on
+  // its own confined app self-redirected to itself forever
+  // (ERR_TOO_MANY_REDIRECTS in production, confirmed 2026-08-09).
+  const pathname = (await headers()).get("x-pathname") ?? "";
+
   // Satpam accounts are confined to the mobile inspection UI at
-  // /satpam-app — this runs before any individual page's own
-  // requireXXX() guard, so it catches every route in this group (not
-  // just "/"), the same way the Marketing→/pemasaran redirect in
-  // (dashboard)/page.tsx already proves reliable for this exact pattern.
-  // (Proxy also attempts this same redirect, but is not reliably invoked
-  // for every route in this environment — this layout-level check is the
-  // real guarantee, proxy is best-effort UX only.)
-  if (session?.user?.isSatpam) {
+  // /mkesindo/satpam-app — this runs before any individual page's own
+  // requireXXX() guard, so it catches every OTHER route in this group,
+  // the same way the Marketing→/pemasaran redirect in (dashboard)/page.tsx
+  // already proves reliable for this exact pattern. (Proxy also attempts
+  // this same redirect, but is not reliably invoked for every route in
+  // this environment — this layout-level check is the real guarantee,
+  // proxy is best-effort UX only.)
+  if (session?.user?.isSatpam && !pathname.startsWith("/mkesindo/satpam-app")) {
     redirect("/mkesindo/satpam-app");
   }
 
@@ -37,7 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // beranda permission withheld) hit exactly this dead end. This
   // layout-level check runs before any page's own permission gate, so it
   // can't be short-circuited by a missing module permission.
-  if (!session?.user?.isSuperAdmin && session?.user?.isDriver) {
+  if (!session?.user?.isSuperAdmin && session?.user?.isDriver && !pathname.startsWith("/mkesindo/driver-app")) {
     redirect("/mkesindo/driver-app");
   }
 

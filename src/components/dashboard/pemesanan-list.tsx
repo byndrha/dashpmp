@@ -15,7 +15,7 @@ import {
   UbahTanggalPemesananDialog,
   type UbahTanggalPemesananTarget,
 } from "@/components/dashboard/ubah-tanggal-pemesanan-dialog";
-import { deletePemesananAction } from "@/app/mkesindo/pemesanan/actions";
+import { deletePemesananAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 
 const STATUS_VARIANT: Record<SalesOrderStatus, "outline" | "secondary" | "default"> = {
   "Belum Dijadwalkan": "outline",

@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { NotificationEvent, NotificationRow } from "@/lib/queries/notifications";
-import { getNotificationsAction, markNotificationReadAction } from "@/app/mkesindo/notification-actions";
+import { getNotificationsAction, markNotificationReadAction } from "@/app/mkesindo/(dashboard)/notification-actions";
 
 export function NotificationBell() {
   const router = useRouter();

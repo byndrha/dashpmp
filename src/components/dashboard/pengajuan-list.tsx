@@ -24,7 +24,7 @@ import {
   approvePengajuanAction,
   rejectPengajuanAction,
   deletePengajuanAction,
-} from "@/app/mkesindo/pemasaran/actions";
+} from "@/app/mkesindo/(dashboard)/pemasaran/actions";
 
 const LocationViewMap = dynamic(
   () => import("@/components/dashboard/location-view-map").then((m) => m.LocationViewMap),

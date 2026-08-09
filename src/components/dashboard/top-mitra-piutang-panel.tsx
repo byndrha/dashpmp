@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { formatRupiah, formatDays, formatPercentPoints, formatQty, formatDate } from "@/lib/format";
 import type { TopMitraPiutangRow } from "@/lib/queries/top-mitra-piutang";
 import type { PiutangStatus } from "@/lib/queries/aging";
-import { setMitraNoteAction } from "@/app/mkesindo/aging/actions";
+import { setMitraNoteAction } from "@/app/mkesindo/(dashboard)/aging/actions";
 
 const STATUS_BADGE_VARIANT: Record<PiutangStatus, string> = {
   Sehat: "border-primary/30 bg-primary/5 text-primary",

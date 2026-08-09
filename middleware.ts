@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth.config";
 
 // This file MUST be named middleware.ts, not proxy.ts. Next.js's own
@@ -52,13 +53,27 @@ const PUBLIC_PREFIXES = ["/login", "/api", "/mkesindo/invoice", "/mkesindo/payme
 // internally.
 const SHARED_PREFIXES = ["/akses-ditolak", "/static"];
 
+// Forwards the current pathname as a request header so Server Components
+// (which don't otherwise get the request path) can read it via
+// `(await headers()).get("x-pathname")` — needed by src/app/mkesindo/layout.tsx
+// to avoid redirecting a request that's already AT the satpam-app/driver-app
+// destination back to itself (see that file's own comment for the incident
+// this fixes: driver-app and satpam-app now live inside the same layout
+// subtree they're being redirected to, and that layout has no other way to
+// know it's already looking at its own redirect target).
+function passThrough(req: NextRequest) {
+  const headers = new Headers(req.headers);
+  headers.set("x-pathname", req.nextUrl.pathname);
+  return NextResponse.next({ request: { headers } });
+}
+
 export const middleware = auth((req) => {
   const path = req.nextUrl.pathname;
   if (PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
-    return NextResponse.next();
+    return passThrough(req);
   }
   if (SHARED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
-    return NextResponse.next();
+    return passThrough(req);
   }
 
   const scope = req.auth?.user?.accountScope;
@@ -72,7 +87,7 @@ export const middleware = auth((req) => {
     if (path === "/") {
       return NextResponse.redirect(new URL("/login", req.nextUrl));
     }
-    return NextResponse.next();
+    return passThrough(req);
   }
 
   // Inlined rather than imported from require-access.ts's canAccessAllPT()
@@ -85,7 +100,7 @@ export const middleware = auth((req) => {
     if (path === "/") {
       return NextResponse.redirect(new URL("/mkesindo", req.nextUrl));
     }
-    return NextResponse.next();
+    return passThrough(req);
   }
 
   if (scope === "pmputra" && !path.startsWith("/pmputra")) {
@@ -95,7 +110,7 @@ export const middleware = auth((req) => {
     return NextResponse.redirect(new URL("/mkesindo", req.nextUrl));
   }
 
-  return NextResponse.next();
+  return passThrough(req);
 });
 
 export const config = {
