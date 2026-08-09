@@ -69,13 +69,10 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
-    const posisiCheck = await new sql.Request(transaction)
-      .input("posisiId", sql.Int, input.posisiId)
-      .query(`SELECT BatchIDAktif FROM DashboardProduksiPalletPosisi WHERE PosisiID = @posisiId`);
-    const posisi = posisiCheck.recordset[0];
-    if (!posisi) throw new AppError("Posisi pallet tidak ditemukan.");
-    if (posisi.BatchIDAktif != null) throw new AppError("Posisi pallet ini sudah terisi batch lain.");
-
+    // Insert speculatively — this is safe because it's inside the same
+    // transaction as the atomic claim below: if the claim fails, the
+    // rollback discards this row too, so no orphan batch is ever visible
+    // outside this function.
     const insertResult = await new sql.Request(transaction)
       .input("mesinId", sql.Int, input.mesinId)
       .input("posisiId", sql.Int, input.posisiId)
@@ -89,10 +86,21 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
       `);
     const batchId = insertResult.recordset[0].BatchID as number;
 
-    await new sql.Request(transaction)
+    // Atomic claim: the WHERE clause encodes both preconditions (position
+    // exists, position is currently empty) as part of the write itself,
+    // instead of a separate SELECT-then-act that a racing call could slip
+    // between. rowsAffected[0] === 0 means either the position doesn't
+    // exist or another transaction already claimed it first — same
+    // idiom as selesaiMuat's claim UPDATE in pengiriman-jadwal.ts.
+    const claim = await new sql.Request(transaction)
       .input("posisiId", sql.Int, input.posisiId)
       .input("batchId", sql.Int, batchId)
-      .query(`UPDATE DashboardProduksiPalletPosisi SET BatchIDAktif = @batchId, ModifiedDate = GETDATE() WHERE PosisiID = @posisiId`);
+      .query(
+        `UPDATE DashboardProduksiPalletPosisi SET BatchIDAktif = @batchId, ModifiedDate = GETDATE() WHERE PosisiID = @posisiId AND BatchIDAktif IS NULL`
+      );
+    if (claim.rowsAffected[0] === 0) {
+      throw new AppError("Posisi pallet ini sudah terisi batch lain.");
+    }
 
     await transaction.commit();
     return batchId;
