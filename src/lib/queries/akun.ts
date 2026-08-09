@@ -19,6 +19,7 @@ export interface AkunAuthRow {
   isSuperAdmin: boolean;
   isSatpam: boolean;
   isDriver: boolean;
+  isProduksi: boolean;
   salesmanId: string | null;
   isActive: boolean;
   failedLoginCount: number;
@@ -32,6 +33,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
             COALESCE(r.is_super_admin, false) AS is_super_admin,
             COALESCE(r.is_satpam, false) AS is_satpam,
             COALESCE(r.is_driver, false) AS is_driver,
+            COALESCE(r.is_produksi, false) AS is_produksi,
             a.salesman_id,
             a.is_active, a.failed_login_count, a.locked_until
      FROM akun a
@@ -53,6 +55,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
     isSuperAdmin: row.is_super_admin,
     isSatpam: row.is_satpam,
     isDriver: row.is_driver,
+    isProduksi: row.is_produksi,
     salesmanId: row.salesman_id,
     isActive: row.is_active,
     failedLoginCount: row.failed_login_count,
@@ -293,13 +296,14 @@ export interface PeranRow {
   isSuperAdmin: boolean;
   isSatpam: boolean;
   isDriver: boolean;
+  isProduksi: boolean;
   akunCount: number;
 }
 
 export async function listAllPeran(): Promise<PeranRow[]> {
   const pool = getPgPool();
   const result = await pool.query(`
-    SELECT r.id, r.perusahaan_id, r.nama, r.is_super_admin, r.is_satpam, r.is_driver,
+    SELECT r.id, r.perusahaan_id, r.nama, r.is_super_admin, r.is_satpam, r.is_driver, r.is_produksi,
            (SELECT count(*) FROM akun a WHERE a.peran_id = r.id) AS akun_count
     FROM peran r
     ORDER BY r.perusahaan_id, r.is_super_admin DESC, r.nama
@@ -311,6 +315,7 @@ export async function listAllPeran(): Promise<PeranRow[]> {
     isSuperAdmin: row.is_super_admin,
     isSatpam: row.is_satpam,
     isDriver: row.is_driver,
+    isProduksi: row.is_produksi,
     akunCount: Number(row.akun_count),
   }));
 }
@@ -367,6 +372,11 @@ export async function setPeranSatpam(peranId: number, isSatpam: boolean): Promis
 export async function setPeranDriver(peranId: number, isDriver: boolean): Promise<void> {
   const pool = getPgPool();
   await pool.query(`UPDATE peran SET is_driver = $1 WHERE id = $2`, [isDriver, peranId]);
+}
+
+export async function setPeranProduksi(peranId: number, isProduksi: boolean): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE peran SET is_produksi = $1 WHERE id = $2`, [isProduksi, peranId]);
 }
 
 // ---------- Sesi login aktif (consumed by auth.ts's jwt callback) ----------
@@ -468,4 +478,17 @@ export async function listActiveSesi(): Promise<AkunSesiRow[]> {
 export async function revokeAkunSesi(sesiId: string): Promise<void> {
   const pool = getPgPool();
   await pool.query(`UPDATE akun_sesi SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, [sesiId]);
+}
+
+// ---------- Akun nama lookup (consumed by Riwayat Produksi to resolve
+// DicatatOlehAkunID — a Postgres akun.id stored as a plain INT column in
+// the MSSQL Produksi tables, since there is no ERP-side identity for
+// Produksi staff, unlike Driver's Salesman link — into a display name) ----------
+
+export async function getAkunNamaMap(akunIds: number[]): Promise<Map<number, string>> {
+  const uniqueIds = [...new Set(akunIds)];
+  if (uniqueIds.length === 0) return new Map();
+  const pool = getPgPool();
+  const result = await pool.query(`SELECT id, nama FROM akun WHERE id = ANY($1::int[])`, [uniqueIds]);
+  return new Map(result.rows.map((row) => [row.id as number, row.nama as string]));
 }
