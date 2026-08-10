@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatTime } from "@/lib/format";
 import type { SatpamInspectionCard } from "@/lib/queries/satpam-inspection";
+import type { SatpamTimelineEntry } from "@/lib/queries/satpam-inspection";
+import { VerticalTimeline, VerticalTimelineItem } from "@/components/ui/vertical-timeline";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
@@ -55,12 +57,28 @@ function InspectionCard({ card }: { card: SatpamInspectionCard }) {
   );
 }
 
+function TimelineCard({ entry }: { entry: SatpamTimelineEntry }) {
+  return (
+    <Card className="p-3">
+      <p className="text-sm font-medium">
+        {entry.tipe === "BERANGKAT" ? "Cek Berangkat" : "Cek Datang"} — {entry.armadaNama}
+        {entry.vehicleNo && entry.vehicleNo !== entry.armadaNama ? ` (${entry.vehicleNo})` : ""}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        {entry.driverName ?? "Tanpa driver"} &mdash; {entry.odometerKM.toLocaleString("id-ID")} KM
+      </p>
+    </Card>
+  );
+}
+
 export function SatpamBerandaClient({
   cards,
+  timeline,
   userName,
   profile,
 }: {
   cards: SatpamInspectionCard[];
+  timeline: SatpamTimelineEntry[];
   userName: string;
   profile: OwnProfile | null;
 }) {
@@ -97,6 +115,20 @@ export function SatpamBerandaClient({
           )}
         </TabsContent>
       </Tabs>
+      <div className="flex flex-col gap-3 border-t px-4 py-4">
+        <h2 className="font-display text-base font-semibold">Riwayat Hari Ini</h2>
+        {timeline.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Belum ada aktivitas hari ini.</p>
+        ) : (
+          <VerticalTimeline>
+            {timeline.map((entry, i) => (
+              <VerticalTimelineItem key={entry.vehicleCheckId} time={formatTime(entry.checkedAt)} isLast={i === timeline.length - 1}>
+                <TimelineCard entry={entry} />
+              </VerticalTimelineItem>
+            ))}
+          </VerticalTimeline>
+        )}
+      </div>
     </div>
   );
 }
