@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah, formatTime, formatKemasanQty } from "@/lib/format";
-import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
+import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
 import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder, ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
@@ -779,6 +779,15 @@ export function RouteValidationDialog({
     return Math.round(segments * costPer5Km);
   }, [route, konsumsiBBM, biayaBBMPerLiter]);
 
+  // Aggregate bongkar time across every stop in the current order — the
+  // per-stop "~X menit" label (SortableStopRow) shows this same function's
+  // result for one stop; this is the sum across all of them, feeding the
+  // route summary's time breakdown below.
+  const bongkarTotalMenit = useMemo(() => {
+    return order.reduce((sum, o) => sum + estimateDeliveryMinutes(o.Qty), 0);
+  }, [order]);
+  const konfirmasiTotalMenit = order.length * CONFIRMATION_MINUTES_PER_STOP;
+
   // "Detail Rute" — plain-text destination list only (no route/fuel
   // figures, those are visual-only info covered by the image share
   // options below). No public link/token exists for this dialog, so
@@ -1234,7 +1243,9 @@ export function RouteValidationDialog({
                 </span>
                 <span className="flex items-center gap-1">
                   <Clock className="size-3.5 text-muted-foreground" />
-                  {route.durationMinutes} menit
+                  Tempuh {route.durationMinutes} + Bongkar {Math.round(bongkarTotalMenit)} + Konfirmasi{" "}
+                  {konfirmasiTotalMenit} = {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)}{" "}
+                  menit
                 </span>
                 {totalFuelLiters != null && (
                   <span className="flex items-center gap-1">
