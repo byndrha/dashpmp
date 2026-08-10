@@ -6,6 +6,7 @@ import {
   getDriverJadwalList,
   getDriverJadwalStops,
   getDriverJadwalHistory,
+  getDriverTimeline,
   getStopOrderItems,
   recordStopArrival,
   confirmStopDelivery,
@@ -13,6 +14,7 @@ import {
   assertOwnsJadwalDetail,
   type DriverJadwalCard,
   type DriverStopRow,
+  type DriverTimelineEntry,
   type StopOrderItem,
   type ConfirmStopDeliveryInput,
 } from "@/lib/queries/pengiriman-jadwal";
@@ -29,6 +31,7 @@ import { recordMasukSpbu, updateFuelLog } from "@/lib/queries/driver-fuel";
 import { recordKendala } from "@/lib/queries/driver-kendala";
 import type { JenisKendala } from "@/lib/kendala-options";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+import { getBusinessDateISO } from "@/lib/business-date";
 
 async function requireOwnSalesmanId(): Promise<string> {
   const session = await requireDriver();
@@ -145,6 +148,13 @@ export async function getDriverJadwalHistoryAction(limit?: number): Promise<Acti
   return runAction(async () => {
     const salesmanId = await requireOwnSalesmanId();
     return getDriverJadwalHistory(salesmanId, limit);
+  });
+}
+
+export async function getDriverTimelineAction(): Promise<ActionResult<DriverTimelineEntry[]>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    return getDriverTimeline(salesmanId, getBusinessDateISO());
   });
 }
 

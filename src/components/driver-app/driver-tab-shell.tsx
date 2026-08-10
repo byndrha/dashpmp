@@ -12,11 +12,11 @@ import { DriverBottomNav } from "@/components/driver-app/bottom-nav";
 import {
   getDriverJadwalListAction,
   getDriverJadwalStopsAction,
-  getDriverJadwalHistoryAction,
+  getDriverTimelineAction,
   getOwnDriverProfileAction,
   getPabrikLocationForDriverAction,
 } from "@/app/mkesindo/driver-app/actions";
-import type { DriverJadwalCard, DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
+import type { DriverJadwalCard, DriverStopRow, DriverTimelineEntry } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverProfileRow } from "@/lib/queries/driver-profile";
 
 export type DriverTabKey = "tugas" | "peta" | "riwayat" | "profil";
@@ -64,7 +64,7 @@ export function DriverTabShell({
   driverName: string;
   initialTugas?: TugasData;
   initialPeta?: PetaData;
-  initialRiwayat?: DriverJadwalCard[];
+  initialRiwayat?: DriverTimelineEntry[];
   initialProfil?: DriverProfileRow | null;
   // Set by a page when the account has no linked salesmanId — same message
   // every lazy tab-switch would surface anyway (requireOwnSalesmanId throws
@@ -77,7 +77,7 @@ export function DriverTabShell({
 
   const [tugas, setTugas] = useState<TugasData | null>(initialTugas ?? null);
   const [peta, setPeta] = useState<PetaData | null>(initialPeta ?? null);
-  const [riwayat, setRiwayat] = useState<DriverJadwalCard[] | null>(initialRiwayat ?? null);
+  const [riwayat, setRiwayat] = useState<DriverTimelineEntry[] | null>(initialRiwayat ?? null);
   // undefined = not fetched yet, null = fetched, account has no linked profile.
   const [profil, setProfil] = useState<DriverProfileRow | null | undefined>(initialProfil);
 
@@ -148,7 +148,7 @@ export function DriverTabShell({
 
       if (activeTab === "riwayat" && riwayat === null) {
         setLoadingTab("riwayat");
-        const result = await getDriverJadwalHistoryAction();
+        const result = await getDriverTimelineAction();
         if (cancelled) return;
         if (!result.success) {
           setTabError(result.error);
@@ -210,7 +210,7 @@ export function DriverTabShell({
         )}
         {visited.has("riwayat") && riwayat && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "riwayat" && "hidden")}>
-            <RiwayatList history={riwayat} />
+            <RiwayatList entries={riwayat} />
           </div>
         )}
         {visited.has("profil") && profil !== undefined && (
