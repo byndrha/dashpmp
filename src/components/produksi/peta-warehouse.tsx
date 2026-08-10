@@ -78,6 +78,14 @@ export function PetaWarehouse({ posisi }: { posisi: PalletPosisiRow[] }) {
         <div className="mt-4 rounded-md border border-border p-3 text-sm">
           <p className="font-semibold">Pallet {selected.Kode}</p>
           <p className="text-muted-foreground">Mesin: {selected.MesinNama ?? "-"}</p>
+          {selected.TanggalLabel != null && (
+            <p className="text-muted-foreground">
+              Tanggal &amp; Shift Produksi:{" "}
+              {new Date(selected.TanggalLabel).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+              {" — Shift "}
+              {selected.Shift}
+            </p>
+          )}
           <p className="text-muted-foreground">
             Sisa: {selected.SisaQty10KG ?? 0} kantong 10kg, {selected.SisaQty5KG ?? 0} kantong 5kg
           </p>

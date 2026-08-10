@@ -11,6 +11,7 @@ export function RiwayatProduksi({ riwayat }: { riwayat: RiwayatProduksiRowWithNa
         <TableHeader>
           <TableRow>
             <TableHead>Tanggal</TableHead>
+            <TableHead>Tanggal &amp; Shift Produksi</TableHead>
             <TableHead>Mesin</TableHead>
             <TableHead>Pallet</TableHead>
             <TableHead>Jumlah Awal</TableHead>
@@ -22,6 +23,11 @@ export function RiwayatProduksi({ riwayat }: { riwayat: RiwayatProduksiRowWithNa
           {riwayat.map((r) => (
             <TableRow key={r.BatchID}>
               <TableCell>{new Date(r.TanggalProduksi).toLocaleDateString("id-ID")}</TableCell>
+              <TableCell>
+                {new Date(r.TanggalLabel).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+                {" — Shift "}
+                {r.Shift}
+              </TableCell>
               <TableCell>{r.MesinNama}</TableCell>
               <TableCell>{r.Kode}</TableCell>
               <TableCell>
