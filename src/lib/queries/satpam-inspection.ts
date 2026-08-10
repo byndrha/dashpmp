@@ -135,7 +135,7 @@ export async function getSatpamTimeline(businessDateISO: string): Promise<Satpam
         vc.CheckedAt,
         vc.OdometerKM
       FROM DashboardVehicleCheck vc
-      JOIN DashboardPengirimanJadwal j ON j.JadwalID = vc.JadwalID
+      JOIN DashboardPengirimanJadwal j ON j.JadwalID = vc.JadwalID AND j.IsDeleted = 0
       JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
       LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
       LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID

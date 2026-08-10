@@ -279,10 +279,14 @@ export interface DriverJadwalCard {
   IsSelesai: boolean;
 }
 
-// businessDate here is a plain calendar date (JamJadwal's own DATE), not
-// the 14:00-WIB-rollover "business date" used elsewhere on the Papan
-// Pengiriman board — the driver picks a literal calendar date from a date
-// picker on the Tugas screen, so no rollover translation applies.
+// dateISO is a 14:00-WIB-rollover business-date label (see ROLLOVER_HOUR
+// in business-date.ts), same convention as everywhere else in this file —
+// the driver's date picker on the Tugas screen (tugas-list.tsx) picks one
+// calendar date as that label, and the results reflect that label's full
+// [date-1 14:00 WIB, date 13:59 WIB) window, not just that calendar day's
+// 00:00-23:59. Deliberately made consistent with the default "today" load
+// (both this function's only two calling paths) rather than giving the
+// picker its own, different date semantics.
 //
 // The StopAgg CTE pre-aggregates to exactly one row per JadwalDetailID
 // BEFORE joining up to the Jadwal level — same reason getPengirimanBoard's
