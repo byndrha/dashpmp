@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
 
     const bytes = await file.arrayBuffer();
     await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
-  } catch {
+  } catch (err) {
+    console.error("[upload/armada-foto] gagal menulis file:", uploadDir, err);
     return NextResponse.json({ error: "Gagal menyimpan foto" }, { status: 500 });
   }
 

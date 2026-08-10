@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
     await mkdir(uploadDir, { recursive: true });
     const bytes = await file.arrayBuffer();
     await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
-  } catch {
+  } catch (err) {
+    console.error("[upload/doc-template] gagal menulis file:", uploadDir, err);
     return NextResponse.json({ error: "Gagal menyimpan file" }, { status: 500 });
   }
 
