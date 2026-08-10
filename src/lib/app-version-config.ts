@@ -7,8 +7,8 @@
 // these constants and deploying is the entire "publish a new version
 // rule" workflow — no DB, no admin UI, no API call.
 export const APP_MIN_VERSION_CODE = 1;
-export const APP_LATEST_VERSION_CODE = 1;
-export const APP_LATEST_VERSION_NAME = "1.0";
+export const APP_LATEST_VERSION_CODE = 2;
+export const APP_LATEST_VERSION_NAME = "1.1";
 
 export type AppVersionStatus = "blocked" | "update-available" | "current";
 
