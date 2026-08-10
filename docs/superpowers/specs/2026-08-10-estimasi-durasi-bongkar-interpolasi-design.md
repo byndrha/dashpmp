@@ -1,10 +1,12 @@
-# Estimasi Durasi Bongkar per Kantong — Interpolasi Linear (Design Spec)
+# Estimasi Durasi Bongkar & Waktu Konfirmasi Pengiriman (Design Spec)
 
 ## Latar Belakang
 
 Setiap Kartu Pengiriman (Jadwal) di Papan Pengiriman menampilkan estimasi durasi bongkar/penurunan es per mitra (stop), dihitung dari jumlah kantong yang diturunkan di stop tersebut. Estimasi ini dipakai untuk tiga hal: (1) tampilan "~X menit" per stop di dialog Validasi Rute, (2) lebar kartu Jadwal di papan (total durasi semua stop), dan (3) deteksi konflik jadwal armada (`checkArmadaConflict`) — kapan sebuah armada diperkirakan selesai dan bisa dipakai untuk trip berikutnya.
 
 Formula lama berbasis blok 5-kantong yang dibulatkan **ke atas** (mis. 7 kantong dihitung seolah 10 kantong). Berdasarkan data lapangan terbaru, pola durasi aktual berbeda dan tidak linear sederhana — kenaikannya per 5 kantong adalah +2, +2, +2, +3, +3, +3, +4 menit (5→40 kantong), lalu menjadi flat +5 menit per 5 kantong setelah 40. Pekerjaan ini mengganti formula lama dengan tabel titik acuan baru, dan mengganti pembulatan-ke-atas dengan **interpolasi linear** antar titik acuan untuk jumlah yang bukan kelipatan 5 persis.
+
+Selain durasi bongkar, setiap stop juga butuh waktu untuk driver mengisi data konfirmasi pengiriman di driver-app (foto bukti, tanda tangan/konfirmasi terima, dsb.) — waktu ini belum pernah masuk ke estimasi manapun. Pekerjaan ini juga menambahkan estimasi tetap 3 menit per stop untuk aktivitas tersebut, dan menampilkan rincian totalnya di dialog Validasi Rute.
 
 ## Formula Baru
 
@@ -93,7 +95,7 @@ Catatan: `ROUND` diterapkan per-stop (di dalam `SUM`), bukan pada total akhirnya
 
 Komentar SQL yang menjelaskan formula (baris ~111-120, saat ini mendeskripsikan tier lama) diperbarui menyebut titik acuan dan aturan interpolasi baru, mengarah ke `delivery-duration.ts` sebagai sumber kebenaran.
 
-## Dampak ke Pemanggil
+## Dampak ke Pemanggil (Formula Bongkar)
 
 Tidak ada perubahan signature/interface pada `estimateDeliveryMinutes` — perubahan murni pada nilai yang dikembalikan. Semua pemanggil otomatis memakai angka baru:
 
@@ -103,13 +105,79 @@ Tidak ada perubahan signature/interface pada `estimateDeliveryMinutes` — perub
 
 Tidak ada tabel/kolom database baru, tidak ada migrasi data — perubahan murni logika kalkulasi di kode aplikasi.
 
+## Waktu Konfirmasi Data di Driver-App (+3 Menit per Stop)
+
+Setiap stop butuh waktu tambahan bagi driver untuk mengisi data konfirmasi pengiriman di driver-app (foto bukti, konfirmasi terima/retur) — aktivitas ini terjadi di lokasi mitra, setelah bongkar selesai, sebelum truk bisa lanjut ke stop berikutnya. Ditambahkan sebagai **konstanta tetap 3 menit per stop**, terpisah dari durasi bongkar (bukan bagian dari `estimateDeliveryMinutes`, supaya kedua komponen tetap bisa ditampilkan terpisah dan diubah secara independen di masa depan).
+
+**Cakupan:** dikonfirmasi pengguna untuk diperlakukan sama seperti waktu bongkar — waktu nyata truk "menempel" di lokasi mitra — sehingga ikut masuk ke **semua** kalkulasi yang sudah memakai `estimateDeliveryMinutes` per stop, bukan cuma tampilan.
+
+### Implementasi
+
+**1. `src/lib/delivery-duration.ts`** — konstanta baru diekspor berdampingan dengan `estimateDeliveryMinutes`:
+
+```ts
+// Fixed time per stop for the driver to fill delivery-confirmation data in
+// driver-app (proof photos, confirm-received/retur) — happens on-site,
+// after bongkar, before the truck can move to the next stop. Kept as its
+// own constant (not folded into estimateDeliveryMinutes) so the two
+// components can still be shown separately and tuned independently.
+export const CONFIRMATION_MINUTES_PER_STOP = 3;
+```
+
+**2. `src/lib/route-estimate.ts`** — impor di baris 1 ditambah `CONFIRMATION_MINUTES_PER_STOP`; `estimateTripMinutes` (baris 47-48), setiap stop menyumbang bongkar + konfirmasi:
+
+```ts
+const bongkarMinutes = orderedStops.reduce(
+  (sum, s) => sum + estimateDeliveryMinutes(s.qty) + CONFIRMATION_MINUTES_PER_STOP,
+  0
+);
+```
+
+**3. `src/lib/queries/pengiriman-jadwal.ts`** — impor di baris 6 ditambah `CONFIRMATION_MINUTES_PER_STOP`, lalu tiga titik:
+
+- `StopDuration` CTE (baris ~129-139): tambahkan `+ 3` per baris stop sebelum `SUM`:
+  ```sql
+  SUM(ROUND(CASE ... END, 1) + 3) AS EstimasiDurasiMenit
+  ```
+- `estimateBusyMinutes` (baris 712): `bongkarMinutes += estimateDeliveryMinutes(loc?.qty ?? 0) + CONFIRMATION_MINUTES_PER_STOP;`
+- `checkArmadaConflict` (baris 829): `candidateEnd = new Date(candidateStart.getTime() + (estimateDeliveryMinutes(candidateQty) + CONFIRMATION_MINUTES_PER_STOP) * 60 * 1000);`
+
+`estimateBusyMinutes` dan `checkArmadaConflict` sudah mengimpor `estimateDeliveryMinutes` dari `delivery-duration.ts` di file yang sama — tinggal menambah `CONFIRMATION_MINUTES_PER_STOP` ke impor itu. `StopDuration` di atas berbeda: itu string SQL mentah (dieksekusi lewat `pool.request().query(...)`), jadi `+ 3` di sana adalah literal SQL biasa, bukan referensi ke konstanta TS — nilainya harus tetap disinkronkan manual dengan `CONFIRMATION_MINUTES_PER_STOP` jika suatu saat berubah, sama seperti CASE bongkar di atasnya sudah harus disinkronkan manual dengan `estimateDeliveryMinutes`.
+
+**4. `src/components/dashboard/route-validation-dialog.tsx`** — impor di baris 30 (`import { estimateDeliveryMinutes } from "@/lib/delivery-duration";`) ditambah `CONFIRMATION_MINUTES_PER_STOP`. Baris "~X menit" per stop (baris 121) **tidak berubah** (tetap murni durasi bongkar per stop, sesuai label "estimasi bongkar"). Perubahan UI ada di baris ringkasan rute (sekitar baris 1229-1256), yang sekarang menampilkan rincian, bukan cuma `{route.durationMinutes} menit`:
+
+```tsx
+const bongkarTotalMenit = order.reduce((sum, o) => sum + estimateDeliveryMinutes(o.Qty), 0);
+const konfirmasiTotalMenit = order.length * CONFIRMATION_MINUTES_PER_STOP;
+const totalMenit = route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit;
+```
+
+```tsx
+<span className="flex items-center gap-1">
+  <Clock className="size-3.5 text-muted-foreground" />
+  Tempuh {Math.round(route.durationMinutes)} + Bongkar {Math.round(bongkarTotalMenit)} + Konfirmasi{" "}
+  {Math.round(konfirmasiTotalMenit)} = {Math.round(totalMenit)} menit
+</span>
+```
+
+Pembulatan ke bilangan bulat di sini murni untuk tampilan (baris ringkasan) — tidak memengaruhi nilai yang dipakai di kalkulasi penjadwalan lain (yang tetap pakai `Math.round(x*10)/10` per Bagian Presisi & Pembulatan di atas).
+
+### Dampak ke Pemanggil (Waktu Konfirmasi)
+
+- **Deteksi konflik armada (`checkArmadaConflict`)** dan **estimasi busy window (`estimateBusyMinutes`)** — jendela "armada sedang sibuk" bertambah 3 menit per stop dari sebelumnya (setelah perubahan formula bongkar di atas).
+- **Estimasi trip Draft (`estimateTripMinutes` di `route-estimate.ts`)** — dipakai untuk menaksir durasi trip sebuah Jadwal Draft sebelum di-Terbit-kan; totalnya naik 3 menit × jumlah stop.
+- **Lebar kartu Jadwal di Papan Pengiriman** (`StopDuration` CTE) — ikut bertambah, sehingga kartu di papan mencerminkan waktu riil termasuk pengisian data konfirmasi, bukan cuma bongkar.
+- **Dialog Validasi Rute** — baris ringkasan rute sekarang menunjukkan rincian 3 komponen (tempuh, bongkar, konfirmasi) dan totalnya, bukan cuma angka tempuh OSRM seperti sebelumnya.
+
 ## Testing
 
 - Unit test `estimateDeliveryMinutes` untuk: setiap titik acuan persis (0, 5, 10, ..., 40 → 0, 1, 3, ..., 20), nilai di atas 40 (45→25, 60→40), nilai interpolasi non-kelipatan-5 di beberapa segmen berbeda (mis. 3→0,6; 7→1,8; 23→8,8; 38→18,4), dan qty negatif/nol → 0.
-- Verifikasi manual di Papan Pengiriman: bandingkan angka "~X menit" per stop di dialog Validasi Rute dengan hasil `estimateDeliveryMinutes` yang sama untuk qty yang sama, memastikan SQL dan TS tidak menyimpang.
+- Unit test `estimateTripMinutes` (`route-estimate.ts`): pastikan tiap stop menyumbang `estimateDeliveryMinutes(qty) + 3`, bukan cuma `estimateDeliveryMinutes(qty)`.
+- Verifikasi manual di Papan Pengiriman: bandingkan angka "~X menit" per stop di dialog Validasi Rute dengan hasil `estimateDeliveryMinutes` yang sama untuk qty yang sama (harus tetap murni bongkar, tanpa +3), dan cek baris ringkasan rute menampilkan rincian Tempuh + Bongkar + Konfirmasi = Total yang konsisten dengan penjumlahan manual.
 
 ## Di Luar Cakupan
 
 - Tidak mengubah cara `Qty` per-stop dihitung (tetap dari `SalesOrderDetail`, kantong 5kg dihitung sebagai 0,5 kantong — logika `StopQty` CTE tidak disentuh).
-- Tidak mengubah UI dialog Validasi Rute selain angka yang ditampilkan (tidak ada perubahan label/format `~X menit`).
+- Tidak mengubah label/format baris "~X menit" per stop individual — hanya baris ringkasan total rute yang mendapat rincian baru.
+- Waktu konfirmasi 3 menit adalah konstanta tetap, bukan dihitung dari jumlah kantong atau properti stop lain — tidak ada logika tambahan untuk memvariasikannya per mitra/jenis pengiriman.
 - Tidak ada perubahan pada modul Produksi (`produksi`/`produksi-app`) — perubahan ini murni di modul Pengiriman/Papan Pengiriman yang sudah ada sejak sebelum Modul Produksi dibangun.
