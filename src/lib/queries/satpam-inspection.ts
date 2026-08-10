@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import type { VehicleCheckTipe } from "@/lib/vehicle-check-types";
 
 export interface SatpamInspectionCard {
   jadwalId: number;
@@ -100,4 +101,68 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
   }
 
   return cards.filter((c) => !c.hasCheck);
+}
+
+export interface SatpamTimelineEntry {
+  vehicleCheckId: number;
+  jadwalId: number;
+  tipe: VehicleCheckTipe;
+  armadaNama: string;
+  vehicleNo: string | null;
+  driverName: string | null;
+  checkedAt: string;
+  odometerKM: number;
+}
+
+// Timeline for satpam-app's Beranda, appended below the existing pending
+// list (getSatpamInspectionList above, unmodified) — completed check
+// events (both BERANGKAT and DATANG, each its own entry since they can be
+// hours apart) whose CheckedAt falls in the current business-date window.
+// Same 14:00-WIB-rollover window expression as getSatpamInspectionList's
+// own JamJadwal filter above, applied to CheckedAt instead.
+export async function getSatpamTimeline(businessDateISO: string): Promise<SatpamTimelineEntry[]> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("businessDate", sql.Date, businessDateISO).query(`
+      SELECT
+        vc.VehicleCheckID,
+        vc.JadwalID,
+        vc.Tipe,
+        a.Nama AS ArmadaNama,
+        ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo,
+        sm.Name AS DriverName,
+        vc.CheckedAt,
+        vc.OdometerKM
+      FROM DashboardVehicleCheck vc
+      JOIN DashboardPengirimanJadwal j ON j.JadwalID = vc.JadwalID
+      JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
+      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+      LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
+      WHERE vc.CheckedAt >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+        AND vc.CheckedAt < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+      ORDER BY vc.CheckedAt DESC
+    `);
+
+  const rows = result.recordset as {
+    VehicleCheckID: number;
+    JadwalID: number;
+    Tipe: VehicleCheckTipe;
+    ArmadaNama: string;
+    VehicleNo: string | null;
+    DriverName: string | null;
+    CheckedAt: Date;
+    OdometerKM: number;
+  }[];
+
+  return rows.map((r) => ({
+    vehicleCheckId: r.VehicleCheckID,
+    jadwalId: r.JadwalID,
+    tipe: r.Tipe,
+    armadaNama: r.ArmadaNama,
+    vehicleNo: r.VehicleNo,
+    driverName: r.DriverName,
+    checkedAt: r.CheckedAt.toISOString(),
+    odometerKM: r.OdometerKM,
+  }));
 }
