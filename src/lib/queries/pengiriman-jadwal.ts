@@ -321,7 +321,15 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
       JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
       LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
       JOIN StopAgg sa ON sa.JadwalID = j.JadwalID
-      WHERE j.SalesmanID = @salesmanId AND j.IsDeleted = 0 AND CAST(j.JamJadwal AS DATE) = @date
+      WHERE j.SalesmanID = @salesmanId AND j.IsDeleted = 0
+        -- @date is a 14:00 WIB rollover business-date label, not a plain
+        -- calendar date — the old CAST(JamJadwal AS DATE) = @date match
+        -- silently dropped/misfiled any Jadwal scheduled after 14:00 WIB
+        -- (it falls on the NEXT business date but the SAME calendar date's
+        -- UTC-naive JamJadwal). Same window expression as
+        -- getSatpamInspectionList/getDriverTimeline/getSatpamTimeline.
+        AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@date AS DATETIME)))
+        AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@date AS DATETIME))
       GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamJadwal, j.Status, j.JamSelesaiMuat, j.JamAktualBerangkat
       ORDER BY j.JamJadwal
     `);
