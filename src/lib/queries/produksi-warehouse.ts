@@ -1,12 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
 
-export const SHIFT_LABEL: Record<1 | 2 | 3, string> = {
-  1: "Shift 1 (07:00)",
-  2: "Shift 2 (15:00)",
-  3: "Shift 3 (23:00)",
-};
-
 export interface PalletPosisiRow {
   PosisiID: number;
   Kode: string;

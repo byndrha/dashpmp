@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createBatchAction } from "@/app/mkesindo/produksi/actions";
 import { getBusinessDateISO } from "@/lib/business-date";
-import { SHIFT_LABEL } from "@/lib/queries/produksi-warehouse";
+import { SHIFT_LABEL } from "@/lib/produksi-shift";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
