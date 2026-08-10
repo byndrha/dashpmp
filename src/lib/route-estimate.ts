@@ -1,4 +1,4 @@
-import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
+import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
 
 export interface LatLng {
   lat: number;
@@ -41,11 +41,15 @@ export function estimateTravelMinutes(pabrik: LatLng, orderedStops: LatLng[]): n
 }
 
 // Full estimated busy duration for a trip — on-site bongkar time at every
-// stop (estimateDeliveryMinutes) plus the travel estimate above. `qty`
-// null skips that stop's bongkar contribution (treated as 0), matching
-// estimateDeliveryMinutes(0).
+// stop (estimateDeliveryMinutes) plus a fixed CONFIRMATION_MINUTES_PER_STOP
+// per stop for driver-app confirmation data entry, plus the travel estimate
+// above. `qty` null skips that stop's bongkar contribution (treated as 0),
+// matching estimateDeliveryMinutes(0) — confirmation time still applies.
 export function estimateTripMinutes(pabrik: LatLng, orderedStops: (LatLng & { qty: number })[]): number {
-  const bongkarMinutes = orderedStops.reduce((sum, s) => sum + estimateDeliveryMinutes(s.qty), 0);
+  const bongkarMinutes = orderedStops.reduce(
+    (sum, s) => sum + estimateDeliveryMinutes(s.qty) + CONFIRMATION_MINUTES_PER_STOP,
+    0
+  );
   const travelMinutes = estimateTravelMinutes(
     pabrik,
     orderedStops.map((s) => ({ lat: s.lat, lng: s.lng }))
