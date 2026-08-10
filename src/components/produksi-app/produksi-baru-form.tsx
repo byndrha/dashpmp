@@ -6,8 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createBatchAction } from "@/app/mkesindo/produksi/actions";
+import { getBusinessDateISO } from "@/lib/business-date";
+import { SHIFT_LABEL } from "@/lib/queries/produksi-warehouse";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
+
+const SHIFT_OPTIONS = [1, 2, 3] as const;
 
 export function ProduksiBaruForm({
   mesinList,
@@ -18,6 +22,8 @@ export function ProduksiBaruForm({
   posisi: PalletPosisiRow[];
   onAfterSimpan: () => void;
 }) {
+  const [tanggalLabel, setTanggalLabel] = useState(() => getBusinessDateISO());
+  const [shift, setShift] = useState<string>("1");
   const [mesinId, setMesinId] = useState<string>("");
   const [posisiId, setPosisiId] = useState<string>("");
   const [qty10, setQty10] = useState("");
@@ -31,6 +37,14 @@ export function ProduksiBaruForm({
   function handleSubmit() {
     setError(null);
     setSuccess(false);
+    if (!tanggalLabel) {
+      setError("Isi tanggal produksi.");
+      return;
+    }
+    if (!shift) {
+      setError("Pilih shift.");
+      return;
+    }
     if (!mesinId) {
       setError("Pilih mesin yang dipakai.");
       return;
@@ -45,6 +59,8 @@ export function ProduksiBaruForm({
     }
     startTransition(async () => {
       const result = await createBatchAction({
+        tanggalLabel,
+        shift: Number(shift) as 1 | 2 | 3,
         mesinId: Number(mesinId),
         posisiId: Number(posisiId),
         qty10KG: Number(qty10) || 0,
@@ -64,6 +80,29 @@ export function ProduksiBaruForm({
 
   return (
     <div className="flex flex-col gap-3 p-4">
+      <div>
+        <Label>Tanggal Produksi</Label>
+        <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} />
+      </div>
+
+      <div>
+        <Label>Shift</Label>
+        <Select value={shift} onValueChange={(v) => setShift(v ?? "1")}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Pilih shift">
+              {(v: string) => SHIFT_LABEL[Number(v) as 1 | 2 | 3]}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {SHIFT_OPTIONS.map((s) => (
+              <SelectItem key={s} value={String(s)}>
+                {SHIFT_LABEL[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div>
         <Label>Mesin yang Dipakai</Label>
         <Select value={mesinId} onValueChange={(v) => setMesinId(v ?? "")}>
