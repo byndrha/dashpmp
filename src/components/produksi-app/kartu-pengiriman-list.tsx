@@ -52,6 +52,8 @@ export function KartuPengirimanList({
         >
           <p className="font-semibold">{jadwal.ArmadaNama}</p>
           <p className="text-xs text-muted-foreground">
+            {new Date(jadwal.JamJadwal).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+            {" • "}
             {new Date(jadwal.JamJadwal).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
           </p>
           <p className="mt-1 text-sm">
