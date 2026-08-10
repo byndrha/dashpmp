@@ -49,7 +49,6 @@ import {
   removeSalesOrderFromJadwalAction,
   getAvailableSalesOrdersAction,
   deleteJadwalDraftAction,
-  startMuatAction,
   selesaiMuatAction,
   konfirmasiBerangkatAction,
   getVehicleChecksForJadwalAction,
@@ -570,18 +569,6 @@ export function RouteValidationDialog({
     });
   }
 
-  function handleMuat() {
-    if (jadwalId == null) return;
-    const targetId = jadwalId;
-    setError(null);
-    startTransition(async () => {
-      const result = await startMuatAction(targetId);
-      if (!result.success) {
-        if (jadwalIdRef.current === targetId) setError(result.error);
-      }
-    });
-  }
-
   // Selesai Muat creates the real DO+SI documents (see selesaiMuat) and
   // auto-opens the invoice for every stop marked in printSelected — same
   // window.open mechanism handlePrintSelected already uses, just triggered
@@ -1049,14 +1036,9 @@ export function RouteValidationDialog({
                   Batalkan Draft
                 </Button>
                 {jadwal?.JamMulaiMuat == null ? (
-                  <Button
-                    size="sm"
-                    className="flex-1"
-                    disabled={pending || isFutureDate}
-                    onClick={handleMuat}
-                  >
-                    Mulai Muat
-                  </Button>
+                  <p className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
+                    Menunggu Isi Muatan dari Produksi
+                  </p>
                 ) : (
                   <Button size="sm" className="flex-1" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
                     {pending ? "Memproses..." : "Selesai Muat"}
