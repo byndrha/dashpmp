@@ -109,8 +109,13 @@ export function ProduksiTabShell({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+    // kartuPengiriman/warehouse/mesin are deliberately in the dependency
+    // list, not just activeTab: refreshKartuPengiriman/refreshWarehouse
+    // reset the relevant state to null WITHOUT changing activeTab (a save
+    // action's onAfter callback fires while the user is still on that same
+    // tab), and this effect must re-run to refetch in that case, not only
+    // when the user switches tabs.
+  }, [activeTab, kartuPengiriman, warehouse, mesin]);
 
   return (
     <div className="flex h-dvh flex-col bg-background">
