@@ -68,7 +68,9 @@ export function ProduksiBaruForm({
         <Label>Mesin yang Dipakai</Label>
         <Select value={mesinId} onValueChange={(v) => setMesinId(v ?? "")}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Pilih mesin" />
+            <SelectValue placeholder="Pilih mesin">
+              {(v: string) => mesinList.find((m) => String(m.MesinID) === v)?.Nama ?? v}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {mesinList.map((m) => (
