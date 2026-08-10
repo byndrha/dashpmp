@@ -48,7 +48,27 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          // MesinCard stays mounted across open/close cycles (keyed by
+          // MesinID, not remounted), so abandoned edits from a previous
+          // open that was dismissed without saving (X button, Escape,
+          // backdrop click) would otherwise still be sitting in state the
+          // next time the dialog opens. Reseed from the live `mesin` prop
+          // every time it opens so it always starts from the true current
+          // values.
+          setNama(mesin.Nama);
+          setKapasitas(String(mesin.KapasitasProduksiPerHari));
+          setListrik(String(mesin.KonsumsiListrikKWh));
+          setLamaProduksi(String(mesin.LamaProduksiMenit));
+          setLamaKemas(String(mesin.LamaPengemasanMenit));
+          setError(null);
+        }
+      }}
+    >
       <DialogTrigger className="rounded-lg border border-border p-3 text-left text-sm hover:bg-muted/50">
         <p className="font-semibold">{mesin.Nama}</p>
         <p className="text-xs text-muted-foreground">Kapasitas: {mesin.KapasitasProduksiPerHari} kantong/hari</p>
