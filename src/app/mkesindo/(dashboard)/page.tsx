@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Wallet, Receipt, Package, LineChart, Zap, ShoppingCart, ArrowRight, Truck } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getTodayWilayahPulse } from "@/lib/queries/activity";
@@ -16,7 +15,6 @@ import { TopMitraPiutangPanel } from "@/components/dashboard/top-mitra-piutang-p
 import { GreetingHeader } from "@/components/dashboard/greeting-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatRupiah } from "@/lib/format";
-import { MARKETING_ROLE_ID } from "@/lib/roles";
 
 const MODULE_LINKS = [
   { href: "/mkesindo/pnl", label: "Keuangan", desc: "Laba rugi dan titik impas", icon: LineChart },
@@ -29,20 +27,14 @@ const MODULE_LINKS = [
 export default async function BerandaPage() {
   const session = await requireModuleAccess("beranda");
 
-  // Marketing always lands on Pemasaran instead of Beranda — whether that's
-  // right after login or from navigating/clicking back to "/" later, since
-  // Beranda's KPIs aren't relevant to their day-to-day work.
-  if (!session.user.isSuperAdmin && session.user.roleId === MARKETING_ROLE_ID) {
-    redirect("/mkesindo/pemasaran");
-  }
-
-  // Driver-account confinement to /mkesindo/driver-app now lives in
-  // mkesindo/layout.tsx instead of here — a check placed at this
-  // page-level ran AFTER requireModuleAccess("beranda") above, so a Driver
-  // Peran without "beranda" module permission (the normal setup, since a
-  // driver-only role has no reason to need dashboard access) got bounced
-  // to /akses-ditolak before ever reaching this line. The layout-level
-  // check runs before any page's own permission gate and can't be
+  // Marketing and Driver-account confinement (to /mkesindo/pemasaran and
+  // /mkesindo/driver-app respectively) now live in mkesindo/(dashboard)/
+  // layout.tsx instead of here — a check placed at this page-level ran
+  // AFTER requireModuleAccess("beranda") above, so a Peran without
+  // "beranda" module permission (the normal setup for both roles, since
+  // neither has a reason to need general dashboard access) got bounced to
+  // /akses-ditolak before ever reaching this line. The layout-level check
+  // runs before any page's own permission gate and can't be
   // short-circuited that way — same reasoning as the existing Satpam
   // confinement there.
 

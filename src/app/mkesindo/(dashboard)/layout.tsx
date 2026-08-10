@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
 import { canAccessAllPT } from "@/lib/require-access";
+import { MARKETING_ROLE_ID } from "@/lib/roles";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { AutoRefresh } from "@/components/dashboard/auto-refresh";
@@ -30,14 +31,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Satpam accounts are confined to the mobile inspection UI at
   // /mkesindo/satpam-app — this runs before any individual page's own
-  // requireXXX() guard, so it catches every OTHER route in this group,
-  // the same way the Marketing→/pemasaran redirect in (dashboard)/page.tsx
-  // already proves reliable for this exact pattern. (Proxy also attempts
-  // this same redirect, but is not reliably invoked for every route in
-  // this environment — this layout-level check is the real guarantee,
-  // proxy is best-effort UX only.)
+  // requireXXX() guard, so it catches every OTHER route in this group.
+  // (Proxy also attempts this same redirect, but is not reliably invoked
+  // for every route in this environment — this layout-level check is the
+  // real guarantee, proxy is best-effort UX only.)
   if (session?.user?.isSatpam && !pathname.startsWith("/mkesindo/satpam-app")) {
     redirect("/mkesindo/satpam-app");
+  }
+
+  // Marketing accounts are confined to /mkesindo/pemasaran — Beranda's KPIs
+  // aren't relevant to their day-to-day work. This check used to live in
+  // (dashboard)/page.tsx (BerandaPage), AFTER requireModuleAccess("beranda")
+  // — so a Marketing Peran without "beranda" module permission (the normal
+  // setup for a role that only ever needs Pemasaran) got bounced to
+  // /akses-ditolak before this redirect ever ran, the exact same class of
+  // bug already fixed for Driver below. Confirmed root cause 2026-08-10 —
+  // a real Marketing account reported landing on /akses-ditolak after
+  // login. This layout-level check runs before any page's own permission
+  // gate, so it can't be short-circuited by a missing module permission.
+  if (!session?.user?.isSuperAdmin && session?.user?.roleId === MARKETING_ROLE_ID && !pathname.startsWith("/mkesindo/pemasaran")) {
+    redirect("/mkesindo/pemasaran");
   }
 
   // Same reasoning as Satpam above, and NOT redundant with the isDriver
