@@ -39,6 +39,10 @@ export function ProduksiBaruForm({
       setError("Pilih posisi pallet.");
       return;
     }
+    if ((Number(qty10) || 0) <= 0 && (Number(qty5) || 0) <= 0) {
+      setError("Isi jumlah kantong 10kg atau 5kg minimal satu.");
+      return;
+    }
     startTransition(async () => {
       const result = await createBatchAction({
         mesinId: Number(mesinId),
