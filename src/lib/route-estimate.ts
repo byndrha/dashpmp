@@ -43,16 +43,22 @@ export function estimateTravelMinutes(pabrik: LatLng, orderedStops: LatLng[]): n
 // Full estimated busy duration for a trip — on-site bongkar time at every
 // stop (estimateDeliveryMinutes) plus a fixed CONFIRMATION_MINUTES_PER_STOP
 // per stop for driver-app confirmation data entry, plus the travel estimate
-// above. `qty` null skips that stop's bongkar contribution (treated as 0),
-// matching estimateDeliveryMinutes(0) — confirmation time still applies.
-export function estimateTripMinutes(pabrik: LatLng, orderedStops: (LatLng & { qty: number })[]): number {
+// above (estimateTravelMinutes), unless realTravelMinutes overrides it with
+// an already-known real duration. Used by estimateBusyMinutes
+// (pengiriman-jadwal.ts) for stops whose location was successfully
+// resolved — a stop with no resolved location can't be routed, so that
+// caller excludes it from orderedStops here and adds its confirmation time
+// back in separately.
+export function estimateTripMinutes(
+  pabrik: LatLng,
+  orderedStops: (LatLng & { qty: number })[],
+  realTravelMinutes: number | null = null
+): number {
   const bongkarMinutes = orderedStops.reduce(
     (sum, s) => sum + estimateDeliveryMinutes(s.qty) + CONFIRMATION_MINUTES_PER_STOP,
     0
   );
-  const travelMinutes = estimateTravelMinutes(
-    pabrik,
-    orderedStops.map((s) => ({ lat: s.lat, lng: s.lng }))
-  );
+  const travelMinutes =
+    realTravelMinutes ?? estimateTravelMinutes(pabrik, orderedStops.map((s) => ({ lat: s.lat, lng: s.lng })));
   return bongkarMinutes + travelMinutes;
 }

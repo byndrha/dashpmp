@@ -4,7 +4,7 @@ import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { formatDate, formatTime } from "@/lib/format";
 import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
-import { estimateTravelMinutes, type LatLng } from "@/lib/route-estimate";
+import { estimateTravelMinutes, estimateTripMinutes, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { AppError } from "@/lib/action-result";
@@ -707,6 +707,10 @@ async function getStopLocationsForSalesOrders(
 // Urutan order). realTravelMinutes overrides the haversine heuristic
 // whenever a real OSRM duration is already known (Terbit) — see
 // estimateTravelMinutesForJadwal for the same convention on the board.
+// Delegates the actual bongkar+confirmation+travel math to
+// estimateTripMinutes (route-estimate.ts) once locations are resolved from
+// the DB — this function's own job is just that DB resolution and the
+// missing-location edge case estimateTripMinutes can't see.
 async function estimateBusyMinutes(
   pool: sql.ConnectionPool,
   pabrik: LatLng,
@@ -715,14 +719,26 @@ async function estimateBusyMinutes(
 ): Promise<number> {
   if (orderedSalesOrderIds.length === 0) return 0;
   const locations = await getStopLocationsForSalesOrders(pool, orderedSalesOrderIds);
-  let bongkarMinutes = 0;
-  const travelStops: LatLng[] = [];
+
+  // estimateTripMinutes needs a coordinate for every stop passed to it — a
+  // SalesOrder whose location couldn't be resolved can't contribute to the
+  // travel-time heuristic, so it's excluded from resolvedStops, but its
+  // confirmation time (CONFIRMATION_MINUTES_PER_STOP) still applies (the
+  // driver still fills delivery-confirmation data for it) and its bongkar
+  // contribution is estimateDeliveryMinutes(0) = 0 — added back in below.
+  let missingLocationMinutes = 0;
+  const resolvedStops: (LatLng & { qty: number })[] = [];
   for (const id of orderedSalesOrderIds) {
     const loc = locations.get(id) ?? null;
-    bongkarMinutes += estimateDeliveryMinutes(loc?.qty ?? 0) + CONFIRMATION_MINUTES_PER_STOP;
-    if (loc) travelStops.push({ lat: loc.lat, lng: loc.lng });
+    if (loc) {
+      resolvedStops.push({ lat: loc.lat, lng: loc.lng, qty: loc.qty });
+    } else {
+      missingLocationMinutes += CONFIRMATION_MINUTES_PER_STOP;
+    }
   }
-  const travelMinutes = realTravelMinutes ?? estimateTravelMinutes(pabrik, travelStops);
+
+  const tripMinutes = estimateTripMinutes(pabrik, resolvedStops, realTravelMinutes);
+
   // Floored to at least 1 minute whenever there's at least one stop: a
   // SalesOrder with a 0-qty detail line (seen live on a handful of old
   // "Retail / Direct Sales" adjustment orders) would otherwise produce an
@@ -731,7 +747,7 @@ async function estimateBusyMinutes(
   // with anything — not even another Jadwal starting at that exact same
   // instant. A departure always occupies at least a moment of the armada's
   // time, degenerate cargo or not.
-  return Math.max(1, bongkarMinutes + travelMinutes);
+  return Math.max(1, tripMinutes + missingLocationMinutes);
 }
 
 interface JadwalBusyWindow {
