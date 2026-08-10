@@ -1,6 +1,12 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
 
+export const SHIFT_LABEL: Record<1 | 2 | 3, string> = {
+  1: "Shift 1 (07:00)",
+  2: "Shift 2 (15:00)",
+  3: "Shift 3 (23:00)",
+};
+
 export interface PalletPosisiRow {
   PosisiID: number;
   Kode: string;
@@ -9,12 +15,15 @@ export interface PalletPosisiRow {
   TanggalProduksi: Date | null;
   SisaQty10KG: number | null;
   SisaQty5KG: number | null;
+  TanggalLabel: Date | null;
+  Shift: 1 | 2 | 3 | null;
 }
 
 export async function getWarehouseMap(): Promise<PalletPosisiRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT p.PosisiID, p.Kode, p.BatchIDAktif, m.Nama AS MesinNama, b.TanggalProduksi, b.SisaQty10KG, b.SisaQty5KG
+    SELECT p.PosisiID, p.Kode, p.BatchIDAktif, m.Nama AS MesinNama, b.TanggalProduksi, b.SisaQty10KG, b.SisaQty5KG,
+           b.TanggalLabel, b.Shift
     FROM DashboardProduksiPalletPosisi p
     LEFT JOIN DashboardProduksiBatch b ON b.BatchID = p.BatchIDAktif AND b.IsDeleted = 0
     LEFT JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
@@ -33,6 +42,8 @@ export interface RiwayatProduksiRow {
   SisaQty10KG: number;
   SisaQty5KG: number;
   DicatatOlehAkunID: number;
+  TanggalLabel: Date;
+  Shift: 1 | 2 | 3;
 }
 
 export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow[]> {
@@ -42,7 +53,8 @@ export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow
     .input("limit", sql.Int, limit)
     .query(`
       SELECT TOP (@limit) b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
-             b.Qty10KG, b.Qty5KG, b.SisaQty10KG, b.SisaQty5KG, b.DicatatOlehAkunID
+             b.Qty10KG, b.Qty5KG, b.SisaQty10KG, b.SisaQty5KG, b.DicatatOlehAkunID,
+             b.TanggalLabel, b.Shift
       FROM DashboardProduksiBatch b
       JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
       JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
@@ -57,6 +69,8 @@ export interface CreateBatchInput {
   posisiId: number;
   qty10KG: number;
   qty5KG: number;
+  tanggalLabel: string;
+  shift: 1 | 2 | 3;
   dicatatOlehAkunId: number;
 }
 
@@ -79,10 +93,12 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
       .input("qty10", sql.Int, input.qty10KG)
       .input("qty5", sql.Int, input.qty5KG)
       .input("akunId", sql.Int, input.dicatatOlehAkunId)
+      .input("tanggalLabel", sql.Date, input.tanggalLabel)
+      .input("shift", sql.TinyInt, input.shift)
       .query(`
-        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, Qty5KG, SisaQty10KG, SisaQty5KG, DicatatOlehAkunID)
+        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, Qty5KG, SisaQty10KG, SisaQty5KG, DicatatOlehAkunID, TanggalLabel, Shift)
         OUTPUT INSERTED.BatchID
-        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty5, @qty10, @qty5, @akunId)
+        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty5, @qty10, @qty5, @akunId, @tanggalLabel, @shift)
       `);
     const batchId = insertResult.recordset[0].BatchID as number;
 
