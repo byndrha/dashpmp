@@ -672,7 +672,7 @@ Expected: no new errors.
 - [ ] **Step 4: Lint**
 
 Run: `npm run lint`
-Expected: no new errors/warnings from the 2 files touched in this task (in particular, confirm the leftover `Fuel` import mentioned in Step 2 was NOT added — it would trigger `@typescript-eslint/no-unused-vars`).
+Expected: no new errors/warnings from the 2 files touched in this task.
 
 - [ ] **Step 5: Commit**
 
