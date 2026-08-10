@@ -409,6 +409,137 @@ export async function getDriverJadwalHistory(salesmanId: string, limit = 50): Pr
   return (result.recordset as Omit<DriverJadwalCard, "IsSelesai">[]).map((r) => ({ ...r, IsSelesai: true }));
 }
 
+export interface DriverTimelineBBM {
+  waktuMasukSpbu: string;
+  waktuIsi: string | null;
+  liter: number | null;
+}
+
+export interface DriverTimelineKendala {
+  waktuLapor: string;
+  jenisKendala: string;
+}
+
+export interface DriverTimelineEntry {
+  jadwalId: number;
+  armadaNama: string;
+  vehicleNo: string | null;
+  jamAktualBerangkat: string;
+  totalStop: number;
+  totalKantong: number;
+  bbm: DriverTimelineBBM[];
+  kendala: DriverTimelineKendala[];
+}
+
+// Timeline for driver-app's Riwayat tab — completed Jadwal (same
+// HAVING COUNT(...) = SUM(IsSelesai) filter as getDriverJadwalHistory
+// above, this function's sibling, which stays unmodified) whose actual
+// departure falls in the current 14:00-WIB-rollover business-date window
+// (see ROLLOVER_HOUR in business-date.ts). Unlike getDriverJadwalHistory,
+// scoped to one business day rather than a flat row-count cap, and each
+// entry carries its own BBM refuel and Kendala report rows (fetched
+// separately below and merged in, the same "fetch flat rows once, group
+// by parent ID in TS" shape as getVehicleChecksForJadwal groups photos) —
+// both are shown as compact lines inside the Jadwal's own timeline card,
+// never as separate timeline entries.
+export async function getDriverTimeline(salesmanId: string, businessDateISO: string): Promise<DriverTimelineEntry[]> {
+  const pool = await getPool();
+  const jadwalResult = await pool
+    .request()
+    .input("salesmanId", sql.VarChar(16), salesmanId)
+    .input("businessDate", sql.Date, businessDateISO).query(`
+      WITH StopAgg AS (
+          SELECT jd.JadwalID, jd.JadwalDetailID,
+                 ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Kantong,
+                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai
+          FROM DashboardPengirimanJadwalDetail jd
+          LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+          LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+          WHERE jd.IsDeleted = 0
+          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai
+      )
+      SELECT
+          j.JadwalID,
+          a.Nama AS ArmadaNama,
+          ed.VehicleNo,
+          j.JamAktualBerangkat,
+          COUNT(sa.JadwalDetailID) AS TotalStop,
+          SUM(sa.Kantong) AS TotalKantong
+      FROM DashboardPengirimanJadwal j
+      JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+      JOIN StopAgg sa ON sa.JadwalID = j.JadwalID
+      WHERE j.SalesmanID = @salesmanId AND j.IsDeleted = 0
+        -- businessDate is a 14:00 WIB rollover label — same window as
+        -- getSatpamInspectionList (satpam-inspection.ts).
+        AND j.JamAktualBerangkat >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+        AND j.JamAktualBerangkat < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+      GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamAktualBerangkat
+      HAVING COUNT(sa.JadwalDetailID) = SUM(sa.IsSelesai)
+      ORDER BY j.JamAktualBerangkat DESC
+    `);
+
+  const jadwalRows = jadwalResult.recordset as {
+    JadwalID: number;
+    ArmadaNama: string;
+    VehicleNo: string | null;
+    JamAktualBerangkat: Date;
+    TotalStop: number;
+    TotalKantong: number;
+  }[];
+
+  if (jadwalRows.length === 0) return [];
+
+  const jadwalIds = jadwalRows.map((r) => r.JadwalID);
+  const request = pool.request();
+  const placeholders = jadwalIds.map((id, i) => {
+    request.input(`j${i}`, sql.Int, id);
+    return `@j${i}`;
+  });
+
+  const [bbmResult, kendalaResult] = await Promise.all([
+    request.query(`
+      SELECT JadwalID, WaktuMasukSpbu, WaktuIsi, Liter
+      FROM DashboardPengirimanBBM
+      WHERE JadwalID IN (${placeholders.join(",")})
+      ORDER BY WaktuMasukSpbu
+    `),
+    pool
+      .request()
+      .query(
+        // Separate request object — the one above already consumed its
+        // positional @j0.. inputs for the BBM query; mssql request objects
+        // are single-use per set of bound inputs.
+        `SELECT JadwalID, WaktuLapor, JenisKendala FROM DashboardPengirimanKendala WHERE JadwalID IN (${jadwalIds.join(",")}) ORDER BY WaktuLapor`
+      ),
+  ]);
+
+  const bbmByJadwal = new Map<number, DriverTimelineBBM[]>();
+  for (const r of bbmResult.recordset as { JadwalID: number; WaktuMasukSpbu: Date; WaktuIsi: Date | null; Liter: number | null }[]) {
+    const list = bbmByJadwal.get(r.JadwalID) ?? [];
+    list.push({ waktuMasukSpbu: r.WaktuMasukSpbu.toISOString(), waktuIsi: r.WaktuIsi?.toISOString() ?? null, liter: r.Liter });
+    bbmByJadwal.set(r.JadwalID, list);
+  }
+
+  const kendalaByJadwal = new Map<number, DriverTimelineKendala[]>();
+  for (const r of kendalaResult.recordset as { JadwalID: number; WaktuLapor: Date; JenisKendala: string }[]) {
+    const list = kendalaByJadwal.get(r.JadwalID) ?? [];
+    list.push({ waktuLapor: r.WaktuLapor.toISOString(), jenisKendala: r.JenisKendala });
+    kendalaByJadwal.set(r.JadwalID, list);
+  }
+
+  return jadwalRows.map((r) => ({
+    jadwalId: r.JadwalID,
+    armadaNama: r.ArmadaNama,
+    vehicleNo: r.VehicleNo,
+    jamAktualBerangkat: r.JamAktualBerangkat.toISOString(),
+    totalStop: r.TotalStop,
+    totalKantong: r.TotalKantong,
+    bbm: bbmByJadwal.get(r.JadwalID) ?? [],
+    kendala: kendalaByJadwal.get(r.JadwalID) ?? [],
+  }));
+}
+
 // Bulk-resolves the travel-time component of EstimasiDurasiMenit for every
 // Jadwal on the board in a single extra query (rather than one round-trip
 // per Jadwal) — fetches every stop's coordinates grouped by JadwalID
