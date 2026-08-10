@@ -293,7 +293,6 @@ git commit -m "feat: getSatpamTimeline query for satpam-app vertical timeline"
 
 ```tsx
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
 
 // Compact vertical activity timeline: a thin rail with one dot per entry
 // on the left, entry content on the right. Deliberately NOT a
