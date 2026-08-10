@@ -18,25 +18,26 @@ export interface DraftJadwalForProduksi {
 // produksiMulaiMuat below runs, the row disappears from this list. Rows
 // already muat-started but not yet "Selesai Muat" stay entirely on the
 // desktop Papan Pengiriman flow, unchanged (see Task 21).
-export async function getDraftJadwalForProduksi(businessDate: string): Promise<DraftJadwalForProduksi[]> {
+//
+// Deliberately NOT restricted to a single business date: a Draft Jadwal
+// that ages out of "today" without being filled must still be reachable
+// here, since the desktop "Mulai Muat" button is only a fallback now (see
+// route-validation-dialog.tsx) — produksi-app is the primary path. Ordered
+// oldest-first, the same FIFO-relevant ordering already used for pallets.
+export async function getDraftJadwalForProduksi(): Promise<DraftJadwalForProduksi[]> {
   const pool = await getPool();
-  const result = await pool
-    .request()
-    .input("businessDate", sql.Date, businessDate)
-    .query(`
-      SELECT j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal,
-             ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KGDibutuhkan,
-             ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KGDibutuhkan
-      FROM DashboardPengirimanJadwal j
-      LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
-      LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
-      LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
-      WHERE j.IsDeleted = 0 AND j.Status = 'Draft' AND j.JamMulaiMuat IS NULL
-        AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
-        AND j.JamJadwal <  DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
-      GROUP BY j.JadwalID, a.Nama, j.JamJadwal
-      ORDER BY j.JamJadwal
-    `);
+  const result = await pool.request().query(`
+    SELECT j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal,
+           ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KGDibutuhkan,
+           ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KGDibutuhkan
+    FROM DashboardPengirimanJadwal j
+    LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+    LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+    LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+    WHERE j.IsDeleted = 0 AND j.Status = 'Draft' AND j.JamMulaiMuat IS NULL
+    GROUP BY j.JadwalID, a.Nama, j.JamJadwal
+    ORDER BY j.JamJadwal
+  `);
   return result.recordset;
 }
 

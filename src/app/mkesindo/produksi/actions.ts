@@ -18,7 +18,6 @@ import {
   type ProduksiMulaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
 import { getAkunNamaMap } from "@/lib/queries/akun";
-import { getBusinessDateISO } from "@/lib/business-date";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
@@ -75,7 +74,7 @@ export async function createBatchAction(
 export async function getDraftJadwalForProduksiAction(): Promise<ActionResult<DraftJadwalForProduksi[]>> {
   return runAction(async () => {
     await requireProduksi();
-    return getDraftJadwalForProduksi(getBusinessDateISO());
+    return getDraftJadwalForProduksi();
   });
 }
 
@@ -86,7 +85,7 @@ export async function produksiMulaiMuatAction(
     const session = await requireProduksi();
     const totalQty10 = input.alokasi.reduce((sum, a) => sum + a.qty10KG, 0);
     const totalQty5 = input.alokasi.reduce((sum, a) => sum + a.qty5KG, 0);
-    const jadwalList = await getDraftJadwalForProduksi(getBusinessDateISO());
+    const jadwalList = await getDraftJadwalForProduksi();
     const jadwal = jadwalList.find((j) => j.JadwalID === input.jadwalId);
     if (!jadwal) throw new AppError("Kartu Pengiriman ini sudah tidak tersedia untuk diisi.");
     if (totalQty10 < jadwal.Qty10KGDibutuhkan || totalQty5 < jadwal.Qty5KGDibutuhkan) {

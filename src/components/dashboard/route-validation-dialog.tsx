@@ -49,6 +49,7 @@ import {
   removeSalesOrderFromJadwalAction,
   getAvailableSalesOrdersAction,
   deleteJadwalDraftAction,
+  startMuatAction,
   selesaiMuatAction,
   konfirmasiBerangkatAction,
   getVehicleChecksForJadwalAction,
@@ -569,6 +570,26 @@ export function RouteValidationDialog({
     });
   }
 
+  // Manual fallback for "Mulai Muat" — the primary path is Aplikasi
+  // Produksi's Isi Muatan flow (produksiMulaiMuatAction), which also
+  // records pallet/stock consumption. This button calls startMuatAction
+  // directly, exactly like before Produksi existed, for cases where a
+  // Kartu Pengiriman needs to be pushed through without going via
+  // produksi-app (e.g. a backlog Draft, or Produksi is unavailable) —
+  // it does NOT deduct any pallet stock, so using it means the
+  // warehouse/FIFO records won't reflect what was actually shipped.
+  function handleMuat() {
+    if (jadwalId == null) return;
+    const targetId = jadwalId;
+    setError(null);
+    startTransition(async () => {
+      const result = await startMuatAction(targetId);
+      if (!result.success) {
+        if (jadwalIdRef.current === targetId) setError(result.error);
+      }
+    });
+  }
+
   // Selesai Muat creates the real DO+SI documents (see selesaiMuat) and
   // auto-opens the invoice for every stop marked in printSelected — same
   // window.open mechanism handlePrintSelected already uses, just triggered
@@ -1031,18 +1052,32 @@ export function RouteValidationDialog({
             )}
 
             {isDraft ? (
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
-                  Batalkan Draft
-                </Button>
-                {jadwal?.JamMulaiMuat == null ? (
-                  <p className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
-                    Menunggu Isi Muatan dari Produksi
-                  </p>
-                ) : (
-                  <Button size="sm" className="flex-1" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
-                    {pending ? "Memproses..." : "Selesai Muat"}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
+                    Batalkan Draft
                   </Button>
+                  {jadwal?.JamMulaiMuat == null ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      disabled={pending || isFutureDate}
+                      onClick={handleMuat}
+                    >
+                      Mulai Muat (Manual)
+                    </Button>
+                  ) : (
+                    <Button size="sm" className="flex-1" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
+                      {pending ? "Memproses..." : "Selesai Muat"}
+                    </Button>
+                  )}
+                </div>
+                {jadwal?.JamMulaiMuat == null && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Jalur utama: isi muatan lewat Aplikasi Produksi. Tombol ini cadangan manual — tidak mengurangi
+                    stok pallet.
+                  </p>
                 )}
               </div>
             ) : isWaitingDeparture ? (
