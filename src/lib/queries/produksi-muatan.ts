@@ -62,6 +62,10 @@ export async function produksiMulaiMuat(input: ProduksiMulaiMuatInput): Promise<
   await transaction.begin();
   try {
     for (const item of input.alokasi) {
+      if (item.qty10KG < 0 || item.qty5KG < 0) {
+        throw new AppError("Jumlah yang diambil tidak boleh negatif.");
+      }
+
       await new sql.Request(transaction)
         .input("jadwalId", sql.Int, input.jadwalId)
         .input("batchId", sql.Int, item.batchId)

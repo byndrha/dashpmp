@@ -132,7 +132,13 @@ export function ProduksiTabShell({
         )}
         {visited.has("kartu-pengiriman") && kartuPengiriman && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "kartu-pengiriman" && "hidden")}>
-            <KartuPengirimanList initialJadwal={kartuPengiriman} onAfterMuat={refreshKartuPengiriman} />
+            <KartuPengirimanList
+              initialJadwal={kartuPengiriman}
+              onAfterMuat={() => {
+                refreshKartuPengiriman();
+                refreshWarehouse();
+              }}
+            />
           </div>
         )}
         {visited.has("produksi-baru") && warehouse && mesin && (
