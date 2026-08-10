@@ -1,4 +1,4 @@
-import { requireProduksi } from "@/lib/require-access";
+import { requireProduksiView } from "@/lib/require-access";
 import { getWarehouseMap, getRiwayatProduksi } from "@/lib/queries/produksi-warehouse";
 import { getMesinList } from "@/lib/queries/produksi-mesin";
 import { getAkunNamaMap } from "@/lib/queries/akun";
@@ -8,7 +8,7 @@ import { PanelMesin } from "@/components/produksi/panel-mesin";
 import { RiwayatProduksi } from "@/components/produksi/riwayat-produksi";
 
 export default async function ProduksiPage() {
-  const session = await requireProduksi();
+  const session = await requireProduksiView();
   const [posisi, mesinList, riwayatRaw] = await Promise.all([
     getWarehouseMap(),
     getMesinList(),

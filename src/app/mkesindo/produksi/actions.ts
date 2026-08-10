@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireProduksi } from "@/lib/require-access";
+import { requireProduksiView } from "@/lib/require-access";
 import { getMesinList, updateMesin, type MesinRow, type UpdateMesinInput } from "@/lib/queries/produksi-mesin";
 import {
   getWarehouseMap,
@@ -22,14 +22,14 @@ import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
   return runAction(async () => {
-    await requireProduksi();
+    await requireProduksiView();
     return getMesinList();
   });
 }
 
 export async function updateMesinAction(input: UpdateMesinInput): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireProduksi();
+    await requireProduksiView();
     if (!input.nama.trim()) throw new AppError("Nama mesin tidak boleh kosong.");
     if (input.kapasitasProduksiPerHari <= 0) throw new AppError("Kapasitas produksi harus lebih dari 0.");
     await updateMesin(input);
@@ -39,7 +39,7 @@ export async function updateMesinAction(input: UpdateMesinInput): Promise<Action
 
 export async function getWarehouseMapAction(): Promise<ActionResult<PalletPosisiRow[]>> {
   return runAction(async () => {
-    await requireProduksi();
+    await requireProduksiView();
     return getWarehouseMap();
   });
 }
@@ -50,7 +50,7 @@ export interface RiwayatProduksiRowWithNama extends RiwayatProduksiRow {
 
 export async function getRiwayatProduksiAction(): Promise<ActionResult<RiwayatProduksiRowWithNama[]>> {
   return runAction(async () => {
-    await requireProduksi();
+    await requireProduksiView();
     const rows = await getRiwayatProduksi();
     const namaMap = await getAkunNamaMap(rows.map((r) => r.DicatatOlehAkunID));
     return rows.map((r) => ({ ...r, DicatatOlehNama: namaMap.get(r.DicatatOlehAkunID) ?? "Tidak diketahui" }));
@@ -61,7 +61,7 @@ export async function createBatchAction(
   input: Omit<CreateBatchInput, "dicatatOlehAkunId">
 ): Promise<ActionResult<number>> {
   return runAction(async () => {
-    const session = await requireProduksi();
+    const session = await requireProduksiView();
     if (input.qty10KG <= 0 && input.qty5KG <= 0) {
       throw new AppError("Isi jumlah kantong 10kg atau 5kg minimal satu.");
     }
@@ -73,7 +73,7 @@ export async function createBatchAction(
 
 export async function getDraftJadwalForProduksiAction(): Promise<ActionResult<DraftJadwalForProduksi[]>> {
   return runAction(async () => {
-    await requireProduksi();
+    await requireProduksiView();
     return getDraftJadwalForProduksi();
   });
 }
@@ -82,7 +82,7 @@ export async function produksiMulaiMuatAction(
   input: Omit<ProduksiMulaiMuatInput, "dicatatOlehAkunId">
 ): Promise<ActionResult<void>> {
   return runAction(async () => {
-    const session = await requireProduksi();
+    const session = await requireProduksiView();
     const totalQty10 = input.alokasi.reduce((sum, a) => sum + a.qty10KG, 0);
     const totalQty5 = input.alokasi.reduce((sum, a) => sum + a.qty5KG, 0);
     const jadwalList = await getDraftJadwalForProduksi();

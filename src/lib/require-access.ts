@@ -76,3 +76,18 @@ export async function requireProduksi() {
   if (!session.user.isProduksi) redirect("/akses-ditolak");
   return session;
 }
+
+// Desktop /mkesindo/produksi is now a regular, permission-gated module
+// (like Pengiriman, Penjualan, etc.) rather than exclusively is_produksi's
+// own view — but is_produksi accounts still get automatic access without
+// needing the "produksi" module permission explicitly granted, since they
+// remain a special role (mirrors canAccessAllPT's superadmin/direktur
+// bypass pattern, just for this one module instead of every module).
+export async function requireProduksiView() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!canAccessAllPT(session.user) && !session.user.isProduksi && !canView(session.user.permissions, "produksi")) {
+    redirect("/akses-ditolak");
+  }
+  return session;
+}

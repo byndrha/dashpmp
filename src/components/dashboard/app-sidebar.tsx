@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Users,
   Megaphone,
+  Factory,
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,6 +43,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
   { href: "/mkesindo/pemesanan", label: "Pemesanan", icon: ClipboardList, moduleKey: "pemesanan" },
   { href: "/mkesindo/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
   { href: "/mkesindo/pemasaran", label: "Pemasaran", icon: Megaphone, moduleKey: "pemasaran" },
+  { href: "/mkesindo/produksi", label: "Produksi", icon: Factory, moduleKey: "produksi" },
 ];
 
 export function AppSidebar({

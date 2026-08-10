@@ -67,19 +67,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/mkesindo/driver-app");
   }
 
-  // Same reasoning as Satpam/Driver above. isProduksi accounts land on
-  // /mkesindo/produksi (view-only warehouse/mesin/riwayat), not
-  // /mkesindo/produksi-app (the mobile action app) — the two are siblings a
-  // Produksi account can freely move between (see
-  // docs/superpowers/specs/2026-08-10-modul-produksi-design.md), so this
-  // redirect only needs to get them OFF the regular (dashboard) tree, not
-  // force them into any one specific destination. The prefix check below
-  // also matches "/mkesindo/produksi-app" (it starts with the same string),
-  // which is harmless here since produksi-app is a route-tree sibling of
-  // (dashboard) and never executes this guard in the first place — it's
-  // listed for clarity, not because it changes behavior.
+  // Same reasoning as Satpam/Driver above, but is_produksi accounts land on
+  // /mkesindo/produksi-app (the mobile action app) on login, not
+  // /mkesindo/produksi (the desktop view-only module, now a regular
+  // permission-gated module like Pengiriman/Penjualan — see
+  // docs/superpowers/specs/2026-08-11-modul-produksi-perluasan-design.md).
+  // The prefix check below matches both "/mkesindo/produksi-app" and
+  // "/mkesindo/produksi" itself (the latter starts with the same string),
+  // so an is_produksi account that navigates to either one from here is
+  // never bounced back — only landing anywhere else in the dashboard tree
+  // triggers this redirect, straight to produksi-app.
   if (!session?.user?.isSuperAdmin && session?.user?.isProduksi && !pathname.startsWith("/mkesindo/produksi")) {
-    redirect("/mkesindo/produksi");
+    redirect("/mkesindo/produksi-app");
   }
 
   // A native pmputra account with no cross-PT authority is confined to its
