@@ -3,7 +3,7 @@ import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { formatDate, formatTime } from "@/lib/format";
-import { estimateDeliveryMinutes } from "@/lib/delivery-duration";
+import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
 import { estimateTravelMinutes, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
@@ -108,16 +108,20 @@ export async function getPengirimanBoard(
     pool
       .request()
       .input("businessDate", sql.Date, businessDate).query(`
-        -- StopDuration estimates each stop's on-site delivery time from its
-        -- own kantong qty — mirrors estimateDeliveryMinutes in
-        -- delivery-duration.ts exactly (qty<=5: 5 min; 5<qty<=40: 5 + 2.5
-        -- min per 5-kantong block past the first; qty>40: 22.5 min, the
-        -- value at exactly 40, + 10 min per 5-kantong block past 40) — and
-        -- sums it per JadwalID, so a Jadwal's timeline card width reflects
-        -- the total time its stops need. Needs its own per-stop
-        -- (JadwalDetailID) grouping first — applying the formula to the
-        -- Jadwal's already-combined TotalKantong instead would treat e.g.
-        -- two 3-kantong stops as one 6-kantong block.
+        -- StopDuration estimates each stop's on-site time (bongkar +
+        -- driver-app confirmation) from its own kantong qty, then sums it
+        -- per JadwalID so a Jadwal's timeline card width reflects the total
+        -- time its stops need. The CASE mirrors estimateDeliveryMinutes in
+        -- delivery-duration.ts exactly: piecewise-linear interpolation
+        -- between reference points 0->0, 5->1, 10->3, 15->5, 20->7, 25->10,
+        -- 30->13, 35->16, 40->20 (menit), then a flat 1-menit/kantong slope
+        -- past 40. The "+ 3" mirrors CONFIRMATION_MINUTES_PER_STOP (same
+        -- file) — fixed per-stop time for driver-app confirmation data
+        -- entry, added outside the interpolation. ROUND(...,1) matches the
+        -- TS side's rounding to avoid binary-float drift from the /5 steps.
+        -- Needs its own per-stop (JadwalDetailID) grouping first — applying
+        -- the formula to the Jadwal's already-combined TotalKantong instead
+        -- would treat e.g. two 3-kantong stops as one 6-kantong block.
         WITH StopQty AS (
             SELECT jd.JadwalID, jd.JadwalDetailID,
                    ISNULL(SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END), 0) AS Qty
@@ -128,12 +132,18 @@ export async function getPengirimanBoard(
         ),
         StopDuration AS (
             SELECT JadwalID,
-                   SUM(CASE
+                   SUM(ROUND(CASE
                      WHEN Qty <= 0 THEN 0
-                     WHEN Qty <= 5 THEN 5
-                     WHEN Qty <= 40 THEN 5 + 2.5 * CEILING((Qty - 5) / 5.0)
-                     ELSE 22.5 + 10 * CEILING((Qty - 40) / 5.0)
-                   END) AS EstimasiDurasiMenit
+                     WHEN Qty <= 5 THEN Qty / 5.0
+                     WHEN Qty <= 10 THEN 1 + 2 * (Qty - 5) / 5.0
+                     WHEN Qty <= 15 THEN 3 + 2 * (Qty - 10) / 5.0
+                     WHEN Qty <= 20 THEN 5 + 2 * (Qty - 15) / 5.0
+                     WHEN Qty <= 25 THEN 7 + 3 * (Qty - 20) / 5.0
+                     WHEN Qty <= 30 THEN 10 + 3 * (Qty - 25) / 5.0
+                     WHEN Qty <= 35 THEN 13 + 3 * (Qty - 30) / 5.0
+                     WHEN Qty <= 40 THEN 16 + 4 * (Qty - 35) / 5.0
+                     ELSE Qty - 20
+                   END, 1) + 3) AS EstimasiDurasiMenit
             FROM StopQty
             GROUP BY JadwalID
         )
@@ -709,7 +719,7 @@ async function estimateBusyMinutes(
   const travelStops: LatLng[] = [];
   for (const id of orderedSalesOrderIds) {
     const loc = locations.get(id) ?? null;
-    bongkarMinutes += estimateDeliveryMinutes(loc?.qty ?? 0);
+    bongkarMinutes += estimateDeliveryMinutes(loc?.qty ?? 0) + CONFIRMATION_MINUTES_PER_STOP;
     if (loc) travelStops.push({ lat: loc.lat, lng: loc.lng });
   }
   const travelMinutes = realTravelMinutes ?? estimateTravelMinutes(pabrik, travelStops);
@@ -826,7 +836,9 @@ export async function checkArmadaConflict(
   const pool = await getPool();
   const pabrikLocation = await getPabrikLocation();
   const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
-  const candidateEnd = new Date(candidateStart.getTime() + estimateDeliveryMinutes(candidateQty) * 60 * 1000);
+  const candidateEnd = new Date(
+    candidateStart.getTime() + (estimateDeliveryMinutes(candidateQty) + CONFIRMATION_MINUTES_PER_STOP) * 60 * 1000
+  );
   const conflict = await findOverlappingJadwalForArmada(pool, pabrikLatLng, armadaId, candidateStart, candidateEnd, excludeJadwalId);
   if (!conflict || conflict.status !== "Draft") return null;
 
