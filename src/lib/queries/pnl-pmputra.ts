@@ -1,6 +1,6 @@
 // src/lib/queries/pnl-pmputra.ts
 import { sql } from "@/lib/db";
-import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
+import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
 import type { BEPSummary, PnLSummary } from "@/lib/queries/pnl";
 import type { DateRangeFilter } from "@/types/dashboard";
 
@@ -23,7 +23,7 @@ import type { DateRangeFilter } from "@/types/dashboard";
 //   BiayaTetap = Gaji (6101.01), Sewa (6103) — logistik has no BPJS
 //     sub-accounts under 6101.xx to include.
 //   Adjustment = Beban Pajak Lainnya (6606).
-export function pmputraKategoriCase(label: PmputraKoneksiLabel): string {
+export function pmputraKategoriCase(label: CompanyKoneksiLabel): string {
   const adjustmentAccount = label === "utama" ? "'6120'" : "'6606'";
   const biayaTetapAccounts =
     label === "utama" ? "'6101.01','6101.03','6101.04','6103'" : "'6101.01','6103'";
@@ -68,8 +68,8 @@ function emptyTotals(): PnLCategoryTotals {
   };
 }
 
-async function getPnLTotalsForLabel(label: PmputraKoneksiLabel, filter: DateRangeFilter): Promise<PnLCategoryTotals> {
-  const pool = await getPmputraPool(label);
+async function getPnLTotalsForLabel(label: CompanyKoneksiLabel, filter: DateRangeFilter): Promise<PnLCategoryTotals> {
+  const pool = await getCompanyPool("pmputra", label);
   const result = await pool
     .request()
     .input("startDate", sql.Date, filter.startDate)
@@ -143,10 +143,10 @@ interface RawBEPTotal {
 }
 
 async function getBEPTotalsForLabel(
-  label: PmputraKoneksiLabel,
+  label: CompanyKoneksiLabel,
   filter: DateRangeFilter
 ): Promise<Map<string, { debit: number; credit: number }>> {
-  const pool = await getPmputraPool(label);
+  const pool = await getCompanyPool("pmputra", label);
   const result = await pool
     .request()
     .input("startDate", sql.Date, filter.startDate)

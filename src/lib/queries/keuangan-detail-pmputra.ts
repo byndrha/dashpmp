@@ -1,7 +1,7 @@
 // src/lib/queries/keuangan-detail-pmputra.ts
 import { getDaysInMonth } from "date-fns";
 import { sql } from "@/lib/db";
-import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
+import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
 import { pmputraKategoriCase } from "@/lib/queries/pnl-pmputra";
 import type { COADetailRow, COAKategori } from "@/lib/queries/keuangan-detail";
 import type { DateRangeFilter } from "@/types/dashboard";
@@ -17,10 +17,10 @@ function realisasiSign(kategori: COAKategori, debit: number, credit: number): nu
 // by getCOADetailRowsForLabel / listChartOfAccountForCostBehaviorPmputra
 // below, same convention as balance-sheet-pmputra.ts) back into its label
 // and bare numeric ID. Throws on anything that doesn't parse to a known
-// PmputraKoneksiLabel — this should never happen for IDs that round-tripped
+// CompanyKoneksiLabel — this should never happen for IDs that round-tripped
 // through this module's own list functions, so a malformed ID here means a
 // caller passed something else in and should fail loudly, not silently.
-function parseLabeledId(labeledId: string): { label: PmputraKoneksiLabel; id: string } {
+function parseLabeledId(labeledId: string): { label: CompanyKoneksiLabel; id: string } {
   const idx = labeledId.indexOf(":");
   const label = idx === -1 ? "" : labeledId.slice(0, idx);
   const id = idx === -1 ? "" : labeledId.slice(idx + 1);
@@ -31,7 +31,7 @@ function parseLabeledId(labeledId: string): { label: PmputraKoneksiLabel; id: st
 }
 
 async function getCOADetailRowsForLabel(
-  label: PmputraKoneksiLabel,
+  label: CompanyKoneksiLabel,
   filter: DateRangeFilter,
   budgetYear: number,
   budgetMonth: number
@@ -46,7 +46,7 @@ async function getCOADetailRowsForLabel(
     BudgetAmount: number | null;
   }[]
 > {
-  const pool = await getPmputraPool(label);
+  const pool = await getCompanyPool("pmputra", label);
   const request = pool
     .request()
     .input("startDate", sql.Date, filter.startDate)
@@ -160,7 +160,7 @@ export async function setCOABudgetPmputra(input: {
     );
   }
 
-  const pool = await getPmputraPool("utama");
+  const pool = await getCompanyPool("pmputra", "utama");
   await pool
     .request()
     .input("coaId", sql.VarChar(16), id)
@@ -188,8 +188,8 @@ export interface CostBehaviorRow {
   CostBehavior: "FIXED" | "VARIABLE" | "MIXED" | null;
 }
 
-async function listCostBehaviorRowsForLabel(label: PmputraKoneksiLabel): Promise<CostBehaviorRow[]> {
-  const pool = await getPmputraPool(label);
+async function listCostBehaviorRowsForLabel(label: CompanyKoneksiLabel): Promise<CostBehaviorRow[]> {
+  const pool = await getCompanyPool("pmputra", label);
   const result = await pool.request().query(`
     SELECT ChartOfAccountID, AccountNo, Description AS AccountName, CostBehavior
     FROM ChartOfAccount
@@ -221,7 +221,7 @@ export async function setCostBehaviorPmputra(
   costBehavior: "FIXED" | "VARIABLE" | "MIXED" | null
 ): Promise<void> {
   const { label, id } = parseLabeledId(chartOfAccountId);
-  const pool = await getPmputraPool(label);
+  const pool = await getCompanyPool("pmputra", label);
   await pool
     .request()
     .input("id", sql.VarChar(16), id)

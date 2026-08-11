@@ -1,6 +1,6 @@
 // src/lib/queries/cash-flow-pmputra.ts
 import { sql } from "@/lib/db";
-import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
+import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
 import type { CashFlowSummary, CashFlowTypeRow } from "@/lib/queries/cash-flow";
 import type { DateRangeFilter } from "@/types/dashboard";
 
@@ -33,8 +33,8 @@ interface RawCashFlowResult {
   pengeluaran: { type: string; amount: number }[];
 }
 
-async function getCashFlowForLabel(label: PmputraKoneksiLabel, filter: DateRangeFilter): Promise<RawCashFlowResult> {
-  const pool = await getPmputraPool(label);
+async function getCashFlowForLabel(label: CompanyKoneksiLabel, filter: DateRangeFilter): Promise<RawCashFlowResult> {
+  const pool = await getCompanyPool("pmputra", label);
   const result = await pool
     .request()
     .input("startDate", sql.Date, filter.startDate)

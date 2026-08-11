@@ -1,5 +1,5 @@
 import { sql } from "@/lib/db";
-import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
+import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
 import type { CashFlowHarian, CashFlowHarianHistoryRow } from "@/lib/queries/cash-flow-harian";
 
 const KAS_BANK_FILTER = `coa.IsChildest = 1 AND LEFT(coa.AccountNo,2) IN ('11','12') AND ISNULL(coa.IsDeleted,0) = 0`;
@@ -14,8 +14,8 @@ function nextDayISO(dateISO: string): string {
 // correctly sums both databases. Unlike PMP_CashFlowDaily/PMP_CashFlowExpense
 // below (which only exist in `utama`), this is a real GeneralLedger query
 // against both `utama` and `logistik`.
-async function getPendapatanOperasionalForLabel(label: PmputraKoneksiLabel, businessDate: string): Promise<number> {
-  const pool = await getPmputraPool(label);
+async function getPendapatanOperasionalForLabel(label: CompanyKoneksiLabel, businessDate: string): Promise<number> {
+  const pool = await getCompanyPool("pmputra", label);
   const result = await pool
     .request()
     .input("date", sql.Date, businessDate)
@@ -33,7 +33,7 @@ async function getPendapatanOperasionalForLabel(label: PmputraKoneksiLabel, busi
 }
 
 export async function getCashFlowHarianHistoryPmputra(limit = 60): Promise<CashFlowHarianHistoryRow[]> {
-  const pool = await getPmputraPool("utama");
+  const pool = await getCompanyPool("pmputra", "utama");
   const result = await pool.request().input("limit", sql.Int, limit).query(`
     SELECT TOP (@limit)
         d.BusinessDate,
@@ -73,7 +73,7 @@ export async function getCashFlowHarianHistoryPmputra(limit = 60): Promise<CashF
 }
 
 export async function getCashFlowHarianPmputra(businessDate: string): Promise<CashFlowHarian> {
-  const pool = await getPmputraPool("utama");
+  const pool = await getCompanyPool("pmputra", "utama");
   const [pendapatanUtama, pendapatanLogistik, result] = await Promise.all([
     getPendapatanOperasionalForLabel("utama", businessDate),
     getPendapatanOperasionalForLabel("logistik", businessDate),
@@ -117,7 +117,7 @@ export async function saveCashFlowDailyFiguresPmputra(input: {
   pengeluaranKasDiTangan: number;
   userId: string;
 }): Promise<void> {
-  const pool = await getPmputraPool("utama");
+  const pool = await getCompanyPool("pmputra", "utama");
   await pool
     .request()
     .input("date", sql.Date, input.businessDate)
@@ -142,7 +142,7 @@ export async function addCashFlowExpensePmputra(input: {
   nominal: number;
   userId: string;
 }): Promise<void> {
-  const pool = await getPmputraPool("utama");
+  const pool = await getCompanyPool("pmputra", "utama");
   await pool
     .request()
     .input("date", sql.Date, input.businessDate)
@@ -155,6 +155,6 @@ export async function addCashFlowExpensePmputra(input: {
 }
 
 export async function deleteCashFlowExpensePmputra(id: number): Promise<void> {
-  const pool = await getPmputraPool("utama");
+  const pool = await getCompanyPool("pmputra", "utama");
   await pool.request().input("id", sql.Int, id).query(`DELETE FROM PMP_CashFlowExpense WHERE ID = @id`);
 }

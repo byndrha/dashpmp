@@ -1,13 +1,13 @@
 // src/lib/queries/hpp-bersih-pmputra.ts
 import { sql } from "@/lib/db";
-import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
+import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
 import type { HPPBersihAccountRow, HPPBersihData } from "@/lib/queries/hpp-bersih";
 
 // User-provided, verified against real ChartOfAccount rows in both
 // databases (see docs/superpowers/specs/2026-08-01-pmputra-keuangan-design.md).
 // Display names use the fuller, disambiguated labels since both databases
 // have an account literally named "Oli".
-const HPP_BERSIH_ACCOUNTS: { label: PmputraKoneksiLabel; accountNo: string; displayName: string }[] = [
+const HPP_BERSIH_ACCOUNTS: { label: CompanyKoneksiLabel; accountNo: string; displayName: string }[] = [
   { label: "utama", accountNo: "6105", displayName: "Listrik" },
   { label: "utama", accountNo: "6113", displayName: "Garam" },
   { label: "utama", accountNo: "6112", displayName: "Air" },
@@ -23,12 +23,12 @@ const HPP_BERSIH_ACCOUNTS: { label: PmputraKoneksiLabel; accountNo: string; disp
 ];
 
 async function getMonthlyNominalForLabel(
-  label: PmputraKoneksiLabel,
+  label: CompanyKoneksiLabel,
   accountNos: string[],
   yearStart: Date,
   yearEnd: Date
 ): Promise<Map<string, number[]>> {
-  const pool = await getPmputraPool(label);
+  const pool = await getCompanyPool("pmputra", label);
   const request = pool.request().input("yearStart", sql.Date, yearStart).input("yearEnd", sql.Date, yearEnd);
   const inClause = accountNos
     .map((no, i) => {
@@ -57,7 +57,7 @@ async function getMonthlyNominalForLabel(
 }
 
 async function getMonthlyBalokRealisasi(yearStart: Date, yearEnd: Date): Promise<number[]> {
-  const pool = await getPmputraPool("utama");
+  const pool = await getCompanyPool("pmputra", "utama");
   const result = await pool
     .request()
     .input("yearStart", sql.Date, yearStart)

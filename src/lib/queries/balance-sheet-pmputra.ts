@@ -1,16 +1,16 @@
 // src/lib/queries/balance-sheet-pmputra.ts
 import { sql } from "@/lib/db";
-import { getPmputraPool, type PmputraKoneksiLabel } from "@/lib/db-pmputra";
+import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
 import { BALANCE_SHEET_KATEGORI_CASE, type BalanceSheetKategori, type BalanceSheetRow } from "@/lib/queries/balance-sheet";
 import type { DateRangeFilter } from "@/types/dashboard";
 
 const DEBIT_NORMAL: BalanceSheetKategori[] = ["AsetLancar", "AsetTetap"];
 
 async function getBalanceSheetRowsForLabel(
-  label: PmputraKoneksiLabel,
+  label: CompanyKoneksiLabel,
   filter: DateRangeFilter
 ): Promise<Omit<BalanceSheetRow, "SaldoPercent">[]> {
-  const pool = await getPmputraPool(label);
+  const pool = await getCompanyPool("pmputra", label);
   const result = await pool
     .request()
     .input("cutoff", sql.Date, filter.endDate)
