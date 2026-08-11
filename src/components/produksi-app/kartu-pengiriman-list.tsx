@@ -3,9 +3,16 @@
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getWarehouseMapAction, produksiMulaiMuatAction } from "@/app/mkesindo/produksi/actions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  getWarehouseMapAction,
+  produksiStartMuatAction,
+  produksiSelesaiMuatAction,
+  getJadwalDetailForProduksiAction,
+} from "@/app/mkesindo/produksi/actions";
 import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
+import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
 
 export function KartuPengirimanList({
   initialJadwal,
@@ -50,7 +57,14 @@ export function KartuPengirimanList({
           onClick={() => setSelected(jadwal)}
           className="rounded-lg border border-border p-3 text-left"
         >
-          <p className="font-semibold">{jadwal.ArmadaNama}</p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold">{jadwal.ArmadaNama}</p>
+            {jadwal.JamMulaiMuat != null && (
+              <span className="shrink-0 rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600">
+                Sedang dimuat — lanjutkan
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
             {new Date(jadwal.JamJadwal).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
             {" • "}
@@ -65,7 +79,62 @@ export function KartuPengirimanList({
   );
 }
 
+// Step 1/2 gate: a Jadwal already resumed after backing out mid-flow skips
+// straight to the alokasi screen (jadwal.JamMulaiMuat is already set), a
+// fresh one shows the explicit "Mulai Muat" screen first.
 function IsiMuatanScreen({
+  jadwal,
+  onBack,
+  onDone,
+}: {
+  jadwal: DraftJadwalForProduksi;
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const [step, setStep] = useState<"mulai" | "alokasi">(jadwal.JamMulaiMuat != null ? "alokasi" : "mulai");
+  const [startError, setStartError] = useState<string | null>(null);
+  const [startPending, startTransition] = useTransition();
+
+  if (step === "mulai") {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <Button variant="outline" size="sm" onClick={onBack} className="w-fit">
+          Kembali
+        </Button>
+        <p className="font-semibold">{jadwal.ArmadaNama}</p>
+        <p className="text-sm text-muted-foreground">
+          {new Date(jadwal.JamJadwal).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+          {" • "}
+          {new Date(jadwal.JamJadwal).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+        </p>
+        <p className="text-sm">
+          Dibutuhkan: {jadwal.Qty10KGDibutuhkan} kantong 10kg, {jadwal.Qty5KGDibutuhkan} kantong 5kg
+        </p>
+        {startError && <p className="text-sm text-destructive">{startError}</p>}
+        <Button
+          disabled={startPending}
+          onClick={() => {
+            setStartError(null);
+            startTransition(async () => {
+              const result = await produksiStartMuatAction(jadwal.JadwalID);
+              if (!result.success) {
+                setStartError(result.error);
+                return;
+              }
+              setStep("alokasi");
+            });
+          }}
+        >
+          {startPending ? "Memproses..." : "Mulai Muat"}
+        </Button>
+      </div>
+    );
+  }
+
+  return <AlokasiScreen jadwal={jadwal} onBack={onBack} onDone={onDone} />;
+}
+
+function AlokasiScreen({
   jadwal,
   onBack,
   onDone,
@@ -78,6 +147,9 @@ function IsiMuatanScreen({
   const [alokasi, setAlokasi] = useState<Record<number, { qty10: number; qty5: number }>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [confirmDetail, setConfirmDetail] = useState<JadwalDetailRow[] | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   useEffect(() => {
     getWarehouseMapAction().then((result) => {
@@ -110,19 +182,36 @@ function IsiMuatanScreen({
     setAlokasi((prev) => ({ ...prev, [row.PosisiID]: { qty10: row.SisaQty10KG ?? 0, qty5: row.SisaQty5KG ?? 0 } }));
   }
 
-  function handleSubmit() {
-    setError(null);
-    if (!posisi) return;
-    const alokasiList = posisi
+  function buildAlokasiList() {
+    if (!posisi) return [];
+    return posisi
       .filter((row) => alokasi[row.PosisiID] && (alokasi[row.PosisiID].qty10 > 0 || alokasi[row.PosisiID].qty5 > 0))
       .map((row) => ({
         batchId: row.BatchIDAktif as number,
         qty10KG: alokasi[row.PosisiID].qty10,
         qty5KG: alokasi[row.PosisiID].qty5,
       }));
-    startTransition(async () => {
-      const result = await produksiMulaiMuatAction({ jadwalId: jadwal.JadwalID, alokasi: alokasiList });
+  }
+
+  function handleOpenConfirm() {
+    setError(null);
+    setConfirmLoading(true);
+    getJadwalDetailForProduksiAction(jadwal.JadwalID).then((result) => {
+      setConfirmLoading(false);
       if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setConfirmDetail(result.data);
+    });
+  }
+
+  function handleConfirmYa() {
+    const alokasiList = buildAlokasiList();
+    startTransition(async () => {
+      const result = await produksiSelesaiMuatAction({ jadwalId: jadwal.JadwalID, alokasi: alokasiList });
+      if (!result.success) {
+        setConfirmDetail(null);
         setError(result.error);
         return;
       }
@@ -184,9 +273,38 @@ function IsiMuatanScreen({
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button disabled={!cukup || pending} onClick={handleSubmit}>
-        {pending ? "Memproses..." : "Konfirmasi Isi Muatan"}
+      <Button disabled={!cukup || confirmLoading} onClick={handleOpenConfirm}>
+        {confirmLoading ? "Memuat..." : "Konfirmasi Isi Muatan"}
       </Button>
+
+      <Dialog open={confirmDetail != null} onOpenChange={(open) => !open && !pending && setConfirmDetail(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Selesaikan Muat?</DialogTitle>
+          </DialogHeader>
+          <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+            <p className="text-sm text-muted-foreground">
+              Muatan akan dikunci dan Surat Jalan/Invoice diterbitkan untuk tujuan berikut:
+            </p>
+            {confirmDetail?.map((d) => (
+              <div key={d.JadwalDetailID} className="rounded-md border border-border p-2 text-sm">
+                <p className="font-medium">{d.CustomerName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {d.Qty10KG} kantong 10kg, {d.Qty5KG} kantong 5kg
+                </p>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" disabled={pending} onClick={() => setConfirmDetail(null)}>
+              Tidak
+            </Button>
+            <Button disabled={pending} onClick={handleConfirmYa}>
+              {pending ? "Memproses..." : "Ya, Selesai Muat"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

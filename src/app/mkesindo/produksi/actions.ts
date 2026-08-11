@@ -13,10 +13,12 @@ import {
 } from "@/lib/queries/produksi-warehouse";
 import {
   getDraftJadwalForProduksi,
-  produksiMulaiMuat,
+  produksiStartMuat,
+  produksiSelesaiMuat,
   type DraftJadwalForProduksi,
-  type ProduksiMulaiMuatInput,
+  type ProduksiSelesaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
+import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
 import { getAkunNamaMap } from "@/lib/queries/akun";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
@@ -81,8 +83,38 @@ export async function getDraftJadwalForProduksiAction(): Promise<ActionResult<Dr
   });
 }
 
-export async function produksiMulaiMuatAction(
-  input: Omit<ProduksiMulaiMuatInput, "dicatatOlehAkunId">
+// Step 1 of produksi-app's 2-step flow: records JamMulaiMuat only, no
+// pallet allocation yet. The alokasi screen (step 2) only opens after this
+// succeeds.
+export async function produksiStartMuatAction(jadwalId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    const jadwalList = await getDraftJadwalForProduksi();
+    const jadwal = jadwalList.find((j) => j.JadwalID === jadwalId);
+    if (!jadwal) throw new AppError("Kartu Pengiriman ini sudah tidak tersedia.");
+    await produksiStartMuat(jadwalId);
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/delivery");
+  });
+}
+
+// Read-only — fetches the destination/qty list shown in the Ya/Tidak
+// confirmation popup before step 2 commits to the real Selesai Muat.
+export async function getJadwalDetailForProduksiAction(jadwalId: number): Promise<ActionResult<JadwalDetailRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getJadwalDetail(jadwalId);
+  });
+}
+
+// Step 2: allocates pallet stock, then completes the real "Selesai Muat"
+// transition (creates DeliveryOrder/SalesInvoice documents) — can reject
+// with AppError if the driver/route on this Jadwal isn't ready yet (e.g.
+// "Driver wajib diisi", "Rute belum berhasil divalidasi"), surfaced to the
+// operator as-is so they know to finish Validasi Rute on desktop first.
+export async function produksiSelesaiMuatAction(
+  input: Omit<ProduksiSelesaiMuatInput, "dicatatOlehAkunId">
 ): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireProduksiView();
@@ -94,7 +126,7 @@ export async function produksiMulaiMuatAction(
     if (totalQty10 < jadwal.Qty10KGDibutuhkan || totalQty5 < jadwal.Qty5KGDibutuhkan) {
       throw new AppError("Jumlah yang dialokasikan belum mencukupi kebutuhan Kartu Pengiriman ini.");
     }
-    await produksiMulaiMuat({ ...input, dicatatOlehAkunId: Number(session.user.id) });
+    await produksiSelesaiMuat({ ...input, dicatatOlehAkunId: Number(session.user.id) });
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/delivery");
