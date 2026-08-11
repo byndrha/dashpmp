@@ -40,6 +40,40 @@ ALTER TABLE ChartOfAccount ADD CostBehavior VARCHAR(16) NULL;
 
 Dijalankan di **kedua** database pmpersada (FINAC_ES_TB dan FINAC_PMP_LOGISTIC) — ini mengubah skema database ERP produksi milik klien, bukan database aplikasi kita sendiri, jadi hanya kolom baru nullable tanpa efek samping ke data/aplikasi ERP klien yang sudah ada.
 
+**Tabel kustom yang hilang (ditemukan setelah spec awal, dikonfirmasi user):** `Cash Flow Harian` (input manual kas di tangan + daftar pengeluaran harian) dan `Anggaran` (APBP per akun) di pmputra bergantung pada 3 tabel kustom yang cuma ada di database `utama` (FINAC_ES_PO) — `PMP_CashFlowDaily`, `PMP_CashFlowExpense`, `PMP_Budget`. Sudah diverifikasi: **ketiganya tidak ada** di FINAC_ES_TB (daftar lengkap tabel `PMP_*` di database itu sudah dicek langsung). Dibuat via DDL controller-run di FINAC_ES_TB saja (bukan FINAC_PMP_LOGISTIC — pmputra sendiri juga hanya punya tabel-tabel ini di `utama`), skema disalin persis dari struktur kolom + constraint PMP_Budget/PMP_CashFlowDaily/PMP_CashFlowExpense milik pmputra yang sudah diverifikasi langsung:
+
+```sql
+CREATE TABLE PMP_Budget (
+  ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+  ChartOfAccountID VARCHAR(16) NOT NULL,
+  BudgetYear INT NOT NULL,
+  BudgetMonth INT NOT NULL,
+  Amount DECIMAL(23,4) NOT NULL,
+  CreatedByUserID VARCHAR(16) NOT NULL,
+  UpdatedAt DATETIME NOT NULL DEFAULT (GETDATE()),
+  CONSTRAINT UQ_PMP_Budget_Akun_Periode UNIQUE (ChartOfAccountID, BudgetYear, BudgetMonth)
+);
+
+CREATE TABLE PMP_CashFlowDaily (
+  BusinessDate DATE NOT NULL PRIMARY KEY,
+  KasDiTangan DECIMAL(23,2) NOT NULL,
+  PengeluaranKasDiTangan DECIMAL(23,2) NOT NULL,
+  UpdatedByUserID VARCHAR(16) NOT NULL,
+  UpdatedAt DATETIME NOT NULL DEFAULT (GETDATE())
+);
+
+CREATE TABLE PMP_CashFlowExpense (
+  ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+  BusinessDate DATE NOT NULL,
+  Deskripsi VARCHAR(256) NOT NULL,
+  Nominal DECIMAL(23,2) NOT NULL,
+  CreatedByUserID VARCHAR(16) NOT NULL,
+  CreatedAt DATETIME NOT NULL DEFAULT (GETDATE())
+);
+```
+
+Sama seperti `CostBehavior`: tabel baru murni tambahan (tidak mengubah tabel ERP yang sudah ada), dimulai kosong — data Cash Flow Harian/Anggaran historis PMPutra tidak ikut pindah (wajar, ini pembukuan PT yang berbeda).
+
 ## Refactor db-pmputra.ts → db-company.ts (Task 3)
 
 `db-pmputra.ts` (± 30 baris, murni boilerplate buka-koneksi via `resolveKoneksi`, tanpa logika bisnis) diganti dengan `src/lib/db-company.ts` yang mengekspor `getCompanyPool(kode: string, label: string): Promise<sql.ConnectionPool>` — sama persis isinya, cuma `kode` jadi parameter alih-alih konstanta `"pmputra"` yang di-hardcode, dan cache pool (`global._pmputraPools`) jadi `Map<string, Promise<ConnectionPool>>` dengan key `` `${kode}:${label}` `` supaya pool pmputra dan pmpersada tidak saling menimpa.
