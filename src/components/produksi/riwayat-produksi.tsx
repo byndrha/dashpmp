@@ -12,6 +12,7 @@ export function RiwayatProduksi({ riwayat }: { riwayat: RiwayatProduksiRowWithNa
           <TableRow>
             <TableHead>Tanggal</TableHead>
             <TableHead>Tanggal &amp; Shift Produksi</TableHead>
+            <TableHead>Jam Panen</TableHead>
             <TableHead>Mesin</TableHead>
             <TableHead>Pallet</TableHead>
             <TableHead>Jumlah Awal</TableHead>
@@ -28,6 +29,7 @@ export function RiwayatProduksi({ riwayat }: { riwayat: RiwayatProduksiRowWithNa
                 {" — Shift "}
                 {r.Shift}
               </TableCell>
+              <TableCell>{r.JamPanen || "-"}</TableCell>
               <TableCell>{r.MesinNama}</TableCell>
               <TableCell>{r.Kode}</TableCell>
               <TableCell>
