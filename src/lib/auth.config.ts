@@ -1,7 +1,7 @@
 import type { NextAuthConfig } from "next-auth";
 import type { PermissionMap } from "@/lib/permissions";
 
-type AccountScope = "mkesindo" | "direktur" | "pmputra";
+type AccountScope = "mkesindo" | "direktur" | "pmputra" | "pmpersada";
 
 // Edge-safe base shared between the full auth.ts (Server Components, Server
 // Actions, the actual login flow) and the root middleware.ts, which needs

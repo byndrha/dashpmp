@@ -12,7 +12,7 @@ import {
 import { PT_ROUTES } from "@/lib/pt-routes";
 import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
-export type PtSwitcherLocation = "mkesindo" | "pmputra" | "grup";
+export type PtSwitcherLocation = "mkesindo" | "pmputra" | "pmpersada" | "grup";
 
 // Only ever rendered for superadmins (each call site gates on
 // session.user.isSuperAdmin before mounting this) — every other account

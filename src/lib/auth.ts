@@ -13,7 +13,7 @@ import {
 } from "@/lib/queries/akun";
 import { fullPermissionMap } from "@/lib/permissions";
 
-type AccountScope = "mkesindo" | "direktur" | "pmputra";
+type AccountScope = "mkesindo" | "direktur" | "pmputra" | "pmpersada";
 
 interface AuthorizedUser {
   id: string;

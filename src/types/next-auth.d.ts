@@ -4,7 +4,7 @@ import type { PermissionMap } from "@/lib/permissions";
 // "mkesindo" = every account that exists today (MSSQL DashboardUser,
 // unchanged). "direktur"/"pmputra" are new Postgres-directory accounts —
 // see docs/superpowers/specs/2026-07-30-postgres-directory-multi-company.md.
-type AccountScope = "mkesindo" | "direktur" | "pmputra";
+type AccountScope = "mkesindo" | "direktur" | "pmputra" | "pmpersada";
 
 declare module "next-auth" {
   interface Session {
