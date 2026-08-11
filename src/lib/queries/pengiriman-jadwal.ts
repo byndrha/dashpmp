@@ -2298,9 +2298,18 @@ export async function confirmStopDelivery(
     | { JadwalID: number; SalesOrderID: string; DeliveryOrderID: string | null; SalesInvoiceID: string | null }
     | undefined;
   if (!detailRow) throw new AppError("Stop pengiriman tidak ditemukan.");
-  if (!detailRow.DeliveryOrderID || !detailRow.SalesInvoiceID) {
+  if (!detailRow.DeliveryOrderID) {
     throw new AppError("Muat untuk stop ini belum diselesaikan, tidak bisa konfirmasi penerimaan.");
   }
+  // detailRow.SalesInvoiceID can legitimately still be null here — the
+  // merged-external-DO case (mergeExternalDeliveriesIntoJadwal): that DO was
+  // already issued by the desktop ERP before this Jadwal existed, so
+  // selesaiMuat (above) deliberately never creates a dashboard SalesInvoice
+  // for it — invoicing for an externally-issued DO is the desktop ERP's own
+  // concern. This confirmation still records the physical delivery in full
+  // (photos, signature, DeliveryOrderDetail.Delivered, SalesReturn if any)
+  // but every SalesInvoice*/SalesInvoiceDetail write below is skipped for
+  // such a row — there is no invoice row to touch.
 
   const existingStop = await pool
     .request()
@@ -2446,24 +2455,26 @@ export async function confirmStopDelivery(
     // within this one already-filtered DO/SI pair is used, never a global
     // ID comparison. This gives a real, safe key (SalesInvoiceDetailID, the
     // actual primary key) to update on instead.
-    const doDetailsResult = await new sql.Request(transaction)
-      .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
-      .query(`SELECT DeliveryOrderDetailID, SalesOrderDetailID FROM DeliveryOrderDetail WHERE DeliveryOrderID = @doId ORDER BY DeliveryOrderDetailID`);
-    const doDetailRows = doDetailsResult.recordset as { DeliveryOrderDetailID: string; SalesOrderDetailID: string }[];
-
-    const siDetailsResult = await new sql.Request(transaction)
-      .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
-      .query(`SELECT SalesInvoiceDetailID FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId ORDER BY SalesInvoiceDetailID`);
-    const siDetailRows = siDetailsResult.recordset as { SalesInvoiceDetailID: string }[];
-
-    if (doDetailRows.length !== siDetailRows.length) {
-      throw new AppError("Jumlah baris DeliveryOrderDetail dan SalesInvoiceDetail tidak sama, tidak bisa memproses konfirmasi ini.");
-    }
-
     const salesInvoiceDetailIdBySoDetailId = new Map<string, string>();
-    doDetailRows.forEach((doDetail, i) => {
-      salesInvoiceDetailIdBySoDetailId.set(doDetail.SalesOrderDetailID, siDetailRows[i].SalesInvoiceDetailID);
-    });
+    if (detailRow.SalesInvoiceID) {
+      const doDetailsResult = await new sql.Request(transaction)
+        .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
+        .query(`SELECT DeliveryOrderDetailID, SalesOrderDetailID FROM DeliveryOrderDetail WHERE DeliveryOrderID = @doId ORDER BY DeliveryOrderDetailID`);
+      const doDetailRows = doDetailsResult.recordset as { DeliveryOrderDetailID: string; SalesOrderDetailID: string }[];
+
+      const siDetailsResult = await new sql.Request(transaction)
+        .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+        .query(`SELECT SalesInvoiceDetailID FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId ORDER BY SalesInvoiceDetailID`);
+      const siDetailRows = siDetailsResult.recordset as { SalesInvoiceDetailID: string }[];
+
+      if (doDetailRows.length !== siDetailRows.length) {
+        throw new AppError("Jumlah baris DeliveryOrderDetail dan SalesInvoiceDetail tidak sama, tidak bisa memproses konfirmasi ini.");
+      }
+
+      doDetailRows.forEach((doDetail, i) => {
+        salesInvoiceDetailIdBySoDetailId.set(doDetail.SalesOrderDetailID, siDetailRows[i].SalesInvoiceDetailID);
+      });
+    }
 
     for (const item of input.items) {
       const sod = soDetailById.get(item.salesOrderDetailId)!;
@@ -2493,19 +2504,25 @@ export async function confirmStopDelivery(
       // this line is still fully recorded elsewhere: SalesReturnDetail.Retur
       // (the formal ERP document) and DashboardPengirimanStopDeliveryItem.QtyRetur
       // (this dashboard's own per-stop record).
-      const salesInvoiceDetailId = salesInvoiceDetailIdBySoDetailId.get(sod.SalesOrderDetailID);
-      if (!salesInvoiceDetailId) throw new AppError(`Baris invoice untuk item ${sod.Name} tidak ditemukan.`);
+      //
+      // Skipped entirely for the merged-external-DO case (no
+      // detailRow.SalesInvoiceID, see the gate check above) — there is no
+      // dashboard-owned SalesInvoiceDetail row to update.
+      if (detailRow.SalesInvoiceID) {
+        const salesInvoiceDetailId = salesInvoiceDetailIdBySoDetailId.get(sod.SalesOrderDetailID);
+        if (!salesInvoiceDetailId) throw new AppError(`Baris invoice untuk item ${sod.Name} tidak ditemukan.`);
 
-      const sidUpdate = await new sql.Request(transaction)
-        .input("siDetailId", sql.VarChar(16), salesInvoiceDetailId)
-        .input("qty", sql.Decimal(23, 4), item.qtyDiterima)
-        .input("amount", sql.Decimal(23, 4), newAmount)
-        .query(
-          `UPDATE SalesInvoiceDetail SET Qty = @qty, Amount = @amount, Netto = @amount, Value = @amount
-           WHERE SalesInvoiceDetailID = @siDetailId`
-        );
-      if (sidUpdate.rowsAffected[0] === 0) {
-        throw new AppError(`Baris SalesInvoiceDetail untuk item ${sod.Name} tidak ditemukan, tidak bisa menyimpan konfirmasi ini.`);
+        const sidUpdate = await new sql.Request(transaction)
+          .input("siDetailId", sql.VarChar(16), salesInvoiceDetailId)
+          .input("qty", sql.Decimal(23, 4), item.qtyDiterima)
+          .input("amount", sql.Decimal(23, 4), newAmount)
+          .query(
+            `UPDATE SalesInvoiceDetail SET Qty = @qty, Amount = @amount, Netto = @amount, Value = @amount
+             WHERE SalesInvoiceDetailID = @siDetailId`
+          );
+        if (sidUpdate.rowsAffected[0] === 0) {
+          throw new AppError(`Baris SalesInvoiceDetail untuk item ${sod.Name} tidak ditemukan, tidak bisa menyimpan konfirmasi ini.`);
+        }
       }
 
       await new sql.Request(transaction)
@@ -2524,16 +2541,20 @@ export async function confirmStopDelivery(
         `);
     }
 
-    // Recompute the invoice header from its now-updated detail rows —
-    // the step vCustomerStatement's Outstanding calculation depends on.
-    const totalResult = await new sql.Request(transaction)
-      .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
-      .query(`SELECT SUM(Amount) AS Total FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId`);
-    const newTotal = (totalResult.recordset[0]?.Total as number | null) ?? 0;
-    await new sql.Request(transaction)
-      .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
-      .input("total", sql.Decimal(23, 4), newTotal)
-      .query(`UPDATE SalesInvoice SET Amount = @total, Netto = @total WHERE SalesInvoiceID = @siId`);
+    // Recompute the invoice header from its now-updated detail rows — the
+    // step vCustomerStatement's Outstanding calculation depends on. Skipped
+    // for the merged-external-DO case (no detailRow.SalesInvoiceID) — no
+    // dashboard-owned SalesInvoice header exists to recompute.
+    if (detailRow.SalesInvoiceID) {
+      const totalResult = await new sql.Request(transaction)
+        .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+        .query(`SELECT SUM(Amount) AS Total FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId`);
+      const newTotal = (totalResult.recordset[0]?.Total as number | null) ?? 0;
+      await new sql.Request(transaction)
+        .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+        .input("total", sql.Decimal(23, 4), newTotal)
+        .query(`UPDATE SalesInvoice SET Amount = @total, Netto = @total WHERE SalesInvoiceID = @siId`);
+    }
 
     await transaction.commit();
     return { stopDeliveryId: existingStopRow.StopDeliveryID, salesInvoiceId: detailRow.SalesInvoiceID };
