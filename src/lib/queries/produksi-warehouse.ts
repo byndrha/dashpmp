@@ -11,16 +11,24 @@ export interface PalletPosisiRow {
   SisaQty5KG: number | null;
   TanggalLabel: Date | null;
   Shift: 1 | 2 | 3 | null;
+  JamPanen: string | null;
 }
 
+// Filtered to Kode LIKE '[SUT]%' -- only the new 42-slot Ice Stock denah
+// (codes S1A..U3D). The old 12 rows (Kode '1A'..'3D') are deliberately left
+// in the table (never deleted, see plan's Global Constraints) so historical
+// DashboardProduksiBatch rows recorded against them still resolve through
+// getRiwayatProduksi()'s JOIN -- they're just never returned by this
+// function, so the UI never shows them as available slots.
 export async function getWarehouseMap(): Promise<PalletPosisiRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT p.PosisiID, p.Kode, p.BatchIDAktif, m.Nama AS MesinNama, b.TanggalProduksi, b.SisaQty10KG, b.SisaQty5KG,
-           b.TanggalLabel, b.Shift
+           b.TanggalLabel, b.Shift, b.JamPanen
     FROM DashboardProduksiPalletPosisi p
     LEFT JOIN DashboardProduksiBatch b ON b.BatchID = p.BatchIDAktif AND b.IsDeleted = 0
     LEFT JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
+    WHERE p.Kode LIKE '[SUT]%'
     ORDER BY p.Kode
   `);
   return result.recordset;
@@ -38,6 +46,7 @@ export interface RiwayatProduksiRow {
   DicatatOlehAkunID: number;
   TanggalLabel: Date;
   Shift: 1 | 2 | 3;
+  JamPanen: string;
 }
 
 export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow[]> {
@@ -48,7 +57,7 @@ export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow
     .query(`
       SELECT TOP (@limit) b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
              b.Qty10KG, b.Qty5KG, b.SisaQty10KG, b.SisaQty5KG, b.DicatatOlehAkunID,
-             b.TanggalLabel, b.Shift
+             b.TanggalLabel, b.Shift, b.JamPanen
       FROM DashboardProduksiBatch b
       JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
       JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
@@ -65,6 +74,7 @@ export interface CreateBatchInput {
   qty5KG: number;
   tanggalLabel: string;
   shift: 1 | 2 | 3;
+  jamPanen: string;
   dicatatOlehAkunId: number;
 }
 
@@ -89,10 +99,11 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
       .input("akunId", sql.Int, input.dicatatOlehAkunId)
       .input("tanggalLabel", sql.Date, input.tanggalLabel)
       .input("shift", sql.TinyInt, input.shift)
+      .input("jamPanen", sql.VarChar(5), input.jamPanen)
       .query(`
-        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, Qty5KG, SisaQty10KG, SisaQty5KG, DicatatOlehAkunID, TanggalLabel, Shift)
+        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, Qty5KG, SisaQty10KG, SisaQty5KG, DicatatOlehAkunID, TanggalLabel, Shift, JamPanen)
         OUTPUT INSERTED.BatchID
-        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty5, @qty10, @qty5, @akunId, @tanggalLabel, @shift)
+        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty5, @qty10, @qty5, @akunId, @tanggalLabel, @shift, @jamPanen)
       `);
     const batchId = insertResult.recordset[0].BatchID as number;
 
