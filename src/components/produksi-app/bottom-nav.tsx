@@ -1,12 +1,11 @@
 "use client";
 
-import { ClipboardList, PackagePlus, Warehouse, User } from "lucide-react";
+import { ClipboardList, Warehouse, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProduksiTabKey } from "./produksi-tab-shell";
 
 const TABS: { key: ProduksiTabKey; label: string; icon: typeof ClipboardList }[] = [
   { key: "kartu-pengiriman", label: "Kartu Pengiriman", icon: ClipboardList },
-  { key: "produksi-baru", label: "Produksi Baru", icon: PackagePlus },
   { key: "warehouse", label: "Warehouse", icon: Warehouse },
   { key: "profil", label: "Profil", icon: User },
 ];

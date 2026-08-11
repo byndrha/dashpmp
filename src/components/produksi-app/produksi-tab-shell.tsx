@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KartuPengirimanList } from "@/components/produksi-app/kartu-pengiriman-list";
-import { ProduksiBaruForm } from "@/components/produksi-app/produksi-baru-form";
 import { WarehouseView } from "@/components/produksi-app/warehouse-view";
 import { ProfilView } from "@/components/produksi-app/profil-view";
 import { ProduksiBottomNav } from "@/components/produksi-app/bottom-nav";
@@ -17,11 +16,10 @@ import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 
-export type ProduksiTabKey = "kartu-pengiriman" | "produksi-baru" | "warehouse" | "profil";
+export type ProduksiTabKey = "kartu-pengiriman" | "warehouse" | "profil";
 
 const TAB_PATHS: Record<ProduksiTabKey, string> = {
   "kartu-pengiriman": "/mkesindo/produksi-app",
-  "produksi-baru": "/mkesindo/produksi-app/produksi-baru",
   warehouse: "/mkesindo/produksi-app/warehouse",
   profil: "/mkesindo/produksi-app/profil",
 };
@@ -80,8 +78,8 @@ export function ProduksiTabShell({
         setLoadingTab(null);
         return;
       }
-      if ((activeTab === "produksi-baru" || activeTab === "warehouse") && warehouse === null) {
-        setLoadingTab(activeTab);
+      if (activeTab === "warehouse" && warehouse === null) {
+        setLoadingTab("warehouse");
         const result = await getWarehouseMapAction();
         if (cancelled) return;
         if (!result.success) {
@@ -92,8 +90,12 @@ export function ProduksiTabShell({
         setWarehouse(result.data);
         setLoadingTab(null);
       }
-      if (activeTab === "produksi-baru" && mesin === null) {
-        setLoadingTab("produksi-baru");
+      // Warehouse now also needs the Mesin list up front — the click-slot
+      // Tambah Produksi dialog is embedded directly in the Warehouse tab
+      // (the old separate "Produksi Baru" tab is gone), so both must be
+      // loaded before that tab can render its dialog's Mesin picker.
+      if (activeTab === "warehouse" && mesin === null) {
+        setLoadingTab("warehouse");
         const result = await getMesinListAction();
         if (cancelled) return;
         if (!result.success) {
@@ -141,14 +143,9 @@ export function ProduksiTabShell({
             />
           </div>
         )}
-        {visited.has("produksi-baru") && warehouse && mesin && (
-          <div className={cn("h-full overflow-y-auto", activeTab !== "produksi-baru" && "hidden")}>
-            <ProduksiBaruForm mesinList={mesin} posisi={warehouse} onAfterSimpan={refreshWarehouse} />
-          </div>
-        )}
-        {visited.has("warehouse") && warehouse && (
+        {visited.has("warehouse") && warehouse && mesin && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "warehouse" && "hidden")}>
-            <WarehouseView posisi={warehouse} />
+            <WarehouseView posisi={warehouse} mesinList={mesin} onAfterTambah={refreshWarehouse} />
           </div>
         )}
         {visited.has("profil") && (
