@@ -62,6 +62,9 @@ export async function createBatchAction(
 ): Promise<ActionResult<number>> {
   return runAction(async () => {
     const session = await requireProduksiView();
+    if (!input.jamPanen) {
+      throw new AppError("Isi jam panen.");
+    }
     if (input.qty10KG <= 0 && input.qty5KG <= 0) {
       throw new AppError("Isi jumlah kantong 10kg atau 5kg minimal satu.");
     }
