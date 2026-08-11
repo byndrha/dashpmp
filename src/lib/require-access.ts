@@ -56,6 +56,13 @@ export async function requirePmputra() {
   return session;
 }
 
+export async function requirePmpersada() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (session.user.accountScope !== "pmpersada" && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
+  return session;
+}
+
 export async function requireSatpam() {
   const session = await auth();
   if (!session?.user) redirect("/login");
