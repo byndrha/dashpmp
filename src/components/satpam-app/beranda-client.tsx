@@ -6,6 +6,7 @@ import { User, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatTime } from "@/lib/format";
 import type { SatpamInspectionCard } from "@/lib/queries/satpam-inspection";
 import type { SatpamTimelineEntry } from "@/lib/queries/satpam-inspection";
@@ -13,6 +14,9 @@ import { VerticalTimeline, VerticalTimelineItem } from "@/components/ui/vertical
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
+import { CheckSummary } from "@/components/vehicle-check-summary";
+import { getVehicleChecksForJadwalAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
+import type { VehicleCheckRow } from "@/lib/vehicle-check-types";
 
 function InspectionCard({ card }: { card: SatpamInspectionCard }) {
   const router = useRouter();
@@ -57,17 +61,65 @@ function InspectionCard({ card }: { card: SatpamInspectionCard }) {
   );
 }
 
+// Departed/completed cards used to simply vanish from the active list with
+// no way back in — this makes the "Riwayat Hari Ini" entry clickable to
+// re-open a read-only view of what was actually recorded (photos +
+// odometer + fuel + muatan), fetched on demand via the same
+// getVehicleChecksForJadwalAction the desktop dialog already uses.
 function TimelineCard({ entry }: { entry: SatpamTimelineEntry }) {
+  const [open, setOpen] = useState(false);
+  const [check, setCheck] = useState<VehicleCheckRow | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleOpen() {
+    setOpen(true);
+    if (check) return;
+    setLoading(true);
+    setError(null);
+    getVehicleChecksForJadwalAction(entry.jadwalId)
+      .then((checks) => {
+        const found = checks.find((c) => c.vehicleCheckId === entry.vehicleCheckId);
+        if (!found) {
+          setError("Data cek kendaraan tidak ditemukan.");
+          return;
+        }
+        setCheck(found);
+      })
+      .catch(() => setError("Gagal memuat data cek kendaraan."))
+      .finally(() => setLoading(false));
+  }
+
   return (
-    <Card className="p-3">
-      <p className="text-sm font-medium">
-        {entry.tipe === "BERANGKAT" ? "Cek Berangkat" : "Cek Datang"} — {entry.armadaNama}
-        {entry.vehicleNo && entry.vehicleNo !== entry.armadaNama ? ` (${entry.vehicleNo})` : ""}
-      </p>
-      <p className="text-xs text-muted-foreground">
-        {entry.driverName ?? "Tanpa driver"} &mdash; {entry.odometerKM.toLocaleString("id-ID")} KM
-      </p>
-    </Card>
+    <>
+      <Card
+        role="button"
+        tabIndex={0}
+        onClick={handleOpen}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleOpen()}
+        className="cursor-pointer p-3 text-left transition-colors active:bg-muted/50"
+      >
+        <p className="text-sm font-medium">
+          {entry.tipe === "BERANGKAT" ? "Cek Berangkat" : "Cek Datang"} — {entry.armadaNama}
+          {entry.vehicleNo && entry.vehicleNo !== entry.armadaNama ? ` (${entry.vehicleNo})` : ""}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {entry.driverName ?? "Tanpa driver"} &mdash; {entry.odometerKM.toLocaleString("id-ID")} KM
+        </p>
+      </Card>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {entry.tipe === "BERANGKAT" ? "Cek Berangkat" : "Cek Datang"} — {entry.armadaNama}
+            </DialogTitle>
+          </DialogHeader>
+          {loading && <p className="text-sm text-muted-foreground">Memuat...</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {check && <CheckSummary check={check} />}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
