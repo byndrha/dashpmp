@@ -4,8 +4,6 @@ import { useEffect, useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { createBatchAction, getRiwayatProduksiForPosisiAction } from "@/app/mkesindo/produksi/actions";
 import type { RiwayatProduksiRowWithNama } from "@/app/mkesindo/produksi/actions";
@@ -17,7 +15,7 @@ import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
 const SHIFT_OPTIONS = [1, 2, 3] as const;
 
-function RiwayatPosisiList({ posisiId, open }: { posisiId: number; open: boolean }) {
+export function RiwayatPosisiList({ posisiId, open }: { posisiId: number; open: boolean }) {
   const [riwayat, setRiwayat] = useState<{ posisiId: number; rows: RiwayatProduksiRowWithNama[] } | null>(null);
 
   useEffect(() => {

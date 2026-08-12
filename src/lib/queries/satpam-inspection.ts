@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import type { VehicleCheckTipe } from "@/lib/vehicle-check-types";
+import { JADWAL_KANTONG_10KG_EXPR, JADWAL_KANTONG_5KG_EXPR } from "@/lib/queries/pengiriman-jadwal";
 
 export interface SatpamInspectionCard {
   jadwalId: number;
@@ -7,7 +8,8 @@ export interface SatpamInspectionCard {
   vehicleNo: string | null;
   driverName: string | null;
   jamJadwal: string;
-  doVoucherNo: string | null;
+  qty10KG: number;
+  qty5KG: number;
   status: "Draft" | "Terbit";
   tipe: "BERANGKAT" | "DATANG";
   // Always false in the array this function returns (see the filter at the
@@ -37,12 +39,17 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
         j.JamJadwal,
         j.Status,
         (
-          SELECT TOP 1 do_.VoucherNo
+          SELECT ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0)
           FROM DashboardPengirimanJadwalDetail jd
-          JOIN DeliveryOrder do_ ON do_.DeliveryOrderID = jd.DeliveryOrderID AND do_.IsDeleted = 0
+          JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
           WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
-          ORDER BY jd.Urutan
-        ) AS DoVoucherNo,
+        ) AS Qty10KG,
+        (
+          SELECT ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0)
+          FROM DashboardPengirimanJadwalDetail jd
+          JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+          WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+        ) AS Qty5KG,
         vcb.VehicleCheckID AS BerangkatCheckID,
         vcd.VehicleCheckID AS DatangCheckID
       FROM DashboardPengirimanJadwal j
@@ -67,7 +74,8 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
     DriverName: string | null;
     JamJadwal: Date;
     Status: "Draft" | "Terbit";
-    DoVoucherNo: string | null;
+    Qty10KG: number;
+    Qty5KG: number;
     BerangkatCheckID: number | null;
     DatangCheckID: number | null;
   }[];
@@ -80,7 +88,8 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
       vehicleNo: r.VehicleNo,
       driverName: r.DriverName,
       jamJadwal: r.JamJadwal.toISOString(),
-      doVoucherNo: r.DoVoucherNo,
+      qty10KG: r.Qty10KG,
+      qty5KG: r.Qty5KG,
       status: r.Status,
       tipe: "BERANGKAT",
       hasCheck: r.BerangkatCheckID != null,
@@ -92,7 +101,8 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
         vehicleNo: r.VehicleNo,
         driverName: r.DriverName,
         jamJadwal: r.JamJadwal.toISOString(),
-        doVoucherNo: r.DoVoucherNo,
+        qty10KG: r.Qty10KG,
+        qty5KG: r.Qty5KG,
         status: r.Status,
         tipe: "DATANG",
         hasCheck: r.DatangCheckID != null,

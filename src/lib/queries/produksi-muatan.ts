@@ -51,6 +51,40 @@ export async function getDraftJadwalForProduksi(): Promise<DraftJadwalForProduks
   return result.recordset;
 }
 
+export interface SelesaiMuatJadwalForProduksi {
+  JadwalID: number;
+  ArmadaNama: string;
+  JamJadwal: Date;
+  JamSelesaiMuat: Date;
+  Qty10KG: number;
+  Qty5KG: number;
+}
+
+// Recent Jadwal that have already finished loading (Status flipped to
+// 'Terbit' by either produksiSelesaiMuat or produksiSelesaiMuatManual below)
+// — a read-only companion list to getDraftJadwalForProduksi above, shown so
+// operators can see what they just finished without leaving the Pengiriman
+// tab. Capped at the 30 most recent rather than date-windowed, to sidestep
+// the WIB/naive-vs-UTC timestamp ambiguity documented for other TransDate-
+// like columns in this codebase (see business-date.ts) — JamSelesaiMuat is
+// simply ordered newest-first and truncated.
+export async function getSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT TOP (30) j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat,
+           ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
+           ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG
+    FROM DashboardPengirimanJadwal j
+    LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+    LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+    LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+    WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL
+    GROUP BY j.JadwalID, a.Nama, j.JamJadwal, j.JamSelesaiMuat
+    ORDER BY j.JamSelesaiMuat DESC
+  `);
+  return result.recordset;
+}
+
 // Explicit "Mulai Muat" step — stamps JamMulaiMuat with no pallet allocation
 // yet (that happens next, in produksiSelesaiMuat below). Thin re-export of
 // the existing delivery-flow startMuat so produksi-app's action layer only
@@ -58,6 +92,17 @@ export async function getDraftJadwalForProduksi(): Promise<DraftJadwalForProduks
 // produksi-muatan export.
 export async function produksiStartMuat(jadwalId: number): Promise<void> {
   await startMuat(jadwalId);
+}
+
+// Quick "Selesai Muat" shortcut — same underlying Draft->Terbit transition
+// (DeliveryOrder/SalesInvoice creation, driver/route/capacity validation) as
+// produksiSelesaiMuat below, but skips pallet allocation entirely: no Stok
+// Es input, no DashboardProduksiBatch stock deduction. For operators who
+// already know the loading is done and don't need per-pallet tracking for
+// this keberangkatan. Thin re-export of the existing delivery-flow
+// selesaiMuat, same pattern as produksiStartMuat above.
+export async function produksiSelesaiMuatManual(jadwalId: number): Promise<void> {
+  await selesaiMuat(jadwalId);
 }
 
 export interface MuatanAlokasi {

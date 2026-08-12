@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatTime } from "@/lib/format";
+import { formatTime, formatDate, formatKemasanQty } from "@/lib/format";
 import type { SatpamInspectionCard } from "@/lib/queries/satpam-inspection";
 import type { SatpamTimelineEntry } from "@/lib/queries/satpam-inspection";
 import { VerticalTimeline, VerticalTimelineItem } from "@/components/ui/vertical-timeline";
@@ -36,12 +36,15 @@ function InspectionCard({ card }: { card: SatpamInspectionCard }) {
               <User className="size-4" /> {card.driverName ?? "Belum ada driver"}
             </p>
           </div>
-          <span className="flex shrink-0 items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm">
-            <Clock className="size-3.5" /> {formatTime(card.jamJadwal)}
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm">
+              <Clock className="size-3.5" /> {formatTime(card.jamJadwal)}
+            </span>
+            <span className="text-xs text-muted-foreground">{formatDate(card.jamJadwal)}</span>
+          </div>
         </div>
         <div className="mt-2 flex items-center justify-between border-t pt-2">
-          <span className="font-mono text-sm">{card.doVoucherNo ?? "Belum ada DO"}</span>
+          <span className="text-sm text-muted-foreground">{formatKemasanQty(card.qty10KG, card.qty5KG)}</span>
           {ready ? (
             <Button
               size="sm"

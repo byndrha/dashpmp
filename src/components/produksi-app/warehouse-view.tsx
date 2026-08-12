@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
-import { TambahProduksiDialog } from "@/components/produksi-app/tambah-produksi-dialog";
+import { TambahProduksiDialog, RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 
@@ -17,7 +18,7 @@ export function WarehouseView({
   mesinList: MesinRow[];
   onAfterTambah: () => void;
 }) {
-  const [selected, setSelected] = useState<PalletPosisiRow | null>(null);
+  const [detailPosisi, setDetailPosisi] = useState<PalletPosisiRow | null>(null);
   const [dialogPosisi, setDialogPosisi] = useState<PalletPosisiRow | null>(null);
   // Default view is Utara, not the first zone in WAREHOUSE_ZONES (Selatan)
   // — Utara is where the sliding door / most active traffic is, per user
@@ -45,7 +46,7 @@ export function WarehouseView({
     if (row.BatchIDAktif == null) {
       setDialogPosisi(row);
     } else {
-      setSelected(row);
+      setDetailPosisi(row);
     }
   }
 
@@ -165,28 +166,35 @@ export function WarehouseView({
         </span>
       </div>
 
-      {selected && (
-        <div className="rounded-md border border-border p-3 text-sm">
-          <p className="font-semibold">Pallet {selected.Kode}</p>
-          <p className="text-muted-foreground">Mesin: {selected.MesinNama ?? "-"}</p>
-          {selected.TanggalLabel != null && (
-            <p className="text-muted-foreground">
-              Tanggal &amp; Shift Produksi:{" "}
-              {new Date(selected.TanggalLabel).toLocaleDateString("id-ID", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })}
-              {" — Shift "}
-              {selected.Shift}
-              {selected.JamPanen && ` — Jam Panen ${selected.JamPanen}`}
-            </p>
-          )}
-          <p className="text-muted-foreground">
-            Sisa: {selected.SisaQty10KG ?? 0} kantong 10kg, {selected.SisaQty5KG ?? 0} kantong 5kg
-          </p>
-        </div>
-      )}
+      <Dialog open={detailPosisi != null} onOpenChange={(open) => !open && setDetailPosisi(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Pallete {detailPosisi?.Kode}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            {detailPosisi && <RiwayatPosisiList posisiId={detailPosisi.PosisiID} open={detailPosisi != null} />}
+            <div className="rounded-md border border-border p-3 text-sm">
+              <p className="text-muted-foreground">Mesin: {detailPosisi?.MesinNama ?? "-"}</p>
+              {detailPosisi?.TanggalLabel != null && (
+                <p className="text-muted-foreground">
+                  Tanggal &amp; Shift Produksi:{" "}
+                  {new Date(detailPosisi.TanggalLabel).toLocaleDateString("id-ID", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                  {" — Shift "}
+                  {detailPosisi.Shift}
+                  {detailPosisi.JamPanen && ` — Jam Panen ${detailPosisi.JamPanen}`}
+                </p>
+              )}
+              <p className="text-muted-foreground">
+                Sisa: {detailPosisi?.SisaQty10KG ?? 0} kantong 10kg, {detailPosisi?.SisaQty5KG ?? 0} kantong 5kg
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <TambahProduksiDialog
         open={dialogPosisi != null}

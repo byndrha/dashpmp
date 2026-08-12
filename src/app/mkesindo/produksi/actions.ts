@@ -14,9 +14,12 @@ import {
 } from "@/lib/queries/produksi-warehouse";
 import {
   getDraftJadwalForProduksi,
+  getSelesaiMuatJadwalForProduksi,
   produksiStartMuat,
   produksiSelesaiMuat,
+  produksiSelesaiMuatManual,
   type DraftJadwalForProduksi,
+  type SelesaiMuatJadwalForProduksi,
   type ProduksiSelesaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
 import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
@@ -144,5 +147,28 @@ export async function produksiSelesaiMuatAction(
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/delivery");
+  });
+}
+
+// Quick "Selesai Muat" shortcut, triggered from the card's top-right button
+// instead of going through the alokasi (Stok Es) screen — no pallet stock is
+// touched. Same Draft-only/driver/route validation as produksiSelesaiMuat
+// above, just without the allocation step first.
+export async function produksiSelesaiMuatManualAction(jadwalId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    await produksiSelesaiMuatManual(jadwalId);
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/delivery");
+  });
+}
+
+// Read-only companion list to getDraftJadwalForProduksiAction — Jadwal that
+// have already finished loading, shown below the main list.
+export async function getSelesaiMuatJadwalForProduksiAction(): Promise<ActionResult<SelesaiMuatJadwalForProduksi[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getSelesaiMuatJadwalForProduksi();
   });
 }
