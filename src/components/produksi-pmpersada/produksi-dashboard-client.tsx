@@ -19,6 +19,7 @@ import type { BakRow, KonfigurasiRow } from "@/lib/queries/produksi-bak-pmpersad
 import { RekDetailDialog } from "./rek-detail-dialog";
 import { formatUsia, TAHAP_BADGE_CLASS } from "./produksi-lib";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 
 const POLL_INTERVAL_MS = 30000;
 // Toleransi di atas durasi standar sebelum sebuah Rek dianggap perlu
@@ -203,8 +204,88 @@ export function ProduksiDashboardClient({
           )}
         </TabsContent>
 
-        {/* TabsContent "denah" ditambahkan Task 9, "rekap" ditambahkan Task 10 */}
+        <TabsContent value="rekap" className="flex flex-col gap-4 pt-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Riwayat Batch & Log Audit</h3>
+            <Button size="sm" variant="outline" onClick={() => exportAuditExcel(audit)}>
+              Ekspor Excel
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ringkasan Panen per Bak (Matang/Siap)</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              {bak.map((b) => {
+                const panen = riwayat.filter((r) => r.BakNama === b.Nama && r.ClosedDate == null);
+                const totalCan = panen.reduce((sum, r) => sum + r.JumlahCan, 0);
+                return (
+                  <div key={b.BakID} className="flex justify-between rounded-lg border p-2 text-sm">
+                    <span>{b.Nama}</span>
+                    <span className="font-medium">{totalCan.toLocaleString("id-ID")} Can aktif</span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Log Audit (500 terbaru)</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b text-muted-foreground uppercase">
+                  <tr>
+                    <th className="p-2">Waktu</th>
+                    <th className="p-2">Lokasi</th>
+                    <th className="p-2">Aksi</th>
+                    <th className="p-2">Operator</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {audit.map((a) => (
+                    <tr key={a.LogID}>
+                      <td className="p-2 font-mono">{formatDate(a.CreatedDate)}</td>
+                      <td className="p-2 font-medium">
+                        {a.BakNama} Rek {a.NomorRek}
+                      </td>
+                      <td className="p-2">{a.AksiLabel}</td>
+                      <td className="p-2">{a.DicatatOlehNama}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
+}
+
+function exportAuditExcel(audit: AuditLogRowWithNama[]) {
+  const rows = audit
+    .map((a) => `<tr><td>${a.CreatedDate}</td><td>${a.BakNama} Rek ${a.NomorRek}</td><td>${a.AksiLabel}</td><td>${a.DicatatOlehNama}</td></tr>`)
+    .join("");
+  const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="UTF-8"></head>
+    <body>
+      <table border="1">
+        <thead><tr><th>Waktu</th><th>Lokasi</th><th>Aksi</th><th>Operator</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </body>
+    </html>
+  `;
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `Audit_Produksi_PMPersada_${new Date().toISOString().slice(0, 10)}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
 }
