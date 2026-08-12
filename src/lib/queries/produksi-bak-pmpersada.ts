@@ -136,3 +136,97 @@ export async function getKonfigurasiInternal(transaction: sql.Transaction): Prom
   const result = await new sql.Request(transaction).query(`SELECT DurasiBKJam, DurasiBBJam FROM DashboardProduksiKonfigurasi WHERE ID = 1`);
   return result.recordset[0];
 }
+
+export async function isiAirBaru(rekId: number, jenisEs: "BK" | "BB", jumlahCan: number, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const config = await getKonfigurasiInternal(transaction);
+    const durasiJam = jenisEs === "BK" ? config.DurasiBKJam : config.DurasiBBJam;
+
+    const rekResult = await new sql.Request(transaction)
+      .input("rekId", sql.Int, rekId)
+      .query(`SELECT BatchIDAktif FROM DashboardProduksiRek WHERE RekID = @rekId`);
+    const rekRow = rekResult.recordset[0] as { BatchIDAktif: number | null } | undefined;
+    if (!rekRow) throw new AppError("Rek tidak ditemukan.");
+
+    if (rekRow.BatchIDAktif) {
+      await new sql.Request(transaction)
+        .input("batchId", sql.Int, rekRow.BatchIDAktif)
+        .query(`UPDATE DashboardProduksiBatch SET ClosedDate = GETDATE() WHERE BatchID = @batchId`);
+    }
+
+    const waktuIsi = new Date();
+    const estimasiBeku = new Date(waktuIsi.getTime() + durasiJam * 3600000);
+
+    const insertResult = await new sql.Request(transaction)
+      .input("rekId", sql.Int, rekId)
+      .input("jenisEs", sql.VarChar(4), jenisEs)
+      .input("jumlahCan", sql.Int, jumlahCan)
+      .input("waktuIsi", sql.DateTime, waktuIsi)
+      .input("estimasiBeku", sql.DateTime, estimasiBeku)
+      .input("akunId", sql.Int, akunId).query(`
+        INSERT INTO DashboardProduksiBatch (RekID, JenisEs, JumlahCan, WaktuIsi, EstimasiBeku, DicatatOlehAkunID)
+        OUTPUT INSERTED.BatchID
+        VALUES (@rekId, @jenisEs, @jumlahCan, @waktuIsi, @estimasiBeku, @akunId)
+      `);
+    const newBatchId = (insertResult.recordset[0] as { BatchID: number }).BatchID;
+
+    await new sql.Request(transaction)
+      .input("rekId", sql.Int, rekId)
+      .input("batchId", sql.Int, newBatchId)
+      .query(`UPDATE DashboardProduksiRek SET BatchIDAktif = @batchId, IsMaintenance = 0, ModifiedDate = GETDATE() WHERE RekID = @rekId`);
+
+    await new sql.Request(transaction)
+      .input("rekId", sql.Int, rekId)
+      .input("batchId", sql.Int, newBatchId)
+      .input("akunId", sql.Int, akunId)
+      .query(`INSERT INTO DashboardProduksiAuditLog (RekID, BatchID, AksiLabel, DicatatOlehAkunID) VALUES (@rekId, @batchId, 'Isi Air Baru', @akunId)`);
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+export async function setBabonan(rekId: number, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const rekResult = await pool
+    .request()
+    .input("rekId", sql.Int, rekId)
+    .query(`SELECT BatchIDAktif FROM DashboardProduksiRek WHERE RekID = @rekId`);
+  const rekRow = rekResult.recordset[0] as { BatchIDAktif: number | null } | undefined;
+  if (!rekRow) throw new AppError("Rek tidak ditemukan.");
+  if (!rekRow.BatchIDAktif) throw new AppError("Rek ini kosong, isi air baru dulu sebelum diset Babonan.");
+
+  await pool.request().input("batchId", sql.Int, rekRow.BatchIDAktif).query(`UPDATE DashboardProduksiBatch SET IsBabonan = 1 WHERE BatchID = @batchId`);
+  await pool
+    .request()
+    .input("rekId", sql.Int, rekId)
+    .input("batchId", sql.Int, rekRow.BatchIDAktif)
+    .input("akunId", sql.Int, akunId)
+    .query(`INSERT INTO DashboardProduksiAuditLog (RekID, BatchID, AksiLabel, DicatatOlehAkunID) VALUES (@rekId, @batchId, 'Set Babonan', @akunId)`);
+}
+
+export async function setMaintenance(rekId: number, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const rekResult = await pool
+    .request()
+    .input("rekId", sql.Int, rekId)
+    .query(`SELECT BatchIDAktif FROM DashboardProduksiRek WHERE RekID = @rekId`);
+  const rekRow = rekResult.recordset[0] as { BatchIDAktif: number | null } | undefined;
+  if (!rekRow) throw new AppError("Rek tidak ditemukan.");
+
+  if (rekRow.BatchIDAktif) {
+    await pool.request().input("batchId", sql.Int, rekRow.BatchIDAktif).query(`UPDATE DashboardProduksiBatch SET ClosedDate = GETDATE() WHERE BatchID = @batchId`);
+  }
+  await pool.request().input("rekId", sql.Int, rekId).query(`UPDATE DashboardProduksiRek SET IsMaintenance = 1, BatchIDAktif = NULL, ModifiedDate = GETDATE() WHERE RekID = @rekId`);
+  await pool
+    .request()
+    .input("rekId", sql.Int, rekId)
+    .input("batchId", sql.Int, rekRow.BatchIDAktif)
+    .input("akunId", sql.Int, akunId)
+    .query(`INSERT INTO DashboardProduksiAuditLog (RekID, BatchID, AksiLabel, DicatatOlehAkunID) VALUES (@rekId, @batchId, 'Set Maintenance', @akunId)`);
+}
