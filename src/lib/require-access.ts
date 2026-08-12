@@ -63,6 +63,17 @@ export async function requirePmpersada() {
   return session;
 }
 
+// requirePmpersada() sendiri hanya cek accountScope company-wide, tanpa
+// cek modul — akun operator produksi PMPersada baru (Task 1 rencana ini)
+// otomatis punya accountScope==="pmpersada" juga (dari perusahaan_id yang
+// sama), jadi tanpa lapisan ini mereka bisa ikut membuka data finansial.
+// canAccessAllPT() tetap lolos (Direktur/superadmin selalu boleh lihat semua).
+export async function requirePmpersadaKeuangan() {
+  const session = await requirePmpersada();
+  if (session.user.isProduksi && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
+  return session;
+}
+
 export async function requireSatpam() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -94,6 +105,21 @@ export async function requireProduksiView() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canAccessAllPT(session.user) && !session.user.isProduksi && !canView(session.user.permissions, "produksi")) {
+    redirect("/akses-ditolak");
+  }
+  return session;
+}
+
+// Gerbang app mobile /pmpersada/produksi-app — operator lantai produksi
+// PMPersada. Beda dari requireProduksiView() milik MKEsindo: sengaja TIDAK
+// pakai canAccessAllPT() bypass di sini, karena akun Direktur/PMP Group
+// yang mengelola banyak PT tidak otomatis relevan sebagai "operator
+// lantai produksi PMPersada" — mereka melihat data ini lewat dashboard
+// desktop /pmpersada/produksi (requirePmpersada() biasa), bukan app mobile ini.
+export async function requirePmpersadaProduksi() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!session.user.isProduksi || session.user.accountScope !== "pmpersada") {
     redirect("/akses-ditolak");
   }
   return session;

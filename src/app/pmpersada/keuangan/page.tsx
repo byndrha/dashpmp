@@ -10,7 +10,7 @@ import { getCashFlowPmpersada } from "@/lib/queries/cash-flow-pmpersada";
 import { getCashFlowHarianPmpersada, getCashFlowHarianHistoryPmpersada } from "@/lib/queries/cash-flow-harian-pmpersada";
 import { getHPPBersihPmpersada } from "@/lib/queries/hpp-bersih-pmpersada";
 import { getBusinessDateISO } from "@/lib/business-date";
-import { requirePmpersada } from "@/lib/require-access";
+import { requirePmpersadaKeuangan } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -38,7 +38,7 @@ export default async function PmpersadaKeuanganPage({
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
-  await requirePmpersada();
+  await requirePmpersadaKeuangan();
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();
