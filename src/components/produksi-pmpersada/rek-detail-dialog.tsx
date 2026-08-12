@@ -80,12 +80,11 @@ export function RekDetailDialog({
               value={jenisEs}
               onChange={(e) => setJenisEs(e.target.value as "BK" | "BB")}
               className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-              disabled={!isAdmin}
             >
               <option value="BK">BK (36 Can)</option>
               <option value="BB">BB (18 Can)</option>
             </select>
-            <Input type="number" value={jumlahCan} onChange={(e) => setJumlahCan(e.target.value)} disabled={!isAdmin} className="flex-1" />
+            <Input type="number" value={jumlahCan} onChange={(e) => setJumlahCan(e.target.value)} className="flex-1" />
           </div>
           <Button disabled={pending} onClick={() => run(() => onIsiAirBaru(jenisEs, Number(jumlahCan)))}>
             Isi Air Baru

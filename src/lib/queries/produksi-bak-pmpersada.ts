@@ -207,6 +207,16 @@ export async function setBabonan(rekId: number, akunId: number): Promise<void> {
     if (!rekRow) throw new AppError("Rek tidak ditemukan.");
     if (!rekRow.BatchIDAktif) throw new AppError("Rek ini kosong, isi air baru dulu sebelum diset Babonan.");
 
+    // Claim guard (sama pola dengan isiAirBaru di atas): pastikan BatchIDAktif
+    // Rek belum berubah sejak SELECT di atas sebelum menulis, supaya operator
+    // lain yang konkuren mengganti batch (mis. Isi Air Baru ulang) tidak
+    // ke-Babonan-kan batch lama yang sudah ditutup.
+    const claimResult = await new sql.Request(transaction)
+      .input("rekId", sql.Int, rekId)
+      .input("batchId", sql.Int, rekRow.BatchIDAktif)
+      .query(`UPDATE DashboardProduksiRek SET ModifiedDate = GETDATE() WHERE RekID = @rekId AND BatchIDAktif = @batchId`);
+    if (claimResult.rowsAffected[0] === 0) throw new AppError("Rek ini sedang diproses operator lain, coba lagi.");
+
     await new sql.Request(transaction)
       .input("batchId", sql.Int, rekRow.BatchIDAktif)
       .query(`UPDATE DashboardProduksiBatch SET IsBabonan = 1 WHERE BatchID = @batchId`);
@@ -239,9 +249,17 @@ export async function setMaintenance(rekId: number, akunId: number): Promise<voi
         .input("batchId", sql.Int, rekRow.BatchIDAktif)
         .query(`UPDATE DashboardProduksiBatch SET ClosedDate = GETDATE() WHERE BatchID = @batchId`);
     }
-    await new sql.Request(transaction)
+    // Claim guard (sama pola dengan isiAirBaru): kondisikan pada BatchIDAktif
+    // yang dibaca di atas supaya operator lain yang konkuren membuat batch
+    // baru (Isi Air Baru) di Rek yang sama tidak ikut ter-NULL-kan/orphan
+    // oleh UPDATE ini.
+    const claimResult = await new sql.Request(transaction)
       .input("rekId", sql.Int, rekId)
-      .query(`UPDATE DashboardProduksiRek SET IsMaintenance = 1, BatchIDAktif = NULL, ModifiedDate = GETDATE() WHERE RekID = @rekId`);
+      .input("oldBatchId", sql.Int, rekRow.BatchIDAktif)
+      .query(
+        `UPDATE DashboardProduksiRek SET IsMaintenance = 1, BatchIDAktif = NULL, ModifiedDate = GETDATE() WHERE RekID = @rekId AND ISNULL(BatchIDAktif,0) = ISNULL(@oldBatchId,0)`
+      );
+    if (claimResult.rowsAffected[0] === 0) throw new AppError("Rek ini sedang diproses operator lain, coba lagi.");
     await new sql.Request(transaction)
       .input("rekId", sql.Int, rekId)
       .input("batchId", sql.Int, rekRow.BatchIDAktif)

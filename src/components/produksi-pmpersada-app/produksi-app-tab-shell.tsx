@@ -50,6 +50,11 @@ export function ProduksiAppTabShell({
   function refreshDenah() {
     setBak(null);
     setRek(null);
+    // Aksi Denah (Isi Air Baru/Babonan/Maintenance) juga menulis baris audit
+    // log milik operator ini -- null-kan riwayat juga supaya tab Riwayat
+    // (yang tetap mounted karena shell ini keep-alive) fetch ulang saat
+    // berikutnya dibuka, bukan menampilkan snapshot lama sepanjang sesi.
+    setRiwayat(null);
   }
 
   useEffect(() => {
