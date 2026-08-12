@@ -254,3 +254,163 @@ export async function setMaintenance(rekId: number, akunId: number): Promise<voi
     throw err;
   }
 }
+
+const TARGET_PCT: Record<"MULAI" | "KRISTAL" | "SIAP" | "JADI", number> = {
+  MULAI: 0.25,
+  KRISTAL: 0.6,
+  SIAP: 0.85,
+  JADI: 1.0,
+};
+
+export async function overrideTahap(rekId: number, tahap: "MULAI" | "KRISTAL" | "SIAP" | "JADI", akunId: number): Promise<void> {
+  const pool = await getPool();
+  const rekResult = await pool.request().input("rekId", sql.Int, rekId).query(`
+    SELECT r.BatchIDAktif, b.JenisEs
+    FROM DashboardProduksiRek r
+    LEFT JOIN DashboardProduksiBatch b ON b.BatchID = r.BatchIDAktif
+    WHERE r.RekID = @rekId
+  `);
+  const row = rekResult.recordset[0] as { BatchIDAktif: number | null; JenisEs: "BK" | "BB" | null } | undefined;
+  if (!row || !row.BatchIDAktif || !row.JenisEs) throw new AppError("Rek ini kosong, isi air baru dulu sebelum override tahap.");
+
+  // UPDATE Batch + INSERT AuditLog harus atomik (satu transaksi) — lihat isiAirBaru/
+  // setBabonan/setMaintenance di atas untuk pola yang sama.
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const config = await getKonfigurasiInternal(transaction);
+    const durasiJam = row.JenisEs === "BK" ? config.DurasiBKJam : config.DurasiBBJam;
+    const targetPct = TARGET_PCT[tahap];
+    const waktuIsi = new Date(Date.now() - targetPct * durasiJam * 3600000);
+    const estimasiBeku = new Date(waktuIsi.getTime() + durasiJam * 3600000);
+
+    await new sql.Request(transaction)
+      .input("batchId", sql.Int, row.BatchIDAktif)
+      .input("waktuIsi", sql.DateTime, waktuIsi)
+      .input("estimasiBeku", sql.DateTime, estimasiBeku)
+      .query(`UPDATE DashboardProduksiBatch SET WaktuIsi = @waktuIsi, EstimasiBeku = @estimasiBeku WHERE BatchID = @batchId`);
+
+    await new sql.Request(transaction)
+      .input("rekId", sql.Int, rekId)
+      .input("batchId", sql.Int, row.BatchIDAktif)
+      .input("akunId", sql.Int, akunId)
+      .input("label", sql.NVarChar(100), `Override ke ${tahap} (Admin)`)
+      .query(`INSERT INTO DashboardProduksiAuditLog (RekID, BatchID, AksiLabel, DicatatOlehAkunID) VALUES (@rekId, @batchId, @label, @akunId)`);
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+export async function koreksiBatch(rekId: number, jenisEs: "BK" | "BB", jumlahCan: number, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const rekResult = await pool.request().input("rekId", sql.Int, rekId).query(`SELECT BatchIDAktif FROM DashboardProduksiRek WHERE RekID = @rekId`);
+  const rekRow = rekResult.recordset[0] as { BatchIDAktif: number | null } | undefined;
+  if (!rekRow?.BatchIDAktif) throw new AppError("Rek ini kosong, tidak ada batch untuk dikoreksi.");
+
+  // UPDATE Batch + INSERT AuditLog harus atomik (satu transaksi) — lihat isiAirBaru/
+  // setBabonan/setMaintenance di atas untuk pola yang sama.
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    await new sql.Request(transaction)
+      .input("batchId", sql.Int, rekRow.BatchIDAktif)
+      .input("jenisEs", sql.VarChar(4), jenisEs)
+      .input("jumlahCan", sql.Int, jumlahCan)
+      .query(`UPDATE DashboardProduksiBatch SET JenisEs = @jenisEs, JumlahCan = @jumlahCan WHERE BatchID = @batchId`);
+
+    await new sql.Request(transaction)
+      .input("rekId", sql.Int, rekId)
+      .input("batchId", sql.Int, rekRow.BatchIDAktif)
+      .input("akunId", sql.Int, akunId)
+      .query(`INSERT INTO DashboardProduksiAuditLog (RekID, BatchID, AksiLabel, DicatatOlehAkunID) VALUES (@rekId, @batchId, 'Koreksi Jenis/Can (Admin)', @akunId)`);
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+// Konfigurasi tidak terikat ke Rek tertentu, sedangkan DashboardProduksiAuditLog.RekID
+// bersifat NOT NULL — aksi ini secara struktural tidak bisa menulis baris AuditLog biasa.
+// ModifiedDate/ModifiedByAkunID di bawah berfungsi sebagai audit trail khusus aksi ini.
+export async function updateKonfigurasi(durasiBKJam: number, durasiBBJam: number, akunId: number): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("bk", sql.Int, durasiBKJam)
+    .input("bb", sql.Int, durasiBBJam)
+    .input("akunId", sql.Int, akunId)
+    .query(`UPDATE DashboardProduksiKonfigurasi SET DurasiBKJam = @bk, DurasiBBJam = @bb, ModifiedDate = GETDATE(), ModifiedByAkunID = @akunId WHERE ID = 1`);
+}
+
+export interface BatchRow {
+  BatchID: number;
+  RekID: number;
+  BakNama: string;
+  NomorRek: number;
+  JenisEs: "BK" | "BB";
+  JumlahCan: number;
+  IsBabonan: boolean;
+  WaktuIsi: string;
+  EstimasiBeku: string;
+  ClosedDate: string | null;
+  DicatatOlehAkunID: number;
+}
+
+export async function getRiwayatBatch(): Promise<BatchRow[]> {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT TOP 1000 b.BatchID, b.RekID, bak.Nama AS BakNama, r.NomorRek, b.JenisEs, b.JumlahCan, b.IsBabonan,
+           b.WaktuIsi, b.EstimasiBeku, b.ClosedDate, b.DicatatOlehAkunID
+    FROM DashboardProduksiBatch b
+    JOIN DashboardProduksiRek r ON r.RekID = b.RekID
+    JOIN DashboardProduksiBak bak ON bak.BakID = r.BakID
+    ORDER BY b.CreatedDate DESC
+  `);
+  const rows = result.recordset as (Omit<BatchRow, "WaktuIsi" | "EstimasiBeku" | "ClosedDate"> & {
+    WaktuIsi: Date;
+    EstimasiBeku: Date;
+    ClosedDate: Date | null;
+  })[];
+  return rows.map((r) => ({
+    ...r,
+    WaktuIsi: r.WaktuIsi.toISOString(),
+    EstimasiBeku: r.EstimasiBeku.toISOString(),
+    ClosedDate: r.ClosedDate ? r.ClosedDate.toISOString() : null,
+  }));
+}
+
+export interface AuditLogRow {
+  LogID: number;
+  RekID: number;
+  BakNama: string;
+  NomorRek: number;
+  AksiLabel: string;
+  Keterangan: string | null;
+  DicatatOlehAkunID: number;
+  CreatedDate: string;
+}
+
+export async function getAuditLog(akunId?: number): Promise<AuditLogRow[]> {
+  const pool = await getPool();
+  const request = pool.request();
+  let whereClause = "";
+  if (akunId != null) {
+    request.input("akunId", sql.Int, akunId);
+    whereClause = "WHERE l.DicatatOlehAkunID = @akunId";
+  }
+  const result = await request.query(`
+    SELECT TOP 500 l.LogID, l.RekID, bak.Nama AS BakNama, r.NomorRek, l.AksiLabel, l.Keterangan, l.DicatatOlehAkunID, l.CreatedDate
+    FROM DashboardProduksiAuditLog l
+    JOIN DashboardProduksiRek r ON r.RekID = l.RekID
+    JOIN DashboardProduksiBak bak ON bak.BakID = r.BakID
+    ${whereClause}
+    ORDER BY l.CreatedDate DESC
+  `);
+  const rows = result.recordset as (Omit<AuditLogRow, "CreatedDate"> & { CreatedDate: Date })[];
+  return rows.map((r) => ({ ...r, CreatedDate: r.CreatedDate.toISOString() }));
+}
