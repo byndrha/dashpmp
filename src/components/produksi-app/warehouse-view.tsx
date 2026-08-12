@@ -98,7 +98,7 @@ export function WarehouseView({
             ref={(el) => {
               panelRefs.current[zone.id] = el;
             }}
-            className="flex w-[88%] shrink-0 snap-start flex-col gap-1 rounded-lg border border-border p-3"
+            className="flex w-fit shrink-0 snap-start flex-col gap-1 rounded-lg border border-border p-3"
           >
             {zone.grup.map((g) => (
               <div key={g.id} className="flex flex-col gap-1">
