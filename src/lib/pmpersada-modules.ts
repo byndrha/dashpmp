@@ -3,6 +3,7 @@
 // pmputra-modules.ts -- PMPersada gets the same 9-module shell PMPutra has.
 export const PMPERSADA_MODULES: Record<string, string> = {
   keuangan: "Keuangan",
+  produksi: "Produksi",
   piutang: "Piutang",
   penjualan: "Penjualan",
   transaksi: "Transaksi",
