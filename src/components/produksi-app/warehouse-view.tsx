@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Grid2x2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
@@ -113,6 +114,14 @@ export function WarehouseView({
                     <span className="flex-1 border-t border-dashed border-border" />
                     <span>{g.dividerAfter}</span>
                     <span className="flex-1 border-t border-dashed border-border" />
+                    {g.dividerAfter.includes("Jendela") && (
+                      <span
+                        title="Jendela"
+                        className="flex size-5 shrink-0 items-center justify-center rounded-sm border border-border bg-muted text-muted-foreground"
+                      >
+                        <Grid2x2 className="size-3" />
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
