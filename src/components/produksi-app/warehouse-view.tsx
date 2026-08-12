@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
@@ -19,11 +19,21 @@ export function WarehouseView({
 }) {
   const [selected, setSelected] = useState<PalletPosisiRow | null>(null);
   const [dialogPosisi, setDialogPosisi] = useState<PalletPosisiRow | null>(null);
-  const [activeZone, setActiveZone] = useState<string>(WAREHOUSE_ZONES[0].id);
+  // Default view is Utara, not the first zone in WAREHOUSE_ZONES (Selatan)
+  // — Utara is where the sliding door / most active traffic is, per user
+  // request.
+  const [activeZone, setActiveZone] = useState<string>("U");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const panelRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const byKode = new Map(posisi.map((p) => [p.Kode, p]));
+
+  // Jump (no smooth animation) to the Utara panel on first mount, since the
+  // scroller otherwise always starts at scrollLeft=0 (Selatan) regardless
+  // of `activeZone`'s initial value.
+  useEffect(() => {
+    panelRefs.current["U"]?.scrollIntoView({ inline: "start", block: "nearest" });
+  }, []);
 
   function scrollToZone(zoneId: string) {
     setActiveZone(zoneId);

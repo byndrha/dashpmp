@@ -1,13 +1,12 @@
 "use client";
 
-import { ClipboardList, Warehouse, User } from "lucide-react";
+import { ClipboardList, Snowflake } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProduksiTabKey } from "./produksi-tab-shell";
 
 const TABS: { key: ProduksiTabKey; label: string; icon: typeof ClipboardList }[] = [
-  { key: "kartu-pengiriman", label: "Kartu Pengiriman", icon: ClipboardList },
-  { key: "warehouse", label: "Warehouse", icon: Warehouse },
-  { key: "profil", label: "Profil", icon: User },
+  { key: "kartu-pengiriman", label: "Pengiriman", icon: ClipboardList },
+  { key: "warehouse", label: "Stok Es", icon: Snowflake },
 ];
 
 export function ProduksiBottomNav({

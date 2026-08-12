@@ -5,8 +5,10 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KartuPengirimanList } from "@/components/produksi-app/kartu-pengiriman-list";
 import { WarehouseView } from "@/components/produksi-app/warehouse-view";
-import { ProfilView } from "@/components/produksi-app/profil-view";
 import { ProduksiBottomNav } from "@/components/produksi-app/bottom-nav";
+import { UserMenu } from "@/components/dashboard/user-menu";
+import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
+import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
 import {
   getDraftJadwalForProduksiAction,
   getWarehouseMapAction,
@@ -16,23 +18,24 @@ import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 
-export type ProduksiTabKey = "kartu-pengiriman" | "warehouse" | "profil";
+export type ProduksiTabKey = "kartu-pengiriman" | "warehouse";
 
 const TAB_PATHS: Record<ProduksiTabKey, string> = {
   "kartu-pengiriman": "/mkesindo/produksi-app",
   warehouse: "/mkesindo/produksi-app/warehouse",
-  profil: "/mkesindo/produksi-app/profil",
 };
 
 export function ProduksiTabShell({
   initialTab,
   userName,
+  profile,
   initialKartuPengiriman,
   initialWarehouse,
   initialMesin,
 }: {
   initialTab: ProduksiTabKey;
   userName: string;
+  profile: OwnProfile | null;
   initialKartuPengiriman?: DraftJadwalForProduksi[];
   initialWarehouse?: PalletPosisiRow[];
   initialMesin?: MesinRow[];
@@ -121,6 +124,13 @@ export function ProduksiTabShell({
 
   return (
     <div className="flex h-dvh flex-col bg-background">
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background px-4 py-2.5">
+        <h1 className="font-display text-base font-semibold">Aplikasi Produksi</h1>
+        <div className="flex items-center gap-1">
+          <AppearanceMenu />
+          <UserMenu name={userName} profile={profile} />
+        </div>
+      </header>
       <div className="relative min-h-0 flex-1">
         {loadingTab && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">
@@ -146,11 +156,6 @@ export function ProduksiTabShell({
         {visited.has("warehouse") && warehouse && mesin && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "warehouse" && "hidden")}>
             <WarehouseView posisi={warehouse} mesinList={mesin} onAfterTambah={refreshWarehouse} />
-          </div>
-        )}
-        {visited.has("profil") && (
-          <div className={cn("h-full overflow-y-auto", activeTab !== "profil" && "hidden")}>
-            <ProfilView userName={userName} />
           </div>
         )}
       </div>

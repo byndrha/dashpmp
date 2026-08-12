@@ -6,6 +6,7 @@ import { getMesinList, updateMesin, type MesinRow, type UpdateMesinInput } from 
 import {
   getWarehouseMap,
   getRiwayatProduksi,
+  getRiwayatProduksiForPosisi,
   createBatch,
   type PalletPosisiRow,
   type RiwayatProduksiRow,
@@ -36,6 +37,7 @@ export async function updateMesinAction(input: UpdateMesinInput): Promise<Action
     if (input.kapasitasProduksiPerHari <= 0) throw new AppError("Kapasitas produksi harus lebih dari 0.");
     await updateMesin(input);
     revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
   });
 }
 
@@ -54,6 +56,18 @@ export async function getRiwayatProduksiAction(): Promise<ActionResult<RiwayatPr
   return runAction(async () => {
     await requireProduksiView();
     const rows = await getRiwayatProduksi();
+    const namaMap = await getAkunNamaMap(rows.map((r) => r.DicatatOlehAkunID));
+    return rows.map((r) => ({ ...r, DicatatOlehNama: namaMap.get(r.DicatatOlehAkunID) ?? "Tidak diketahui" }));
+  });
+}
+
+// Riwayat scoped to one Pallete — shown at the top of TambahProduksiDialog.
+export async function getRiwayatProduksiForPosisiAction(
+  posisiId: number
+): Promise<ActionResult<RiwayatProduksiRowWithNama[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    const rows = await getRiwayatProduksiForPosisi(posisiId);
     const namaMap = await getAkunNamaMap(rows.map((r) => r.DicatatOlehAkunID));
     return rows.map((r) => ({ ...r, DicatatOlehNama: namaMap.get(r.DicatatOlehAkunID) ?? "Tidak diketahui" }));
   });

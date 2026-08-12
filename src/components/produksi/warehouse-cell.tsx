@@ -31,7 +31,7 @@ export function WarehouseCell({
       type="button"
       onClick={() => onClick?.(row)}
       className={cn(
-        "flex h-14 flex-1 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight",
+        "flex size-[55px] shrink-0 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight",
         row?.BatchIDAktif != null ? ageClass(row.TanggalLabel, row.JamPanen) : "bg-muted text-muted-foreground"
       )}
     >

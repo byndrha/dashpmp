@@ -1,18 +1,68 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createBatchAction } from "@/app/mkesindo/produksi/actions";
+import { cn } from "@/lib/utils";
+import { createBatchAction, getRiwayatProduksiForPosisiAction } from "@/app/mkesindo/produksi/actions";
+import type { RiwayatProduksiRowWithNama } from "@/app/mkesindo/produksi/actions";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { SHIFT_LABEL } from "@/lib/produksi-shift";
+import { STATUS_MESIN_LABEL } from "@/lib/produksi-mesin-status";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
 const SHIFT_OPTIONS = [1, 2, 3] as const;
+
+function RiwayatPosisiList({ posisiId, open }: { posisiId: number; open: boolean }) {
+  const [riwayat, setRiwayat] = useState<{ posisiId: number; rows: RiwayatProduksiRowWithNama[] } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getRiwayatProduksiForPosisiAction(posisiId).then((result) => {
+      if (cancelled) return;
+      if (result.success) setRiwayat({ posisiId, rows: result.data });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, posisiId]);
+
+  if (!open) return null;
+
+  const rows = riwayat && riwayat.posisiId === posisiId ? riwayat.rows : null;
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/30 p-2.5">
+      <p className="text-xs font-semibold text-muted-foreground">Riwayat Produksi Pallete Ini</p>
+      {rows === null ? (
+        <p className="text-xs text-muted-foreground">Memuat...</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Belum ada riwayat.</p>
+      ) : (
+        <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
+          {rows.map((r) => (
+            <p key={r.BatchID} className="text-[11px] text-muted-foreground">
+              {new Date(r.TanggalLabel).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+              {" — Shift "}
+              {r.Shift}
+              {" — "}
+              {r.JamPanen}
+              {" — "}
+              {r.MesinNama}
+              {" — "}
+              {r.Qty10KG}-{r.Qty5KG}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TambahProduksiDialog({
   open,
@@ -88,63 +138,90 @@ export function TambahProduksiDialog({
         onOpenChange(o);
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Tambah Produksi — Slot {posisi?.Kode}</DialogTitle>
+          <DialogTitle>Tambah Produksi — Pallete {posisi?.Kode}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div>
-            <Label>Tanggal Produksi</Label>
-            <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} />
+          {posisi && <RiwayatPosisiList posisiId={posisi.PosisiID} open={open} />}
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label>Tanggal Produksi</Label>
+              <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} />
+            </div>
+            <div>
+              <Label>Shift</Label>
+              <Select value={shift} onValueChange={(v) => setShift(v ?? "1")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Shift">{(v: string) => SHIFT_LABEL[Number(v) as 1 | 2 | 3]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {SHIFT_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={String(s)}>
+                      {SHIFT_LABEL[s]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Jam Panen</Label>
+              <Input type="time" value={jamPanen} onChange={(e) => setJamPanen(e.target.value)} />
+            </div>
           </div>
-          <div>
-            <Label>Shift</Label>
-            <Select value={shift} onValueChange={(v) => setShift(v ?? "1")}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih shift">{(v: string) => SHIFT_LABEL[Number(v) as 1 | 2 | 3]}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {SHIFT_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={String(s)}>
-                    {SHIFT_LABEL[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+
           <div>
             <Label>Mesin yang Dipakai</Label>
-            <Select value={mesinId} onValueChange={(v) => setMesinId(v ?? "")}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih mesin">
-                  {(v: string) => mesinList.find((m) => String(m.MesinID) === v)?.Nama ?? v}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {mesinList.map((m) => (
-                  <SelectItem key={m.MesinID} value={String(m.MesinID)}>
-                    {m.Nama}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-3 gap-2">
+              {mesinList.map((m) => {
+                const disabled = m.Status !== "AKTIF";
+                const active = mesinId === String(m.MesinID);
+                return (
+                  <button
+                    key={m.MesinID}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setMesinId(String(m.MesinID))}
+                    className={cn(
+                      "flex flex-col items-start gap-0.5 rounded-lg border p-2 text-left text-xs transition-colors",
+                      disabled ? "cursor-not-allowed border-border bg-muted/40 opacity-50" : "border-border hover:bg-muted/50",
+                      active && !disabled && "border-primary bg-primary/10"
+                    )}
+                  >
+                    <span className="font-semibold">{m.Nama}</span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-medium",
+                        m.Status === "AKTIF" ? "text-emerald-600" : m.Status === "MAINTENANCE" ? "text-amber-600" : "text-destructive"
+                      )}
+                    >
+                      {STATUS_MESIN_LABEL[m.Status]}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{m.KapasitasProduksiPerHari} kantong/hari</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div>
-            <Label>Jam Panen</Label>
-            <Input type="time" value={jamPanen} onChange={(e) => setJamPanen(e.target.value)} />
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label>Kantong 10KG</Label>
+              <Input type="number" value={qty10} onChange={(e) => setQty10(e.target.value)} />
+            </div>
+            <div>
+              <Label>Kantong 5KG</Label>
+              <Input type="number" value={qty5} onChange={(e) => setQty5(e.target.value)} />
+            </div>
+            <div className="flex flex-col justify-end">
+              <Button disabled={pending} onClick={handleSubmit}>
+                {pending ? "..." : "Simpan"}
+              </Button>
+            </div>
           </div>
-          <div>
-            <Label>Jumlah Kantong 10kg</Label>
-            <Input type="number" value={qty10} onChange={(e) => setQty10(e.target.value)} />
-          </div>
-          <div>
-            <Label>Jumlah Kantong 5kg</Label>
-            <Input type="number" value={qty5} onChange={(e) => setQty5(e.target.value)} />
-          </div>
+
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button disabled={pending} onClick={handleSubmit}>
-            {pending ? "Menyimpan..." : "Simpan"}
-          </Button>
         </div>
       </DialogContent>
     </Dialog>

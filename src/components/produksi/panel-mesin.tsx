@@ -5,8 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { updateMesinAction } from "@/app/mkesindo/produksi/actions";
+import { STATUS_MESIN_LABEL, type StatusMesin } from "@/lib/produksi-mesin-status";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
+
+const STATUS_OPTIONS: StatusMesin[] = ["AKTIF", "MAINTENANCE", "RUSAK"];
+
+const STATUS_BADGE_CLASS: Record<StatusMesin, string> = {
+  AKTIF: "bg-emerald-500/15 text-emerald-600",
+  MAINTENANCE: "bg-amber-500/15 text-amber-600",
+  RUSAK: "bg-destructive/15 text-destructive",
+};
 
 export function PanelMesin({ mesinList }: { mesinList: MesinRow[] }) {
   return (
@@ -21,6 +31,7 @@ export function PanelMesin({ mesinList }: { mesinList: MesinRow[] }) {
 function MesinCard({ mesin }: { mesin: MesinRow }) {
   const [open, setOpen] = useState(false);
   const [nama, setNama] = useState(mesin.Nama);
+  const [status, setStatus] = useState<StatusMesin>(mesin.Status);
   const [kapasitas, setKapasitas] = useState(String(mesin.KapasitasProduksiPerHari));
   const [listrik, setListrik] = useState(String(mesin.KonsumsiListrikKWh));
   const [lamaProduksi, setLamaProduksi] = useState(String(mesin.LamaProduksiMenit));
@@ -34,6 +45,7 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
       const result = await updateMesinAction({
         mesinId: mesin.MesinID,
         nama,
+        status,
         kapasitasProduksiPerHari: Number(kapasitas),
         konsumsiListrikKWh: Number(listrik),
         lamaProduksiMenit: Number(lamaProduksi),
@@ -61,6 +73,7 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
           // every time it opens so it always starts from the true current
           // values.
           setNama(mesin.Nama);
+          setStatus(mesin.Status);
           setKapasitas(String(mesin.KapasitasProduksiPerHari));
           setListrik(String(mesin.KonsumsiListrikKWh));
           setLamaProduksi(String(mesin.LamaProduksiMenit));
@@ -70,7 +83,12 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
       }}
     >
       <DialogTrigger className="rounded-lg border border-border p-3 text-left text-sm hover:bg-muted/50">
-        <p className="font-semibold">{mesin.Nama}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-semibold">{mesin.Nama}</p>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE_CLASS[mesin.Status]}`}>
+            {STATUS_MESIN_LABEL[mesin.Status]}
+          </span>
+        </div>
         <p className="text-xs text-muted-foreground">Kapasitas: {mesin.KapasitasProduksiPerHari} kantong/hari</p>
         <p className="text-xs text-muted-foreground">Listrik: {mesin.KonsumsiListrikKWh} kWh</p>
         <p className="text-xs text-muted-foreground">Produksi: {mesin.LamaProduksiMenit} menit</p>
@@ -84,6 +102,21 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
           <div>
             <Label>Nama</Label>
             <Input value={nama} onChange={(e) => setNama(e.target.value)} />
+          </div>
+          <div>
+            <Label>Status</Label>
+            <Select value={status} onValueChange={(v) => setStatus((v as StatusMesin) ?? "AKTIF")}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Pilih status">{(v: string) => STATUS_MESIN_LABEL[v as StatusMesin]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STATUS_MESIN_LABEL[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Kapasitas Produksi (kantong/hari)</Label>

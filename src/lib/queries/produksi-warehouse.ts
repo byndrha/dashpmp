@@ -67,6 +67,28 @@ export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow
   return result.recordset;
 }
 
+// Riwayat scoped to one Pallete (PosisiID) — shown at the top of
+// TambahProduksiDialog so the operator can see what previously filled this
+// exact slot before starting a new batch on it.
+export async function getRiwayatProduksiForPosisi(posisiId: number, limit = 10): Promise<RiwayatProduksiRow[]> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("posisiId", sql.Int, posisiId)
+    .input("limit", sql.Int, limit)
+    .query(`
+      SELECT TOP (@limit) b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
+             b.Qty10KG, b.Qty5KG, b.SisaQty10KG, b.SisaQty5KG, b.DicatatOlehAkunID,
+             b.TanggalLabel, b.Shift, b.JamPanen
+      FROM DashboardProduksiBatch b
+      JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
+      JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
+      WHERE b.IsDeleted = 0 AND b.PosisiID = @posisiId
+      ORDER BY b.TanggalProduksi DESC
+    `);
+  return result.recordset;
+}
+
 export interface CreateBatchInput {
   mesinId: number;
   posisiId: number;
