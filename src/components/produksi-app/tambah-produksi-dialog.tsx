@@ -146,26 +146,38 @@ export function TambahProduksiDialog({
           </DialogHeader>
 
 
-          <div className="grid grid-cols-[135px_128px_98px] gap-0">
+          <div className="grid grid-cols-[1fr_98px] gap-0">
+            {/* Baris 1 - Tanggal */}
             <div>
-              <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} />
+              <Input
+                type="date"
+                value={tanggalLabel}
+                onChange={(e) => setTanggalLabel(e.target.value)}
+              />
             </div>
+
+            {/* Baris 1 - Jam Panen */}
             <div>
-              <Select value={shift} onValueChange={(v) => setShift(v ?? "1")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Shift">{(v: string) => SHIFT_LABEL[Number(v) as 1 | 2 | 3]}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {SHIFT_OPTIONS.map((s) => (
-                    <SelectItem key={s} value={String(s)}>
-                      {SHIFT_LABEL[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                type="time"
+                value={jamPanen}
+                onChange={(e) => setJamPanen(e.target.value)}
+              />
             </div>
-            <div>
-              <Input type="time" value={jamPanen} onChange={(e) => setJamPanen(e.target.value)} />
+
+            {/* Baris 2 - Shift */}
+            <div className="col-span-2 grid grid-cols-3">
+              {SHIFT_OPTIONS.map((s) => (
+                <Button
+                  key={s}
+                  type="button"
+                  variant={shift === String(s) ? "default" : "outline"}
+                  onClick={() => setShift(String(s))}
+                  className="rounded-none"
+                >
+                  {SHIFT_LABEL[s]}
+                </Button>
+              ))}
             </div>
           </div>
 
