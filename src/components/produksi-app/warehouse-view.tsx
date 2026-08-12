@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Grid2x2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
@@ -92,45 +91,61 @@ export function WarehouseView({
       </div>
 
       <div ref={scrollerRef} onScroll={handleScroll} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
-        {WAREHOUSE_ZONES.map((zone) => (
-          <div
-            key={zone.id}
-            ref={(el) => {
-              panelRefs.current[zone.id] = el;
-            }}
-            className="flex w-fit shrink-0 snap-start flex-col gap-1 rounded-lg border border-border p-3"
-          >
-            {zone.grup.map((g) => (
-              <div key={g.id} className="flex flex-col gap-1">
-                {g.rows.map((row, i) => (
-                  <div key={i} className="flex gap-2">
-                    {row.map((kode) => (
-                      <WarehouseCell key={kode} kode={kode} row={byKode.get(kode)} onClick={handleCellClick} />
+        {WAREHOUSE_ZONES.map((zone) => {
+          const isSelatan = zone.id === "S";
+          const hasJendela = zone.grup.some((g) => g.dividerAfter?.includes("Jendela"));
+          return (
+            <div
+              key={zone.id}
+              ref={(el) => {
+                panelRefs.current[zone.id] = el;
+              }}
+              className="flex w-fit shrink-0 snap-start flex-col gap-1 rounded-lg border border-border p-3"
+            >
+              <div className="relative flex flex-col gap-1">
+                {zone.grup.map((g) => (
+                  <div key={g.id} className="flex flex-col gap-1">
+                    {g.rows.map((row, i) => (
+                      <div key={i} className="flex gap-2">
+                        {isSelatan && (
+                          <span className="flex w-[60px] shrink-0 items-center justify-center">
+                            <span className="size-3 rounded-full border border-border bg-muted-foreground/30" />
+                          </span>
+                        )}
+                        {row.map((kode) => (
+                          <WarehouseCell key={kode} kode={kode} row={byKode.get(kode)} onClick={handleCellClick} />
+                        ))}
+                      </div>
                     ))}
-                  </div>
-                ))}
-                {g.dividerAfter && (
-                  <div className="flex items-center gap-2 text-center text-[11px] text-muted-foreground">
-                    <span className="flex-1 border-t border-dashed border-border" />
-                    <span>{g.dividerAfter}</span>
-                    <span className="flex-1 border-t border-dashed border-border" />
-                    {g.dividerAfter.includes("Jendela") && (
-                      <span
-                        title="Jendela"
-                        className="flex size-5 shrink-0 items-center justify-center rounded-sm border border-border bg-muted text-muted-foreground"
+                    {g.dividerAfter && (
+                      <div
+                        className={cn(
+                          "flex items-center gap-2 text-center text-[11px] text-muted-foreground",
+                          g.dividerAfter === "Jalan" && "py-2"
+                        )}
                       >
-                        <Grid2x2 className="size-3" />
-                      </span>
+                        {isSelatan && <span className="w-[60px] shrink-0" />}
+                        <span className="flex-1 border-t border-dashed border-border" />
+                        <span>{g.dividerAfter}</span>
+                        <span className="flex-1 border-t border-dashed border-border" />
+                        {g.dividerAfter.includes("Jendela") && (
+                          <span
+                            title="Jendela"
+                            className="relative z-10 h-6 w-1.5 shrink-0 rounded-sm border border-border bg-muted"
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
+                ))}
+                {hasJendela && <div className="pointer-events-none absolute inset-y-0 right-0 w-1 bg-foreground/70" />}
               </div>
-            ))}
-            {zone.showPintuGeser && (
-              <p className="mt-2 rounded-md bg-muted py-1 text-center text-xs font-medium">Pintu Geser</p>
-            )}
-          </div>
-        ))}
+              {zone.showPintuGeser && (
+                <p className="mt-2 rounded-md bg-muted py-1 text-center text-xs font-medium">Pintu Geser</p>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex flex-wrap gap-3 text-[11px]">
