@@ -1,5 +1,5 @@
 import { requirePmpersada, canAccessAllPT } from "@/lib/require-access";
-import { getBakListAction, getRekMapAction, getKonfigurasiAction, getRiwayatBatchAction, getAuditLogAction } from "@/app/pmpersada/produksi/actions";
+import { getBakListAction, getRekMapAction, getKonfigurasiAction, getRiwayatBatchAction, getAuditLogAction } from "@/app/pmpersada/(dashboard)/produksi/actions";
 import { ProduksiDashboardClient } from "@/components/produksi-pmpersada/produksi-dashboard-client";
 
 export default async function PmpersadaProduksiPage() {

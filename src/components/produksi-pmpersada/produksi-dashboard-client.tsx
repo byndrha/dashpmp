@@ -8,13 +8,15 @@ import { AlertTriangle } from "lucide-react";
 import {
   getRekMapAction,
   getBakListAction,
+  getRiwayatBatchAction,
+  getAuditLogAction,
   isiAirBaruAction,
   setBabonanAction,
   setMaintenanceAction,
   overrideTahapAction,
   koreksiBatchAction,
-} from "@/app/pmpersada/produksi/actions";
-import type { RekMapRowWithNama, BatchRowWithNama, AuditLogRowWithNama } from "@/app/pmpersada/produksi/actions";
+} from "@/app/pmpersada/(dashboard)/produksi/actions";
+import type { RekMapRowWithNama, BatchRowWithNama, AuditLogRowWithNama } from "@/app/pmpersada/(dashboard)/produksi/actions";
 import type { BakRow, KonfigurasiRow } from "@/lib/queries/produksi-bak-pmpersada";
 import { RekDetailDialog } from "./rek-detail-dialog";
 import { formatUsia, TAHAP_BADGE_CLASS } from "./produksi-lib";
@@ -44,23 +46,29 @@ export function ProduksiDashboardClient({
   const [bak] = useState(initialBak);
   const [rek, setRek] = useState(initialRek);
   const [konfigurasi, setKonfigurasi] = useState(initialKonfigurasi);
-  const [riwayat] = useState(initialRiwayat);
-  const [audit] = useState(initialAudit);
+  const [riwayat, setRiwayat] = useState(initialRiwayat);
+  const [audit, setAudit] = useState(initialAudit);
   const [, startTransition] = useTransition();
   const [selectedBakId, setSelectedBakId] = useState(bak[0]?.BakID ?? 0);
   const [selectedRek, setSelectedRek] = useState<RekMapRowWithNama | null>(null);
 
-  const refreshRek = useCallback(() => {
+  const refreshAll = useCallback(() => {
     startTransition(async () => {
-      const result = await getRekMapAction();
-      if (result.success) setRek(result.data);
+      const [rekResult, riwayatResult, auditResult] = await Promise.all([
+        getRekMapAction(),
+        getRiwayatBatchAction(),
+        getAuditLogAction(),
+      ]);
+      if (rekResult.success) setRek(rekResult.data);
+      if (riwayatResult.success) setRiwayat(riwayatResult.data);
+      if (auditResult.success) setAudit(auditResult.data);
     });
   }, []);
 
   useEffect(() => {
-    const id = setInterval(refreshRek, POLL_INTERVAL_MS);
+    const id = setInterval(refreshAll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [refreshRek]);
+  }, [refreshAll]);
 
   const totalCan = rek.reduce((sum, r) => sum + (r.IsMaintenance ? 0 : (r.JumlahCan ?? 0)), 0);
   const canBaru = rek.filter((r) => r.Tahap === "BARU").reduce((sum, r) => sum + (r.JumlahCan ?? 0), 0);
@@ -195,11 +203,11 @@ export function ProduksiDashboardClient({
               rek={selectedRek}
               isAdmin={isAdmin}
               onClose={() => setSelectedRek(null)}
-              onIsiAirBaru={(jenisEs, jumlahCan) => isiAirBaruAction({ rekId: selectedRek.RekID, jenisEs, jumlahCan }).then((r) => { if (r.success) refreshRek(); return r; })}
-              onSetBabonan={() => setBabonanAction(selectedRek.RekID).then((r) => { if (r.success) refreshRek(); return r; })}
-              onSetMaintenance={() => setMaintenanceAction(selectedRek.RekID).then((r) => { if (r.success) refreshRek(); return r; })}
-              onOverrideTahap={(tahap) => overrideTahapAction(selectedRek.RekID, tahap).then((r) => { if (r.success) refreshRek(); return r; })}
-              onKoreksiBatch={(jenisEs, jumlahCan) => koreksiBatchAction({ rekId: selectedRek.RekID, jenisEs, jumlahCan }).then((r) => { if (r.success) refreshRek(); return r; })}
+              onIsiAirBaru={(jenisEs, jumlahCan) => isiAirBaruAction({ rekId: selectedRek.RekID, jenisEs, jumlahCan }).then((r) => { if (r.success) refreshAll(); return r; })}
+              onSetBabonan={() => setBabonanAction(selectedRek.RekID).then((r) => { if (r.success) refreshAll(); return r; })}
+              onSetMaintenance={() => setMaintenanceAction(selectedRek.RekID).then((r) => { if (r.success) refreshAll(); return r; })}
+              onOverrideTahap={(tahap) => overrideTahapAction(selectedRek.RekID, tahap).then((r) => { if (r.success) refreshAll(); return r; })}
+              onKoreksiBatch={(jenisEs, jumlahCan) => koreksiBatchAction({ rekId: selectedRek.RekID, jenisEs, jumlahCan }).then((r) => { if (r.success) refreshAll(); return r; })}
             />
           )}
         </TabsContent>

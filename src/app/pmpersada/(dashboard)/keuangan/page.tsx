@@ -31,7 +31,7 @@ import {
   deleteCashFlowExpensePmpersadaAction,
   getHPPBersihPmpersadaAction,
   setCostBehaviorPmpersadaAction,
-} from "@/app/pmpersada/keuangan/actions";
+} from "@/app/pmpersada/(dashboard)/keuangan/actions";
 
 export default async function PmpersadaKeuanganPage({
   searchParams,
