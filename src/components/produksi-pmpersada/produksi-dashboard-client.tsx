@@ -3,11 +3,22 @@
 import { useEffect, useState, useTransition, useCallback } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
-import { getRekMapAction, getBakListAction } from "@/app/pmpersada/produksi/actions";
+import {
+  getRekMapAction,
+  getBakListAction,
+  isiAirBaruAction,
+  setBabonanAction,
+  setMaintenanceAction,
+  overrideTahapAction,
+  koreksiBatchAction,
+} from "@/app/pmpersada/produksi/actions";
 import type { RekMapRowWithNama, BatchRowWithNama, AuditLogRowWithNama } from "@/app/pmpersada/produksi/actions";
 import type { BakRow, KonfigurasiRow } from "@/lib/queries/produksi-bak-pmpersada";
-import { formatUsia } from "./produksi-lib";
+import { RekDetailDialog } from "./rek-detail-dialog";
+import { formatUsia, TAHAP_BADGE_CLASS } from "./produksi-lib";
+import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 30000;
 // Toleransi di atas durasi standar sebelum sebuah Rek dianggap perlu
@@ -35,6 +46,8 @@ export function ProduksiDashboardClient({
   const [riwayat] = useState(initialRiwayat);
   const [audit] = useState(initialAudit);
   const [, startTransition] = useTransition();
+  const [selectedBakId, setSelectedBakId] = useState(bak[0]?.BakID ?? 0);
+  const [selectedRek, setSelectedRek] = useState<RekMapRowWithNama | null>(null);
 
   const refreshRek = useCallback(() => {
     startTransition(async () => {
@@ -151,6 +164,43 @@ export function ProduksiDashboardClient({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="denah" className="flex flex-col gap-4 pt-4">
+          <div className="flex flex-wrap gap-2">
+            {bak.map((b) => (
+              <Button key={b.BakID} size="sm" variant={selectedBakId === b.BakID ? "default" : "outline"} onClick={() => setSelectedBakId(b.BakID)}>
+                {b.Nama} ({b.TotalRek})
+              </Button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+            {rek
+              .filter((r) => r.BakID === selectedBakId)
+              .map((r) => (
+                <button
+                  key={r.RekID}
+                  type="button"
+                  onClick={() => setSelectedRek(r)}
+                  className={cn("flex flex-col gap-1 rounded-lg border p-2 text-left text-xs", TAHAP_BADGE_CLASS[r.Tahap])}
+                >
+                  <span className="font-bold">Rek {r.NomorRek}</span>
+                  <span className="truncate">{r.JenisEs ?? "-"}</span>
+                </button>
+              ))}
+          </div>
+          {selectedRek && (
+            <RekDetailDialog
+              rek={selectedRek}
+              isAdmin={isAdmin}
+              onClose={() => setSelectedRek(null)}
+              onIsiAirBaru={(jenisEs, jumlahCan) => isiAirBaruAction({ rekId: selectedRek.RekID, jenisEs, jumlahCan }).then((r) => { if (r.success) refreshRek(); return r; })}
+              onSetBabonan={() => setBabonanAction(selectedRek.RekID).then((r) => { if (r.success) refreshRek(); return r; })}
+              onSetMaintenance={() => setMaintenanceAction(selectedRek.RekID).then((r) => { if (r.success) refreshRek(); return r; })}
+              onOverrideTahap={(tahap) => overrideTahapAction(selectedRek.RekID, tahap).then((r) => { if (r.success) refreshRek(); return r; })}
+              onKoreksiBatch={(jenisEs, jumlahCan) => koreksiBatchAction({ rekId: selectedRek.RekID, jenisEs, jumlahCan }).then((r) => { if (r.success) refreshRek(); return r; })}
+            />
+          )}
         </TabsContent>
 
         {/* TabsContent "denah" ditambahkan Task 9, "rekap" ditambahkan Task 10 */}
