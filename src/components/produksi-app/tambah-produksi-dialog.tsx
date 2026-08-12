@@ -139,19 +139,18 @@ export function TambahProduksiDialog({
       }}
     >
       <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Tambah Produksi — Pallete {posisi?.Kode}</DialogTitle>
-        </DialogHeader>
         <div className="flex flex-col gap-3">
           {posisi && <RiwayatPosisiList posisiId={posisi.PosisiID} open={open} />}
+          <DialogHeader>
+            <DialogTitle>Tambah Produksi — Pallete {posisi?.Kode}</DialogTitle>
+          </DialogHeader>
 
-          <div className="grid grid-cols-3 gap-2">
+
+          <div className="grid grid-cols-[135px_128px_98px] gap-0">
             <div>
-              <Label>Tanggal Produksi</Label>
               <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} />
             </div>
             <div>
-              <Label>Shift</Label>
               <Select value={shift} onValueChange={(v) => setShift(v ?? "1")}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Shift">{(v: string) => SHIFT_LABEL[Number(v) as 1 | 2 | 3]}</SelectValue>
@@ -166,13 +165,11 @@ export function TambahProduksiDialog({
               </Select>
             </div>
             <div>
-              <Label>Jam Panen</Label>
               <Input type="time" value={jamPanen} onChange={(e) => setJamPanen(e.target.value)} />
             </div>
           </div>
 
           <div>
-            <Label>Mesin yang Dipakai</Label>
             <div className="grid grid-cols-3 gap-2">
               {mesinList.map((m) => {
                 const disabled = m.Status !== "AKTIF";
@@ -206,20 +203,40 @@ export function TambahProduksiDialog({
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <div>
-              <Label>Kantong 10KG</Label>
-              <Input type="number" value={qty10} onChange={(e) => setQty10(e.target.value)} />
-            </div>
-            <div>
-              <Label>Kantong 5KG</Label>
-              <Input type="number" value={qty5} onChange={(e) => setQty5(e.target.value)} />
-            </div>
-            <div className="flex flex-col justify-end">
-              <Button disabled={pending} onClick={handleSubmit}>
-                {pending ? "..." : "Simpan"}
-              </Button>
+          <div>
+            <div className="relative">
+              <Input
+                type="number"
+                value={qty10}
+                onChange={(e) => setQty10(e.target.value)}
+                className="pr-12"
+              />
+              <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-sm text-muted-foreground">
+                10KG
+              </span>
             </div>
           </div>
+
+          <div>
+            <div className="relative">
+              <Input
+                type="number"
+                value={qty5}
+                onChange={(e) => setQty5(e.target.value)}
+                className="pr-12"
+              />
+              <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-sm text-muted-foreground">
+                5KG
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-end">
+            <Button disabled={pending} onClick={handleSubmit}>
+              {pending ? "..." : "Simpan"}
+            </Button>
+          </div>
+        </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

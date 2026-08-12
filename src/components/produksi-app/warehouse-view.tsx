@@ -102,7 +102,7 @@ export function WarehouseView({
               }}
               className="flex w-fit shrink-0 snap-start flex-col gap-1 rounded-lg border border-border p-3"
             >
-              <div className="relative flex flex-col gap-1">
+              <div className="relative flex flex-col gap-1 mr-2">
                 {zone.grup.map((g) => (
                   <div key={g.id} className="flex flex-col gap-1">
                     {g.rows.map((row, i) => (
@@ -127,6 +127,8 @@ export function WarehouseView({
                         {isSelatan && <span className="w-[60px] shrink-0" />}
                         <span className="flex-1 border-t border-dashed border-border" />
                         <span>{g.dividerAfter}</span>
+                        <span className="flex-1 border-t border-dashed border-border" />
+                        <span className="flex-1 border-t border-dashed border-border" />
                         <span className="flex-1 border-t border-dashed border-border" />
                         {g.dividerAfter.includes("Jendela") && (
                           <span
