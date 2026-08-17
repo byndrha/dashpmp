@@ -116,7 +116,8 @@ export function KartuPengirimanList({
                 {new Date(jadwal.JamSelesaiMuat).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {jadwal.Qty10KG} kantong 10kg, {jadwal.Qty5KG} kantong 5kg
+                {jadwal.Qty10KG} kantong 10kg
+                {jadwal.Qty5KGDimuat != null && `, ${jadwal.Qty5KGDimuat} kantong 5kg dimuat`}
               </p>
             </div>
           ))}

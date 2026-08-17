@@ -58,6 +58,13 @@ export interface SelesaiMuatJadwalForProduksi {
   JamSelesaiMuat: Date;
   Qty10KG: number;
   Qty5KG: number;
+  // Angka 5kg yang benar-benar dicatat operator saat Isi Muatan (lewat
+  // field "Qty 5kg dimuat"), berbeda dari Qty5KG di atas (yang dari
+  // JADWAL_KANTONG_5KG_EXPR -- kebutuhan pesanan pelanggan, bukan yang
+  // sungguh dimuat). null untuk Jadwal lama sebelum kolom ini ada, atau
+  // yang diselesaikan lewat jalur manual (produksiSelesaiMuatManual) yang
+  // tidak pernah melalui alokasi pallet sama sekali.
+  Qty5KGDimuat: number | null;
 }
 
 // Recent Jadwal that have already finished loading (Status flipped to
@@ -71,7 +78,7 @@ export interface SelesaiMuatJadwalForProduksi {
 export async function getSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT TOP (30) j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat,
+    SELECT TOP (30) j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat,
            ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
            ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG
     FROM DashboardPengirimanJadwal j
@@ -79,7 +86,7 @@ export async function getSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadw
     LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
     LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
     WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL
-    GROUP BY j.JadwalID, a.Nama, j.JamJadwal, j.JamSelesaiMuat
+    GROUP BY j.JadwalID, a.Nama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat
     ORDER BY j.JamSelesaiMuat DESC
   `);
   return result.recordset;

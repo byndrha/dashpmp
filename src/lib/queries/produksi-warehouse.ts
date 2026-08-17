@@ -129,7 +129,7 @@ export async function getBatchAktifForAlokasi(): Promise<BatchAktifRow[]> {
     SELECT b.BatchID, b.PosisiID, p.Kode, b.SisaQty10KG, b.TanggalLabel, b.JamPanen
     FROM DashboardProduksiBatch b
     JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
-    WHERE b.IsDeleted = 0 AND b.SisaQty10KG > 0
+    WHERE b.IsDeleted = 0 AND b.SisaQty10KG > 0 AND p.Kode LIKE '[SUT]%'
     ORDER BY b.TanggalLabel ASC, b.JamPanen ASC
   `);
   return result.recordset;
@@ -193,11 +193,24 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
     // transaksi ini commit/rollback -- menutup race dua operator submit ke
     // posisi yang sama secara bersamaan, pola yang sama seperti klaim
     // BatchIDAktif IS NULL yang digantikannya.
+    // Tidak perlu WITH (UPDLOCK, HOLDLOCK) di sini -- klaim baris posisi di
+    // atas sudah menyerialisasi semua createBatch konkuren ke posisi yang
+    // sama (satu per satu), jadi INSERT spekulatif di atas selalu terlihat
+    // oleh SELECT ini sendiri tanpa race. Sempat memakai hint ini, tapi
+    // DashboardProduksiBatch tidak punya index pada PosisiID -- HOLDLOCK
+    // tanpa index pendukung membuat SQL Server mengunci seluruh clustered
+    // index (bukan cuma baris posisi ini), yang justru membuka deadlock
+    // baru antar OPERATOR BERBEDA yang submit ke POSISI BERBEDA secara
+    // bersamaan (ditemukan saat final review). Penulis lain ke SisaQty10KG
+    // (klaim produksiSelesaiMuat) hanya pernah MENGURANGI nilainya, jadi
+    // baca tanpa lock di sini paling buruk melihat total yang stale-TINGGI
+    // (bukan stale-rendah) -- itu membuat pengecekan >120 lebih konservatif,
+    // tidak pernah kurang ketat, jadi batas 120 tetap tidak bisa terlanggar.
     const capacityCheck = await new sql.Request(transaction)
       .input("posisiId", sql.Int, input.posisiId)
       .query(`
         SELECT ISNULL(SUM(SisaQty10KG), 0) AS TotalSisa
-        FROM DashboardProduksiBatch WITH (UPDLOCK, HOLDLOCK)
+        FROM DashboardProduksiBatch
         WHERE PosisiID = @posisiId AND IsDeleted = 0 AND SisaQty10KG > 0
       `);
     const totalSisa = capacityCheck.recordset[0].TotalSisa as number;
