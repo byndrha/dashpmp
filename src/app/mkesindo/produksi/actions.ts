@@ -8,9 +8,11 @@ import {
   getRiwayatProduksi,
   getRiwayatProduksiForPosisi,
   createBatch,
+  getBatchAktifForAlokasi,
   type PalletPosisiRow,
   type RiwayatProduksiRow,
   type CreateBatchInput,
+  type BatchAktifRow,
 } from "@/lib/queries/produksi-warehouse";
 import {
   getDraftJadwalForProduksi,
@@ -51,6 +53,13 @@ export async function getWarehouseMapAction(): Promise<ActionResult<PalletPosisi
   });
 }
 
+export async function getBatchAktifForAlokasiAction(): Promise<ActionResult<BatchAktifRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getBatchAktifForAlokasi();
+  });
+}
+
 export interface RiwayatProduksiRowWithNama extends RiwayatProduksiRow {
   DicatatOlehNama: string;
 }
@@ -84,11 +93,12 @@ export async function createBatchAction(
     if (!input.jamPanen) {
       throw new AppError("Isi jam panen.");
     }
-    if (input.qty10KG <= 0 && input.qty5KG <= 0) {
-      throw new AppError("Isi jumlah kantong 10kg atau 5kg minimal satu.");
+    if (input.qty10KG <= 0) {
+      throw new AppError("Isi jumlah kantong 10kg.");
     }
     const batchId = await createBatch({ ...input, dicatatOlehAkunId: Number(session.user.id) });
     revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
     return batchId;
   });
 }
@@ -136,11 +146,10 @@ export async function produksiSelesaiMuatAction(
   return runAction(async () => {
     const session = await requireProduksiView();
     const totalQty10 = input.alokasi.reduce((sum, a) => sum + a.qty10KG, 0);
-    const totalQty5 = input.alokasi.reduce((sum, a) => sum + a.qty5KG, 0);
     const jadwalList = await getDraftJadwalForProduksi();
     const jadwal = jadwalList.find((j) => j.JadwalID === input.jadwalId);
     if (!jadwal) throw new AppError("Kartu Pengiriman ini sudah tidak tersedia untuk diisi.");
-    if (totalQty10 < jadwal.Qty10KGDibutuhkan || totalQty5 < jadwal.Qty5KGDibutuhkan) {
+    if (totalQty10 < jadwal.Qty10KGDibutuhkan || input.qty5KGDimuat < jadwal.Qty5KGDibutuhkan) {
       throw new AppError("Jumlah yang dialokasikan belum mencukupi kebutuhan Kartu Pengiriman ini.");
     }
     await produksiSelesaiMuat({ ...input, dicatatOlehAkunId: Number(session.user.id) });
