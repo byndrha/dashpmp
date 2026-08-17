@@ -189,10 +189,8 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
 
     // Kapasitas: total SisaQty10KG semua batch aktif di posisi ini (baris
     // yang baru di-insert di atas sudah ikut terhitung) tidak boleh melebihi
-    // 120. WITH (UPDLOCK, HOLDLOCK) mengunci baris yang cocok sampai
-    // transaksi ini commit/rollback -- menutup race dua operator submit ke
-    // posisi yang sama secara bersamaan, pola yang sama seperti klaim
-    // BatchIDAktif IS NULL yang digantikannya.
+    // 120.
+    //
     // Tidak perlu WITH (UPDLOCK, HOLDLOCK) di sini -- klaim baris posisi di
     // atas sudah menyerialisasi semua createBatch konkuren ke posisi yang
     // sama (satu per satu), jadi INSERT spekulatif di atas selalu terlihat
