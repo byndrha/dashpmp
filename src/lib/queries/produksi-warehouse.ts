@@ -153,6 +153,20 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
+    // Kunci baris posisi (selalu ada -- 42 posisi tetap) sebagai titik
+    // serialisasi SEBELUM insert/cek kapasitas. Menutup race deadlock yang
+    // reviewer temukan: mengunci baris batch (kardinalitas berubah-ubah,
+    // termasuk kosong) alih-alih baris posisi yang stabil membuat dua
+    // transaksi konkuren ke posisi yang sama bisa saling menunggu satu sama
+    // lain secara melingkar (circular wait -> SQL Server membatalkan salah
+    // satu dengan error 1205 mentah). Mengunci baris posisi dulu membuat
+    // keduanya cukup antre berurutan (blocking wait biasa), bukan deadlock --
+    // dan tetap benar untuk posisi yang sedang kosong (baris posisi tetap ada
+    // meski batch-nya nol).
+    await new sql.Request(transaction)
+      .input("posisiId", sql.Int, input.posisiId)
+      .query(`SELECT PosisiID FROM DashboardProduksiPalletPosisi WITH (UPDLOCK, HOLDLOCK) WHERE PosisiID = @posisiId`);
+
     // Insert speculatively — aman karena satu transaksi dengan pengecekan
     // kapasitas di bawah: kalau kapasitas terlampaui, rollback membuang
     // baris ini juga, jadi tidak ada batch "orphan" yang pernah terlihat di
@@ -186,10 +200,10 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
         WHERE PosisiID = @posisiId AND IsDeleted = 0 AND SisaQty10KG > 0
       `);
     const totalSisa = capacityCheck.recordset[0].TotalSisa as number;
-    if (totalSisa > 120) {
+    if (totalSisa > KAPASITAS_PALLET_10KG) {
       const sebelumnya = totalSisa - input.qty10KG;
       throw new AppError(
-        `Kapasitas pallet ini penuh -- sudah terisi ${sebelumnya}/120 kantong 10kg, sisa ruang hanya ${120 - sebelumnya}.`
+        `Kapasitas pallet ini penuh -- sudah terisi ${sebelumnya}/${KAPASITAS_PALLET_10KG} kantong 10kg, sisa ruang hanya ${KAPASITAS_PALLET_10KG - sebelumnya}.`
       );
     }
 
