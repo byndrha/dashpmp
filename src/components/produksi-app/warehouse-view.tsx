@@ -6,6 +6,8 @@ import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
 import { TambahProduksiDialog, RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { KAPASITAS_PALLET_10KG } from "@/lib/queries/produksi-warehouse";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 
@@ -43,11 +45,7 @@ export function WarehouseView({
 
   function handleCellClick(row: PalletPosisiRow | undefined) {
     if (!row) return;
-    if (row.BatchIDAktif == null) {
-      setDialogPosisi(row);
-    } else {
-      setDetailPosisi(row);
-    }
+    setDetailPosisi(row);
   }
 
   // Keeps the Selatan/Tengah/Utara tab highlight in sync when the user
@@ -162,7 +160,7 @@ export function WarehouseView({
           <span className="size-3 rounded-sm bg-emerald-600" /> Baru
         </span>
         <span className="flex items-center gap-1">
-          <span className="size-3 rounded-sm bg-muted" /> Kosong — ketuk untuk tambah produksi
+          <span className="size-3 rounded-sm bg-muted" /> Kosong — ketuk untuk detail &amp; tambah produksi
         </span>
       </div>
 
@@ -174,24 +172,21 @@ export function WarehouseView({
           <div className="flex flex-col gap-3">
             {detailPosisi && <RiwayatPosisiList posisiId={detailPosisi.PosisiID} open={detailPosisi != null} />}
             <div className="rounded-md border border-border p-3 text-sm">
-              <p className="text-muted-foreground">Mesin: {detailPosisi?.MesinNama ?? "-"}</p>
-              {detailPosisi?.TanggalLabel != null && (
-                <p className="text-muted-foreground">
-                  Tanggal &amp; Shift Produksi:{" "}
-                  {new Date(detailPosisi.TanggalLabel).toLocaleDateString("id-ID", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                  {" — Shift "}
-                  {detailPosisi.Shift}
-                  {detailPosisi.JamPanen && ` — Jam Panen ${detailPosisi.JamPanen}`}
-                </p>
-              )}
               <p className="text-muted-foreground">
-                Sisa: {detailPosisi?.SisaQty10KG ?? 0} kantong 10kg, {detailPosisi?.SisaQty5KG ?? 0} kantong 5kg
+                Terisi {detailPosisi?.TotalSisaQty10KG ?? 0}/{KAPASITAS_PALLET_10KG} kantong 10kg
+                {(detailPosisi?.JumlahBatchAktif ?? 0) > 1 && ` — ${detailPosisi?.JumlahBatchAktif} batch aktif`}
               </p>
             </div>
+            {detailPosisi && detailPosisi.TotalSisaQty10KG < KAPASITAS_PALLET_10KG && (
+              <Button
+                onClick={() => {
+                  setDialogPosisi(detailPosisi);
+                  setDetailPosisi(null);
+                }}
+              >
+                + Tambah Produksi
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
