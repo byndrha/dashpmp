@@ -4,7 +4,7 @@ import { useState } from "react";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
 import { RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
-import { KAPASITAS_PALLET_10KG } from "@/lib/queries/produksi-warehouse";
+import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
 export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) {

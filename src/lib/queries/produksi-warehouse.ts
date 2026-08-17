@@ -1,11 +1,12 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
+import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 
-// Kapasitas gabungan per posisi pallet, dalam kantong 10kg (SUM SisaQty10KG
-// semua batch aktif di posisi itu). Lihat produksi-warehouse-multi-batch
-// design spec — satu posisi sekarang bisa menampung >1 batch, bukan lagi
-// satu batch sampai habis.
-export const KAPASITAS_PALLET_10KG = 120;
+// Re-exported for existing server-side consumers importing it from here --
+// client components must import from @/lib/produksi-warehouse-constants
+// directly instead (this module pulls in @/lib/db -> mssql/tedious, which
+// cannot be bundled into the browser).
+export { KAPASITAS_PALLET_10KG };
 
 export interface PalletPosisiRow {
   PosisiID: number;

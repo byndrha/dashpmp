@@ -11,7 +11,7 @@ import { getBusinessDateISO } from "@/lib/business-date";
 import { SHIFT_LABEL } from "@/lib/produksi-shift";
 import { STATUS_MESIN_LABEL } from "@/lib/produksi-mesin-status";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
-import { KAPASITAS_PALLET_10KG } from "@/lib/queries/produksi-warehouse";
+import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
 const SHIFT_OPTIONS = [1, 2, 3] as const;
