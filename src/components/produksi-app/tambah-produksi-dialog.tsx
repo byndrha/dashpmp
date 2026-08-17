@@ -11,6 +11,7 @@ import { getBusinessDateISO } from "@/lib/business-date";
 import { SHIFT_LABEL } from "@/lib/produksi-shift";
 import { STATUS_MESIN_LABEL } from "@/lib/produksi-mesin-status";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
+import { KAPASITAS_PALLET_10KG } from "@/lib/queries/produksi-warehouse";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
 const SHIFT_OPTIONS = [1, 2, 3] as const;
@@ -53,7 +54,7 @@ export function RiwayatPosisiList({ posisiId, open }: { posisiId: number; open: 
               {" — "}
               {r.MesinNama}
               {" — "}
-              {r.Qty10KG}-{r.Qty5KG}
+              {r.Qty10KG} kantong 10kg
             </p>
           ))}
         </div>
@@ -80,9 +81,10 @@ export function TambahProduksiDialog({
   const [mesinId, setMesinId] = useState<string>("");
   const [jamPanen, setJamPanen] = useState("");
   const [qty10, setQty10] = useState("");
-  const [qty5, setQty5] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const sisaKapasitas = posisi ? KAPASITAS_PALLET_10KG - posisi.TotalSisaQty10KG : KAPASITAS_PALLET_10KG;
 
   function reset() {
     setTanggalLabel(getBusinessDateISO());
@@ -90,7 +92,6 @@ export function TambahProduksiDialog({
     setMesinId("");
     setJamPanen("");
     setQty10("");
-    setQty5("");
     setError(null);
   }
 
@@ -105,8 +106,13 @@ export function TambahProduksiDialog({
       setError("Isi jam panen.");
       return;
     }
-    if ((Number(qty10) || 0) <= 0 && (Number(qty5) || 0) <= 0) {
-      setError("Isi jumlah kantong 10kg atau 5kg minimal satu.");
+    const qty10Num = Number(qty10) || 0;
+    if (qty10Num <= 0) {
+      setError("Isi jumlah kantong 10kg.");
+      return;
+    }
+    if (qty10Num > sisaKapasitas) {
+      setError(`Melebihi sisa kapasitas pallet ini (sisa ${sisaKapasitas} kantong).`);
       return;
     }
     startTransition(async () => {
@@ -116,8 +122,7 @@ export function TambahProduksiDialog({
         mesinId: Number(mesinId),
         posisiId: posisi.PosisiID,
         jamPanen,
-        qty10KG: Number(qty10) || 0,
-        qty5KG: Number(qty5) || 0,
+        qty10KG: qty10Num,
       });
       if (!result.success) {
         setError(result.error);
@@ -141,6 +146,11 @@ export function TambahProduksiDialog({
           {posisi && <RiwayatPosisiList posisiId={posisi.PosisiID} open={open} />}
           <DialogHeader>
             <DialogTitle>Tambah Produksi — Pallete {posisi?.Kode}</DialogTitle>
+            {posisi && (
+              <p className="text-xs text-muted-foreground">
+                Terisi {posisi.TotalSisaQty10KG}/{KAPASITAS_PALLET_10KG} — sisa ruang {sisaKapasitas} kantong
+              </p>
+            )}
           </DialogHeader>
 
 
@@ -212,7 +222,7 @@ export function TambahProduksiDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="relative">
               <Input
@@ -223,20 +233,6 @@ export function TambahProduksiDialog({
               />
               <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-sm text-muted-foreground">
                 10KG
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <div className="relative">
-              <Input
-                type="number"
-                value={qty5}
-                onChange={(e) => setQty5(e.target.value)}
-                className="pr-12"
-              />
-              <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-sm text-muted-foreground">
-                5KG
               </span>
             </div>
           </div>
