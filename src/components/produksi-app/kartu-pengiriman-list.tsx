@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
-  getWarehouseMapAction,
+  getBatchAktifForAlokasiAction,
   produksiStartMuatAction,
   produksiSelesaiMuatAction,
   produksiSelesaiMuatManualAction,
@@ -13,7 +13,7 @@ import {
   getSelesaiMuatJadwalForProduksiAction,
 } from "@/app/mkesindo/produksi/actions";
 import type { DraftJadwalForProduksi, SelesaiMuatJadwalForProduksi } from "@/lib/queries/produksi-muatan";
-import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
+import type { BatchAktifRow } from "@/lib/queries/produksi-warehouse";
 import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
 
 export function KartuPengirimanList({
@@ -280,8 +280,9 @@ function AlokasiScreen({
   onBack: () => void;
   onDone: () => void;
 }) {
-  const [posisi, setPosisi] = useState<PalletPosisiRow[] | null>(null);
-  const [alokasi, setAlokasi] = useState<Record<number, { qty10: number; qty5: number }>>({});
+  const [batchList, setBatchList] = useState<BatchAktifRow[] | null>(null);
+  const [alokasi, setAlokasi] = useState<Record<number, number>>({});
+  const [qty5Dimuat, setQty5Dimuat] = useState(() => String(jadwal.Qty5KGDibutuhkan));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -289,45 +290,28 @@ function AlokasiScreen({
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   useEffect(() => {
-    getWarehouseMapAction().then((result) => {
-      if (result.success) {
-        setPosisi(
-          result.data
-            .filter((p) => p.BatchIDAktif != null)
-            .sort((a, b) => new Date(a.TanggalProduksi ?? 0).getTime() - new Date(b.TanggalProduksi ?? 0).getTime())
-        );
-      }
+    getBatchAktifForAlokasiAction().then((result) => {
+      if (result.success) setBatchList(result.data);
     });
   }, []);
 
-  const totalQty10 = Object.values(alokasi).reduce((sum, a) => sum + a.qty10, 0);
-  const totalQty5 = Object.values(alokasi).reduce((sum, a) => sum + a.qty5, 0);
-  const cukup = totalQty10 >= jadwal.Qty10KGDibutuhkan && totalQty5 >= jadwal.Qty5KGDibutuhkan;
+  const totalQty10 = Object.values(alokasi).reduce((sum, q) => sum + q, 0);
+  const qty5Num = Number(qty5Dimuat) || 0;
+  const cukup = totalQty10 >= jadwal.Qty10KGDibutuhkan && qty5Num >= jadwal.Qty5KGDibutuhkan;
 
-  function setAmbil(posisiId: number, field: "qty10" | "qty5", value: number, max: number) {
-    setAlokasi((prev) => ({
-      ...prev,
-      [posisiId]: {
-        qty10: prev[posisiId]?.qty10 ?? 0,
-        qty5: prev[posisiId]?.qty5 ?? 0,
-        [field]: Math.min(Math.max(0, value), max),
-      },
-    }));
+  function setAmbil(batchId: number, value: number, max: number) {
+    setAlokasi((prev) => ({ ...prev, [batchId]: Math.min(Math.max(0, value), max) }));
   }
 
-  function handleAmbilSemua(row: PalletPosisiRow) {
-    setAlokasi((prev) => ({ ...prev, [row.PosisiID]: { qty10: row.SisaQty10KG ?? 0, qty5: row.SisaQty5KG ?? 0 } }));
+  function handleAmbilSemua(row: BatchAktifRow) {
+    setAlokasi((prev) => ({ ...prev, [row.BatchID]: row.SisaQty10KG }));
   }
 
   function buildAlokasiList() {
-    if (!posisi) return [];
-    return posisi
-      .filter((row) => alokasi[row.PosisiID] && (alokasi[row.PosisiID].qty10 > 0 || alokasi[row.PosisiID].qty5 > 0))
-      .map((row) => ({
-        batchId: row.BatchIDAktif as number,
-        qty10KG: alokasi[row.PosisiID].qty10,
-        qty5KG: alokasi[row.PosisiID].qty5,
-      }));
+    if (!batchList) return [];
+    return batchList
+      .filter((row) => (alokasi[row.BatchID] ?? 0) > 0)
+      .map((row) => ({ batchId: row.BatchID, qty10KG: alokasi[row.BatchID] }));
   }
 
   function handleOpenConfirm() {
@@ -346,7 +330,11 @@ function AlokasiScreen({
   function handleConfirmYa() {
     const alokasiList = buildAlokasiList();
     startTransition(async () => {
-      const result = await produksiSelesaiMuatAction({ jadwalId: jadwal.JadwalID, alokasi: alokasiList });
+      const result = await produksiSelesaiMuatAction({
+        jadwalId: jadwal.JadwalID,
+        alokasi: alokasiList,
+        qty5KGDimuat: qty5Num,
+      });
       if (!result.success) {
         setConfirmDetail(null);
         setError(result.error);
@@ -365,17 +353,20 @@ function AlokasiScreen({
       <p className="text-sm text-muted-foreground">
         Dibutuhkan: {jadwal.Qty10KGDibutuhkan} kantong 10kg, {jadwal.Qty5KGDibutuhkan} kantong 5kg
       </p>
-      <p className="text-sm">
-        Sudah dialokasikan: {totalQty10} kantong 10kg, {totalQty5} kantong 5kg
-      </p>
+      <p className="text-sm">Sudah dialokasikan: {totalQty10} kantong 10kg</p>
 
-      {posisi === null ? (
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Qty 5kg dimuat (tanpa pallet, langsung)</label>
+        <Input type="number" value={qty5Dimuat} onChange={(e) => setQty5Dimuat(e.target.value)} className="mt-1" />
+      </div>
+
+      {batchList === null ? (
         <p className="text-sm text-muted-foreground">Memuat data pallet...</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {posisi.map((row, index) => (
+          {batchList.map((row, index) => (
             <div
-              key={row.PosisiID}
+              key={row.BatchID}
               className={index === 0 ? "rounded-lg border-2 border-amber-500 p-3" : "rounded-lg border border-border p-3"}
             >
               <div className="flex items-center justify-between">
@@ -387,21 +378,13 @@ function AlokasiScreen({
                   Ambil semua sisa
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Sisa: {row.SisaQty10KG} kantong 10kg, {row.SisaQty5KG} kantong 5kg
-              </p>
-              <div className="mt-2 flex gap-2">
+              <p className="text-xs text-muted-foreground">Sisa: {row.SisaQty10KG} kantong 10kg</p>
+              <div className="mt-2">
                 <Input
                   type="number"
                   placeholder="Qty 10kg"
-                  value={alokasi[row.PosisiID]?.qty10 ?? ""}
-                  onChange={(e) => setAmbil(row.PosisiID, "qty10", Number(e.target.value), row.SisaQty10KG ?? 0)}
-                />
-                <Input
-                  type="number"
-                  placeholder="Qty 5kg"
-                  value={alokasi[row.PosisiID]?.qty5 ?? ""}
-                  onChange={(e) => setAmbil(row.PosisiID, "qty5", Number(e.target.value), row.SisaQty5KG ?? 0)}
+                  value={alokasi[row.BatchID] ?? ""}
+                  onChange={(e) => setAmbil(row.BatchID, Number(e.target.value), row.SisaQty10KG)}
                 />
               </div>
             </div>
