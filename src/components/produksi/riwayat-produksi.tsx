@@ -32,12 +32,8 @@ export function RiwayatProduksi({ riwayat }: { riwayat: RiwayatProduksiRowWithNa
               <TableCell>{r.JamPanen || "-"}</TableCell>
               <TableCell>{r.MesinNama}</TableCell>
               <TableCell>{r.Kode}</TableCell>
-              <TableCell>
-                {r.Qty10KG} kantong 10kg, {r.Qty5KG} kantong 5kg
-              </TableCell>
-              <TableCell>
-                {r.SisaQty10KG} kantong 10kg, {r.SisaQty5KG} kantong 5kg
-              </TableCell>
+              <TableCell>{r.Qty10KG} kantong 10kg</TableCell>
+              <TableCell>{r.SisaQty10KG} kantong 10kg</TableCell>
               <TableCell>{r.DicatatOlehNama}</TableCell>
             </TableRow>
           ))}
