@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
+import { RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
+import { KAPASITAS_PALLET_10KG } from "@/lib/queries/produksi-warehouse";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
 export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) {
@@ -66,25 +68,15 @@ export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) 
       </div>
 
       {selected && (
-        <div className="mt-4 rounded-md border border-border p-3 text-sm">
-          <p className="font-semibold">Pallet {selected.Kode}</p>
-          <p className="text-muted-foreground">Mesin: {selected.MesinNama ?? "-"}</p>
-          {selected.TanggalLabel != null && (
+        <div className="mt-4 flex flex-col gap-3">
+          <RiwayatPosisiList posisiId={selected.PosisiID} open={selected != null} />
+          <div className="rounded-md border border-border p-3 text-sm">
+            <p className="font-semibold">Pallet {selected.Kode}</p>
             <p className="text-muted-foreground">
-              Tanggal &amp; Shift Produksi:{" "}
-              {new Date(selected.TanggalLabel).toLocaleDateString("id-ID", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })}
-              {" — Shift "}
-              {selected.Shift}
-              {selected.JamPanen && ` — Jam Panen ${selected.JamPanen}`}
+              Terisi {selected.TotalSisaQty10KG}/{KAPASITAS_PALLET_10KG} kantong 10kg
+              {selected.JumlahBatchAktif > 1 && ` — ${selected.JumlahBatchAktif} batch aktif`}
             </p>
-          )}
-          <p className="text-muted-foreground">
-            Sisa: {selected.SisaQty10KG ?? 0} kantong 10kg, {selected.SisaQty5KG ?? 0} kantong 5kg
-          </p>
+          </div>
         </div>
       )}
     </div>

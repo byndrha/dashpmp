@@ -26,19 +26,21 @@ export function WarehouseCell({
   row: PalletPosisiRow | undefined;
   onClick?: (row: PalletPosisiRow | undefined) => void;
 }) {
+  const terisi = (row?.JumlahBatchAktif ?? 0) > 0;
   return (
     <button
       type="button"
       onClick={() => onClick?.(row)}
       className={cn(
-        "flex size-[55px] shrink-0 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight",
-        row?.BatchIDAktif != null ? ageClass(row.TanggalLabel, row.JamPanen) : "bg-muted text-muted-foreground"
+        "relative flex size-[55px] shrink-0 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight",
+        terisi ? ageClass(row!.TanggalLabelTertua, row!.JamPanenTertua) : "bg-muted text-muted-foreground"
       )}
     >
       <span>{kode}</span>
-      {row?.BatchIDAktif != null && (
-        <span className="text-[9px] font-normal opacity-90">
-          {row.SisaQty10KG ?? 0}-{row.SisaQty5KG ?? 0}
+      {terisi && <span className="text-[9px] font-normal opacity-90">{row!.TotalSisaQty10KG}</span>}
+      {(row?.JumlahBatchAktif ?? 0) > 1 && (
+        <span className="absolute -right-1 -top-1 rounded-full bg-foreground px-1 text-[8px] font-bold text-background">
+          ×{row!.JumlahBatchAktif}
         </span>
       )}
     </button>
