@@ -108,27 +108,30 @@ export async function produksiSelesaiMuatManual(jadwalId: number): Promise<void>
 export interface MuatanAlokasi {
   batchId: number;
   qty10KG: number;
-  qty5KG: number;
 }
 
 export interface ProduksiSelesaiMuatInput {
   jadwalId: number;
   alokasi: MuatanAlokasi[];
+  // Kantong 5kg tidak lagi dialokasikan per-pallet -- diproses langsung
+  // tanpa FIFO, jadi cukup satu angka per Kartu Pengiriman, terpisah dari
+  // alokasi 10kg di atas. Disimpan ke DashboardPengirimanJadwal.Qty5KGDimuat,
+  // bukan DashboardProduksiMuatanDetail.
+  qty5KGDimuat: number;
   dicatatOlehAkunId: number;
 }
 
-// Allocates pallet stock to the Jadwal, then completes the real "Selesai
-// Muat" transition (driver/route/capacity-validated, creates real
-// DeliveryOrder + SalesInvoice documents) — the produksi-app equivalent of
-// desktop's "Selesai Muat" button. Requires produksiStartMuat to already
-// have been called for this jadwalId (enforced by the UI flow: the alokasi
-// screen only ever opens after "Mulai Muat" succeeds), not re-checked here
-// since selesaiMuat below doesn't need JamMulaiMuat itself.
-export async function produksiSelesaiMuat(
-  input: ProduksiSelesaiMuatInput
-): Promise<{ jadwalDetailId: number; invoiceToken: string }[]> {
-  if (input.alokasi.length === 0) {
-    throw new AppError("Pilih minimal satu pallet untuk mengisi muatan.");
+// Allocates pallet stock (10kg only) to the Jadwal, records the separate
+// 5kg-loaded figure, then completes the real "Selesai Muat" transition
+// (driver/route/capacity-validated, creates real DeliveryOrder + SalesInvoice
+// documents) — the produksi-app equivalent of desktop's "Selesai Muat"
+// button. Requires produksiStartMuat to already have been called for this
+// jadwalId (enforced by the UI flow: the alokasi screen only ever opens
+// after "Mulai Muat" succeeds), not re-checked here since selesaiMuat below
+// doesn't need JamMulaiMuat itself.
+export async function produksiSelesaiMuat(input: ProduksiSelesaiMuatInput): Promise<void> {
+  if (input.alokasi.length === 0 && input.qty5KGDimuat <= 0) {
+    throw new AppError("Pilih minimal satu pallet 10kg atau isi jumlah kantong 5kg yang dimuat.");
   }
 
   const pool = await getPool();
@@ -136,7 +139,7 @@ export async function produksiSelesaiMuat(
   await transaction.begin();
   try {
     for (const item of input.alokasi) {
-      if (item.qty10KG < 0 || item.qty5KG < 0) {
+      if (item.qty10KG < 0) {
         throw new AppError("Jumlah yang diambil tidak boleh negatif.");
       }
 
@@ -144,40 +147,40 @@ export async function produksiSelesaiMuat(
         .input("jadwalId", sql.Int, input.jadwalId)
         .input("batchId", sql.Int, item.batchId)
         .input("qty10", sql.Int, item.qty10KG)
-        .input("qty5", sql.Int, item.qty5KG)
         .input("akunId", sql.Int, input.dicatatOlehAkunId)
         .query(`
-          INSERT INTO DashboardProduksiMuatanDetail (JadwalID, BatchID, Qty10KGDiambil, Qty5KGDiambil, DicatatOlehAkunID)
-          VALUES (@jadwalId, @batchId, @qty10, @qty5, @akunId)
+          INSERT INTO DashboardProduksiMuatanDetail (JadwalID, BatchID, Qty10KGDiambil, DicatatOlehAkunID)
+          VALUES (@jadwalId, @batchId, @qty10, @akunId)
         `);
 
       // Atomic claim: the WHERE clause encodes both "batch exists" and
       // "enough stock remains" as one condition, so the row's exclusive
       // lock (held until commit/rollback, unlike a plain SELECT's shared
       // lock) prevents two concurrent allocations from both succeeding
-      // against stock that can only cover one of them. See Task 8's
-      // createBatch fix for the same pattern and the race it closes.
+      // against stock that can only cover one of them.
       const claim = await new sql.Request(transaction)
         .input("batchId", sql.Int, item.batchId)
         .input("qty10", sql.Int, item.qty10KG)
-        .input("qty5", sql.Int, item.qty5KG)
         .query(`
           UPDATE DashboardProduksiBatch
-          SET SisaQty10KG = SisaQty10KG - @qty10, SisaQty5KG = SisaQty5KG - @qty5, ModifiedDate = GETDATE()
-          OUTPUT INSERTED.PosisiID, INSERTED.SisaQty10KG, INSERTED.SisaQty5KG
-          WHERE BatchID = @batchId AND SisaQty10KG >= @qty10 AND SisaQty5KG >= @qty5
+          SET SisaQty10KG = SisaQty10KG - @qty10, ModifiedDate = GETDATE()
+          OUTPUT INSERTED.SisaQty10KG
+          WHERE BatchID = @batchId AND SisaQty10KG >= @qty10
         `);
       if (claim.recordset.length === 0) {
         throw new AppError("Jumlah yang diambil melebihi sisa stok pallet ini.");
       }
-      const { PosisiID, SisaQty10KG, SisaQty5KG } = claim.recordset[0];
-
-      if (SisaQty10KG === 0 && SisaQty5KG === 0) {
-        await new sql.Request(transaction)
-          .input("posisiId", sql.Int, PosisiID)
-          .query(`UPDATE DashboardProduksiPalletPosisi SET BatchIDAktif = NULL, ModifiedDate = GETDATE() WHERE PosisiID = @posisiId`);
-      }
+      // Tidak ada lagi langkah "null-kan BatchIDAktif kalau sisa 0" --
+      // kolom itu sudah dihapus (Task 0). Status "kosong" sekarang murni
+      // hasil agregasi (lihat getWarehouseMap), tidak perlu ditulis ulang
+      // di sini.
     }
+
+    await new sql.Request(transaction)
+      .input("jadwalId", sql.Int, input.jadwalId)
+      .input("qty5", sql.Int, input.qty5KGDimuat)
+      .query(`UPDATE DashboardPengirimanJadwal SET Qty5KGDimuat = @qty5 WHERE JadwalID = @jadwalId`);
+
     await transaction.commit();
   } catch (err) {
     await transaction.rollback();
@@ -188,21 +191,10 @@ export async function produksiSelesaiMuat(
   // (src/lib/queries/pengiriman-jadwal.ts) — deliberately called AFTER the
   // pallet-consumption transaction above commits, not inside it, because
   // selesaiMuat opens its own pool.request()/sql.Transaction and does not
-  // accept an external one. Threading a transaction parameter through it
-  // would mean modifying its signature, which this design explicitly avoids
-  // to protect the delivery flow's own hard-won correctness (Selesai
-  // Muat/Berangkat split, ArmadaConflict work, external-DO handling) from
-  // regression. Unlike the old startMuat call this replaces, selesaiMuat is
-  // NOT trivial — it validates driver/route/capacity and creates real
-  // DeliveryOrder + SalesInvoice documents, so it can genuinely reject
-  // (AppError) after pallet stock has already been committed. That's the
-  // same accepted trade-off already documented above (residual risk of a
-  // second step failing after the first commits), just with a heavier
-  // second step; the caller (produksiSelesaiMuatAction) surfaces the
-  // AppError directly so the operator sees exactly why (e.g. "Driver wajib
-  // diisi" / "Rute belum berhasil divalidasi") and can go fix it on desktop
-  // — the pallet allocation itself is not rolled back, matching how a
-  // desktop-side Selesai Muat failure after Mulai Muat already behaves
-  // today (JamMulaiMuat stays set, operator retries Selesai Muat).
-  return selesaiMuat(input.jadwalId);
+  // accept an external one. Unlike the old startMuat call this replaces,
+  // selesaiMuat is NOT trivial — it validates driver/route/capacity and
+  // creates real DeliveryOrder + SalesInvoice documents, so it can
+  // genuinely reject (AppError) after pallet stock has already been
+  // committed. Accepted trade-off, unchanged from before this task.
+  await selesaiMuat(input.jadwalId);
 }
