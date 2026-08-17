@@ -1,17 +1,22 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
 
+// Kapasitas gabungan per posisi pallet, dalam kantong 10kg (SUM SisaQty10KG
+// semua batch aktif di posisi itu). Lihat produksi-warehouse-multi-batch
+// design spec — satu posisi sekarang bisa menampung >1 batch, bukan lagi
+// satu batch sampai habis.
+export const KAPASITAS_PALLET_10KG = 120;
+
 export interface PalletPosisiRow {
   PosisiID: number;
   Kode: string;
-  BatchIDAktif: number | null;
-  MesinNama: string | null;
-  TanggalProduksi: Date | null;
-  SisaQty10KG: number | null;
-  SisaQty5KG: number | null;
-  TanggalLabel: Date | null;
-  Shift: 1 | 2 | 3 | null;
-  JamPanen: string | null;
+  JumlahBatchAktif: number;
+  TotalSisaQty10KG: number;
+  // Batch aktif TERTUA di posisi ini (berdasarkan TanggalLabel+JamPanen) —
+  // dipakai warehouse-cell.tsx untuk warna panduan FIFO. null kalau posisi
+  // kosong (JumlahBatchAktif = 0).
+  TanggalLabelTertua: Date | null;
+  JamPanenTertua: string | null;
 }
 
 // Filtered to Kode LIKE '[SUT]%' -- only the new 42-slot Ice Stock denah
@@ -20,14 +25,30 @@ export interface PalletPosisiRow {
 // DashboardProduksiBatch rows recorded against them still resolve through
 // getRiwayatProduksi()'s JOIN -- they're just never returned by this
 // function, so the UI never shows them as available slots.
+//
+// One row per position, aggregated over every active batch (SisaQty10KG >
+// 0) referencing it via PosisiID -- BatchIDAktif no longer exists (Task 0
+// dropped it), occupancy/capacity is always derived here, never stored.
 export async function getWarehouseMap(): Promise<PalletPosisiRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT p.PosisiID, p.Kode, p.BatchIDAktif, m.Nama AS MesinNama, b.TanggalProduksi, b.SisaQty10KG, b.SisaQty5KG,
-           b.TanggalLabel, b.Shift, b.JamPanen
+    SELECT p.PosisiID, p.Kode,
+           ISNULL(agg.JumlahBatchAktif, 0) AS JumlahBatchAktif,
+           ISNULL(agg.TotalSisaQty10KG, 0) AS TotalSisaQty10KG,
+           oldest.TanggalLabel AS TanggalLabelTertua,
+           oldest.JamPanen AS JamPanenTertua
     FROM DashboardProduksiPalletPosisi p
-    LEFT JOIN DashboardProduksiBatch b ON b.BatchID = p.BatchIDAktif AND b.IsDeleted = 0
-    LEFT JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
+    OUTER APPLY (
+      SELECT COUNT(*) AS JumlahBatchAktif, SUM(b.SisaQty10KG) AS TotalSisaQty10KG
+      FROM DashboardProduksiBatch b
+      WHERE b.PosisiID = p.PosisiID AND b.IsDeleted = 0 AND b.SisaQty10KG > 0
+    ) agg
+    OUTER APPLY (
+      SELECT TOP 1 b2.TanggalLabel, b2.JamPanen
+      FROM DashboardProduksiBatch b2
+      WHERE b2.PosisiID = p.PosisiID AND b2.IsDeleted = 0 AND b2.SisaQty10KG > 0
+      ORDER BY b2.TanggalLabel ASC, b2.JamPanen ASC
+    ) oldest
     WHERE p.Kode LIKE '[SUT]%'
     ORDER BY p.Kode
   `);
@@ -40,9 +61,7 @@ export interface RiwayatProduksiRow {
   MesinNama: string;
   TanggalProduksi: Date;
   Qty10KG: number;
-  Qty5KG: number;
   SisaQty10KG: number;
-  SisaQty5KG: number;
   DicatatOlehAkunID: number;
   TanggalLabel: Date;
   Shift: 1 | 2 | 3;
@@ -56,7 +75,7 @@ export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow
     .input("limit", sql.Int, limit)
     .query(`
       SELECT TOP (@limit) b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
-             b.Qty10KG, b.Qty5KG, b.SisaQty10KG, b.SisaQty5KG, b.DicatatOlehAkunID,
+             b.Qty10KG, b.SisaQty10KG, b.DicatatOlehAkunID,
              b.TanggalLabel, b.Shift, b.JamPanen
       FROM DashboardProduksiBatch b
       JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
@@ -68,8 +87,9 @@ export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow
 }
 
 // Riwayat scoped to one Pallete (PosisiID) — shown at the top of
-// TambahProduksiDialog so the operator can see what previously filled this
-// exact slot before starting a new batch on it.
+// TambahProduksiDialog / the detail popup so the operator can see every
+// batch (active or already-consumed) ever recorded at this exact slot,
+// including ones stacked alongside a currently-active batch.
 export async function getRiwayatProduksiForPosisi(posisiId: number, limit = 10): Promise<RiwayatProduksiRow[]> {
   const pool = await getPool();
   const result = await pool
@@ -78,7 +98,7 @@ export async function getRiwayatProduksiForPosisi(posisiId: number, limit = 10):
     .input("limit", sql.Int, limit)
     .query(`
       SELECT TOP (@limit) b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
-             b.Qty10KG, b.Qty5KG, b.SisaQty10KG, b.SisaQty5KG, b.DicatatOlehAkunID,
+             b.Qty10KG, b.SisaQty10KG, b.DicatatOlehAkunID,
              b.TanggalLabel, b.Shift, b.JamPanen
       FROM DashboardProduksiBatch b
       JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
@@ -89,60 +109,88 @@ export async function getRiwayatProduksiForPosisi(posisiId: number, limit = 10):
   return result.recordset;
 }
 
+// Satu baris per batch aktif (SisaQty10KG > 0) di SELURUH warehouse, diurut
+// FIFO (tertua dulu) -- dipakai AlokasiScreen ("Isi Muatan") untuk
+// menampilkan pilihan pallet per-batch, bukan per-posisi, supaya benar saat
+// satu posisi punya >1 batch menumpuk.
+export interface BatchAktifRow {
+  BatchID: number;
+  PosisiID: number;
+  Kode: string;
+  SisaQty10KG: number;
+  TanggalLabel: Date;
+  JamPanen: string;
+}
+
+export async function getBatchAktifForAlokasi(): Promise<BatchAktifRow[]> {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT b.BatchID, b.PosisiID, p.Kode, b.SisaQty10KG, b.TanggalLabel, b.JamPanen
+    FROM DashboardProduksiBatch b
+    JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
+    WHERE b.IsDeleted = 0 AND b.SisaQty10KG > 0
+    ORDER BY b.TanggalLabel ASC, b.JamPanen ASC
+  `);
+  return result.recordset;
+}
+
 export interface CreateBatchInput {
   mesinId: number;
   posisiId: number;
   qty10KG: number;
-  qty5KG: number;
   tanggalLabel: string;
   shift: 1 | 2 | 3;
   jamPanen: string;
   dicatatOlehAkunId: number;
 }
 
-// A pallet position holds exactly one batch until it's fully consumed
-// (BatchIDAktif is cleared only when both Sisa columns hit 0 — see
-// produksi-muatan.ts's produksiMulaiMuat) — this function enforces that
-// "one pallet = one batch at a time" rule at creation time.
+// Satu posisi pallet sekarang bisa menampung banyak batch sekaligus, dibatasi
+// kapasitas gabungan KAPASITAS_PALLET_10KG (120) kantong 10kg -- bukan lagi
+// "satu batch sampai habis". Dipanggil baik untuk posisi kosong maupun yang
+// sudah terisi (selama kapasitas masih ada).
 export async function createBatch(input: CreateBatchInput): Promise<number> {
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
-    // Insert speculatively — this is safe because it's inside the same
-    // transaction as the atomic claim below: if the claim fails, the
-    // rollback discards this row too, so no orphan batch is ever visible
-    // outside this function.
+    // Insert speculatively — aman karena satu transaksi dengan pengecekan
+    // kapasitas di bawah: kalau kapasitas terlampaui, rollback membuang
+    // baris ini juga, jadi tidak ada batch "orphan" yang pernah terlihat di
+    // luar fungsi ini.
     const insertResult = await new sql.Request(transaction)
       .input("mesinId", sql.Int, input.mesinId)
       .input("posisiId", sql.Int, input.posisiId)
       .input("qty10", sql.Int, input.qty10KG)
-      .input("qty5", sql.Int, input.qty5KG)
       .input("akunId", sql.Int, input.dicatatOlehAkunId)
       .input("tanggalLabel", sql.Date, input.tanggalLabel)
       .input("shift", sql.TinyInt, input.shift)
       .input("jamPanen", sql.VarChar(5), input.jamPanen)
       .query(`
-        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, Qty5KG, SisaQty10KG, SisaQty5KG, DicatatOlehAkunID, TanggalLabel, Shift, JamPanen)
+        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, SisaQty10KG, DicatatOlehAkunID, TanggalLabel, Shift, JamPanen)
         OUTPUT INSERTED.BatchID
-        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty5, @qty10, @qty5, @akunId, @tanggalLabel, @shift, @jamPanen)
+        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty10, @akunId, @tanggalLabel, @shift, @jamPanen)
       `);
     const batchId = insertResult.recordset[0].BatchID as number;
 
-    // Atomic claim: the WHERE clause encodes both preconditions (position
-    // exists, position is currently empty) as part of the write itself,
-    // instead of a separate SELECT-then-act that a racing call could slip
-    // between. rowsAffected[0] === 0 means either the position doesn't
-    // exist or another transaction already claimed it first — same
-    // idiom as selesaiMuat's claim UPDATE in pengiriman-jadwal.ts.
-    const claim = await new sql.Request(transaction)
+    // Kapasitas: total SisaQty10KG semua batch aktif di posisi ini (baris
+    // yang baru di-insert di atas sudah ikut terhitung) tidak boleh melebihi
+    // 120. WITH (UPDLOCK, HOLDLOCK) mengunci baris yang cocok sampai
+    // transaksi ini commit/rollback -- menutup race dua operator submit ke
+    // posisi yang sama secara bersamaan, pola yang sama seperti klaim
+    // BatchIDAktif IS NULL yang digantikannya.
+    const capacityCheck = await new sql.Request(transaction)
       .input("posisiId", sql.Int, input.posisiId)
-      .input("batchId", sql.Int, batchId)
-      .query(
-        `UPDATE DashboardProduksiPalletPosisi SET BatchIDAktif = @batchId, ModifiedDate = GETDATE() WHERE PosisiID = @posisiId AND BatchIDAktif IS NULL`
+      .query(`
+        SELECT ISNULL(SUM(SisaQty10KG), 0) AS TotalSisa
+        FROM DashboardProduksiBatch WITH (UPDLOCK, HOLDLOCK)
+        WHERE PosisiID = @posisiId AND IsDeleted = 0 AND SisaQty10KG > 0
+      `);
+    const totalSisa = capacityCheck.recordset[0].TotalSisa as number;
+    if (totalSisa > 120) {
+      const sebelumnya = totalSisa - input.qty10KG;
+      throw new AppError(
+        `Kapasitas pallet ini penuh -- sudah terisi ${sebelumnya}/120 kantong 10kg, sisa ruang hanya ${120 - sebelumnya}.`
       );
-    if (claim.rowsAffected[0] === 0) {
-      throw new AppError("Posisi pallet ini sudah terisi batch lain.");
     }
 
     await transaction.commit();
