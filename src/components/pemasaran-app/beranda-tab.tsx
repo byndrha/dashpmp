@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { NotebookPen, PackageCheck, Wallet, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatRupiah } from "@/lib/format";
@@ -25,6 +26,12 @@ export function BerandaTab() {
   const [topPiutang, setTopPiutang] = useState<TopMitraPiutangRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<TopMitraPiutangRow | null>(null);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  // See top-mitra-piutang-panel.tsx's editingNoteIdRef for why this exists:
+  // read fresh after an await so a save request for a mitra the user has
+  // since switched away from (or closed the dialog for) can't paint a stale
+  // error over the wrong dialog.
+  const editingNoteIdRef = useRef<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -43,15 +50,35 @@ export function BerandaTab() {
     };
   }, []);
 
+  function openNoteEditor(row: TopMitraPiutangRow) {
+    editingNoteIdRef.current = row.BusinessPartnerID;
+    setNoteError(null);
+    setEditingNote(row);
+  }
+
+  function closeNoteEditor() {
+    editingNoteIdRef.current = null;
+    setEditingNote(null);
+    setNoteError(null);
+  }
+
   function handleSaveNote(formData: FormData) {
     if (!editingNote) return;
     const targetId = editingNote.BusinessPartnerID;
     const note = String(formData.get("note") ?? "").trim();
+    setNoteError(null);
     startTransition(async () => {
       const result = await setMitraNoteAction({ businessPartnerId: targetId, note: note || null });
-      if (!result.success) return;
+      // The dialog may have moved on to a different mitra (or closed) while
+      // this request was in flight — only touch state if it's still showing
+      // the mitra this request was actually for.
+      if (editingNoteIdRef.current !== targetId) return;
+      if (!result.success) {
+        setNoteError(result.error);
+        return;
+      }
       setTopPiutang((prev) => prev?.map((r) => (r.BusinessPartnerID === targetId ? { ...r, TargetNote: note || null } : r)) ?? null);
-      setEditingNote(null);
+      closeNoteEditor();
     });
   }
 
@@ -131,7 +158,7 @@ export function BerandaTab() {
                 <p className="tabular-nums text-primary">{formatRupiah(r.NominalPiutang)}</p>
                 <button
                   type="button"
-                  onClick={() => setEditingNote(r)}
+                  onClick={() => openNoteEditor(r)}
                   className="mt-1 flex items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-primary"
                 >
                   <NotebookPen className="size-3.5 shrink-0" />
@@ -143,13 +170,17 @@ export function BerandaTab() {
         </CardContent>
       </Card>
 
-      <Dialog open={editingNote != null} onOpenChange={(open) => !open && setEditingNote(null)}>
+      <Dialog open={editingNote != null} onOpenChange={(open) => !open && closeNoteEditor()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Catatan — {editingNote?.CustomerName}</DialogTitle>
           </DialogHeader>
           <form action={handleSaveNote} className="flex flex-col gap-3">
-            <Textarea name="note" rows={4} defaultValue={editingNote?.TargetNote ?? ""} />
+            <Label htmlFor="note" className="sr-only">
+              Catatan
+            </Label>
+            <Textarea id="note" name="note" rows={4} defaultValue={editingNote?.TargetNote ?? ""} />
+            {noteError && <p className="text-xs text-destructive">{noteError}</p>}
             <DialogFooter>
               <Button type="submit" disabled={pending}>
                 {pending ? "Menyimpan..." : "Simpan Catatan"}
