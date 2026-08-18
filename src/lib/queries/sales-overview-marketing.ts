@@ -74,13 +74,19 @@ export async function getSalesDayComparisonForMarketing(marketingUserId: string)
   const zeroPoint: SalesDayPoint = { NetSales: 0, DOQty: 0 };
   const zeroHourly = (): HourlyPoint[] => Array.from({ length: 24 }, (_, hour) => ({ hour, NetSales: 0, DOQty: 0 }));
 
+  const points = [
+    { label: "Kemarin", date: new Date(Date.UTC(businessToday.getUTCFullYear(), businessToday.getUTCMonth(), businessToday.getUTCDate() - 1)) },
+    { label: "Pekan Lalu", date: new Date(Date.UTC(businessToday.getUTCFullYear(), businessToday.getUTCMonth(), businessToday.getUTCDate() - 7)) },
+    { label: "Bulan Lalu", date: sameDayMonthsBack(businessToday, 1) },
+    { label: "Tahun Lalu", date: sameDayMonthsBack(businessToday, 12) },
+  ];
+
   if (mitraIds.length === 0) {
-    const labels = ["Kemarin", "Pekan Lalu", "Bulan Lalu", "Tahun Lalu"];
     return {
-      comparisons: labels.map(
-        (label): SalesDayComparison => ({
+      comparisons: points.map(
+        ({ label, date }): SalesDayComparison => ({
           label,
-          dateISO: businessToday.toISOString().slice(0, 10),
+          dateISO: date.toISOString().slice(0, 10),
           current: zeroPoint,
           previous: zeroPoint,
           NominalPctChange: null,
@@ -100,12 +106,6 @@ export async function getSalesDayComparisonForMarketing(marketingUserId: string)
       return `@bp${i}`;
     });
 
-  const points = [
-    { label: "Kemarin", date: new Date(Date.UTC(businessToday.getUTCFullYear(), businessToday.getUTCMonth(), businessToday.getUTCDate() - 1)) },
-    { label: "Pekan Lalu", date: new Date(Date.UTC(businessToday.getUTCFullYear(), businessToday.getUTCMonth(), businessToday.getUTCDate() - 7)) },
-    { label: "Bulan Lalu", date: sameDayMonthsBack(businessToday, 1) },
-    { label: "Tahun Lalu", date: sameDayMonthsBack(businessToday, 12) },
-  ];
   // "Pekan Lalu" skipped when it crosses into a different calendar month —
   // same rule as getSalesDayComparison().
   const pekanLalu = points[1].date;
