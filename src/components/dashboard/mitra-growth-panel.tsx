@@ -13,10 +13,6 @@ function addCell(a: MitraGrowthCell, b: MitraGrowthCell): MitraGrowthCell {
   };
 }
 
-// Total (cumulative, as of today) shown large, with the new-this-month vs
-// new-last-month pair next to it plus a trend arrow on the delta — stacked
-// on mobile (not enough width for both side by side), side-by-side from sm:
-// up per explicit request.
 function GrowthCell({ cell, bold }: { cell: MitraGrowthCell; bold?: boolean }) {
   const delta = cell.newThisMonth - cell.newLastMonth;
   return (
@@ -48,7 +44,7 @@ function GrowthHalfTable({ rows }: { rows: MitraGrowthRow[] }) {
         <TableRow>
           <TableHead>Wilayah</TableHead>
           <TableHead className="text-right">Agen</TableHead>
-          <TableHead className="text-right">Retail</TableHead>
+          <TableHead className="text-right">Outlet</TableHead>
           <TableHead className="text-right">TakeAway</TableHead>
           <TableHead className="text-right">RPA</TableHead>
           <TableHead className="text-right">Total</TableHead>
@@ -62,7 +58,7 @@ function GrowthHalfTable({ rows }: { rows: MitraGrowthRow[] }) {
               <GrowthCell cell={r.agen} />
             </TableCell>
             <TableCell>
-              <GrowthCell cell={r.retail} />
+              <GrowthCell cell={r.outlet} />
             </TableCell>
             <TableCell>
               <GrowthCell cell={r.takeaway} />
@@ -80,12 +76,6 @@ function GrowthHalfTable({ rows }: { rows: MitraGrowthRow[] }) {
   );
 }
 
-// Wilayah as rows, partner type as columns (fixed 5 columns — each type's
-// label appears once in the header, not repeated per wilayah). Split into
-// two side-by-side halves on non-mobile ("5 kiri, 5 kanan") instead of one
-// long list, so it reads as two short tables rather than a tall one; on
-// mobile the grid collapses to a single column and the two halves just
-// stack in order, which still reads as one continuous list.
 export function MitraGrowthTable({ rows }: { rows: MitraGrowthRow[] }) {
   if (rows.length === 0) {
     return <p className="py-6 text-center text-sm text-muted-foreground">Belum ada data mitra.</p>;
@@ -94,12 +84,12 @@ export function MitraGrowthTable({ rows }: { rows: MitraGrowthRow[] }) {
   const grandTotal = rows.reduce(
     (acc, r) => ({
       agen: addCell(acc.agen, r.agen),
-      retail: addCell(acc.retail, r.retail),
+      outlet: addCell(acc.outlet, r.outlet),
       takeaway: addCell(acc.takeaway, r.takeaway),
       rpa: addCell(acc.rpa, r.rpa),
       total: addCell(acc.total, r.total),
     }),
-    { agen: EMPTY_CELL, retail: EMPTY_CELL, takeaway: EMPTY_CELL, rpa: EMPTY_CELL, total: EMPTY_CELL }
+    { agen: EMPTY_CELL, outlet: EMPTY_CELL, takeaway: EMPTY_CELL, rpa: EMPTY_CELL, total: EMPTY_CELL }
   );
 
   const mid = Math.ceil(rows.length / 2);
@@ -121,7 +111,7 @@ export function MitraGrowthTable({ rows }: { rows: MitraGrowthRow[] }) {
               <GrowthCell cell={grandTotal.agen} bold />
             </TableCell>
             <TableCell>
-              <GrowthCell cell={grandTotal.retail} bold />
+              <GrowthCell cell={grandTotal.outlet} bold />
             </TableCell>
             <TableCell>
               <GrowthCell cell={grandTotal.takeaway} bold />
