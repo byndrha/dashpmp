@@ -26,10 +26,16 @@ export async function getMonthlyCapacitySnapshot(monthStart: Date): Promise<Map<
     return new Map((existing.recordset as CapacitySnapshotRow[]).map((r) => [r.BusinessPartnerID, r.Capacity]));
   }
 
-  // Atomic per-row claim (NOT EXISTS), same pattern as addMarketingWilayah
-  // in marketing-wilayah.ts — concurrent callers racing for the first query
-  // of a new month can't double-insert the same (MonthStart,
-  // BusinessPartnerID) pair.
+  // Safety comes from a real unique index on (MonthStart, BusinessPartnerID)
+  // — UX_DashboardMitraCapacitySnapshot_MonthStart_BusinessPartnerID — not
+  // from the WHERE NOT EXISTS below. Two concurrent callers racing for the
+  // first query of a new month can both pass NOT EXISTS before either
+  // commits; the index is what stops that from becoming a duplicate row —
+  // whichever INSERT reaches the index second fails with a unique-constraint
+  // violation instead of silently double-inserting. NOT EXISTS is just an
+  // optimization that skips attempting inserts for rows already snapshotted
+  // this month; same division of labor as addMarketingMitra in
+  // marketing-wilayah.ts.
   await pool.request().input("monthStart", sql.Date, monthStart).query(`
     INSERT INTO DashboardMitraCapacitySnapshot (MonthStart, BusinessPartnerID, Capacity)
     SELECT @monthStart, bp.BusinessPartnerID, bp.Capacity
