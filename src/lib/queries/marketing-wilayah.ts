@@ -134,6 +134,7 @@ export interface MarketingMitraAssignment {
   Wilayah: string;
   Kecamatan: string | null;
   Capacity: number | null;
+  JoinDate: string | null;
   CreatedAt: string;
 }
 
@@ -154,7 +155,7 @@ export async function getMarketingMitraAssignments(): Promise<MarketingMitraAssi
     SELECT mm.MarketingMitraID, mm.MarketingUserID,
            mm.BusinessPartnerID, bp.Name AS MitraName,
            ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-           bp.NPWPAddress AS Kecamatan, bp.Capacity, mm.CreatedAt
+           bp.NPWPAddress AS Kecamatan, bp.Capacity, bp.JoinDate, mm.CreatedAt
     FROM DashboardMarketingMitra mm
     JOIN BusinessPartner bp ON bp.BusinessPartnerID = mm.BusinessPartnerID
   `);
@@ -166,6 +167,7 @@ export async function getMarketingMitraAssignments(): Promise<MarketingMitraAssi
     Wilayah: string;
     Kecamatan: string | null;
     Capacity: number | null;
+    JoinDate: string | null;
     CreatedAt: string;
   }[];
 
@@ -186,6 +188,7 @@ export async function getMarketingMitraAssignments(): Promise<MarketingMitraAssi
       Wilayah: r.Wilayah,
       Kecamatan: r.Kecamatan,
       Capacity: r.Capacity,
+      JoinDate: r.JoinDate,
       CreatedAt: r.CreatedAt,
     }))
     .sort((a, b) => a.MarketingNama.localeCompare(b.MarketingNama) || a.MitraName.localeCompare(b.MitraName));

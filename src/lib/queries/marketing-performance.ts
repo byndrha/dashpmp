@@ -33,6 +33,7 @@ export interface MarketingScopeAllMitra {
   Wilayah: string;
   Kecamatan: string | null;
   Capacity: number | null;
+  JoinDate: string | null;
 }
 
 export interface MarketingPerformanceData {
@@ -132,7 +133,8 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
           Name,
           ISNULL(NULLIF(LTRIM(RTRIM(NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           NPWPAddress AS Kecamatan,
-          Capacity
+          Capacity,
+          JoinDate
       FROM BusinessPartner
       WHERE ISNULL(IsDeleted, 0) = 0
     `),
@@ -176,6 +178,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     Wilayah: string;
     Kecamatan: string | null;
     Capacity: number | null;
+    JoinDate: string | null;
   }[]) {
     const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
     if (!cell) continue;
@@ -188,6 +191,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       Wilayah: r.Wilayah,
       Kecamatan: r.Kecamatan,
       Capacity: r.Capacity,
+      JoinDate: r.JoinDate,
     });
     allMitraByMarketing.set(cell.MarketingUserID, roster);
   }
