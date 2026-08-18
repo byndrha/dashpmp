@@ -9,16 +9,19 @@ import { MitraDOPanel } from "@/components/dashboard/mitra-do-panel";
 import type { SalesOrderCard } from "@/lib/queries/sales-cards";
 import type { WilayahDeliverySummary } from "@/lib/queries/delivery";
 import type { MitraDOMonthly } from "@/lib/queries/mitra-do";
+import type { MitraContactLogSummaryEntry } from "@/lib/queries/mitra-contact-log";
 
 export function TransaksiPanels({
   orders,
   wilayahDelivery,
   mitraDO,
+  contactLogSummary,
   initialMarketingFilter,
 }: {
   orders: SalesOrderCard[];
   wilayahDelivery: WilayahDeliverySummary[];
   mitraDO: MitraDOMonthly;
+  contactLogSummary: MitraContactLogSummaryEntry[];
   // Seeded from Kinerja Marketing's "?marketing=" deep link (Pemasaran) —
   // clicking a Marketing there lands here pre-filtered, scrolled straight
   // to the DO-per-Mitra panel instead of the page top.
@@ -60,6 +63,7 @@ export function TransaksiPanels({
       <div ref={mitraDORef}>
         <MitraDOPanel
           data={mitraDO}
+          contactLogSummary={contactLogSummary}
           wilayahFilter={mitraDOWilayah}
           onWilayahFilterChange={setMitraDOWilayah}
           marketingFilter={mitraDOMarketing}

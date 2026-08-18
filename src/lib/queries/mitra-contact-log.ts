@@ -41,6 +41,39 @@ export async function getMitraContactLogForDate(
   }));
 }
 
+export interface MitraContactLogSummaryEntry {
+  BusinessPartnerID: string;
+  LogDate: string;
+  ContactType: ContactType;
+  AngkaPemesanan: number;
+}
+
+// Lightweight batch read for MitraDOPanel's always-visible "angka | %"
+// readout under each DayChip's icons — unlike getMitraContactLogForDate this
+// covers the WHOLE visible date range in one call, but only the 4 columns
+// actually needed for that readout (no HasilPenawaran/AlasanTidakSesuai
+// text, and AngkaPemesanan IS NULL rows are dropped since there's nothing to
+// show for those). Still cheap even at scale: one row per mitra per date per
+// channel that was actually filled in, not one per mitra per date that
+// merely exists.
+export async function getMitraContactLogSummaryForRange(
+  startDateISO: string,
+  endDateISO: string
+): Promise<MitraContactLogSummaryEntry[]> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("startDate", sql.Date, new Date(startDateISO))
+    .input("endDate", sql.Date, new Date(endDateISO)).query(`
+      SELECT BusinessPartnerID, LogDate, ContactType, AngkaPemesanan
+      FROM DashboardMitraContactLog
+      WHERE LogDate >= @startDate AND LogDate < @endDate AND AngkaPemesanan IS NOT NULL
+    `);
+  return (
+    result.recordset as (Omit<MitraContactLogSummaryEntry, "LogDate"> & { LogDate: Date })[]
+  ).map((r) => ({ ...r, LogDate: r.LogDate.toISOString().slice(0, 10) }));
+}
+
 // Upsert on the (BusinessPartnerID, LogDate, ContactType) unique key — one
 // note per channel per day, edited in place rather than accumulating an
 // unbounded history, matching the "log the current situation for this date"

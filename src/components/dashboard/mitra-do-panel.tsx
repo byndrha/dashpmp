@@ -28,12 +28,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
-import type { ContactType } from "@/lib/queries/mitra-contact-log";
+import type { ContactType, MitraContactLogSummaryEntry } from "@/lib/queries/mitra-contact-log";
 import { updateMitraCapacityAction } from "@/app/mkesindo/(dashboard)/mitra/actions";
 import { getMitraContactLogAction, saveMitraContactLogAction } from "@/app/mkesindo/(dashboard)/transaksi/actions";
 
@@ -55,7 +56,8 @@ const INFO_COL_CLASS = "w-52 sm:w-56";
 // before (was h-11) to fit the Chat/Telepon log icon row DayChip adds below
 // the qty — the header total cells just end up with a little extra
 // (harmless, still vertically centered) breathing room.
-const DAY_COL_CLASS = "h-14 w-12";
+const DAY_COL_WIDTH_CLASS = "w-12";
+const DAY_COL_CLASS = cn(DAY_COL_WIDTH_CLASS, "h-14");
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
@@ -94,17 +96,30 @@ function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
 // single call) rather than bundled into the page's initial load, which
 // would mean a query per mitra per visible date — easily thousands of rows
 // nobody's looking at yet.
+//
+// Only the button rendered on TODAY's own DayChip gets the Hari ini/Besok
+// tab switcher (isToday) — every other date's button keeps editing exactly
+// its own fixed dateISO, same as before. The switcher exists purely as a
+// convenience so a rep can log tomorrow's forecast without scrolling the
+// day-strip to tomorrow's own column; writes still land on tomorrow's own
+// (BusinessPartnerID, LogDate, ContactType) row, so tomorrow's own DayChip
+// picks up the same value once the page's data refreshes.
 function ContactLogButton({
   businessPartnerId,
   dateISO,
   contactType,
+  isToday,
 }: {
   businessPartnerId: string;
   dateISO: string;
   contactType: ContactType;
+  isToday: boolean;
 }) {
   const Icon = contactType === "Chat" ? MessageCircle : Phone;
+  const router = useRouter();
+  const besokISO = useMemo(() => addDaysISO(dateISO, 1), [dateISO]);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"hari-ini" | "besok">("hari-ini");
   const [loading, setLoading] = useState(false);
   const [hasEntry, setHasEntry] = useState(false);
   const [hasilPenawaran, setHasilPenawaran] = useState("");
@@ -112,11 +127,11 @@ function ContactLogButton({
   const [alasanTidakSesuai, setAlasanTidakSesuai] = useState("");
   const [pending, startTransition] = useTransition();
 
-  function handleOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) return;
+  const activeDateISO = isToday && tab === "besok" ? besokISO : dateISO;
+
+  function loadFor(targetDateISO: string) {
     setLoading(true);
-    getMitraContactLogAction(businessPartnerId, dateISO)
+    getMitraContactLogAction(businessPartnerId, targetDateISO)
       .then((result) => {
         if (!result.success) {
           toast.error(result.error);
@@ -131,11 +146,23 @@ function ContactLogButton({
       .finally(() => setLoading(false));
   }
 
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) return;
+    setTab("hari-ini");
+    loadFor(dateISO);
+  }
+
+  function handleTabChange(nextTab: "hari-ini" | "besok") {
+    setTab(nextTab);
+    loadFor(nextTab === "besok" ? besokISO : dateISO);
+  }
+
   function handleSave() {
     startTransition(async () => {
       const result = await saveMitraContactLogAction({
         businessPartnerId,
-        dateISO,
+        dateISO: activeDateISO,
         contactType,
         hasilPenawaran: hasilPenawaran.trim() || null,
         angkaPemesanan: angkaPemesanan.trim() ? Number(angkaPemesanan) : null,
@@ -147,6 +174,10 @@ function ContactLogButton({
       }
       setHasEntry(true);
       setOpen(false);
+      // The "angka | %" readout under every DayChip's icons comes from a
+      // page-level batch fetch (contactLogSummary), not this popover's own
+      // state — refresh so a just-saved value shows up there immediately.
+      router.refresh();
     });
   }
 
@@ -164,8 +195,24 @@ function ContactLogButton({
         <Icon className={cn("size-2.5", hasEntry ? "text-primary" : "text-muted-foreground/40")} />
       </PopoverTrigger>
       <PopoverContent className="w-64" align="center">
+        {isToday && (
+          <Tabs
+            value={tab}
+            onValueChange={(v) => typeof v === "string" && handleTabChange(v as "hari-ini" | "besok")}
+            className="mb-2"
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="hari-ini" className="flex-1 text-xs">
+                Hari ini
+              </TabsTrigger>
+              <TabsTrigger value="besok" className="flex-1 text-xs">
+                Besok
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
         <p className="mb-2 text-xs font-medium">
-          Log {contactType} &mdash; {dateISO.slice(8, 10)}/{dateISO.slice(5, 7)}/{dateISO.slice(0, 4)}
+          Log {contactType} &mdash; {activeDateISO.slice(8, 10)}/{activeDateISO.slice(5, 7)}/{activeDateISO.slice(0, 4)}
         </p>
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
@@ -217,9 +264,27 @@ function ContactLogButton({
   );
 }
 
+// Percentage is always against TODAY's own actual DO qty (the mitra's
+// current pace), regardless of which date's Angka Pemesanan is being shown
+// — a future date has no "actual" of its own yet to compare against, and a
+// past date's own historical actual isn't what "dari QTY DO aktual saat
+// ini" means. Omits the "%" suffix rather than showing a divide-by-zero
+// artifact when today's own qty is 0 or unknown.
+function formatPemesananLine(angkaPemesanan: number, todayQty: number | null): string {
+  const pct = todayQty != null && todayQty > 0 ? Math.round((angkaPemesanan / todayQty) * 100) : null;
+  return pct != null ? `${formatQty(angkaPemesanan)}|${pct}%` : formatQty(angkaPemesanan);
+}
+
 // Right-border-only cells (no rounded chip look) so adjacent cells across
 // every row in the list line up into continuous vertical divider lines,
 // per-date, running from the header total row down through the whole list.
+// Height is intentionally min-h (not fixed h-14, unlike the header's own
+// per-date total cells) — a chip whose mitra+date has a saved Angka
+// Pemesanan grows taller to fit its readout line(s), and the browser's own
+// flex `align-items: stretch` (the default for the row's un-styled flex
+// container) makes every other chip in that SAME mitra row stretch to
+// match, so the per-date vertical divider lines stay continuous down the
+// page — only the affected mitra's own row gets taller, not the whole grid.
 function DayChip({
   businessPartnerId,
   dateISO,
@@ -227,6 +292,9 @@ function DayChip({
   prevQty,
   target,
   isPast,
+  isToday,
+  contactSummary,
+  todayQty,
 }: {
   businessPartnerId: string;
   dateISO: string;
@@ -237,6 +305,9 @@ function DayChip({
   prevQty: number | null;
   target: number | null;
   isPast: boolean;
+  isToday: boolean;
+  contactSummary: { chat?: number; telepon?: number } | undefined;
+  todayQty: number | null;
 }) {
   const state = !isPast ? "future" : target == null ? "neutral" : qty >= target ? "hit" : "miss";
   const day = Number(dateISO.slice(8, 10));
@@ -248,7 +319,8 @@ function DayChip({
     <div
       className={cn(
         "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r py-1 text-[10px] tabular-nums",
-        DAY_COL_CLASS,
+        DAY_COL_WIDTH_CLASS,
+        "min-h-14",
         state === "hit" && "bg-primary/10 text-primary",
         state === "miss" && "bg-destructive/10 text-destructive",
         state === "future" && "text-muted-foreground/50",
@@ -262,9 +334,15 @@ function DayChip({
         {change === "down" && <ArrowDown className="size-2.5 shrink-0 text-destructive" />}
       </span>
       <span className="flex items-center gap-0.5">
-        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Chat" />
-        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" />
+        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Chat" isToday={isToday} />
+        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" isToday={isToday} />
       </span>
+      {contactSummary && (contactSummary.chat != null || contactSummary.telepon != null) && (
+        <span className="flex flex-col items-center gap-px text-[8px] leading-tight font-medium text-muted-foreground">
+          {contactSummary.chat != null && <span>{formatPemesananLine(contactSummary.chat, todayQty)}</span>}
+          {contactSummary.telepon != null && <span>{formatPemesananLine(contactSummary.telepon, todayQty)}</span>}
+        </span>
+      )}
     </div>
   );
 }
@@ -374,17 +452,24 @@ function MitraDOCard({
   dates,
   todayISO,
   elapsedDays,
+  contactSummaryMap,
 }: {
   m: MitraDORow;
   dates: string[];
   todayISO: string;
   elapsedDays: number;
+  // Keyed `${BusinessPartnerID}|${dateISO}` — built once in MitraDOPanel from
+  // the page's batch-fetched contactLogSummary, not per-card.
+  contactSummaryMap: Map<string, { chat?: number; telepon?: number }>;
 }) {
   const trend = getTrend(m.DailyQty, elapsedDays);
   // Average per elapsed day, not per every day in the visible range —
   // matches TargetHarian's own per-day meaning, and dividing by the full
   // range would understate the average for a range that isn't over yet.
   const avgQty = elapsedDays > 0 ? m.TotalQty / elapsedDays : null;
+  // "QTY DO aktual saat ini" for the Angka Pemesanan percentage — today's
+  // own DailyQty entry, when today actually falls within the visible range.
+  const todayQty = elapsedDays > 0 ? (m.DailyQty[elapsedDays - 1] ?? null) : null;
   return (
     <div className="flex items-stretch">
       {/* Sticky within the shared horizontal-scroll ancestor (not the page)
@@ -432,6 +517,9 @@ function MitraDOCard({
             prevQty={i > 0 ? m.DailyQty[i - 1] : null}
             target={m.TargetHarian}
             isPast={dateISO <= todayISO}
+            isToday={dateISO === todayISO}
+            contactSummary={contactSummaryMap.get(`${m.BusinessPartnerID}|${dateISO}`)}
+            todayQty={todayQty}
           />
         ))}
       </div>
@@ -452,12 +540,14 @@ function matchesMarketingFilter(m: MitraDORow, marketingFilter: string): boolean
 
 export function MitraDOPanel({
   data,
+  contactLogSummary,
   wilayahFilter,
   onWilayahFilterChange,
   marketingFilter,
   onMarketingFilterChange,
 }: {
   data: MitraDOMonthly;
+  contactLogSummary: MitraContactLogSummaryEntry[];
   wilayahFilter: string;
   onWilayahFilterChange: (wilayah: string) => void;
   marketingFilter: string;
@@ -469,6 +559,21 @@ export function MitraDOPanel({
   const { active, inactive, daysInRange, rangeStartISO, todayISO } = data;
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
+
+  // Keyed `${BusinessPartnerID}|${LogDate}` -> per-channel Angka Pemesanan,
+  // built once per contactLogSummary change rather than re-scanned per
+  // mitra card.
+  const contactSummaryMap = useMemo(() => {
+    const map = new Map<string, { chat?: number; telepon?: number }>();
+    for (const entry of contactLogSummary) {
+      const key = `${entry.BusinessPartnerID}|${entry.LogDate}`;
+      const existing = map.get(key) ?? {};
+      if (entry.ContactType === "Chat") existing.chat = entry.AngkaPemesanan;
+      else existing.telepon = entry.AngkaPemesanan;
+      map.set(key, existing);
+    }
+    return map;
+  }, [contactLogSummary]);
 
   const dates = useMemo(
     () => Array.from({ length: daysInRange }, (_, i) => addDaysISO(rangeStartISO, i)),
@@ -750,14 +855,28 @@ export function MitraDOPanel({
           <div ref={bodyScrollRef} onScroll={handleBodyScroll} className="overflow-x-auto">
             <div className="flex flex-col divide-y">
               {sortedActive.map((m) => (
-                <MitraDOCard key={m.BusinessPartnerID} m={m} dates={dates} todayISO={todayISO} elapsedDays={elapsedDays} />
+                <MitraDOCard
+                  key={m.BusinessPartnerID}
+                  m={m}
+                  dates={dates}
+                  todayISO={todayISO}
+                  elapsedDays={elapsedDays}
+                  contactSummaryMap={contactSummaryMap}
+                />
               ))}
             </div>
 
             {showAll && filteredInactive.length > 0 && (
               <div className="flex flex-col divide-y border-t">
                 {filteredInactive.map((m) => (
-                  <MitraDOCard key={m.BusinessPartnerID} m={m} dates={dates} todayISO={todayISO} elapsedDays={elapsedDays} />
+                  <MitraDOCard
+                    key={m.BusinessPartnerID}
+                    m={m}
+                    dates={dates}
+                    todayISO={todayISO}
+                    elapsedDays={elapsedDays}
+                    contactSummaryMap={contactSummaryMap}
+                  />
                 ))}
               </div>
             )}

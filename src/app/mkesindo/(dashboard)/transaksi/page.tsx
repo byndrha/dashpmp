@@ -1,6 +1,7 @@
 import { requireModuleAccess } from "@/lib/require-access";
 import { getSalesOrderCards } from "@/lib/queries/sales-cards";
 import { getMitraDOMonthly } from "@/lib/queries/mitra-do";
+import { getMitraContactLogSummaryForRange } from "@/lib/queries/mitra-contact-log";
 import { getWilayahDeliverySummary } from "@/lib/queries/delivery";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -15,11 +16,18 @@ export default async function TransaksiPage({
   await requireModuleAccess("transaksi");
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [orders, wilayahList, mitraDO, wilayahDelivery] = await Promise.all([
+  // +1 day past filter.endDate: the "Besok" tab (Hari ini/Besok switcher in
+  // MitraDOPanel) can write to tomorrow's date even when today is the last
+  // day of the visible range, and that write needs to show up in this
+  // summary without falling just outside the filtered window.
+  const contactLogRangeEnd = new Date(filter.endDate);
+  contactLogRangeEnd.setUTCDate(contactLogRangeEnd.getUTCDate() + 1);
+  const [orders, wilayahList, mitraDO, wilayahDelivery, contactLogSummary] = await Promise.all([
     getSalesOrderCards(filter),
     getWilayahList(),
     getMitraDOMonthly(filter),
     getWilayahDeliverySummary(filter),
+    getMitraContactLogSummaryForRange(filter.startDate, contactLogRangeEnd.toISOString().slice(0, 10)),
   ]);
 
   return (
@@ -33,6 +41,7 @@ export default async function TransaksiPage({
         orders={orders}
         wilayahDelivery={wilayahDelivery}
         mitraDO={mitraDO}
+        contactLogSummary={contactLogSummary}
         initialMarketingFilter={params.marketing}
       />
     </div>
