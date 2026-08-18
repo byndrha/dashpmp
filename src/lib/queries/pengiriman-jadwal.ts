@@ -48,6 +48,12 @@ export interface JadwalCard {
   SalesmanID: string | null;
   DriverName: string | null;
   JamJadwal: string | Date;
+  // Real creation timestamp. Added after DashboardPengirimanJadwal already
+  // had rows — those were backfilled from ModifiedDate (the closest proxy
+  // available) at migration time, so for any Jadwal created before that
+  // migration this is an approximation, not a true creation time; new
+  // Jadwal get an accurate value from the column's own GETDATE() default.
+  CreatedDate: string | Date;
   JamMulaiMuat: string | Date | null;
   JamAktualBerangkat: string | Date | null;
   Status: JadwalStatus;
@@ -153,6 +159,7 @@ export async function getPengirimanBoard(
             j.SalesmanID,
             sm.Name AS DriverName,
             j.JamJadwal,
+            j.CreatedDate,
             j.JamMulaiMuat,
             j.JamAktualBerangkat,
             j.JamSelesaiMuat,
@@ -175,7 +182,7 @@ export async function getPengirimanBoard(
           -- midnight-to-midnight day. Kept as WIB->UTC (-7h) on top of that,
           -- same convention as the rest of this file's businessDate filters.
           AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
-        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.JamMulaiMuat, j.JamAktualBerangkat, j.JamSelesaiMuat, j.Status, j.JarakKM, j.DurasiMenit, sdur.EstimasiDurasiMenit
+        GROUP BY j.JadwalID, j.ArmadaID, j.SalesmanID, sm.Name, j.JamJadwal, j.CreatedDate, j.JamMulaiMuat, j.JamAktualBerangkat, j.JamSelesaiMuat, j.Status, j.JarakKM, j.DurasiMenit, sdur.EstimasiDurasiMenit
         ORDER BY j.JamJadwal
       `),
     pool

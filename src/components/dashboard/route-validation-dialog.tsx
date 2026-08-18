@@ -6,7 +6,7 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +23,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { VerticalTimeline, VerticalTimelineItem } from "@/components/ui/vertical-timeline";
+import { CheckSummary } from "@/components/vehicle-check-summary";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -61,6 +64,15 @@ const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((
   ssr: false,
   loading: () => <Skeleton className="h-full w-full rounded-lg" />,
 });
+
+// "5 Menit" under an hour, "4 Jam 5 Menit" (or "4 Jam" flat) at or above.
+function formatDurationMinutes(totalMinutes: number): string {
+  const minutes = Math.max(0, totalMinutes);
+  if (minutes < 60) return `${minutes} Menit`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} Jam ${rest} Menit` : `${hours} Jam`;
+}
 
 function SortableStopRow({
   detail,
@@ -756,6 +768,35 @@ export function RouteValidationDialog({
   const isDraft = jadwal?.Status === "Draft";
   const isWaitingDeparture = jadwal?.Status === "Terbit" && jadwal?.JamAktualBerangkat == null;
   const hasBerangkatCheck = vehicleChecks.some((c) => c.tipe === "BERANGKAT");
+  const jamKembaliAktual = vehicleChecks.find((c) => c.tipe === "DATANG")?.checkedAt ?? null;
+
+  // "Draf dibuat" is an administrative marker, not part of the timed
+  // loading/departure pipeline — it never gets a duration (the gap before
+  // Mulai Muat can be arbitrarily long and isn't meaningful to show). The
+  // pipeline itself starts counting from Mulai Muat: each later step's
+  // duration is the elapsed time since the immediately preceding step that
+  // has actually happened.
+  const statusHistory = useMemo(() => {
+    if (!jadwal) return [];
+    const rawPipeline: { label: string; timestamp: string | Date | null }[] = [
+      { label: "Mulai Muat", timestamp: jadwal.JamMulaiMuat },
+      { label: "Selesai Muat", timestamp: jadwal.JamSelesaiMuat },
+      { label: "Berangkat", timestamp: jadwal.JamAktualBerangkat },
+      { label: "Datang", timestamp: jamKembaliAktual },
+    ];
+
+    let prevMs: number | null = null;
+    const withDuration: { label: string; timestamp: string | Date; durationLabel: string | null }[] = [];
+    for (const s of rawPipeline) {
+      if (s.timestamp == null) continue;
+      const ms = new Date(s.timestamp).getTime();
+      const durationLabel = prevMs != null ? formatDurationMinutes(Math.round((ms - prevMs) / 60000)) : null;
+      prevMs = ms;
+      withDuration.push({ label: s.label, timestamp: s.timestamp, durationLabel });
+    }
+
+    return [{ label: "Draf dibuat", timestamp: jadwal.CreatedDate, durationLabel: null }, ...withDuration];
+  }, [jadwal, jamKembaliAktual]);
   const isFutureDate = businessDate > todayISO;
   const overCapacity = kapasitasMaks != null && totalQty > kapasitasMaks;
   const canSelesaiMuat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity && !isFutureDate;
@@ -1060,6 +1101,38 @@ export function RouteValidationDialog({
               </p>
             )}
 
+            {statusHistory.length > 0 && (
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button size="sm" variant="ghost" className="h-7 w-fit gap-1.5 px-2 text-xs text-muted-foreground" />
+                  }
+                >
+                  <History className="size-3.5" />
+                  Riwayat Status
+                  <ChevronDown className="size-3.5" />
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80">
+                  <VerticalTimeline>
+                    {statusHistory.map((s, i) => (
+                      <VerticalTimelineItem
+                        key={s.label}
+                        time={`${formatTime(s.timestamp)} · ${formatDate(s.timestamp)}`}
+                        isLast={i === statusHistory.length - 1}
+                      >
+                        <p className="text-sm font-medium">
+                          {s.label}
+                          {s.durationLabel && (
+                            <span className="ml-1.5 font-normal text-muted-foreground">| {s.durationLabel}</span>
+                          )}
+                        </p>
+                      </VerticalTimelineItem>
+                    ))}
+                  </VerticalTimeline>
+                </PopoverContent>
+              </Popover>
+            )}
+
             {isDraft ? (
               <div className="flex flex-col gap-1.5">
                 <div className="flex gap-2">
@@ -1281,6 +1354,17 @@ export function RouteValidationDialog({
           </div>
         </div>
         </div>
+
+        {!isDraft && vehicleChecks.length > 0 && (
+          <div className="flex flex-col gap-2 border-t p-4 md:pt-3">
+            <p className="text-xs font-medium text-muted-foreground">Hasil Inspeksi Kendaraan (Satpam)</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {vehicleChecks.map((c) => (
+                <CheckSummary key={c.vehicleCheckId} check={c} />
+              ))}
+            </div>
+          </div>
+        )}
         {conflict && (
           <ArmadaConflictDialog
             conflict={conflict.info}
