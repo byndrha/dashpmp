@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
+import { WilayahSelect } from "@/components/dashboard/wilayah-select";
+import { KecamatanSelect } from "@/components/dashboard/kecamatan-select";
 import { formatRupiah } from "@/lib/format";
 import { createPengajuanAction, getPriceLevelOptionsAction } from "@/app/mkesindo/pemasaran-app/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
@@ -18,14 +21,38 @@ export function PengajuanForm() {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const [address, setAddress] = useState("");
+  const [wilayah, setWilayah] = useState("");
+  const [kecamatan, setKecamatan] = useState("");
+  const [regencyCode, setRegencyCode] = useState<string | null>(null);
+  const [location, setLocation] = useState<MitraLocationValue | null>(null);
+
   useEffect(() => {
     getPriceLevelOptionsAction().then((result) => {
       if (result.success) setPriceLevels(result.data);
     });
   }, []);
 
+  // Same cascade pattern as the desktop Pengajuan/Edit Mitra dialogs — only
+  // clears Kecamatan when Wilayah actually changes to a different region.
+  function handleWilayahChange(name: string, code: string | null) {
+    if (name !== wilayah) setKecamatan("");
+    setWilayah(name);
+    setRegencyCode(code);
+  }
+
+  function handleGeocode(suggestion: { alamat: string | null; wilayah: string | null; kecamatan: string | null }) {
+    if (suggestion.alamat) setAddress(suggestion.alamat);
+    if (suggestion.wilayah) setWilayah(suggestion.wilayah);
+    if (suggestion.kecamatan) setKecamatan(suggestion.kecamatan);
+  }
+
   function handleSubmit(formData: FormData) {
     setError(null);
+    if (!location) {
+      setError("Lokasi GPS wajib diisi — geser pin atau klik peta.");
+      return;
+    }
     const priceLevel = formData.get("priceLevel") ? Number(formData.get("priceLevel")) : null;
     const qtyKantong = formData.get("qtyKantong") ? Number(formData.get("qtyKantong")) : null;
     startTransition(async () => {
@@ -35,11 +62,11 @@ export function PengajuanForm() {
         waktuPermintaanSampai: String(formData.get("waktuPermintaanSampai") ?? ""),
         qtyKantong,
         priceLevel,
-        wilayah: String(formData.get("wilayah") ?? "") || null,
-        kecamatan: String(formData.get("kecamatan") ?? "") || null,
-        alamat: String(formData.get("alamat") ?? "") || null,
-        latitude: null,
-        longitude: null,
+        wilayah: wilayah || null,
+        kecamatan: kecamatan || null,
+        alamat: address || null,
+        latitude: location.latitude,
+        longitude: location.longitude,
         kapasitas: qtyKantong,
         kompetitor: String(formData.get("kompetitor") ?? "") || null,
       });
@@ -73,15 +100,28 @@ export function PengajuanForm() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="alamat">Alamat *</Label>
-            <Textarea id="alamat" name="alamat" rows={2} required />
+            <Textarea id="alamat" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} required />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="wilayah">Wilayah *</Label>
-            <Input id="wilayah" name="wilayah" required />
+            <Label>Wilayah *</Label>
+            <WilayahSelect value={wilayah} onChange={handleWilayahChange} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kecamatan">Kecamatan</Label>
-            <Input id="kecamatan" name="kecamatan" />
+            <Label>Kecamatan</Label>
+            <KecamatanSelect regencyCode={regencyCode} value={kecamatan} onChange={setKecamatan} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Lokasi GPS *</Label>
+            <MitraLocationField
+              value={location}
+              onChange={setLocation}
+              onGeocode={handleGeocode}
+              wilayah={wilayah}
+              kecamatan={kecamatan}
+            />
+            {!location && (
+              <p className="text-xs text-destructive">Lokasi GPS wajib diisi — geser pin atau klik peta.</p>
+            )}
           </div>
         </div>
 
@@ -122,10 +162,12 @@ export function PengajuanForm() {
           </div>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" disabled={pending}>
-          {pending ? "Mengirim..." : "Kirim Pengajuan"}
-        </Button>
+        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-2 flex flex-col gap-2 border-t border-border bg-background p-4">
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" disabled={pending} className="w-full">
+            {pending ? "Mengirim..." : "Kirim Pengajuan"}
+          </Button>
+        </div>
       </form>
     </div>
   );

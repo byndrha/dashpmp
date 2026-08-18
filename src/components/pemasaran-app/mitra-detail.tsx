@@ -33,8 +33,8 @@ export function MitraDetail({ mitra }: { mitra: MitraRow }) {
       <div className="flex flex-col gap-1 p-4">
         <Row label="No. Telepon" value={mitra.Kontak ?? "-"} />
         <Row label="Jenis Usaha" value={mitra.PartnerType} />
-        <Row label="Kabupaten" value={mitra.Wilayah ?? "-"} />
-        <Row label="Wilayah / Kecamatan" value={mitra.Kecamatan ?? "-"} />
+        <Row label="Wilayah" value={mitra.Wilayah ?? "-"} />
+        <Row label="Kecamatan" value={mitra.Kecamatan ?? "-"} />
         <Row label="Alamat" value={mitra.Alamat ?? "-"} />
         <Row label="Kantong/Hari" value={mitra.Capacity != null ? String(mitra.Capacity) : "Belum diisi"} />
         <Row label="Kompetitor" value={mitra.Kompetitor ?? "-"} />
