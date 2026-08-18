@@ -73,6 +73,16 @@ export function useLiveCameraCapture({
         }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track?.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean };
+        if (capabilities?.torch) {
+          track
+            .applyConstraints({ advanced: [{ torch: true } as MediaTrackConstraintSet] })
+            .catch(() => {
+              // Device reported torch support but declined the constraint —
+              // camera still works without flash, so this is not an error.
+            });
+        }
       })
       .catch(() => {
         if (!cancelled) setError("Izin kamera diperlukan untuk mengambil foto.");

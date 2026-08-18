@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, HelpCircle, Truck } from "lucide-react";
+import { ArrowLeft, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import { useLiveCameraCapture } from "@/hooks/use-live-camera-capture";
 import { createVehicleCheckAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import {
@@ -260,9 +261,7 @@ export function LiveInspeksiClient({
           </p>
           <p className="text-xs text-muted-foreground">Driver: {driverName ?? "-"}</p>
         </div>
-        <Button size="icon" variant="ghost" className="rounded-full bg-black/40 text-foreground">
-          <HelpCircle className="size-5" />
-        </Button>
+        <AppearanceMenu triggerClassName="rounded-full bg-black/40 text-foreground hover:bg-black/60" />
       </div>
 
       {/* Status pill */}

@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Sun, Moon, Monitor, Palette as PaletteIcon, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +36,7 @@ function useHasMounted() {
   );
 }
 
-export function AppearanceMenu() {
+export function AppearanceMenu({ triggerClassName }: { triggerClassName?: string } = {}) {
   const mounted = useHasMounted();
   const { theme, setTheme } = useTheme();
   const { palette, setPalette } = usePalette();
@@ -45,7 +46,7 @@ export function AppearanceMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className={cn(triggerClassName)} />}>
         <TriggerIcon className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
