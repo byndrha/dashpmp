@@ -24,7 +24,7 @@ Spesifikasi ini memecah penilaian menjadi tiga kategori — **Existing**, **NOO*
 
 ### 1. Kategori PartnerType baru (Agen / RPA / Outlet)
 
-`PartnerType` tetap diturunkan dari kolom `BusinessPartner.Gender` (`PARTNER_TYPE_CASE`, `src/lib/queries/aging.ts`) — pola yang sudah ada dipertahankan, hanya ditambah satu nilai baru (mis. `"Other"`) untuk mewakili RPA. Tiga ambang batas qty di `approvePengajuan()` (`AGEN_QTY_THRESHOLD`, `src/lib/queries/mitra-pengajuan.ts`) dan `updateMitraCapacity()`/`updateMitra()` mana pun yang menentukan Gender dari qty:
+`PartnerType` tetap diturunkan dari kolom `BusinessPartner.Gender` (`PARTNER_TYPE_CASE`, `src/lib/queries/aging.ts`) — pola yang sudah ada dipertahankan, hanya ditambah satu nilai baru (mis. `"Other"`) untuk mewakili RPA. **Koreksi dari draft awal spec ini**: qty→Gender hanya diturunkan di **satu tempat**, `approvePengajuan()` (`AGEN_QTY_THRESHOLD`, `src/lib/queries/mitra-pengajuan.ts`) — `updateMitra()`/`updateMitraCapacity()`/`createMitra()` di `mitra.ts` semuanya generic pass-through (`Gender` sudah diresolusi pemanggilnya), tidak melakukan derivasi apa pun dan tidak perlu disentuh. Tiga ambang batas qty di `approvePengajuan()`:
 
 - qty ≤ 10 → **Outlet** (`Gender = "Female"`, label tampilan berubah dari "Retail" ke "Outlet" di seluruh UI — cek setiap tempat yang literal menulis "Retail")
 - 10 < qty ≤ 100 → **Agen** (`Gender = "Male"`, tidak berubah)
@@ -33,6 +33,8 @@ Spesifikasi ini memecah penilaian menjadi tiga kategori — **Existing**, **NOO*
 Ini otomatis, sama seperti sekarang — tidak ada field "Jenis Usaha" manual yang ditambahkan ke form manapun (konsisten dengan keputusan produk sebelumnya di modul ini). `PARTNER_TYPE_CASE` bertambah satu cabang `WHEN Gender = <nilai RPA> THEN 'RPA'`.
 
 **Tidak ada migrasi** untuk mitra existing — perubahan hanya berlaku untuk Pengajuan yang di-approve setelah fitur ini aktif, dan saat seseorang mengedit ulang data mitra existing.
+
+**Unifikasi dengan panel "Mitra Growth" yang sudah ada**: `src/lib/queries/mitra-growth.ts` sudah lebih dulu punya konsep "RPA" sendiri — dideteksi dari **nama mitra yang diawali "RPA"** (`GROWTH_TYPE_CASE`, lokal ke file itu, sengaja dipisah dari `PARTNER_TYPE_CASE` bersama menurut komentarnya sendiri). Ini akan **diganti** mengikuti `PARTNER_TYPE_CASE` yang baru (qty-based) — `GROWTH_TYPE_CASE` dan `MitraGrowthType` lokal di `mitra-growth.ts` dihapus, digantikan langsung oleh `PARTNER_TYPE_CASE`/`PartnerType` bersama. Konsekuensi: perilaku panel Mitra Growth (`mitra-growth-panel.tsx`) berubah — mitra yang sebelumnya masuk RPA karena namanya diawali "RPA" tapi qty pengirimannya kecil, tidak lagi terhitung RPA di panel itu (ikut aturan qty>100 yang baru, konsisten di semua tempat).
 
 ### 2. Snapshot Kapasitas Bulanan (baru)
 
