@@ -78,7 +78,14 @@ export async function getVisitLogDetailAction(
   dateISO: string
 ): Promise<ActionResult<MarketingVisitLogEntry | null>> {
   return runAction(async () => {
-    await requireMarketing();
+    const session = await requireMarketing();
+    // Same roster resolution getVisitLogStatusAction already uses — reused
+    // here so a marketing rep can't read a colleague's visit-log note by
+    // passing a businessPartnerId outside their own resolved coverage.
+    const roster = await getVisitLogStatusForMarketing(session.user.id, dateISO);
+    if (!roster.some((r) => r.BusinessPartnerID === businessPartnerId)) {
+      throw new AppError("Anda tidak memiliki akses ke mitra ini.");
+    }
     return getMarketingVisitLogForDate(businessPartnerId, dateISO);
   });
 }
@@ -90,6 +97,13 @@ export async function saveVisitLogAction(input: {
 }): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireMarketing();
+    // Same ownership check as getVisitLogDetailAction above — without it,
+    // one marketing rep could overwrite a colleague's visit-log note by
+    // calling this action with a businessPartnerId outside their own scope.
+    const roster = await getVisitLogStatusForMarketing(session.user.id, input.dateISO);
+    if (!roster.some((r) => r.BusinessPartnerID === input.businessPartnerId)) {
+      throw new AppError("Anda tidak memiliki akses ke mitra ini.");
+    }
     await saveMarketingVisitLog({ ...input, userId: session.user.id });
   });
 }

@@ -42,7 +42,8 @@ export function KinerjaMarketingSubTab() {
   const roster = ownMitraId ? (data.allMitraByMarketing[ownMitraId] ?? []) : [];
   const totalQty = data.cells.reduce((sum, c) => sum + c.DailyQty.reduce((s, q) => s + q, 0), 0);
   const totalTarget = data.cells.reduce((sum, c) => sum + c.TargetHarian, 0);
-  const last5 = Array.from({ length: Math.min(5, data.periodDays) }, (_, i) => data.periodDays - 5 + i).filter((i) => i >= 0);
+  const windowSize = Math.min(5, data.periodDays);
+  const last5 = Array.from({ length: windowSize }, (_, i) => data.periodDays - windowSize + i);
 
   return (
     <div className="flex flex-col gap-2 p-4">
@@ -58,7 +59,7 @@ export function KinerjaMarketingSubTab() {
         </CardContent>
       </Card>
 
-      {roster
+      {[...roster]
         .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0))
         .map((m) => {
           const daily = data.mitraDailyQty[m.BusinessPartnerID] ?? [];

@@ -27,7 +27,11 @@ export function MitraTab() {
         return;
       }
       setMitra(mitraResult.data);
-      if (wilayahResult.success) setWilayahStats(wilayahResult.data);
+      if (!wilayahResult.success) {
+        setError(wilayahResult.error);
+        return;
+      }
+      setWilayahStats(wilayahResult.data);
     });
     return () => {
       cancelled = true;

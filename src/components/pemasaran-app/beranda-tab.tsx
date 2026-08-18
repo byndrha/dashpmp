@@ -69,16 +69,22 @@ export function BerandaTab() {
     setNoteError(null);
     startTransition(async () => {
       const result = await setMitraNoteAction({ businessPartnerId: targetId, note: note || null });
-      // The dialog may have moved on to a different mitra (or closed) while
-      // this request was in flight — only touch state if it's still showing
-      // the mitra this request was actually for.
-      if (editingNoteIdRef.current !== targetId) return;
       if (!result.success) {
+        // The dialog may have moved on to a different mitra (or closed)
+        // while this request was in flight — only paint the error if it's
+        // still showing the mitra this request was actually for.
+        if (editingNoteIdRef.current !== targetId) return;
         setNoteError(result.error);
         return;
       }
+      // The server-side save always succeeds regardless of what the dialog
+      // is doing client-side, so the local list sync must always run — it's
+      // a silent background update with no "wrong dialog" risk, unlike the
+      // error-paint above.
       setTopPiutang((prev) => prev?.map((r) => (r.BusinessPartnerID === targetId ? { ...r, TargetNote: note || null } : r)) ?? null);
-      closeNoteEditor();
+      // Only close/reset the dialog if it's still showing this same mitra —
+      // otherwise this would yank shut a dialog the user has since switched to.
+      if (editingNoteIdRef.current === targetId) closeNoteEditor();
     });
   }
 
