@@ -34,11 +34,12 @@ export interface AgingRow {
 //   Kecamatan  <- NPWPAddress
 //   Kontak     <- MobileNo
 //   TakeAway   <- SalesmanID = '0127'
-//   Gender = Female -> Retail, Gender = Male -> Agen
+//   Gender = Female -> Outlet, Gender = Male -> Agen, Gender = Other -> RPA
 export const PARTNER_TYPE_CASE = `
   CASE
     WHEN bp.SalesmanID = '0127' THEN 'TakeAway'
-    WHEN bp.Gender = 'Female' THEN 'Retail'
+    WHEN bp.Gender = 'Other' THEN 'RPA'
+    WHEN bp.Gender = 'Female' THEN 'Outlet'
     WHEN bp.Gender = 'Male' THEN 'Agen'
     ELSE 'Lainnya'
   END
