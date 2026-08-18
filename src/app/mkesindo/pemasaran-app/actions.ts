@@ -23,6 +23,8 @@ import { getTopMitraPiutang, type TopMitraPiutangRow } from "@/lib/queries/top-m
 import { setMitraNote } from "@/lib/queries/collection-priority";
 import type { SalesDayComparisonResult } from "@/lib/queries/sales-overview";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+import { getMarketingPerformanceTrend, type MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
+import { getPangsaPasarTrend, type PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
 
 function ownMitra(all: MitraRow[], marketingName: string): MitraRow[] {
   return all.filter((m) => m.MarketingNama === marketingName);
@@ -62,6 +64,22 @@ export async function getKinerjaMarketingAction(): Promise<ActionResult<Marketin
       cells: data.cells.filter((c) => c.MarketingUserID === session.user.id),
       allMitraByMarketing: { [session.user.id]: ownMitraRoster },
       mitraDailyQty,
+    };
+  });
+}
+
+export async function getKinerjaMarketingTrendAction(
+  monthsBack: 3 | 12
+): Promise<ActionResult<{ performance: MarketingPerformanceTrendData; pangsaPasar: PangsaPasarTrendData }>> {
+  return runAction(async () => {
+    const session = await requireMarketing();
+    const performanceFull = await getMarketingPerformanceTrend(monthsBack);
+    const pangsaPasarFull = await getPangsaPasarTrend(monthsBack, performanceFull);
+    // Mobile never shows the combined/company-wide view — only the caller's
+    // own row, same cross-marketing isolation rule as getKinerjaMarketingAction.
+    return {
+      performance: { ...performanceFull, rows: performanceFull.rows.filter((r) => r.MarketingUserID === session.user.id) },
+      pangsaPasar: { ...pangsaPasarFull, rows: pangsaPasarFull.rows.filter((r) => r.MarketingUserID === session.user.id) },
     };
   });
 }
