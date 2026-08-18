@@ -236,11 +236,11 @@ function MitraFormDialog({
             <Label className="sr-only">Tipe Mitra</Label>
             <Select value={gender} onValueChange={(v) => setGender(v ?? "Male")}>
               <SelectTrigger className="w-full">
-                <SelectValue>{(v: string) => (v === "Female" ? "Retail" : "Agen")}</SelectValue>
+                <SelectValue>{(v: string) => (v === "Female" ? "Outlet" : "Agen")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Male">Agen</SelectItem>
-                <SelectItem value="Female">Retail</SelectItem>
+                <SelectItem value="Female">Outlet</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -324,7 +324,7 @@ function MitraFormDialog({
   );
 }
 
-const PARTNER_TYPES = ["Agen", "Retail", "TakeAway", "Lainnya"] as const;
+const PARTNER_TYPES = ["Agen", "Outlet", "RPA", "TakeAway", "Lainnya"] as const;
 const WILAYAH_UNKNOWN = "__unknown__";
 const PIN_OPTIONS = [
   { value: "all", label: "Pin" },

@@ -346,7 +346,8 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
           <SelectContent>
             <SelectItem value="all">Semua Tipe</SelectItem>
             <SelectItem value="Agen">Agen</SelectItem>
-            <SelectItem value="Retail">Retail</SelectItem>
+            <SelectItem value="Outlet">Outlet</SelectItem>
+            <SelectItem value="RPA">RPA</SelectItem>
             <SelectItem value="TakeAway">TakeAway</SelectItem>
             <SelectItem value="Lainnya">Lainnya</SelectItem>
           </SelectContent>
