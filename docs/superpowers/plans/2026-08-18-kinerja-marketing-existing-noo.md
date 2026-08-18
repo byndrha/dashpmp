@@ -1137,7 +1137,7 @@ export async function getPangsaPasarTrend(
           NPWPAddress AS Kecamatan,
           JoinDate,
           ${PARTNER_TYPE_CASE} AS PartnerType
-      FROM BusinessPartner
+      FROM BusinessPartner bp
       WHERE ISNULL(IsDeleted, 0) = 0
     `),
   ]);
