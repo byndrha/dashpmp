@@ -1675,8 +1675,21 @@ function MarketingCard({
   // to year-month and re-appending "-01" is a safe string comparison
   // against JoinDate without re-parsing timezones.
   const currentMonthStartISO = `${todayISO.slice(0, 7)}-01`;
-  const isExisting = (joinDate: string | null) => !joinDate || joinDate < currentMonthStartISO;
-  const isNoo = (joinDate: string | null) => !!joinDate && joinDate >= currentMonthStartISO;
+  // JoinDate arrives from the server as a real JS Date at runtime (the
+  // underlying BusinessPartner.JoinDate column is SQL datetime — the mssql
+  // driver returns a Date object, and React's RSC serialization preserves
+  // Date instances across the server/client boundary), even though its
+  // declared type is `string | null`. Comparing a Date directly against an
+  // ISO string via `<`/`>=` always evaluates false (Date coerces to its
+  // numeric timestamp, the string fails ToNumber). Normalize both sides
+  // through `new Date(...)` before comparing — this also works unchanged if
+  // JoinDate genuinely is a string at runtime, since `new Date(dateObj)`
+  // clones a Date input as-is. Matches the same normalization already used
+  // in marketing-performance-trend.ts/pangsa-pasar-trend.ts.
+  const isExisting = (joinDate: string | null) =>
+    !joinDate || new Date(joinDate).getTime() < new Date(currentMonthStartISO).getTime();
+  const isNoo = (joinDate: string | null) =>
+    !!joinDate && new Date(joinDate).getTime() >= new Date(currentMonthStartISO).getTime();
 
   const sortedMitra = useMemo(
     () => [...mitraPrioritas].filter((m) => isExisting(m.JoinDate)).sort(compareCapacityDesc),
@@ -2078,11 +2091,17 @@ export function KinerjaMarketingSubTab() {
   const todayISO = data?.todayISO ?? "";
   const currentMonthStartISO = todayISO ? `${todayISO.slice(0, 7)}-01` : "";
   const existingRoster = useMemo(
-    () => roster.filter((m) => !m.JoinDate || m.JoinDate < currentMonthStartISO).sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
+    () =>
+      roster
+        .filter((m) => !m.JoinDate || new Date(m.JoinDate).getTime() < new Date(currentMonthStartISO).getTime())
+        .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
     [roster, currentMonthStartISO]
   );
   const nooRoster = useMemo(
-    () => roster.filter((m) => m.JoinDate && m.JoinDate >= currentMonthStartISO).sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
+    () =>
+      roster
+        .filter((m) => !!m.JoinDate && new Date(m.JoinDate).getTime() >= new Date(currentMonthStartISO).getTime())
+        .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
     [roster, currentMonthStartISO]
   );
 
