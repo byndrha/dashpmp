@@ -84,7 +84,13 @@ export function MitraEditForm({ mitra }: { mitra: MitraRow }) {
           <Label htmlFor="priceLevel">Harga per Kantong</Label>
           <Select name="priceLevel" defaultValue={mitra.PriceLevel != null ? String(mitra.PriceLevel) : undefined}>
             <SelectTrigger id="priceLevel">
-              <SelectValue placeholder="Pilih tingkat harga" />
+              <SelectValue placeholder="Pilih tingkat harga">
+                {(value: string | null) => {
+                  if (!value) return "Pilih tingkat harga";
+                  const level = priceLevels?.find((p) => String(p.Level) === value);
+                  return level ? `Level ${level.Level} — ${formatRupiah(level.Price)}` : value;
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {priceLevels?.map((p) => (

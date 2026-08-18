@@ -91,7 +91,13 @@ export function PengajuanForm() {
             <Label htmlFor="priceLevel">Tingkat Harga</Label>
             <Select name="priceLevel">
               <SelectTrigger id="priceLevel">
-                <SelectValue placeholder="Pilih tingkat harga" />
+                <SelectValue placeholder="Pilih tingkat harga">
+                  {(value: string | null) => {
+                    if (!value) return "Pilih tingkat harga";
+                    const level = priceLevels?.find((p) => String(p.Level) === value);
+                    return level ? `Level ${level.Level} — ${formatRupiah(level.Price)}` : value;
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {priceLevels?.map((p) => (
