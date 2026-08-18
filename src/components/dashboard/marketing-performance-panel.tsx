@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -13,14 +13,19 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
+import { MatriksPerformaTable, PangsaPasarTable, TrendExpandButton } from "@/components/dashboard/marketing-trend-tables";
 import { cn } from "@/lib/utils";
 import type { MarketingPerformanceData, MarketingScopeCell, MarketingScopeAllMitra } from "@/lib/queries/marketing-performance";
 import type { MarketingKPIRow } from "@/lib/queries/mitra-pengajuan";
 import type { MarketingMitraAssignment } from "@/lib/queries/marketing-wilayah";
+import type { MarketingTrendRow } from "@/lib/queries/marketing-performance-trend";
+import type { PangsaPasarRow } from "@/lib/queries/pangsa-pasar-trend";
 import {
   setMarketingPeriodSettingAction,
   getMarketingVisitLogAction,
   saveMarketingVisitLogAction,
+  getMarketingTrendDataAction,
+  type MarketingTrendBundle,
 } from "@/app/mkesindo/(dashboard)/pemasaran/actions";
 
 // Absorbed from the old MarketingKPIPanel ("Pencapaian Marketing — Bulan
@@ -334,6 +339,9 @@ function MarketingCard({
   onMitraClick,
   forceOpen,
   dailyDelta,
+  trendRow,
+  pangsaPasarRow,
+  trendMonths,
 }: {
   row: AggregatedRow;
   kpi: MarketingKPIRow | undefined;
@@ -353,15 +361,39 @@ function MarketingCard({
   // true total for the row, search only narrows which mitra rows are shown
   // below it).
   dailyDelta: { positive: number[]; negative: number[] };
+  trendRow: MarketingTrendRow | undefined;
+  pangsaPasarRow: PangsaPasarRow | undefined;
+  trendMonths: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [openAll, setOpenAll] = useState(false);
+  const [openNoo, setOpenNoo] = useState(false);
   const kunjungan = kpi?.Kunjungan ?? 0;
   const konversiPct = kpi && kpi.Kunjungan > 0 ? (kpi.Konversi / kpi.Kunjungan) * 100 : 0;
-  const sortedMitra = useMemo(() => [...mitraPrioritas].sort(compareCapacityDesc), [mitraPrioritas]);
-  const sortedAllMitra = useMemo(() => [...allMitra].sort(compareCapacityDesc), [allMitra]);
+
+  // Current WIB business month, as a "YYYY-MM-01" string — todayISO is
+  // already a business-date ISO string (getBusinessDateISO()), so slicing
+  // to year-month and re-appending "-01" is a safe string comparison
+  // against JoinDate without re-parsing timezones.
+  const currentMonthStartISO = `${todayISO.slice(0, 7)}-01`;
+  const isExisting = (joinDate: string | null) => !joinDate || joinDate < currentMonthStartISO;
+  const isNoo = (joinDate: string | null) => !!joinDate && joinDate >= currentMonthStartISO;
+
+  const sortedMitra = useMemo(
+    () => [...mitraPrioritas].filter((m) => isExisting(m.JoinDate)).sort(compareCapacityDesc),
+    [mitraPrioritas, currentMonthStartISO]
+  );
+  const sortedAllMitra = useMemo(
+    () => [...allMitra].filter((m) => isExisting(m.JoinDate)).sort(compareCapacityDesc),
+    [allMitra, currentMonthStartISO]
+  );
+  const sortedNooMitra = useMemo(
+    () => [...allMitra].filter((m) => isNoo(m.JoinDate)).sort(compareCapacityDesc),
+    [allMitra, currentMonthStartISO]
+  );
   const showPrioritas = open || forceOpen;
   const showAll = openAll || forceOpen;
+  const showNoo = openNoo || forceOpen;
 
   return (
     <div className="flex flex-col">
@@ -407,6 +439,19 @@ function MarketingCard({
         </div>
       </div>
 
+      {trendRow && (
+        <div className="border-t px-3 py-2">
+          <MatriksPerformaTable
+            months={trendMonths}
+            existing={trendRow.months.map((m) => m.existing)}
+            noo={trendRow.months.map((m) => m.noo)}
+            total={trendRow.months.map((m) => m.total)}
+            title="Matriks Performa"
+          />
+          {pangsaPasarRow && <PangsaPasarTable rows={pangsaPasarRow.months} />}
+        </div>
+      )}
+
       {sortedMitra.length > 0 && (
         <div className="pb-1">
           <Button
@@ -418,7 +463,7 @@ function MarketingCard({
             disabled={forceOpen}
           >
             <Star className="size-3 fill-primary text-primary" />
-            {showPrioritas ? "Sembunyikan" : "Tampilkan"} {sortedMitra.length} mitra prioritas
+            {showPrioritas ? "Sembunyikan" : "Tampilkan"} {sortedMitra.length} mitra prioritas (Existing)
             <ChevronDown className={cn("size-3 transition-transform", showPrioritas && "rotate-180")} />
           </Button>
           {showPrioritas && (
@@ -449,12 +494,43 @@ function MarketingCard({
             disabled={forceOpen}
           >
             <Users className="size-3" />
-            {showAll ? "Sembunyikan" : "Tampilkan"} {sortedAllMitra.length} seluruh mitra
+            {showAll ? "Sembunyikan" : "Tampilkan"} {sortedAllMitra.length} seluruh mitra (Existing)
             <ChevronDown className={cn("size-3 transition-transform", showAll && "rotate-180")} />
           </Button>
           {showAll && (
             <div className="flex flex-col divide-y border-t">
               {sortedAllMitra.map((m) => (
+                <AllMitraRow
+                  key={m.BusinessPartnerID}
+                  mitra={m}
+                  dailyQty={mitraDailyQty[m.BusinessPartnerID] ?? []}
+                  dates={dates}
+                  todayISO={todayISO}
+                  onMitraClick={onMitraClick}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {sortedNooMitra.length > 0 && (
+        <div className="pb-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 pl-3 text-[11px] text-muted-foreground"
+            onClick={() => setOpenNoo((v) => !v)}
+            disabled={forceOpen}
+          >
+            <Users className="size-3 text-primary" />
+            {showNoo ? "Sembunyikan" : "Tampilkan"} {sortedNooMitra.length} mitra NOO bulan ini
+            <ChevronDown className={cn("size-3 transition-transform", showNoo && "rotate-180")} />
+          </Button>
+          {showNoo && (
+            <div className="flex flex-col divide-y border-t">
+              {sortedNooMitra.map((m) => (
                 <AllMitraRow
                   key={m.BusinessPartnerID}
                   mitra={m}
@@ -574,11 +650,13 @@ export function MarketingPerformancePanel({
   kpiRows,
   canManageSettings,
   mitraAssignments,
+  initialTrendBundle,
 }: {
   data: MarketingPerformanceData;
   kpiRows: MarketingKPIRow[];
   canManageSettings: boolean;
   mitraAssignments: MarketingMitraAssignment[];
+  initialTrendBundle: MarketingTrendBundle | null;
 }) {
   const { cells, periodDays, rangeStartISO, todayISO, mitraDailyQty, allMitraByMarketing } = data;
   const [wilayahFilter, setWilayahFilter] = useState(ALL);
@@ -586,6 +664,40 @@ export function MarketingPerformancePanel({
   const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
   const [mitraSearch, setMitraSearch] = useState("");
   const mitraSearchQuery = mitraSearch.trim().toLowerCase();
+
+  const [trendBundle, setTrendBundle] = useState(initialTrendBundle);
+  const [trendExpanded, setTrendExpanded] = useState(false);
+  const [trendPending, startTrendTransition] = useTransition();
+
+  useEffect(() => {
+    // Re-syncs local trend state whenever the server re-fetches the initial
+    // 3-month bundle (e.g. router.refresh() after a period-setting change) —
+    // same "seed local state from a prop via effect" pattern used elsewhere
+    // in this codebase (mitra-detail-dialog.tsx, greeting-header.tsx, etc.).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTrendBundle(initialTrendBundle);
+    setTrendExpanded(false);
+  }, [initialTrendBundle]);
+
+  function handleTrendToggle() {
+    const nextMonthsBack: 3 | 12 = trendExpanded ? 3 : 12;
+    startTrendTransition(async () => {
+      const result = await getMarketingTrendDataAction(nextMonthsBack);
+      if (result.success) {
+        setTrendBundle(result.data);
+        setTrendExpanded(!trendExpanded);
+      }
+    });
+  }
+
+  const trendRowByMarketing = useMemo(
+    () => new Map((trendBundle?.performance.rows ?? []).map((r) => [r.MarketingUserID, r])),
+    [trendBundle]
+  );
+  const pangsaPasarRowByMarketing = useMemo(
+    () => new Map((trendBundle?.pangsaPasar.rows ?? []).map((r) => [r.MarketingUserID, r])),
+    [trendBundle]
+  );
 
   const kpiByUserId = useMemo(() => new Map(kpiRows.map((r) => [r.UserID, r])), [kpiRows]);
   const mitraByMarketing = useMemo(() => {
@@ -739,7 +851,12 @@ export function MarketingPerformancePanel({
               {rangeStartISO} &ndash; {addDaysISO(rangeStartISO, periodDays - 1)}.
             </CardDescription>
           </div>
-          {canManageSettings && <PeriodSettings rangeStartISO={rangeStartISO} periodDays={periodDays} />}
+          <div className="flex items-center gap-2">
+            {trendBundle && !trendBundle.showCombined && (
+              <TrendExpandButton expanded={trendExpanded} onToggle={handleTrendToggle} pending={trendPending} />
+            )}
+            {canManageSettings && <PeriodSettings rangeStartISO={rangeStartISO} periodDays={periodDays} />}
+          </div>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <div className="relative w-56">
@@ -779,6 +896,24 @@ export function MarketingPerformancePanel({
           </Select>
         </div>
       </CardHeader>
+      {trendBundle?.showCombined && (
+        <CardContent className="border-b pb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold">Gabungan Seluruh Marketing</p>
+            <TrendExpandButton expanded={trendExpanded} onToggle={handleTrendToggle} pending={trendPending} />
+          </div>
+          <div className="flex flex-col gap-4">
+            <MatriksPerformaTable
+              months={trendBundle.performance.months}
+              existing={trendBundle.performance.combined.map((m) => m.existing)}
+              noo={trendBundle.performance.combined.map((m) => m.noo)}
+              total={trendBundle.performance.combined.map((m) => m.total)}
+              title="Matriks Performa (Gabungan)"
+            />
+            <PangsaPasarTable rows={trendBundle.pangsaPasar.combined} />
+          </div>
+        </CardContent>
+      )}
       <CardContent>
         {rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
@@ -835,6 +970,9 @@ export function MarketingPerformancePanel({
                   onMitraClick={setDetailMitraId}
                   forceOpen={forceOpen}
                   dailyDelta={deltaPerDateByMarketing.get(r.MarketingUserID) ?? EMPTY_DELTA}
+                  trendRow={trendRowByMarketing.get(r.MarketingUserID)}
+                  pangsaPasarRow={pangsaPasarRowByMarketing.get(r.MarketingUserID)}
+                  trendMonths={trendBundle?.performance.months ?? []}
                 />
               ))}
             </div>

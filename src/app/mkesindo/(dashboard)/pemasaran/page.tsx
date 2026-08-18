@@ -16,6 +16,21 @@ import { MarketingWilayahPanel } from "@/components/dashboard/marketing-wilayah-
 import { MarketingPerformancePanel } from "@/components/dashboard/marketing-performance-panel";
 import { PemasaranWilayahDeliveryPanel } from "@/components/dashboard/pemasaran-wilayah-delivery-panel";
 import { MarketingLocationMap } from "@/components/dashboard/marketing-location-map";
+import { getMarketingPerformanceTrend } from "@/lib/queries/marketing-performance-trend";
+import { getPangsaPasarTrend } from "@/lib/queries/pangsa-pasar-trend";
+import type { MarketingTrendBundle } from "@/app/mkesindo/(dashboard)/pemasaran/actions";
+
+async function loadTrendBundle(canView: boolean, sessionUserId: string, isPlainMarketing: boolean): Promise<MarketingTrendBundle | null> {
+  if (!canView) return null;
+  const performanceFull = await getMarketingPerformanceTrend(3);
+  const pangsaPasarFull = await getPangsaPasarTrend(3, performanceFull);
+  if (!isPlainMarketing) return { performance: performanceFull, pangsaPasar: pangsaPasarFull, showCombined: true };
+  return {
+    performance: { ...performanceFull, rows: performanceFull.rows.filter((r) => r.MarketingUserID === sessionUserId) },
+    pangsaPasar: { ...pangsaPasarFull, rows: pangsaPasarFull.rows.filter((r) => r.MarketingUserID === sessionUserId) },
+    showCombined: false,
+  };
+}
 
 export default async function PemasaranPage() {
   const session = await requireModuleAccess("pemasaran");
@@ -27,6 +42,7 @@ export default async function PemasaranPage() {
   // Kinerja Marketing is explicitly hidden from Staff — everyone else
   // (Marketing, Supervisor, Accounting, Manager, Super Admin) still sees it.
   const canViewKinerjaMarketing = !(session.user.roleId === STAFF_ROLE_ID && !session.user.isSuperAdmin);
+  const isPlainMarketing = !session.user.isSuperAdmin && session.user.roleId === MARKETING_ROLE_ID;
 
   const [
     rows,
@@ -39,6 +55,7 @@ export default async function PemasaranPage() {
     performance,
     wilayahDelivery,
     marketingPositions,
+    trendBundle,
   ] = await Promise.all([
       getPengajuanList(),
       getMarketingKPI(),
@@ -58,12 +75,12 @@ export default async function PemasaranPage() {
       // Live-position map is part of the same canManageWilayah-gated section
       // as MarketingWilayahPanel — Marketing themselves never see it.
       canManageWilayah ? getLatestMarketingPositions() : Promise.resolve([]),
+      loadTrendBundle(canViewKinerjaMarketing, session.user.id, isPlainMarketing),
     ]);
 
   // Marketing sees only their own progress here — Supervisor/Accounting/Super
   // Admin (the roles that actually approve/reject and monitor the team)
   // still see every marketing person's KPI, unchanged.
-  const isPlainMarketing = !session.user.isSuperAdmin && session.user.roleId === MARKETING_ROLE_ID;
   const kpiRows = isPlainMarketing ? allKpiRows.filter((r) => r.UserID === session.user.id) : allKpiRows;
   const performanceForSession =
     isPlainMarketing && performance
@@ -101,6 +118,7 @@ export default async function PemasaranPage() {
           kpiRows={kpiRows}
           canManageSettings={canManageWilayah}
           mitraAssignments={mitraAssignmentsForSession}
+          initialTrendBundle={trendBundle}
         />
       )}
 
