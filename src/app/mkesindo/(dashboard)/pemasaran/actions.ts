@@ -25,6 +25,10 @@ import {
 } from "@/lib/queries/marketing-visit-log";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+import { STAFF_ROLE_ID } from "@/lib/roles";
+import { MARKETING_ROLE_ID } from "@/lib/queries/mitra-pengajuan";
+import { getMarketingPerformanceTrend, type MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
+import { getPangsaPasarTrend, type PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
 
 export async function createPengajuanAction(input: PengajuanInput): Promise<ActionResult<void>> {
   return runAction(async () => {
@@ -196,5 +200,39 @@ export async function saveMarketingVisitLogAction(input: {
     if (!userId) throw new AppError("Unauthorized");
 
     await saveMarketingVisitLog({ ...input, userId });
+  });
+}
+
+export interface MarketingTrendBundle {
+  performance: MarketingPerformanceTrendData;
+  pangsaPasar: PangsaPasarTrendData;
+  showCombined: boolean;
+}
+
+// Same "who can see Kinerja Marketing" gate as the page (canViewKinerjaMarketing
+// in page.tsx) — everyone except plain Staff. Plain Marketing sessions get
+// their own row only and no combined figures, same narrowing
+// performanceForSession already applies to getMarketingPerformance().
+export async function getMarketingTrendDataAction(monthsBack: 3 | 12): Promise<ActionResult<MarketingTrendBundle>> {
+  return runAction(async () => {
+    const session = await auth();
+    const user = session?.user;
+    if (!user) throw new AppError("Unauthorized");
+    if (user.roleId === STAFF_ROLE_ID && !user.isSuperAdmin) {
+      throw new AppError("Tidak punya izin melihat Kinerja Marketing");
+    }
+
+    const performanceFull = await getMarketingPerformanceTrend(monthsBack);
+    const pangsaPasarFull = await getPangsaPasarTrend(monthsBack, performanceFull);
+
+    const isPlainMarketing = !user.isSuperAdmin && user.roleId === MARKETING_ROLE_ID;
+    if (!isPlainMarketing) {
+      return { performance: performanceFull, pangsaPasar: pangsaPasarFull, showCombined: true };
+    }
+    return {
+      performance: { ...performanceFull, rows: performanceFull.rows.filter((r) => r.MarketingUserID === user.id) },
+      pangsaPasar: { ...pangsaPasarFull, rows: pangsaPasarFull.rows.filter((r) => r.MarketingUserID === user.id) },
+      showCombined: false,
+    };
   });
 }
