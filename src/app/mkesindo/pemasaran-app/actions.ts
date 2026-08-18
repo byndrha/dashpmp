@@ -48,9 +48,20 @@ export async function getKinerjaMarketingAction(): Promise<ActionResult<Marketin
   return runAction(async () => {
     const session = await requireMarketing();
     const data = await getMarketingPerformance();
+    // data.mitraDailyQty and data.allMitraByMarketing cover every marketing's
+    // resolved mitra, not just the caller's — must be narrowed to the
+    // caller's own roster before leaving this action, same as cells below.
+    const ownMitraRoster = data.allMitraByMarketing[session.user.id] ?? [];
+    const mitraDailyQty: Record<string, number[]> = {};
+    for (const m of ownMitraRoster) {
+      const qty = data.mitraDailyQty[m.BusinessPartnerID];
+      if (qty) mitraDailyQty[m.BusinessPartnerID] = qty;
+    }
     return {
       ...data,
       cells: data.cells.filter((c) => c.MarketingUserID === session.user.id),
+      allMitraByMarketing: { [session.user.id]: ownMitraRoster },
+      mitraDailyQty,
     };
   });
 }
