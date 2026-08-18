@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canView, type ModuleKey } from "@/lib/permissions";
+import { MARKETING_ROLE_ID } from "@/lib/roles";
 
 // An account has cross-PT authority if it's superadmin, OR its Perusahaan
 // is "PMP Group" itself (accountScope "direktur", the holding level above
@@ -92,6 +93,17 @@ export async function requireProduksi() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!session.user.isProduksi) redirect("/akses-ditolak");
+  return session;
+}
+
+// Gerbang /mkesindo/pemasaran-app — Marketing bukan boolean flag seperti
+// Driver/Satpam/Produksi, tapi Role (MARKETING_ROLE_ID) yang sudah ada sejak
+// modul Pemasaran desktop dibangun. Super Admin tetap boleh masuk untuk
+// keperluan preview/testing, sama seperti pola akses lain di app ini.
+export async function requireMarketing() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!session.user.isSuperAdmin && session.user.roleId !== MARKETING_ROLE_ID) redirect("/akses-ditolak");
   return session;
 }
 

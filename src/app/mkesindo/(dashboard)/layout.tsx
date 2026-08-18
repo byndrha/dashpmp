@@ -39,7 +39,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/mkesindo/satpam-app");
   }
 
-  // Marketing accounts are confined to /mkesindo/pemasaran — Beranda's KPIs
+  // Marketing accounts are confined to /mkesindo/pemasaran-app — Beranda's KPIs
   // aren't relevant to their day-to-day work. This check used to live in
   // (dashboard)/page.tsx (BerandaPage), AFTER requireModuleAccess("beranda")
   // — so a Marketing Peran without "beranda" module permission (the normal
@@ -49,8 +49,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // a real Marketing account reported landing on /akses-ditolak after
   // login. This layout-level check runs before any page's own permission
   // gate, so it can't be short-circuited by a missing module permission.
-  if (!session?.user?.isSuperAdmin && session?.user?.roleId === MARKETING_ROLE_ID && !pathname.startsWith("/mkesindo/pemasaran")) {
-    redirect("/mkesindo/pemasaran");
+  if (!session?.user?.isSuperAdmin && session?.user?.roleId === MARKETING_ROLE_ID && !pathname.startsWith("/mkesindo/pemasaran-app")) {
+    redirect("/mkesindo/pemasaran-app");
   }
 
   // Same reasoning as Satpam above, and NOT redundant with the isDriver
