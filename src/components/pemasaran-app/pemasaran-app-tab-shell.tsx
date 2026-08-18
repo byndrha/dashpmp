@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PemasaranAppBottomNav } from "@/components/pemasaran-app/bottom-nav";
-import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
-import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
 
 export type PemasaranAppTabKey = "beranda" | "mitra" | "pemasaran";
 
@@ -18,14 +18,12 @@ const TAB_PATHS: Record<PemasaranAppTabKey, string> = {
 export function PemasaranAppTabShell({
   initialTab,
   userName,
-  profile,
   beranda,
   mitra,
   pemasaran,
 }: {
   initialTab: PemasaranAppTabKey;
   userName: string;
-  profile: OwnProfile | null;
   beranda: React.ReactNode;
   mitra: React.ReactNode;
   pemasaran: React.ReactNode;
@@ -45,7 +43,10 @@ export function PemasaranAppTabShell({
         <h1 className="font-display text-base font-semibold">Aplikasi Pemasaran</h1>
         <div className="flex items-center gap-1">
           <AppearanceMenu />
-          <UserMenu name={userName} profile={profile} />
+          <Link href="/mkesindo/pemasaran-app/profil" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
+            <User className="size-4" />
+            {userName}
+          </Link>
         </div>
       </header>
       <div className="relative min-h-0 flex-1">
