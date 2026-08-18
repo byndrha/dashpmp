@@ -4,4 +4,4 @@ export interface DateRangeFilter {
   wilayah?: string;
 }
 
-export type PartnerType = "Agen" | "Retail" | "TakeAway" | "Lainnya";
+export type PartnerType = "Agen" | "Outlet" | "RPA" | "TakeAway" | "Lainnya";
