@@ -8,10 +8,11 @@ import { createSalesOrderFromPengajuan } from "@/lib/queries/sales-order";
 import { MARKETING_ROLE_ID, APPROVER_ROLE_IDS } from "@/lib/roles";
 import { AppError } from "@/lib/action-result";
 
-// More than 10 kantong reads as a reseller buying in bulk (Agen); 10 or
-// fewer as a direct retail outlet (Retail) — see PARTNER_TYPE_CASE in
+// qty <= 10 -> Outlet (Gender "Female"), 10 < qty <= 100 -> Agen (Gender
+// "Male"), qty > 100 -> RPA (Gender "Other") — see PARTNER_TYPE_CASE in
 // aging.ts for the Gender->PartnerType mapping this feeds into.
 const AGEN_QTY_THRESHOLD = 10;
+const RPA_QTY_THRESHOLD = 100;
 
 export { MARKETING_ROLE_ID, APPROVER_ROLE_IDS };
 
@@ -235,7 +236,12 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
       address: row.Alamat,
       wilayah: row.Wilayah,
       kecamatan: row.Kecamatan,
-      gender: row.QtyKantong != null && row.QtyKantong > AGEN_QTY_THRESHOLD ? "Male" : "Female",
+      gender:
+        row.QtyKantong != null && row.QtyKantong > RPA_QTY_THRESHOLD
+          ? "Other"
+          : row.QtyKantong != null && row.QtyKantong > AGEN_QTY_THRESHOLD
+            ? "Male"
+            : "Female",
       priceLevel: row.PriceLevel,
       termOfPaymentId: null,
       capacity: row.Kapasitas,
