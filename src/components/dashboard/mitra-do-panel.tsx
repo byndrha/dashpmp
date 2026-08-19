@@ -268,9 +268,34 @@ function ContactLogButton({
 // -> 50% (under-delivered). Only computed once the date has actually
 // elapsed (a future date's "actual" is just 0 so far, not a real shortfall)
 // and only when the forecast itself is a positive number.
-function formatPemesananLine(angkaPemesanan: number, actualQtyForDate: number, dateHasElapsed: boolean): string {
+//
+// Solid warning-color background (not just colored text) so this badge
+// stays legible sitting on top of DayChip's own hit/miss red or green tint
+// — a translucent readout would otherwise blend into that background. The
+// qty and percentage get their own visual gap (a hairline divider, not a
+// literal "|" character glued between two numbers) so they read as two
+// distinct values rather than one run-together string.
+function PemesananBadge({
+  angkaPemesanan,
+  actualQtyForDate,
+  dateHasElapsed,
+}: {
+  angkaPemesanan: number;
+  actualQtyForDate: number;
+  dateHasElapsed: boolean;
+}) {
   const pct = dateHasElapsed && angkaPemesanan > 0 ? Math.round((actualQtyForDate / angkaPemesanan) * 100) : null;
-  return pct != null ? `${formatQty(angkaPemesanan)}|${pct}%` : formatQty(angkaPemesanan);
+  return (
+    <span className="flex items-center gap-1 rounded bg-warning px-1 py-px text-warning-foreground">
+      <span>{formatQty(angkaPemesanan)}</span>
+      {pct != null && (
+        <>
+          <span className="h-2.5 w-px shrink-0 bg-warning-foreground/40" />
+          <span>{pct}%</span>
+        </>
+      )}
+    </span>
+  );
 }
 
 // Right-border-only cells (no rounded chip look) so adjacent cells across
@@ -332,9 +357,13 @@ function DayChip({
         <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" />
       </span>
       {contactSummary && (contactSummary.chat != null || contactSummary.telepon != null) && (
-        <span className="flex flex-col items-center gap-px text-[8px] leading-tight font-medium text-muted-foreground">
-          {contactSummary.chat != null && <span>{formatPemesananLine(contactSummary.chat, qty, isPast)}</span>}
-          {contactSummary.telepon != null && <span>{formatPemesananLine(contactSummary.telepon, qty, isPast)}</span>}
+        <span className="flex flex-col items-center gap-0.5 text-[8px] font-medium">
+          {contactSummary.chat != null && (
+            <PemesananBadge angkaPemesanan={contactSummary.chat} actualQtyForDate={qty} dateHasElapsed={isPast} />
+          )}
+          {contactSummary.telepon != null && (
+            <PemesananBadge angkaPemesanan={contactSummary.telepon} actualQtyForDate={qty} dateHasElapsed={isPast} />
+          )}
         </span>
       )}
     </div>
@@ -863,12 +892,20 @@ export function MitraDOPanel({
                 >
                   <span>{formatQty(totalPerDate[i])}</span>
                   {(pemesanan.hasChat || pemesanan.hasTelepon) && (
-                    <span className="flex flex-col items-center gap-px text-[8px] leading-tight font-medium text-muted-foreground">
+                    <span className="flex flex-col items-center gap-0.5 text-[8px] font-medium">
                       {pemesanan.hasChat && (
-                        <span>{formatPemesananLine(pemesanan.chat, totalPerDate[i], dateISO <= todayISO)}</span>
+                        <PemesananBadge
+                          angkaPemesanan={pemesanan.chat}
+                          actualQtyForDate={totalPerDate[i]}
+                          dateHasElapsed={dateISO <= todayISO}
+                        />
                       )}
                       {pemesanan.hasTelepon && (
-                        <span>{formatPemesananLine(pemesanan.telepon, totalPerDate[i], dateISO <= todayISO)}</span>
+                        <PemesananBadge
+                          angkaPemesanan={pemesanan.telepon}
+                          actualQtyForDate={totalPerDate[i]}
+                          dateHasElapsed={dateISO <= todayISO}
+                        />
                       )}
                     </span>
                   )}
