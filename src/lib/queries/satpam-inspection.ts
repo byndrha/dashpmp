@@ -28,47 +28,97 @@ export interface SatpamInspectionCard {
   hasCheck: boolean;
 }
 
-// One row per Jadwal-and-Tipe combination still needing a Satpam decision
-// today (businessDate, 14:00 WIB rollover — see ROLLOVER_HOUR in
-// business-date.ts). BERANGKAT rows always appear (Draft ones just aren't
-// actionable yet); DATANG rows only appear once BERANGKAT is Terbit AND has
-// its own recorded check — mirrors the sequential Cek Berangkat -> Cek
-// Datang gate already enforced server-side in vehicle-check.ts's
-// createVehicleCheck.
+interface RawInspectionRow {
+  JadwalID: number;
+  ArmadaNama: string;
+  VehicleNo: string | null;
+  DriverName: string | null;
+  JamJadwal: Date;
+  JamAktualBerangkat: Date | null;
+  DurasiMenit: number | null;
+  Status: "Draft" | "Terbit";
+  Qty10KG: number;
+  Qty5KG: number;
+  BerangkatCheckID: number | null;
+  DatangCheckID: number | null;
+}
+
+// Shared by both queries below — same per-Jadwal SELECT/JOINs either way,
+// only the WHERE differs (see getSatpamInspectionList).
+const INSPECTION_ROW_SELECT = `
+  SELECT
+    j.JadwalID,
+    a.Nama AS ArmadaNama,
+    ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo,
+    sm.Name AS DriverName,
+    j.JamJadwal,
+    j.JamAktualBerangkat,
+    j.DurasiMenit,
+    j.Status,
+    (
+      SELECT ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0)
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+      WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+    ) AS Qty10KG,
+    (
+      SELECT ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0)
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+      WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+    ) AS Qty5KG,
+    vcb.VehicleCheckID AS BerangkatCheckID,
+    vcd.VehicleCheckID AS DatangCheckID
+  FROM DashboardPengirimanJadwal j
+  JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
+  LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+  LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
+  LEFT JOIN DashboardVehicleCheck vcb ON vcb.JadwalID = j.JadwalID AND vcb.Tipe = 'BERANGKAT'
+  LEFT JOIN DashboardVehicleCheck vcd ON vcd.JadwalID = j.JadwalID AND vcd.Tipe = 'DATANG'
+`;
+
+function toCard(
+  r: RawInspectionRow,
+  tipe: "BERANGKAT" | "DATANG",
+  hasCheck: boolean,
+  jamEstimasiKedatangan: string | null
+): SatpamInspectionCard {
+  return {
+    jadwalId: r.JadwalID,
+    armadaNama: r.ArmadaNama,
+    vehicleNo: r.VehicleNo,
+    driverName: r.DriverName,
+    jamJadwal: r.JamJadwal.toISOString(),
+    jamEstimasiKedatangan,
+    qty10KG: r.Qty10KG,
+    qty5KG: r.Qty5KG,
+    status: r.Status,
+    tipe,
+    hasCheck,
+  };
+}
+
+// BERANGKAT and DATANG candidates are queried separately and deliberately
+// scoped differently:
+//  - BERANGKAT stays restricted to today's business-date window (14:00 WIB
+//    rollover — see ROLLOVER_HOUR in business-date.ts): a Draft Jadwal
+//    scheduled for a past period that never departed is stale/backlogged,
+//    not something still "on duty" the way an already-departed Jadwal
+//    genuinely is.
+//  - DATANG is intentionally NOT date-scoped: an armada that departed in a
+//    previous business-date period and hasn't had its Cek Datang recorded
+//    yet is still out on the road and needs checking on return, regardless
+//    of which period it departed in — it must not silently vanish from
+//    satpam-app just because the day rolled over while it was still out
+//    (confirmed live: TRUK 98/JadwalID 360 fell out of the old
+//    single-date-scoped query this exact way).
 export async function getSatpamInspectionList(businessDate: string): Promise<SatpamInspectionCard[]> {
   const pool = await getPool();
-  const result = await pool
+
+  const berangkatResult = await pool
     .request()
     .input("businessDate", sql.Date, businessDate).query(`
-      SELECT
-        j.JadwalID,
-        a.Nama AS ArmadaNama,
-        ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo,
-        sm.Name AS DriverName,
-        j.JamJadwal,
-        j.JamAktualBerangkat,
-        j.DurasiMenit,
-        j.Status,
-        (
-          SELECT ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0)
-          FROM DashboardPengirimanJadwalDetail jd
-          JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
-          WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
-        ) AS Qty10KG,
-        (
-          SELECT ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0)
-          FROM DashboardPengirimanJadwalDetail jd
-          JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
-          WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
-        ) AS Qty5KG,
-        vcb.VehicleCheckID AS BerangkatCheckID,
-        vcd.VehicleCheckID AS DatangCheckID
-      FROM DashboardPengirimanJadwal j
-      JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
-      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
-      LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
-      LEFT JOIN DashboardVehicleCheck vcb ON vcb.JadwalID = j.JadwalID AND vcb.Tipe = 'BERANGKAT'
-      LEFT JOIN DashboardVehicleCheck vcd ON vcd.JadwalID = j.JadwalID AND vcd.Tipe = 'DATANG'
+      ${INSPECTION_ROW_SELECT}
       WHERE j.IsDeleted = 0
         -- businessDate is a 14:00 WIB rollover label — see ROLLOVER_HOUR in
         -- business-date.ts and the identical window used in
@@ -78,55 +128,26 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
       ORDER BY j.JamJadwal
     `);
 
-  const rows = result.recordset as {
-    JadwalID: number;
-    ArmadaNama: string;
-    VehicleNo: string | null;
-    DriverName: string | null;
-    JamJadwal: Date;
-    JamAktualBerangkat: Date | null;
-    DurasiMenit: number | null;
-    Status: "Draft" | "Terbit";
-    Qty10KG: number;
-    Qty5KG: number;
-    BerangkatCheckID: number | null;
-    DatangCheckID: number | null;
-  }[];
+  const datangResult = await pool.request().query(`
+    ${INSPECTION_ROW_SELECT}
+    WHERE j.IsDeleted = 0 AND j.Status = 'Terbit' AND vcb.VehicleCheckID IS NOT NULL AND vcd.VehicleCheckID IS NULL
+    ORDER BY j.JamAktualBerangkat
+  `);
 
   const cards: SatpamInspectionCard[] = [];
-  for (const r of rows) {
-    cards.push({
-      jadwalId: r.JadwalID,
-      armadaNama: r.ArmadaNama,
-      vehicleNo: r.VehicleNo,
-      driverName: r.DriverName,
-      jamJadwal: r.JamJadwal.toISOString(),
-      jamEstimasiKedatangan: null,
-      qty10KG: r.Qty10KG,
-      qty5KG: r.Qty5KG,
-      status: r.Status,
-      tipe: "BERANGKAT",
-      hasCheck: r.BerangkatCheckID != null,
-    });
-    if (r.Status === "Terbit" && r.BerangkatCheckID != null) {
-      const jamEstimasiKedatangan =
-        r.JamAktualBerangkat && r.DurasiMenit != null
-          ? new Date(r.JamAktualBerangkat.getTime() + r.DurasiMenit * 60_000).toISOString()
-          : null;
-      cards.push({
-        jadwalId: r.JadwalID,
-        armadaNama: r.ArmadaNama,
-        vehicleNo: r.VehicleNo,
-        driverName: r.DriverName,
-        jamJadwal: r.JamJadwal.toISOString(),
-        jamEstimasiKedatangan,
-        qty10KG: r.Qty10KG,
-        qty5KG: r.Qty5KG,
-        status: r.Status,
-        tipe: "DATANG",
-        hasCheck: r.DatangCheckID != null,
-      });
-    }
+  for (const r of berangkatResult.recordset as RawInspectionRow[]) {
+    cards.push(toCard(r, "BERANGKAT", r.BerangkatCheckID != null, null));
+  }
+  for (const r of datangResult.recordset as RawInspectionRow[]) {
+    const jamEstimasiKedatangan =
+      r.JamAktualBerangkat && r.DurasiMenit != null
+        ? new Date(r.JamAktualBerangkat.getTime() + r.DurasiMenit * 60_000).toISOString()
+        : null;
+    // DatangCheckID IS NULL is already guaranteed by the query's own WHERE
+    // — hasCheck is always false here, kept explicit (not hardcoded) so the
+    // shape matches toCard's signature and the final filter below stays a
+    // no-op safety net rather than load-bearing for this half.
+    cards.push(toCard(r, "DATANG", r.DatangCheckID != null, jamEstimasiKedatangan));
   }
 
   return cards.filter((c) => !c.hasCheck);
