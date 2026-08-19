@@ -49,3 +49,33 @@ export function decryptSecret(ciphertext: string): string {
   const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
   return decrypted.toString("utf8");
 }
+
+// Separate derived key from getKey()'s "perusahaan-db-credential:" prefix —
+// a leaked Google Drive refresh token must not also unlock DB credentials,
+// and vice versa (same principle as this file's existing getKey() comment).
+function getGDriveKey(): Buffer {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("AUTH_SECRET is not configured — cannot encrypt/decrypt stored secrets");
+  return createHash("sha256").update(`gdrive-refresh-token:${secret}`).digest();
+}
+
+export function encryptGDriveToken(plaintext: string): string {
+  const key = getGDriveKey();
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, authTag, encrypted]).toString("base64url");
+}
+
+export function decryptGDriveToken(ciphertext: string): string {
+  const key = getGDriveKey();
+  const buf = Buffer.from(ciphertext, "base64url");
+  const iv = buf.subarray(0, IV_LENGTH);
+  const authTag = buf.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+  const encrypted = buf.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString("utf8");
+}
