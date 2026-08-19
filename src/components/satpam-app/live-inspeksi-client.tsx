@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
@@ -157,6 +158,7 @@ export function LiveInspeksiClient({
   const [uploading, setUploading] = useState<JenisFotoKendaraan | null>(null);
   const [odometerKM, setOdometerKM] = useState("");
   const [fuelBar, setFuelBar] = useState<FuelBar>(2);
+  const [remark, setRemark] = useState("");
   const [muatanQty, setMuatanQty] = useState<number | null>(null);
   const [showMuatanDialog, setShowMuatanDialog] = useState(false);
   const [muatanStep, setMuatanStep] = useState<MuatanStep>("choice");
@@ -206,7 +208,15 @@ export function LiveInspeksiClient({
         jenisFoto,
         filePath: photos[jenisFoto] as string,
       }));
-      const result = await createVehicleCheckAction({ jadwalId, tipe, odometerKM: Number(odometerKM), fuelBar, muatanQty, photos: photoList });
+      const result = await createVehicleCheckAction({
+        jadwalId,
+        tipe,
+        odometerKM: Number(odometerKM),
+        fuelBar,
+        muatanQty,
+        remark: tipe === "DATANG" && remark.trim() ? remark.trim() : null,
+        photos: photoList,
+      });
       if (!result.success) {
         setError(result.error);
         return;
@@ -246,32 +256,39 @@ export function LiveInspeksiClient({
         onCapture={(file) => handleCapture(file, activeSlot)}
       />
 
-      {/* Top bar — sits directly on the live camera feed, so its scrim stays
-          literal black/transparent (compositing against video pixels, not a
-          themed surface); text/icons use the forced-dark foreground token. */}
-      <div className="relative z-10 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-4">
-        <Button size="icon" variant="ghost" className="rounded-full bg-black/40 text-foreground" onClick={() => router.back()}>
-          <ArrowLeft className="size-5" />
-        </Button>
-        <div className="flex flex-col items-center">
-          <p className="font-display text-lg font-bold">Inspeksi Kendaraan</p>
-          <p className="text-xs font-semibold uppercase tracking-wide text-warning">
-            {armadaNama}
-            {vehicleNo && vehicleNo !== armadaNama ? ` - ${vehicleNo}` : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">Driver: {driverName ?? "-"}</p>
+      {/* Top bar + status pill sit directly on the live camera feed, so they
+          stay forced dark (a `dark`-scoped subtree, not the app's real
+          theme) regardless of the satpam's AppearanceMenu choice — their
+          bg-black/40 scrim needs light foreground tokens to stay legible
+          compositing over video pixels, unlike the bottom sheet/footer
+          below (real themed surfaces, outside this scope, that DO follow
+          the real theme). `contents` keeps this wrapper invisible to the
+          parent flex column's layout — only the CSS variable scoping is
+          local. */}
+      <div className="dark contents">
+        <div className="relative z-10 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-4">
+          <Button size="icon" variant="ghost" className="rounded-full bg-black/40 text-foreground" onClick={() => router.back()}>
+            <ArrowLeft className="size-5" />
+          </Button>
+          <div className="flex flex-col items-center">
+            <p className="font-display text-lg font-bold">Inspeksi Kendaraan</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-warning">
+              {armadaNama}
+              {vehicleNo && vehicleNo !== armadaNama ? ` - ${vehicleNo}` : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">Driver: {driverName ?? "-"}</p>
+          </div>
+          <AppearanceMenu triggerClassName="rounded-full bg-black/40 text-foreground hover:bg-black/60" />
         </div>
-        <AppearanceMenu triggerClassName="rounded-full bg-black/40 text-foreground hover:bg-black/60" />
-      </div>
 
-      {/* Status pill */}
-      <div className="relative z-10 mx-4 flex items-center justify-between rounded-full bg-black/40 px-4 py-2 text-xs">
-        <span className="flex items-center gap-2">
-          <span className="size-2 animate-pulse rounded-full bg-warning" /> LIVE VIEW
-        </span>
-        <span className="font-mono font-bold">
-          {photosDone}/{JENIS_FOTO_LIST.length} SELESAI
-        </span>
+        <div className="relative z-10 mx-4 flex items-center justify-between rounded-full bg-black/40 px-4 py-2 text-xs">
+          <span className="flex items-center gap-2">
+            <span className="size-2 animate-pulse rounded-full bg-warning" /> LIVE VIEW
+          </span>
+          <span className="font-mono font-bold">
+            {photosDone}/{JENIS_FOTO_LIST.length} SELESAI
+          </span>
+        </div>
       </div>
 
       <div className="flex-1" />
@@ -318,6 +335,20 @@ export function LiveInspeksiClient({
           </div>
           <FuelBarSelector value={fuelBar} onChange={setFuelBar} />
         </div>
+        {tipe === "DATANG" && (
+          <div className="mt-4 flex flex-col gap-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Remark (opsional)
+            </label>
+            <Textarea
+              rows={2}
+              placeholder="Mis. driver tidak sesuai, qty return es tidak sesuai..."
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              className="border-border bg-muted/20 text-foreground placeholder:text-muted-foreground"
+            />
+          </div>
+        )}
         {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
       </div>
 

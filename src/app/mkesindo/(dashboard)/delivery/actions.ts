@@ -267,6 +267,7 @@ export async function createVehicleCheckAction(input: {
   odometerKM: number;
   fuelBar: FuelBar;
   muatanQty: number;
+  remark: string | null;
   photos: VehicleCheckPhoto[];
 }): Promise<ActionResult<void>> {
   const session = await requireModuleAccess("delivery");

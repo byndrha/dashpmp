@@ -47,6 +47,12 @@ export function CheckSummary({ check }: { check: VehicleCheckRow }) {
           <img key={p.jenisFoto} src={p.filePath} alt={JENIS_FOTO_LABEL[p.jenisFoto]} className="h-14 w-full rounded object-cover" />
         ))}
       </div>
+      {check.remark && (
+        <p className="rounded border border-warning/30 bg-warning/10 px-2 py-1.5 text-foreground">
+          <span className="font-medium text-warning">Remark: </span>
+          {check.remark}
+        </p>
+      )}
     </div>
   );
 }

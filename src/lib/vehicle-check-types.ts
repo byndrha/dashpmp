@@ -78,6 +78,10 @@ export interface VehicleCheckRow {
   odometerKM: number;
   fuelBar: FuelBar;
   muatanQty: number;
+  // Free-text note — Cek Datang's own use case is flagging a driver
+  // mismatch or a return-qty (e.g. ice) discrepancy. Nullable, and only
+  // ever collected on the DATANG form; BERANGKAT checks always save null.
+  remark: string | null;
   checkedByUserId: string;
   checkedAt: string;
   photos: VehicleCheckPhoto[];

@@ -24,7 +24,7 @@ export async function getVehicleChecksForJadwal(jadwalId: number): Promise<Vehic
     .request()
     .input("jadwalId", sql.Int, jadwalId)
     .query(`
-      SELECT vc.VehicleCheckID, vc.JadwalID, vc.Tipe, vc.OdometerKM, vc.FuelBar, vc.MuatanQty,
+      SELECT vc.VehicleCheckID, vc.JadwalID, vc.Tipe, vc.OdometerKM, vc.FuelBar, vc.MuatanQty, vc.Remark,
              vc.CheckedByUserID, vc.CheckedAt,
              p.JenisFoto, p.FilePath
       FROM DashboardVehicleCheck vc
@@ -40,6 +40,7 @@ export async function getVehicleChecksForJadwal(jadwalId: number): Promise<Vehic
     OdometerKM: number;
     FuelBar: FuelBar;
     MuatanQty: number;
+    Remark: string | null;
     CheckedByUserID: string;
     CheckedAt: Date;
     JenisFoto: JenisFotoKendaraan | null;
@@ -57,6 +58,7 @@ export async function getVehicleChecksForJadwal(jadwalId: number): Promise<Vehic
         odometerKM: r.OdometerKM,
         fuelBar: r.FuelBar,
         muatanQty: r.MuatanQty,
+        remark: r.Remark,
         checkedByUserId: r.CheckedByUserID,
         checkedAt: r.CheckedAt.toISOString(),
         photos: [],
@@ -76,6 +78,7 @@ export async function createVehicleCheck(input: {
   odometerKM: number;
   fuelBar: FuelBar;
   muatanQty: number;
+  remark: string | null;
   userId: string;
   photos: VehicleCheckPhoto[];
 }): Promise<void> {
@@ -118,10 +121,11 @@ export async function createVehicleCheck(input: {
       .input("odometerKM", sql.Int, input.odometerKM)
       .input("fuelBar", sql.TinyInt, input.fuelBar)
       .input("muatanQty", sql.Int, input.muatanQty)
+      .input("remark", sql.NVarChar(500), input.remark)
       .input("userId", sql.VarChar(16), input.userId).query(`
-        INSERT INTO DashboardVehicleCheck (JadwalID, Tipe, OdometerKM, FuelBar, MuatanQty, CheckedByUserID)
+        INSERT INTO DashboardVehicleCheck (JadwalID, Tipe, OdometerKM, FuelBar, MuatanQty, Remark, CheckedByUserID)
         OUTPUT INSERTED.VehicleCheckID
-        VALUES (@jadwalId, @tipe, @odometerKM, @fuelBar, @muatanQty, @userId)
+        VALUES (@jadwalId, @tipe, @odometerKM, @fuelBar, @muatanQty, @remark, @userId)
       `);
     const vehicleCheckId = (header.recordset[0] as { VehicleCheckID: number }).VehicleCheckID;
 

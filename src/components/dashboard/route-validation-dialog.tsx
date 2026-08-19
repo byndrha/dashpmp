@@ -754,6 +754,7 @@ export function RouteValidationDialog({
     odometerKM: number;
     fuelBar: FuelBar;
     muatanQty: number;
+    remark: string | null;
     photos: VehicleCheckPhoto[];
   }): Promise<void> {
     if (jadwalId == null) return;

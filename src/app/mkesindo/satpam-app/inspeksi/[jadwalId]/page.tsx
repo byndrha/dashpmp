@@ -39,16 +39,14 @@ export default async function LiveInspeksiPage({
   const expectedMuatanQty = stops.reduce((sum, s) => sum + s.Qty, 0);
 
   return (
-    <div className="dark">
-      <LiveInspeksiClient
-        jadwalId={jadwalId}
-        armadaId={header.ArmadaID}
-        tipe={tipe}
-        armadaNama={header.ArmadaNama}
-        vehicleNo={header.VehicleNo}
-        driverName={header.DriverName}
-        expectedMuatanQty={expectedMuatanQty}
-      />
-    </div>
+    <LiveInspeksiClient
+      jadwalId={jadwalId}
+      armadaId={header.ArmadaID}
+      tipe={tipe}
+      armadaNama={header.ArmadaNama}
+      vehicleNo={header.VehicleNo}
+      driverName={header.DriverName}
+      expectedMuatanQty={expectedMuatanQty}
+    />
   );
 }

@@ -79,6 +79,7 @@ function CheckForm({
     odometerKM: number;
     fuelBar: FuelBar;
     muatanQty: number;
+    remark: string | null;
     photos: VehicleCheckPhoto[];
   }) => Promise<void>;
 }) {
@@ -119,6 +120,9 @@ function CheckForm({
           odometerKM: Number(odometerKM),
           fuelBar,
           muatanQty: Number(muatanQty),
+          // Desktop's CheckForm doesn't collect a Remark — that's currently
+          // only satpam-app's Kedatangan flow.
+          remark: null,
           photos: JENIS_FOTO_LIST.map((jenisFoto) => ({ jenisFoto, filePath: photos[jenisFoto] as string })),
         });
       } catch (err) {
@@ -234,6 +238,7 @@ export function VehicleCheckDialog({
     odometerKM: number;
     fuelBar: FuelBar;
     muatanQty: number;
+    remark: string | null;
     photos: VehicleCheckPhoto[];
   }) => Promise<void>;
   checks: VehicleCheckRow[];
