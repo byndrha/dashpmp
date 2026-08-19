@@ -54,8 +54,10 @@ const INFO_COL_CLASS = "w-52 sm:w-56";
 // Fixed width for each date column, shared between the header's per-date
 // total cells and every row's DayChip so both line up exactly. Height is
 // min-h (not fixed) on both — either can grow to fit an Angka Pemesanan
-// readout line without breaking the shared width alignment.
-const DAY_COL_WIDTH_CLASS = "w-12";
+// readout line without breaking the shared width alignment. Widened from
+// w-12 (48px) so the Angka Pemesanan badge has room for a readable font
+// instead of being squeezed down to 7px text.
+const DAY_COL_WIDTH_CLASS = "w-16";
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
@@ -286,11 +288,11 @@ function PemesananBadge({
 }) {
   const pct = dateHasElapsed && angkaPemesanan > 0 ? Math.round((actualQtyForDate / angkaPemesanan) * 100) : null;
   return (
-    <span className="flex w-full min-w-0 items-center justify-center gap-0.5 rounded bg-warning px-0.5 py-px text-[7px] leading-none text-warning-foreground">
+    <span className="flex w-full min-w-0 items-center justify-center gap-1 rounded bg-warning px-1 py-0.5 text-[9px] font-semibold leading-none text-warning-foreground">
       <span className="truncate">{formatQty(angkaPemesanan)}</span>
       {pct != null && (
         <>
-          <span className="h-2 w-px shrink-0 bg-warning-foreground/40" />
+          <span className="h-2.5 w-px shrink-0 bg-warning-foreground/40" />
           <span className="truncate">{pct}%</span>
         </>
       )}
