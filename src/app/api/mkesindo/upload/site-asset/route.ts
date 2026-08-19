@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { uploadFile } from "@/lib/storage/google-drive";
 import { requireSuperAdmin } from "@/lib/require-access";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -26,17 +25,13 @@ export async function POST(req: NextRequest) {
   const kind = formData.get("kind") === "og-image" ? "og" : "favicon";
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const fileName = `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "site");
 
   try {
-    await mkdir(uploadDir, { recursive: true });
-
     const bytes = await file.arrayBuffer();
-    await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
+    const uploaded = await uploadFile("mkesindo", ["site"], fileName, Buffer.from(bytes), file.type);
+    return NextResponse.json({ path: uploaded.publicPath });
   } catch (err) {
-    console.error("[upload/site-asset] gagal menulis file:", uploadDir, err);
+    console.error("[upload/site-asset] gagal mengunggah ke Google Drive:", err);
     return NextResponse.json({ error: "Gagal menyimpan file" }, { status: 500 });
   }
-
-  return NextResponse.json({ path: `/uploads/site/${fileName}` });
 }

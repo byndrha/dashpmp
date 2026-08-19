@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { uploadFile } from "@/lib/storage/google-drive";
 import { requireProduksi } from "@/lib/require-access";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -29,16 +28,13 @@ export async function POST(req: NextRequest) {
     "-" +
     [String(now.getHours()).padStart(2, "0"), String(now.getMinutes()).padStart(2, "0"), String(now.getSeconds()).padStart(2, "0")].join("");
   const fileName = `${stamp}.${ext}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "produksi-kualitas");
 
   try {
-    await mkdir(uploadDir, { recursive: true });
     const bytes = await file.arrayBuffer();
-    await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
+    const uploaded = await uploadFile("mkesindo", ["produksi-kualitas"], fileName, Buffer.from(bytes), file.type);
+    return NextResponse.json({ path: uploaded.publicPath });
   } catch (err) {
-    console.error("[upload/produksi-kualitas] gagal menulis file:", uploadDir, err);
+    console.error("[upload/produksi-kualitas] gagal mengunggah ke Google Drive:", err);
     return NextResponse.json({ error: "Gagal menyimpan foto" }, { status: 500 });
   }
-
-  return NextResponse.json({ path: `/uploads/produksi-kualitas/${fileName}` });
 }

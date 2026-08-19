@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { uploadFile } from "@/lib/storage/google-drive";
 import { requireModuleAccess } from "@/lib/require-access";
 import { auth } from "@/lib/auth";
 import { JENIS_FOTO_LIST, type JenisFotoKendaraan } from "@/lib/queries/vehicle-check";
@@ -53,16 +52,13 @@ export async function POST(req: NextRequest) {
   ].join("");
   const fileName = `${stamp}-${jenisFoto}.${ext}`;
   const safeArmadaId = armadaId.replace(/[^a-zA-Z0-9_-]/g, "");
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "satpam-check", safeArmadaId);
 
   try {
-    await mkdir(uploadDir, { recursive: true });
     const bytes = await file.arrayBuffer();
-    await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
+    const uploaded = await uploadFile("mkesindo", ["satpam-check", safeArmadaId], fileName, Buffer.from(bytes), file.type);
+    return NextResponse.json({ path: uploaded.publicPath });
   } catch (err) {
-    console.error("[upload/satpam-check] gagal menulis file:", uploadDir, err);
+    console.error("[upload/satpam-check] gagal mengunggah ke Google Drive:", err);
     return NextResponse.json({ error: "Gagal menyimpan foto" }, { status: 500 });
   }
-
-  return NextResponse.json({ path: `/uploads/satpam-check/${safeArmadaId}/${fileName}` });
 }
