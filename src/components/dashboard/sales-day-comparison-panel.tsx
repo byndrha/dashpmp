@@ -1,8 +1,9 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Truck, ChevronRight } from "lucide-react";
+import { Truck, ChevronRight, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TrendPill } from "@/components/dashboard/sales-chips";
 import { formatRupiah, formatDayMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -38,13 +39,24 @@ function HourlyComparisonTable({
     <div className="col-span-3 -mx-1 mt-1 mb-2 max-h-64 overflow-y-auto rounded-md border bg-secondary/20 px-2 py-2">
       <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-2 gap-y-1">
         <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Jam</span>
-        <span className="justify-self-end text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-          Periode Ini
-        </span>
+        <Tooltip>
+          <TooltipTrigger className="cursor-help justify-self-end text-[9px] font-medium uppercase tracking-wide text-muted-foreground underline decoration-dotted underline-offset-2">
+            Periode Ini
+          </TooltipTrigger>
+          <TooltipContent className="max-w-64">
+            Rincian per jam berdasarkan tanggal kalender asli periode pembanding ini.
+          </TooltipContent>
+        </Tooltip>
         <span />
-        <span className="justify-self-end text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-          Hari Ini
-        </span>
+        <Tooltip>
+          <TooltipTrigger className="cursor-help justify-self-end text-[9px] font-medium uppercase tracking-wide text-muted-foreground underline decoration-dotted underline-offset-2">
+            Hari Ini
+          </TooltipTrigger>
+          <TooltipContent className="max-w-64">
+            Rincian per jam berdasarkan tanggal kalender label periode saat ini — bisa kosong sepanjang sore/malam
+            karena label sudah berpindah ke besok setelah rollover 14:00 WIB.
+          </TooltipContent>
+        </Tooltip>
         {periodHourly.map((h) => {
           const todayPoint = todayHourly[h.hour];
           const isPast = h.hour <= currentWibHour;
@@ -97,7 +109,16 @@ function CurrentHourPreview({
   const pct = pctChange(currentCumulative.NetSales, previousCumulative.NetSales);
   return (
     <div className="col-span-3 -mt-0.5 mb-1 flex flex-wrap items-center gap-1.5 pl-4 text-[9px] text-muted-foreground">
-      <span className="whitespace-nowrap">~ Jam {String(currentWibHour).padStart(2, "0")}:00</span>
+      <Tooltip>
+        <TooltipTrigger className="cursor-help whitespace-nowrap underline decoration-dotted underline-offset-2">
+          ~ Jam {String(currentWibHour).padStart(2, "0")}:00
+        </TooltipTrigger>
+        <TooltipContent className="max-w-64">
+          Akumulasi real-time sejak rollover 14:00 WIB terakhir sampai jam sekarang, dibandingkan periode ini pada
+          rentang jam yang sama persis (apple-to-apple) — beda dari kolom Nominal/Kantong di atas yang memakai total
+          1 hari penuh.
+        </TooltipContent>
+      </Tooltip>
       <span className="tabular-nums">
         {compactRupiahFormatter.format(previousCumulative.NetSales)}{" "}
         <span>&middot; {previousCumulative.DOQty.toLocaleString("id-ID")} kantong</span>
@@ -136,12 +157,34 @@ export function SalesDayComparisonPanel({
   return (
     <Card className="py-4">
       <CardHeader className="px-4">
-        <CardTitle className="font-display">Perbandingan Penjualan</CardTitle>
+        <div className="flex items-center gap-1.5">
+          <CardTitle className="font-display">Perbandingan Penjualan</CardTitle>
+          <Tooltip>
+            <TooltipTrigger className="text-muted-foreground hover:text-foreground">
+              <Info className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64">
+              Semua periode di panel ini mengikuti rollover 14:00 WIB, bukan pukul 00:00 — setelah jam 14:00,
+              transaksi baru dicatat di bawah label &quot;besok&quot;. Karena itu &quot;Hari Ini&quot; bisa tampak
+              kosong di sore/malam hari, sementara baris &quot;~ Jam&quot; di tiap periode tetap menunjukkan
+              progres real-time hari kalender yang sebenarnya.
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <CardDescription>Penjualan hari ini dibandingkan beberapa periode sebelumnya.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Hari Ini</p>
+          <Tooltip>
+            <TooltipTrigger className="cursor-help text-xs font-medium uppercase tracking-wide text-muted-foreground underline decoration-dotted underline-offset-2">
+              Hari Ini
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64">
+              Total 1 hari kalender penuh untuk label periode saat ini (bisa sudah berpindah ke tanggal besok jika
+              sekarang sudah lewat jam 14:00 WIB) — bukan angka real-time. Untuk progres saat ini, lihat baris
+              &quot;~ Jam&quot; di tiap periode pembanding di bawah.
+            </TooltipContent>
+          </Tooltip>
           <div className="flex flex-wrap items-end justify-between gap-2">
             <p className="font-display text-xl font-semibold tabular-nums">{formatRupiah(current?.NetSales ?? 0)}</p>
             <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2 py-1">
@@ -150,7 +193,14 @@ export function SalesDayComparisonPanel({
                 <span className="font-display text-xs font-semibold tabular-nums text-primary">
                   {(current?.DOQty ?? 0).toLocaleString("id-ID")}
                 </span>
-                <span className="text-[9px] whitespace-nowrap text-muted-foreground">kantong terkirim</span>
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help whitespace-nowrap text-left text-[9px] text-muted-foreground underline decoration-dotted underline-offset-2">
+                    kantong terkirim
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-64">
+                    Total kantong DO terkirim untuk periode kalender yang sama dengan Rp di sebelah kiri.
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </div>
@@ -160,12 +210,21 @@ export function SalesDayComparisonPanel({
         <div className="-mx-1 overflow-x-auto border-t px-1 pt-3">
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Periode</span>
-            <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Nominal
-            </span>
-            <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Kantong
-            </span>
+            <Tooltip>
+              <TooltipTrigger className="cursor-help justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground underline decoration-dotted underline-offset-2">
+                Nominal
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">
+                Total penjualan 1 hari kalender penuh tanggal pembanding, dibandingkan total &quot;Hari Ini&quot; di
+                atas.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger className="cursor-help justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground underline decoration-dotted underline-offset-2">
+                Kantong
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">Total kantong DO 1 hari kalender penuh tanggal pembanding.</TooltipContent>
+            </Tooltip>
             {comparisons.map((c) => {
               const isOpen = expanded === c.label;
               return (
