@@ -38,7 +38,7 @@ export function CheckSummary({ check }: { check: VehicleCheckRow }) {
         </span>
         <span className="flex items-center gap-1">
           <Package className="size-3" />
-          {check.muatanQty.toLocaleString("id-ID")} koli
+          {check.muatanQty.toLocaleString("id-ID")} kantong es kristal
         </span>
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">

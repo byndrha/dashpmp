@@ -376,7 +376,7 @@ export function LiveInspeksiClient({
             <DialogTitle>Muatan sudah sesuai?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Total muatan seharusnya: <strong>{expectedMuatanQty}</strong> koli.
+            Total muatan seharusnya: <strong>{expectedMuatanQty}</strong> kantong es kristal.
           </p>
           {muatanStep === "manual" && (
             <Input
@@ -384,7 +384,7 @@ export function LiveInspeksiClient({
               inputMode="numeric"
               min={0}
               autoFocus
-              placeholder="Jumlah koli sebenarnya"
+              placeholder="Jumlah kantong es kristal sebenarnya"
               value={manualMuatanInput}
               onChange={(e) => setManualMuatanInput(e.target.value)}
             />

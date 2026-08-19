@@ -183,7 +183,7 @@ function CheckForm({
             type="number"
             inputMode="numeric"
             min={0}
-            placeholder="Jumlah Koli/Unit Muatan"
+            placeholder="Jumlah Kantong Es Kristal"
             value={muatanQty}
             onChange={(e) => setMuatanQty(e.target.value)}
             className="relative"
