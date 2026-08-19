@@ -1069,6 +1069,11 @@ export function RouteValidationDialog({
                   </DropdownMenu>
                 </div>
               )}
+              {isWaitingDeparture && (
+                <Button size="sm" disabled={pending || !hasBerangkatCheck} onClick={handleKonfirmasiBerangkat}>
+                  {pending ? "Memproses..." : "Berangkat"}
+                </Button>
+              )}
             </div>
           </div>
           {jadwal && (
@@ -1177,10 +1182,6 @@ export function RouteValidationDialog({
                   </p>
                 )}
               </div>
-            ) : isWaitingDeparture ? (
-              <Button size="sm" className="w-fit" disabled={pending || !hasBerangkatCheck} onClick={handleKonfirmasiBerangkat}>
-                {pending ? "Memproses..." : "Berangkat"}
-              </Button>
             ) : null}
 
             {isDraft && isFutureDate && (
@@ -1193,13 +1194,6 @@ export function RouteValidationDialog({
             {overCapacity && (
               <p className="text-xs text-destructive">
                 Total muatan {totalQty} kantong melebihi kapasitas armada ({kapasitasMaks} kantong).
-              </p>
-            )}
-
-            {jadwal?.JamMulaiMuat && (
-              <p className="flex items-center gap-1.5 rounded-lg border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
-                <Clock className="size-3.5" />
-                Mulai Muat pukul {formatTime(jadwal.JamMulaiMuat)}
               </p>
             )}
 
