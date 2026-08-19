@@ -128,10 +128,13 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
       ORDER BY j.JamJadwal
     `);
 
+  // Most-recently-departed first — the newest card for a given
+  // driver/armada is the one most likely to be relevant right now, not
+  // whichever has been sitting out longest.
   const datangResult = await pool.request().query(`
     ${INSPECTION_ROW_SELECT}
     WHERE j.IsDeleted = 0 AND j.Status = 'Terbit' AND vcb.VehicleCheckID IS NOT NULL AND vcd.VehicleCheckID IS NULL
-    ORDER BY j.JamAktualBerangkat
+    ORDER BY j.JamAktualBerangkat DESC
   `);
 
   const cards: SatpamInspectionCard[] = [];

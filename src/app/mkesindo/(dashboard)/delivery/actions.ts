@@ -291,6 +291,35 @@ export async function createVehicleCheckAction(input: {
       throw new AppError("Jumlah muatan wajib diisi dengan angka 0 atau lebih.");
     }
     await createVehicleCheck({ ...input, userId: session.user.id });
+
+    // Satpam completing Cek Berangkat IS the real-world moment of
+    // departure — they're physically at the gate watching the truck
+    // leave. Without this, JamAktualBerangkat stayed null until someone
+    // separately opened desktop Validasi Rute and clicked "Berangkat",
+    // which nothing in satpam-app's own flow ever prompted anyone to do —
+    // confirmed live (JadwalID 360/TRUK 98): Cek Berangkat done, Status
+    // already Terbit, but JamAktualBerangkat null over an hour later. That
+    // in turn broke the Kedatangan card's estimated-arrival time (falls
+    // back to the original schedule with no real departure to compute
+    // from) and driver-app's own status badge (stuck on "Menunggu
+    // Keberangkatan" instead of "Dalam Pengiriman").
+    //
+    // Best-effort, not load-bearing: the vehicle check above already
+    // succeeded regardless of what happens here. If departure was somehow
+    // already confirmed by someone else in the meantime, konfirmasiBerangkat
+    // throws ("sudah berangkat...") — that's the desired end state already
+    // holding, not a real failure, so it's swallowed rather than surfaced
+    // as an error on top of a check that genuinely did succeed.
+    if (input.tipe === "BERANGKAT") {
+      try {
+        await konfirmasiBerangkat(input.jadwalId);
+      } catch (err) {
+        console.error("[createVehicleCheckAction] auto-konfirmasiBerangkat failed:", err);
+      }
+    }
+
     revalidatePath("/mkesindo/delivery");
+    revalidatePath("/mkesindo/satpam-app");
+    revalidatePath("/mkesindo/driver-app");
   });
 }

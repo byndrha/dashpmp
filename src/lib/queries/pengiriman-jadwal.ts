@@ -390,7 +390,15 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
           )
         )
       GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamJadwal, j.Status, j.JamSelesaiMuat, j.JamAktualBerangkat
-      ORDER BY j.JamJadwal
+      -- A Jadwal that's actually in progress (departed, not every stop
+      -- confirmed yet) floats to the top regardless of its own JamJadwal —
+      -- that's the one the driver needs to act on right now, not
+      -- necessarily whichever was scheduled earliest. Everything else
+      -- (not yet departed, or already fully Selesai) keeps the original
+      -- schedule-time order as the secondary sort.
+      ORDER BY
+        CASE WHEN j.JamAktualBerangkat IS NOT NULL AND SUM(sa.IsSelesai) < COUNT(sa.JadwalDetailID) THEN 0 ELSE 1 END,
+        j.JamJadwal
     `);
   return (result.recordset as Omit<DriverJadwalCard, "IsSelesai">[]).map((r) => ({
     ...r,
