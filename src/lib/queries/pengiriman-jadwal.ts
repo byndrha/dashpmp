@@ -7,6 +7,7 @@ import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/de
 import { estimateTravelMinutes, estimateTripMinutes, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
+import { getBusinessDateISO } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
@@ -292,8 +293,17 @@ export interface DriverJadwalCard {
 // calendar date as that label, and the results reflect that label's full
 // [date-1 14:00 WIB, date 13:59 WIB) window, not just that calendar day's
 // 00:00-23:59. Deliberately made consistent with the default "today" load
-// (both this function's only two calling paths) rather than giving the
+// (both this function's non-picker calling paths) rather than giving the
 // picker its own, different date semantics.
+//
+// EXCEPTION when dateISO is genuinely today's own business date: any
+// Jadwal for this driver that has already departed and still has an
+// unfinished stop is included too, regardless of which period it
+// departed in — a driver still out on a long trip when the day rolls
+// over must not lose their own in-progress card. This carve-over is
+// intentionally NOT applied when dateISO is some other, manually-picked
+// date (see the @includeInProgress gate below) — an unrelated
+// in-progress trip has no business bleeding into an unrelated date's view.
 //
 // The StopAgg CTE pre-aggregates to exactly one row per JadwalDetailID
 // BEFORE joining up to the Jadwal level — same reason getPengirimanBoard's
@@ -303,10 +313,19 @@ export interface DriverJadwalCard {
 // once per its own SalesOrderDetail line instead of once per stop.
 export async function getDriverJadwalList(salesmanId: string, dateISO: string): Promise<DriverJadwalCard[]> {
   const pool = await getPool();
+  // The "still mid-task, any date" carve-over below only makes sense for
+  // the driver's own CURRENT task list — tugas-list.tsx's free-form date
+  // picker can request an arbitrary past/future date too, and an
+  // unrelated in-progress trip has no business bleeding into that
+  // specific date's view. Gated on a SQL param (not a JS if/else building
+  // two different query strings) so there's exactly one query to reason
+  // about.
+  const includeInProgress = dateISO === getBusinessDateISO();
   const result = await pool
     .request()
     .input("salesmanId", sql.VarChar(16), salesmanId)
-    .input("date", sql.Date, dateISO).query(`
+    .input("date", sql.Date, dateISO)
+    .input("includeInProgress", sql.Bit, includeInProgress).query(`
       WITH StopAgg AS (
           SELECT jd.JadwalID, jd.JadwalDetailID,
                  ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Kantong,
@@ -333,14 +352,43 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
       LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
       JOIN StopAgg sa ON sa.JadwalID = j.JadwalID
       WHERE j.SalesmanID = @salesmanId AND j.IsDeleted = 0
-        -- @date is a 14:00 WIB rollover business-date label, not a plain
-        -- calendar date — the old CAST(JamJadwal AS DATE) = @date match
-        -- silently dropped/misfiled any Jadwal scheduled after 14:00 WIB
-        -- (it falls on the NEXT business date but the SAME calendar date's
-        -- UTC-naive JamJadwal). Same window expression as
-        -- getSatpamInspectionList/getDriverTimeline/getSatpamTimeline.
-        AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@date AS DATETIME)))
-        AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@date AS DATETIME))
+        AND (
+          -- @date is a 14:00 WIB rollover business-date label, not a plain
+          -- calendar date — the old CAST(JamJadwal AS DATE) = @date match
+          -- silently dropped/misfiled any Jadwal scheduled after 14:00 WIB
+          -- (it falls on the NEXT business date but the SAME calendar
+          -- date's UTC-naive JamJadwal). Same window expression as
+          -- getSatpamInspectionList/getDriverTimeline/getSatpamTimeline.
+          (j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@date AS DATETIME)))
+           AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@date AS DATETIME)))
+          -- OR (only when @date is genuinely today's business date, not an
+          -- arbitrary date picked via tugas-list.tsx's own date picker):
+          -- already departed (implies Terbit — JamAktualBerangkat is only
+          -- ever set once, by konfirmasiBerangkat, which requires
+          -- Status = 'Terbit' at that time) within the last 3 days AND at
+          -- least one stop still has no
+          -- DashboardPengirimanStopDelivery.JamSelesai — i.e. the driver
+          -- is genuinely still mid-task on this Jadwal, regardless of
+          -- which business-date period it departed in. Without this, a
+          -- long-running trip that crosses the 14:00 WIB rollover drops
+          -- off the driver's own Tugas list mid-delivery. The 3-day floor
+          -- deliberately excludes genuinely stale/abandoned Jadwal (23
+          -- found live, some 2+ weeks old) that never got a proper Selesai
+          -- — those are a separate backlog-cleanup problem, not something
+          -- a driver should suddenly see resurrected in their current
+          -- task list.
+          OR (
+            @includeInProgress = 1
+            AND j.JamAktualBerangkat IS NOT NULL
+            AND j.JamAktualBerangkat >= DATEADD(DAY, -3, GETDATE())
+            AND EXISTS (
+              SELECT 1
+              FROM DashboardPengirimanJadwalDetail jd2
+              LEFT JOIN DashboardPengirimanStopDelivery sd2 ON sd2.JadwalDetailID = jd2.JadwalDetailID
+              WHERE jd2.JadwalID = j.JadwalID AND jd2.IsDeleted = 0 AND sd2.JamSelesai IS NULL
+            )
+          )
+        )
       GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamJadwal, j.Status, j.JamSelesaiMuat, j.JamAktualBerangkat
       ORDER BY j.JamJadwal
     `);
