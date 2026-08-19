@@ -6,7 +6,7 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, PackageCheck, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -797,6 +797,21 @@ export function RouteValidationDialog({
 
     return [{ label: "Draf dibuat", timestamp: jadwal.CreatedDate, durationLabel: null }, ...withDuration];
   }, [jadwal, jamKembaliAktual]);
+
+  // Same sentence the status area below used to show on its own — now it
+  // doubles as the Riwayat Status trigger's own label (next to the Terbit
+  // badge) so there's one line of truth instead of two.
+  const currentStatusLabel = !jadwal
+    ? "Riwayat Status"
+    : isDraft
+      ? jadwal.JamMulaiMuat == null
+        ? `Draf dibuat pukul ${formatTime(jadwal.CreatedDate)}`
+        : `Mulai Muat pukul ${formatTime(jadwal.JamMulaiMuat)}`
+      : isWaitingDeparture
+        ? `Selesai Muat pukul ${formatTime(jadwal.JamSelesaiMuat as string)} — menunggu Cek Berangkat`
+        : jadwal.JamAktualBerangkat
+          ? `Sudah berangkat pukul ${formatTime(jadwal.JamAktualBerangkat)}`
+          : "Riwayat Status";
   const isFutureDate = businessDate > todayISO;
   const overCapacity = kapasitasMaks != null && totalQty > kapasitasMaks;
   const canSelesaiMuat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity && !isFutureDate;
@@ -997,31 +1012,64 @@ export function RouteValidationDialog({
                 </Badge>
               )}
             </DialogTitle>
-            {jadwal && order.length > 0 && (
-              <div data-capture-hide="true" className="shrink-0">
-                <DropdownMenu>
-                  <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" />}>
-                    <Share2 className="size-3.5" />
-                    Bagikan
+            <div className="flex shrink-0 items-center gap-2">
+              {statusHistory.length > 0 && (
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs font-normal" />
+                    }
+                  >
+                    <History className="size-3.5" />
+                    {currentStatusLabel}
                     <ChevronDown className="size-3 opacity-60" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleShareSeluruhnya}>
-                      <ImageIcon className="size-4" />
-                      Seluruhnya
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleShareDetailRute}>
-                      <List className="size-4" />
-                      Detail Rute
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleShareDataRute}>
-                      <ImageIcon className="size-4" />
-                      Data Rute
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80">
+                    <VerticalTimeline>
+                      {statusHistory.map((s, i) => (
+                        <VerticalTimelineItem
+                          key={s.label}
+                          time={`${formatTime(s.timestamp)} · ${formatDate(s.timestamp)}`}
+                          isLast={i === statusHistory.length - 1}
+                        >
+                          <p className="text-sm font-medium">
+                            {s.label}
+                            {s.durationLabel && (
+                              <span className="ml-1.5 font-normal text-muted-foreground">| {s.durationLabel}</span>
+                            )}
+                          </p>
+                        </VerticalTimelineItem>
+                      ))}
+                    </VerticalTimeline>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {jadwal && order.length > 0 && (
+                <div data-capture-hide="true">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" />}>
+                      <Share2 className="size-3.5" />
+                      Bagikan
+                      <ChevronDown className="size-3 opacity-60" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={handleShareSeluruhnya}>
+                        <ImageIcon className="size-4" />
+                        Seluruhnya
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleShareDetailRute}>
+                        <List className="size-4" />
+                        Detail Rute
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleShareDataRute}>
+                        <ImageIcon className="size-4" />
+                        Data Rute
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+            </div>
           </div>
           {jadwal && (
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -1101,38 +1149,6 @@ export function RouteValidationDialog({
               </p>
             )}
 
-            {statusHistory.length > 0 && (
-              <Popover>
-                <PopoverTrigger
-                  render={
-                    <Button size="sm" variant="ghost" className="h-7 w-fit gap-1.5 px-2 text-xs text-muted-foreground" />
-                  }
-                >
-                  <History className="size-3.5" />
-                  Riwayat Status
-                  <ChevronDown className="size-3.5" />
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-80">
-                  <VerticalTimeline>
-                    {statusHistory.map((s, i) => (
-                      <VerticalTimelineItem
-                        key={s.label}
-                        time={`${formatTime(s.timestamp)} · ${formatDate(s.timestamp)}`}
-                        isLast={i === statusHistory.length - 1}
-                      >
-                        <p className="text-sm font-medium">
-                          {s.label}
-                          {s.durationLabel && (
-                            <span className="ml-1.5 font-normal text-muted-foreground">| {s.durationLabel}</span>
-                          )}
-                        </p>
-                      </VerticalTimelineItem>
-                    ))}
-                  </VerticalTimeline>
-                </PopoverContent>
-              </Popover>
-            )}
-
             {isDraft ? (
               <div className="flex flex-col gap-1.5">
                 <div className="flex gap-2">
@@ -1163,23 +1179,10 @@ export function RouteValidationDialog({
                 )}
               </div>
             ) : isWaitingDeparture ? (
-              <div className="flex flex-col gap-2">
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock className="size-3.5" />
-                  Selesai Muat pukul {formatTime(jadwal!.JamSelesaiMuat as string)} — menunggu Cek Berangkat
-                </p>
-                <Button size="sm" className="w-fit" disabled={pending || !hasBerangkatCheck} onClick={handleKonfirmasiBerangkat}>
-                  {pending ? "Memproses..." : "Berangkat"}
-                </Button>
-              </div>
-            ) : (
-              jadwal?.JamAktualBerangkat && (
-                <p className="flex items-center gap-1.5 text-xs text-primary">
-                  <PackageCheck className="size-3.5" />
-                  Sudah berangkat pukul {formatTime(jadwal.JamAktualBerangkat)}
-                </p>
-              )
-            )}
+              <Button size="sm" className="w-fit" disabled={pending || !hasBerangkatCheck} onClick={handleKonfirmasiBerangkat}>
+                {pending ? "Memproses..." : "Berangkat"}
+              </Button>
+            ) : null}
 
             {isDraft && isFutureDate && (
               <p className="text-xs text-muted-foreground">
