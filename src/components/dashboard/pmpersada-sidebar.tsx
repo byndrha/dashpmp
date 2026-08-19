@@ -59,8 +59,8 @@ export function PmpersadaSidebar({
             className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
           />
           <div className="flex min-w-0 flex-col gap-0.5 truncate group-data-[collapsible=icon]:hidden">
+            <p className="font-display font-semibold leading-tight">PT Putra Maesa Persada</p>
             <div className="flex items-center gap-1.5">
-              <p className="font-display font-semibold leading-tight">PT Putra Maesa Persada</p>
               <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
                 Es Balok
               </Badge>
