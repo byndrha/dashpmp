@@ -286,12 +286,12 @@ function PemesananBadge({
 }) {
   const pct = dateHasElapsed && angkaPemesanan > 0 ? Math.round((actualQtyForDate / angkaPemesanan) * 100) : null;
   return (
-    <span className="flex items-center gap-1 rounded bg-warning px-1 py-px text-warning-foreground">
-      <span>{formatQty(angkaPemesanan)}</span>
+    <span className="flex w-full min-w-0 items-center justify-center gap-0.5 rounded bg-warning px-0.5 py-px text-[7px] leading-none text-warning-foreground">
+      <span className="truncate">{formatQty(angkaPemesanan)}</span>
       {pct != null && (
         <>
-          <span className="h-2.5 w-px shrink-0 bg-warning-foreground/40" />
-          <span>{pct}%</span>
+          <span className="h-2 w-px shrink-0 bg-warning-foreground/40" />
+          <span className="truncate">{pct}%</span>
         </>
       )}
     </span>
@@ -357,7 +357,7 @@ function DayChip({
         <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" />
       </span>
       {contactSummary && (contactSummary.chat != null || contactSummary.telepon != null) && (
-        <span className="flex flex-col items-center gap-0.5 text-[8px] font-medium">
+        <span className="flex w-full min-w-0 flex-col items-center gap-0.5 px-0.5 font-medium">
           {contactSummary.chat != null && (
             <PemesananBadge angkaPemesanan={contactSummary.chat} actualQtyForDate={qty} dateHasElapsed={isPast} />
           )}
@@ -892,7 +892,7 @@ export function MitraDOPanel({
                 >
                   <span>{formatQty(totalPerDate[i])}</span>
                   {(pemesanan.hasChat || pemesanan.hasTelepon) && (
-                    <span className="flex flex-col items-center gap-0.5 text-[8px] font-medium">
+                    <span className="flex w-full min-w-0 flex-col items-center gap-0.5 px-0.5 font-medium">
                       {pemesanan.hasChat && (
                         <PemesananBadge
                           angkaPemesanan={pemesanan.chat}
