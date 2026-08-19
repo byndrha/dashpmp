@@ -119,6 +119,43 @@ function RejectDialog({
   );
 }
 
+function ApproveDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  pending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (keterangan: string | null) => void;
+  pending: boolean;
+}) {
+  const [keterangan, setKeterangan] = useState("");
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (next) setKeterangan("");
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Setujui Pengajuan</DialogTitle>
+          <DialogDescription>Mitra baru akan otomatis dibuat. Catatan bersifat opsional.</DialogDescription>
+        </DialogHeader>
+        <Textarea placeholder="Catatan (opsional)" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} />
+        <DialogFooter>
+          <Button disabled={pending} onClick={() => onConfirm(keterangan || null)}>
+            {pending ? "Memproses..." : "Setujui Pengajuan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function PengajuanList({
   rows,
   priceLevels,
@@ -132,15 +169,21 @@ export function PengajuanList({
 }) {
   const [pending, startTransition] = useTransition();
   const [rejecting, setRejecting] = useState<PengajuanRow | null>(null);
+  const [approving, setApproving] = useState<PengajuanRow | null>(null);
   const [viewingLocation, setViewingLocation] = useState<PengajuanRow | null>(null);
 
   const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
 
-  function handleApprove(row: PengajuanRow) {
-    if (!confirm(`Setujui pengajuan "${row.NamaCalon}"? Mitra baru akan otomatis dibuat.`)) return;
+  function handleApprove(keterangan: string | null) {
+    if (!approving) return;
+    const id = approving.PengajuanID;
     startTransition(async () => {
-      const result = await approvePengajuanAction(row.PengajuanID);
-      if (!result.success) toast.error(result.error);
+      const result = await approvePengajuanAction(id, keterangan);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      setApproving(null);
     });
   }
 
@@ -248,8 +291,13 @@ export function PengajuanList({
                 Input {formatDate(row.CreatedAt)} {formatTime(row.CreatedAt)}
               </p>
 
-              {row.Status === "Ditolak" && row.CatatanTolak && (
-                <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">{row.CatatanTolak}</p>
+              {row.Status === "Ditolak" && (row.Keterangan ?? row.CatatanTolak) && (
+                <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                  {row.Keterangan ?? row.CatatanTolak}
+                </p>
+              )}
+              {row.Status === "Disetujui" && row.Keterangan && (
+                <p className="rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary">{row.Keterangan}</p>
               )}
 
               {canApprove && row.Status === "Menunggu" && (
@@ -260,7 +308,7 @@ export function PengajuanList({
                     disabled={pending}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleApprove(row);
+                      setApproving(row);
                     }}
                   >
                     Setujui
@@ -292,6 +340,15 @@ export function PengajuanList({
           open={!!rejecting}
           onOpenChange={(open) => !open && setRejecting(null)}
           onConfirm={handleReject}
+          pending={pending}
+        />
+      )}
+
+      {approving && (
+        <ApproveDialog
+          open={!!approving}
+          onOpenChange={(open) => !open && setApproving(null)}
+          onConfirm={handleApprove}
           pending={pending}
         />
       )}

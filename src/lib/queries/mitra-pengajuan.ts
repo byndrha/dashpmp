@@ -49,6 +49,7 @@ export interface PengajuanRow {
   Kompetitor: string | null;
   Status: PengajuanStatus;
   CatatanTolak: string | null;
+  Keterangan: string | null;
   ConvertedBusinessPartnerID: string | null;
   CreatedAt: string;
 }
@@ -79,6 +80,7 @@ export async function getPengajuanList(): Promise<PengajuanRow[]> {
         dmp.Kompetitor,
         dmp.Status,
         dmp.CatatanTolak,
+        dmp.Keterangan,
         dmp.ConvertedBusinessPartnerID,
         dmp.CreatedAt
     FROM DashboardMitraPengajuan dmp
@@ -189,7 +191,11 @@ export async function createPengajuan(input: PengajuanInput, marketingUserId: st
     `);
 }
 
-export async function approvePengajuan(pengajuanId: number, reviewerUserId: string): Promise<void> {
+export async function approvePengajuan(
+  pengajuanId: number,
+  reviewerUserId: string,
+  keterangan?: string | null
+): Promise<void> {
   const pool = await getPool();
 
   // Atomically claim the row before doing any create-mitra work: an UPDATE
@@ -278,10 +284,11 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
       .request()
       .input("id", sql.Int, pengajuanId)
       .input("bpId", sql.VarChar(16), businessPartnerId)
-      .input("reviewer", sql.VarChar(16), reviewerUserId).query(`
+      .input("reviewer", sql.VarChar(16), reviewerUserId)
+      .input("keterangan", sql.VarChar(500), keterangan ?? null).query(`
         UPDATE DashboardMitraPengajuan
         SET Status = 'Disetujui', ConvertedBusinessPartnerID = @bpId,
-            ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
+            ReviewedByUserID = @reviewer, ReviewedAt = GETDATE(), Keterangan = @keterangan
         WHERE PengajuanID = @id AND Status = 'Diproses'
       `);
   } catch (err) {
@@ -299,16 +306,16 @@ export async function approvePengajuan(pengajuanId: number, reviewerUserId: stri
 export async function rejectPengajuan(
   pengajuanId: number,
   reviewerUserId: string,
-  catatan: string | null
+  keterangan: string | null
 ): Promise<void> {
   const pool = await getPool();
   await pool
     .request()
     .input("id", sql.Int, pengajuanId)
     .input("reviewer", sql.VarChar(16), reviewerUserId)
-    .input("catatan", sql.VarChar(512), catatan).query(`
+    .input("keterangan", sql.VarChar(500), keterangan).query(`
       UPDATE DashboardMitraPengajuan
-      SET Status = 'Ditolak', CatatanTolak = @catatan,
+      SET Status = 'Ditolak', Keterangan = @keterangan,
           ReviewedByUserID = @reviewer, ReviewedAt = GETDATE()
       WHERE PengajuanID = @id AND Status = 'Menunggu'
     `);

@@ -53,10 +53,13 @@ async function requireApprover() {
   return user;
 }
 
-export async function approvePengajuanAction(pengajuanId: number): Promise<ActionResult<void>> {
+export async function approvePengajuanAction(
+  pengajuanId: number,
+  keterangan?: string | null
+): Promise<ActionResult<void>> {
   return runAction(async () => {
     const user = await requireApprover();
-    await approvePengajuan(pengajuanId, user.id);
+    await approvePengajuan(pengajuanId, user.id, keterangan);
     revalidatePath("/mkesindo/pemasaran");
     revalidatePath("/mkesindo/mitra");
   });
