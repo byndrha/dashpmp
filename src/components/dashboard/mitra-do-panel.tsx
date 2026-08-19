@@ -582,6 +582,10 @@ export function MitraDOPanel({
   const { active, inactive, daysInRange, rangeStartISO, todayISO } = data;
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
+  // Guards the bidirectional mirror below from ping-ponging: setting one
+  // side's scrollLeft fires its own scroll event, which would otherwise
+  // immediately write back to the side that just triggered it.
+  const syncingScrollRef = useRef(false);
 
   // Keyed `${BusinessPartnerID}|${LogDate}` -> per-channel Angka Pemesanan,
   // built once per contactLogSummary change rather than re-scanned per
@@ -746,13 +750,28 @@ export function MitraDOPanel({
     [dates]
   );
 
-  // One-way mirror: the body's own horizontal scrollbar is what the user
-  // actually drags; the header's date-total row has no scrollbar of its
-  // own (overflow-x-hidden) and just has its scrollLeft driven to match,
-  // so both stay visually locked together as one continuous grid even
-  // though they live in separate sticky/non-sticky DOM regions.
+  // Bidirectional mirror: the header's date-total row and the body's mitra
+  // rows live in separate DOM regions (the header stays vertically sticky
+  // while the body scrolls past it), so they can't share one native
+  // scroll container — but either one can be dragged directly, and a
+  // plain synchronous scrollLeft assignment (no transition/smooth-scroll
+  // anywhere in this tree) keeps the other in the exact same frame, with
+  // no perceptible lag. The guard flag stops the write-back from
+  // re-triggering the scroll handler that caused it.
   function handleBodyScroll(e: React.UIEvent<HTMLDivElement>) {
-    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    if (syncingScrollRef.current) return;
+    if (!headerScrollRef.current) return;
+    syncingScrollRef.current = true;
+    headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    syncingScrollRef.current = false;
+  }
+
+  function handleHeaderScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (syncingScrollRef.current) return;
+    if (!bodyScrollRef.current) return;
+    syncingScrollRef.current = true;
+    bodyScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    syncingScrollRef.current = false;
   }
 
   const CurrentSortIcon = SORT_OPTIONS[sortMode].icon;
@@ -867,9 +886,12 @@ export function MitraDOPanel({
             rows={exportRows}
           />
         </div>
-        {/* Per-date total row — mirrors the body's horizontal scroll (see
-            handleBodyScroll) so it always lines up with the date columns
-            below it, while staying put in the sticky header itself. */}
+        {/* Per-date total row — bidirectionally mirrors the body's horizontal
+            scroll (see handleBodyScroll/handleHeaderScroll) so it always
+            lines up with the date columns below it and can be dragged
+            directly too, while staying put in the sticky header itself.
+            The "N mitra ditampilkan" block to its left is a plain sibling,
+            not part of either scrolling region, so it never moves. */}
         <div className="mt-2 flex min-w-0 border-t pt-2">
           <div
             className={cn(
@@ -883,7 +905,11 @@ export function MitraDOPanel({
               {formatQty(totalTargetDisplayed)}
             </span>
           </div>
-          <div ref={headerScrollRef} className="flex min-w-0 flex-1 overflow-x-hidden border-l">
+          <div
+            ref={headerScrollRef}
+            onScroll={handleHeaderScroll}
+            className="no-scrollbar flex min-w-0 flex-1 overflow-x-auto border-l"
+          >
             {dates.map((dateISO, i) => {
               const pemesanan = totalPemesananPerDate[i];
               return (
