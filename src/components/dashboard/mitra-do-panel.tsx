@@ -52,12 +52,10 @@ const SORT_OPTIONS: Record<SortMode, { label: string; icon: LucideIcon }> = {
 // spacer and every row's info block so the date columns line up exactly.
 const INFO_COL_CLASS = "w-52 sm:w-56";
 // Fixed width for each date column, shared between the header's per-date
-// total cells and every row's DayChip so both line up exactly. Taller than
-// before (was h-11) to fit the Chat/Telepon log icon row DayChip adds below
-// the qty — the header total cells just end up with a little extra
-// (harmless, still vertically centered) breathing room.
+// total cells and every row's DayChip so both line up exactly. Height is
+// min-h (not fixed) on both — either can grow to fit an Angka Pemesanan
+// readout line without breaking the shared width alignment.
 const DAY_COL_WIDTH_CLASS = "w-12";
-const DAY_COL_CLASS = cn(DAY_COL_WIDTH_CLASS, "h-14");
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
@@ -97,23 +95,24 @@ function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
 // would mean a query per mitra per visible date — easily thousands of rows
 // nobody's looking at yet.
 //
-// Only the button rendered on TODAY's own DayChip gets the Hari ini/Besok
-// tab switcher (isToday) — every other date's button keeps editing exactly
-// its own fixed dateISO, same as before. The switcher exists purely as a
-// convenience so a rep can log tomorrow's forecast without scrolling the
-// day-strip to tomorrow's own column; writes still land on tomorrow's own
-// (BusinessPartnerID, LogDate, ContactType) row, so tomorrow's own DayChip
-// picks up the same value once the page's data refreshes.
+// Every date column's log button gets the Hari ini/Besok tab switcher —
+// "Hari ini" and "Besok" are relative to whichever date this particular
+// button belongs to (dateISO), not to the real calendar today. Opening the
+// log for 01/08 and picking "Besok" edits 02/08's own entry; the switcher
+// exists purely as a convenience so a rep can log the next day's forecast
+// without closing this popover and scrolling the day-strip to find that
+// column. Writes still land on that date's own (BusinessPartnerID, LogDate,
+// ContactType) row, so 02/08's own DayChip picks up the same value once the
+// page's data refreshes — this popover doesn't "own" tomorrow's data any
+// more than 02/08's own log button does.
 function ContactLogButton({
   businessPartnerId,
   dateISO,
   contactType,
-  isToday,
 }: {
   businessPartnerId: string;
   dateISO: string;
   contactType: ContactType;
-  isToday: boolean;
 }) {
   const Icon = contactType === "Chat" ? MessageCircle : Phone;
   const router = useRouter();
@@ -127,7 +126,7 @@ function ContactLogButton({
   const [alasanTidakSesuai, setAlasanTidakSesuai] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const activeDateISO = isToday && tab === "besok" ? besokISO : dateISO;
+  const activeDateISO = tab === "besok" ? besokISO : dateISO;
 
   function loadFor(targetDateISO: string) {
     setLoading(true);
@@ -195,22 +194,20 @@ function ContactLogButton({
         <Icon className={cn("size-2.5", hasEntry ? "text-primary" : "text-muted-foreground/40")} />
       </PopoverTrigger>
       <PopoverContent className="w-64" align="center">
-        {isToday && (
-          <Tabs
-            value={tab}
-            onValueChange={(v) => typeof v === "string" && handleTabChange(v as "hari-ini" | "besok")}
-            className="mb-2"
-          >
-            <TabsList className="w-full">
-              <TabsTrigger value="hari-ini" className="flex-1 text-xs">
-                Hari ini
-              </TabsTrigger>
-              <TabsTrigger value="besok" className="flex-1 text-xs">
-                Besok
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
+        <Tabs
+          value={tab}
+          onValueChange={(v) => typeof v === "string" && handleTabChange(v as "hari-ini" | "besok")}
+          className="mb-2"
+        >
+          <TabsList className="w-full">
+            <TabsTrigger value="hari-ini" className="flex-1 text-xs">
+              Hari ini
+            </TabsTrigger>
+            <TabsTrigger value="besok" className="flex-1 text-xs">
+              Besok
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <p className="mb-2 text-xs font-medium">
           Log {contactType} &mdash; {activeDateISO.slice(8, 10)}/{activeDateISO.slice(5, 7)}/{activeDateISO.slice(0, 4)}
         </p>
@@ -292,7 +289,6 @@ function DayChip({
   prevQty,
   target,
   isPast,
-  isToday,
   contactSummary,
   todayQty,
 }: {
@@ -305,7 +301,6 @@ function DayChip({
   prevQty: number | null;
   target: number | null;
   isPast: boolean;
-  isToday: boolean;
   contactSummary: { chat?: number; telepon?: number } | undefined;
   todayQty: number | null;
 }) {
@@ -334,8 +329,8 @@ function DayChip({
         {change === "down" && <ArrowDown className="size-2.5 shrink-0 text-destructive" />}
       </span>
       <span className="flex items-center gap-0.5">
-        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Chat" isToday={isToday} />
-        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" isToday={isToday} />
+        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Chat" />
+        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" />
       </span>
       {contactSummary && (contactSummary.chat != null || contactSummary.telepon != null) && (
         <span className="flex flex-col items-center gap-px text-[8px] leading-tight font-medium text-muted-foreground">
@@ -517,7 +512,6 @@ function MitraDOCard({
             prevQty={i > 0 ? m.DailyQty[i - 1] : null}
             target={m.TargetHarian}
             isPast={dateISO <= todayISO}
-            isToday={dateISO === todayISO}
             contactSummary={contactSummaryMap.get(`${m.BusinessPartnerID}|${dateISO}`)}
             todayQty={todayQty}
           />
@@ -622,6 +616,34 @@ export function MitraDOPanel({
     }
     return totals;
   }, [filteredActive, daysInRange]);
+
+  // Per-date Angka Pemesanan summed across every CURRENTLY FILTERED mitra
+  // (same filteredActive scope as totalPerDate above, not the unfiltered
+  // contactLogSummary) — the header's own "akumulasi dari data keseluruhan
+  // ... dari seluruh mitra" readout, one line per channel, same
+  // formatPemesananLine shape as each mitra row's own readout.
+  const totalPemesananPerDate = useMemo(() => {
+    const dateIndex = new Map(dates.map((d, i) => [d, i]));
+    const totals: { chat: number; telepon: number; hasChat: boolean; hasTelepon: boolean }[] = Array.from(
+      { length: daysInRange },
+      () => ({ chat: 0, telepon: 0, hasChat: false, hasTelepon: false })
+    );
+    const filteredIds = new Set(filteredActive.map((m) => m.BusinessPartnerID));
+    for (const entry of contactLogSummary) {
+      if (!filteredIds.has(entry.BusinessPartnerID)) continue;
+      const i = dateIndex.get(entry.LogDate);
+      if (i == null) continue;
+      if (entry.ContactType === "Chat") {
+        totals[i].chat += entry.AngkaPemesanan;
+        totals[i].hasChat = true;
+      } else {
+        totals[i].telepon += entry.AngkaPemesanan;
+        totals[i].hasTelepon = true;
+      }
+    }
+    return totals;
+  }, [contactLogSummary, filteredActive, dates, daysInRange]);
+  const totalTodayQty = elapsedDays > 0 ? (totalPerDate[elapsedDays - 1] ?? null) : null;
 
   // "Yang ditampilkan" = whatever's actually rendered below — filteredActive
   // plus filteredInactive only when that section is toggled open, same
@@ -834,17 +856,27 @@ export function MitraDOPanel({
             </span>
           </div>
           <div ref={headerScrollRef} className="flex min-w-0 flex-1 overflow-x-hidden border-l">
-            {dates.map((dateISO, i) => (
-              <div
-                key={dateISO}
-                className={cn(
-                  "flex shrink-0 items-center justify-center border-r text-[10px] font-semibold tabular-nums text-primary",
-                  DAY_COL_CLASS
-                )}
-              >
-                {formatQty(totalPerDate[i])}
-              </div>
-            ))}
+            {dates.map((dateISO, i) => {
+              const pemesanan = totalPemesananPerDate[i];
+              return (
+                <div
+                  key={dateISO}
+                  className={cn(
+                    "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r py-1 text-[10px] font-semibold tabular-nums text-primary",
+                    DAY_COL_WIDTH_CLASS,
+                    "min-h-14"
+                  )}
+                >
+                  <span>{formatQty(totalPerDate[i])}</span>
+                  {(pemesanan.hasChat || pemesanan.hasTelepon) && (
+                    <span className="flex flex-col items-center gap-px text-[8px] leading-tight font-medium text-muted-foreground">
+                      {pemesanan.hasChat && <span>{formatPemesananLine(pemesanan.chat, totalTodayQty)}</span>}
+                      {pemesanan.hasTelepon && <span>{formatPemesananLine(pemesanan.telepon, totalTodayQty)}</span>}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </CardHeader>
