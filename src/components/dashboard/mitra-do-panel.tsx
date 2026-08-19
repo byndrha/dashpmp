@@ -59,8 +59,8 @@ const INFO_COL_CLASS = "w-52 sm:w-56";
 // the header's own aggregate line can run to 4-digit qty + 4-digit percent
 // (e.g. "3.093|5155%" — the header's % is against the WHOLE filtered
 // mitra list's actual, deliberately not scaled down to just the mitra
-// who've logged a forecast so far), so w-24 gives it enough room too.
-const DAY_COL_WIDTH_CLASS = "w-24";
+// who've logged a forecast so far), so w-20 gives it enough room too.
+const DAY_COL_WIDTH_CLASS = "w-20";
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
