@@ -1,4 +1,6 @@
 import { OAuth2Client } from "google-auth-library";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 import { resolveGDriveKoneksi } from "@/lib/queries/perusahaan-gdrive";
 
 export interface UploadedFile {
@@ -76,6 +78,17 @@ async function uploadToParent(
   return json.id;
 }
 
+async function uploadToLocalDiskFallback(
+  categoryPath: string[],
+  filename: string,
+  buffer: Buffer
+): Promise<UploadedFile> {
+  const uploadDir = path.join(process.cwd(), "public", "uploads", ...categoryPath);
+  await mkdir(uploadDir, { recursive: true });
+  await writeFile(path.join(uploadDir, filename), buffer);
+  return { fileId: "", publicPath: `/uploads/${categoryPath.join("/")}/${filename}` };
+}
+
 export async function uploadFile(
   perusahaanKode: string,
   categoryPath: string[],
@@ -85,7 +98,8 @@ export async function uploadFile(
 ): Promise<UploadedFile> {
   const conn = await resolveGDriveKoneksi(perusahaanKode);
   if (!conn) {
-    throw new Error(`Google Drive belum terhubung untuk perusahaan "${perusahaanKode}" — hubungkan dulu di /grup/perusahaan.`);
+    console.warn(`[google-drive] Belum terhubung untuk "${perusahaanKode}" — menyimpan ke disk lokal sebagai fallback. Hubungkan Google Drive di /grup/perusahaan.`);
+    return uploadToLocalDiskFallback(categoryPath, filename, buffer);
   }
   const client = buildOAuthClient(conn.refreshToken);
   const accessToken = await getAccessToken(client);

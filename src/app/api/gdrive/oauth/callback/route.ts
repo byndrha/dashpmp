@@ -35,13 +35,18 @@ export async function GET(req: NextRequest) {
   }
   const refreshToken = tokenJson.refresh_token;
 
-  const perusahaanNama = (await getPerusahaanNama(perusahaanId)) ?? `PT #${perusahaanId}`;
-  const [email, rootFolderId] = await Promise.all([
-    getConnectedAccountEmail(refreshToken),
-    createRootFolderForConnect(refreshToken, perusahaanNama),
-  ]);
+  try {
+    const perusahaanNama = (await getPerusahaanNama(perusahaanId)) ?? `PT #${perusahaanId}`;
+    const [email, rootFolderId] = await Promise.all([
+      getConnectedAccountEmail(refreshToken),
+      createRootFolderForConnect(refreshToken, perusahaanNama),
+    ]);
 
-  await saveGDriveKoneksi({ perusahaanId, connectedEmail: email, refreshToken, rootFolderId });
+    await saveGDriveKoneksi({ perusahaanId, connectedEmail: email, refreshToken, rootFolderId });
+  } catch (err) {
+    console.error("[gdrive/oauth/callback] post-token-exchange setup failed:", err);
+    return NextResponse.redirect(new URL("/grup/perusahaan?gdrive=error", req.url));
+  }
 
   return NextResponse.redirect(new URL("/grup/perusahaan?gdrive=connected", req.url));
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Pencil, Trash2, MapPin, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +45,8 @@ export function PerusahaanList({
   const [target, setTarget] = useState<PerusahaanRow | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const searchParams = useSearchParams();
+  const gdriveStatus = searchParams.get("gdrive");
 
   function handleSubmit(input: PerusahaanInput, koneksiBlocks: UpsertKoneksiInput[]) {
     setError(null);
@@ -94,6 +97,16 @@ export function PerusahaanList({
 
   return (
     <div className="flex flex-col gap-3">
+      {gdriveStatus === "connected" && (
+        <p className="rounded-md border border-primary/40 bg-primary/5 p-3 text-sm text-primary">
+          Google Drive berhasil dihubungkan.
+        </p>
+      )}
+      {gdriveStatus === "error" && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+          Gagal menghubungkan Google Drive. Coba lagi dari kartu PT terkait.
+        </p>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{rows.length} PT terdaftar.</p>
         <Button
