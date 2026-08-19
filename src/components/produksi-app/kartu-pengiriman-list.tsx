@@ -10,17 +10,26 @@ import {
   produksiSelesaiMuatAction,
   produksiSelesaiMuatManualAction,
   getJadwalDetailForProduksiAction,
-  getSelesaiMuatJadwalForProduksiAction,
 } from "@/app/mkesindo/produksi/actions";
+import type { ActionResult } from "@/lib/action-result";
 import type { DraftJadwalForProduksi, SelesaiMuatJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { BatchAktifRow } from "@/lib/queries/produksi-warehouse";
 import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
 
+// Reused for both the Pengiriman tab (current + future period) and the
+// Riwayat tab (previous periods) — same Mulai Muat -> Alokasi -> Selesai
+// Muat flow either way, just fed a different pre-filtered list and a
+// different "Sudah Selesai Muat" fetcher, since a backlogged card is fully
+// actionable, not a frozen read-only record.
 export function KartuPengirimanList({
   initialJadwal,
+  fetchSelesaiList,
+  emptyMessage = "Tidak ada Kartu Pengiriman yang perlu diisi muatan saat ini.",
   onAfterMuat,
 }: {
   initialJadwal: DraftJadwalForProduksi[];
+  fetchSelesaiList: () => Promise<ActionResult<SelesaiMuatJadwalForProduksi[]>>;
+  emptyMessage?: string;
   onAfterMuat: () => void;
 }) {
   const [jadwalList, setJadwalList] = useState(initialJadwal);
@@ -29,13 +38,18 @@ export function KartuPengirimanList({
   const [selesaiList, setSelesaiList] = useState<SelesaiMuatJadwalForProduksi[] | null>(null);
 
   function refreshSelesaiList() {
-    getSelesaiMuatJadwalForProduksiAction().then((result) => {
+    fetchSelesaiList().then((result) => {
       if (result.success) setSelesaiList(result.data);
     });
   }
 
   useEffect(() => {
     refreshSelesaiList();
+    // Only ever meant to fire once on mount — fetchSelesaiList is a stable
+    // action reference for this component instance's whole lifetime (the
+    // Pengiriman and Riwayat tabs each mount their own instance with a
+    // different, but never-changing, action prop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleDone(jadwalId: number) {
@@ -65,9 +79,7 @@ export function KartuPengirimanList({
   return (
     <div className="flex flex-col gap-2 p-4">
       {jadwalList.length === 0 ? (
-        <p className="text-center text-sm text-muted-foreground">
-          Tidak ada Kartu Pengiriman yang perlu diisi muatan saat ini.
-        </p>
+        <p className="text-center text-sm text-muted-foreground">{emptyMessage}</p>
       ) : (
         jadwalList.map((jadwal) => (
           <div key={jadwal.JadwalID} className="relative rounded-lg border border-border p-3">

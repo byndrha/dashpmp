@@ -16,7 +16,10 @@ import {
 } from "@/lib/queries/produksi-warehouse";
 import {
   getDraftJadwalForProduksi,
+  getDraftJadwalRiwayatForProduksi,
+  getAllDraftJadwalForProduksi,
   getSelesaiMuatJadwalForProduksi,
+  getSelesaiMuatJadwalRiwayatForProduksi,
   produksiStartMuat,
   produksiSelesaiMuat,
   produksiSelesaiMuatManual,
@@ -116,7 +119,10 @@ export async function getDraftJadwalForProduksiAction(): Promise<ActionResult<Dr
 export async function produksiStartMuatAction(jadwalId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
     await requireProduksiView();
-    const jadwalList = await getDraftJadwalForProduksi();
+    // Unfiltered on purpose — this card may belong to either the
+    // Pengiriman (current) or Riwayat (previous period) tab; both are
+    // equally valid targets for Mulai Muat.
+    const jadwalList = await getAllDraftJadwalForProduksi();
     const jadwal = jadwalList.find((j) => j.JadwalID === jadwalId);
     if (!jadwal) throw new AppError("Kartu Pengiriman ini sudah tidak tersedia.");
     await produksiStartMuat(jadwalId);
@@ -146,7 +152,8 @@ export async function produksiSelesaiMuatAction(
   return runAction(async () => {
     const session = await requireProduksiView();
     const totalQty10 = input.alokasi.reduce((sum, a) => sum + a.qty10KG, 0);
-    const jadwalList = await getDraftJadwalForProduksi();
+    // Unfiltered — same reasoning as produksiStartMuatAction above.
+    const jadwalList = await getAllDraftJadwalForProduksi();
     const jadwal = jadwalList.find((j) => j.JadwalID === input.jadwalId);
     if (!jadwal) throw new AppError("Kartu Pengiriman ini sudah tidak tersedia untuk diisi.");
     if (totalQty10 < jadwal.Qty10KGDibutuhkan || input.qty5KGDimuat < jadwal.Qty5KGDibutuhkan) {
@@ -179,5 +186,20 @@ export async function getSelesaiMuatJadwalForProduksiAction(): Promise<ActionRes
   return runAction(async () => {
     await requireProduksiView();
     return getSelesaiMuatJadwalForProduksi();
+  });
+}
+
+// Riwayat tab — previous-period counterparts of the two actions above.
+export async function getDraftJadwalRiwayatForProduksiAction(): Promise<ActionResult<DraftJadwalForProduksi[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getDraftJadwalRiwayatForProduksi();
+  });
+}
+
+export async function getSelesaiMuatJadwalRiwayatForProduksiAction(): Promise<ActionResult<SelesaiMuatJadwalForProduksi[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getSelesaiMuatJadwalRiwayatForProduksi();
   });
 }

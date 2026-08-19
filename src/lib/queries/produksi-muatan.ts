@@ -1,11 +1,23 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
+import { getBusinessDateISO } from "@/lib/business-date";
 import {
   startMuat,
   selesaiMuat,
   JADWAL_KANTONG_10KG_EXPR,
   JADWAL_KANTONG_5KG_EXPR,
 } from "@/lib/queries/pengiriman-jadwal";
+
+// Same 14:00 WIB rollover rule as the rest of the app (business-date.ts) —
+// a card whose own JamJadwal falls in today's business-date window or
+// later is "current", everything before that is "riwayat" (previous
+// period). JamJadwal is written by this dashboard's own create-Jadwal flow
+// (true UTC, not the naive-WIB TransDate-style landmine some ERP-written
+// columns have elsewhere), so a plain getBusinessDateISO() comparison is
+// safe here.
+function isCurrentOrFuturePeriod(jamJadwal: Date): boolean {
+  return getBusinessDateISO(new Date(jamJadwal)) >= getBusinessDateISO();
+}
 
 export interface DraftJadwalForProduksi {
   JadwalID: number;
@@ -34,7 +46,15 @@ export interface DraftJadwalForProduksi {
 // route-validation-dialog.tsx) — produksi-app is the primary path. Ordered
 // newest-scheduled-first (most recently added keberangkatan on top) per
 // user request — older backlog Drafts stay in the list, just lower down.
-export async function getDraftJadwalForProduksi(): Promise<DraftJadwalForProduksi[]> {
+// Unfiltered — every Draft regardless of period. Used where a card must be
+// found/validated by ID no matter which of the two tabs it's actually
+// showing in (produksiStartMuatAction/produksiSelesaiMuatAction), not for
+// rendering either list directly.
+export async function getAllDraftJadwalForProduksi(): Promise<DraftJadwalForProduksi[]> {
+  return fetchAllDraftJadwalForProduksi();
+}
+
+async function fetchAllDraftJadwalForProduksi(): Promise<DraftJadwalForProduksi[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamMulaiMuat,
@@ -49,6 +69,27 @@ export async function getDraftJadwalForProduksi(): Promise<DraftJadwalForProduks
     ORDER BY j.JamJadwal DESC
   `);
   return result.recordset;
+}
+
+// Pengiriman tab — today's business-date period and any future one. A
+// Draft that ages out of "today" doesn't disappear, it moves to the
+// Riwayat tab below (still fully actionable there — see
+// getDraftJadwalRiwayatForProduksi), so total reachability is unchanged
+// from before this split, just re-partitioned.
+export async function getDraftJadwalForProduksi(): Promise<DraftJadwalForProduksi[]> {
+  const all = await fetchAllDraftJadwalForProduksi();
+  return all.filter((r) => isCurrentOrFuturePeriod(r.JamJadwal));
+}
+
+// Riwayat tab — every Draft whose own JamJadwal is a previous business-date
+// period, whether or not loading was ever started (JamMulaiMuat set or
+// not). Still routes through the exact same Mulai Muat -> Alokasi ->
+// Selesai Muat flow as the Pengiriman tab (KartuPengirimanList is reused
+// as-is, just fed this list instead) — a backlogged card isn't frozen,
+// it's just no longer cluttering the main list.
+export async function getDraftJadwalRiwayatForProduksi(): Promise<DraftJadwalForProduksi[]> {
+  const all = await fetchAllDraftJadwalForProduksi();
+  return all.filter((r) => !isCurrentOrFuturePeriod(r.JamJadwal));
 }
 
 export interface SelesaiMuatJadwalForProduksi {
@@ -68,17 +109,18 @@ export interface SelesaiMuatJadwalForProduksi {
 }
 
 // Recent Jadwal that have already finished loading (Status flipped to
-// 'Terbit' by either produksiSelesaiMuat or produksiSelesaiMuatManual below)
-// — a read-only companion list to getDraftJadwalForProduksi above, shown so
-// operators can see what they just finished without leaving the Pengiriman
-// tab. Capped at the 30 most recent rather than date-windowed, to sidestep
-// the WIB/naive-vs-UTC timestamp ambiguity documented for other TransDate-
-// like columns in this codebase (see business-date.ts) — JamSelesaiMuat is
-// simply ordered newest-first and truncated.
-export async function getSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
+// 'Terbit' by either produksiSelesaiMuat or produksiSelesaiMuatManual
+// below) — a read-only companion list to getDraftJadwalForProduksi above.
+// Capped at the 100 most recent rather than date-windowed, to sidestep the
+// WIB/naive-vs-UTC timestamp ambiguity documented for other TransDate-like
+// columns in this codebase (see business-date.ts) — JamSelesaiMuat is
+// simply ordered newest-first and truncated. 100 (not the original 30) so
+// the Pengiriman/Riwayat split below still has reasonable depth on both
+// sides after partitioning by the row's own JamJadwal period.
+async function fetchRecentSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT TOP (30) j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat,
+    SELECT TOP (100) j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat,
            ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
            ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG
     FROM DashboardPengirimanJadwal j
@@ -90,6 +132,23 @@ export async function getSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadw
     ORDER BY j.JamSelesaiMuat DESC
   `);
   return result.recordset;
+}
+
+// Pengiriman tab's "Sudah Selesai Muat" section — shown so operators can
+// see what they just finished without leaving the tab. Partitioned by the
+// SAME period as the Draft list above (the card's own JamJadwal, not when
+// it happened to be completed), so a card's tab placement stays consistent
+// regardless of load status.
+export async function getSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
+  const all = await fetchRecentSelesaiMuatJadwalForProduksi();
+  return all.filter((r) => isCurrentOrFuturePeriod(r.JamJadwal));
+}
+
+// Riwayat tab's already-completed section — same 100-row recency window,
+// restricted to previous-period cards.
+export async function getSelesaiMuatJadwalRiwayatForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
+  const all = await fetchRecentSelesaiMuatJadwalForProduksi();
+  return all.filter((r) => !isCurrentOrFuturePeriod(r.JamJadwal));
 }
 
 // Explicit "Mulai Muat" step — stamps JamMulaiMuat with no pallet allocation
