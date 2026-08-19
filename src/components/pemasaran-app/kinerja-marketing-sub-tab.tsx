@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { Star, Loader2, Users } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Star, Loader2, Users, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { getKinerjaMarketingAction, getKinerjaMarketingTrendAction } from "@/app/mkesindo/pemasaran-app/actions";
+import {
+  getKinerjaMarketingAction,
+  getKinerjaMarketingTrendAction,
+  getVisitLogDetailAction,
+  saveVisitLogAction,
+} from "@/app/mkesindo/pemasaran-app/actions";
 import type { MarketingPerformanceData } from "@/lib/queries/marketing-performance";
 import type { MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 import type { PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
@@ -13,6 +21,75 @@ import { MatriksPerformaTable, PangsaPasarTable, TrendExpandButton } from "@/com
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 0 });
+}
+
+// dayIndex -> calendar date, same convention as marketing-performance.ts's
+// DailyQty indexing (index 0 = rangeStartISO, index N = rangeStartISO + N
+// days) — mirrors the private addDaysISO in marketing-performance-panel.tsx,
+// duplicated locally since that one isn't exported.
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDateLong(dateISO: string): string {
+  return `${dateISO.slice(8, 10)}/${dateISO.slice(5, 7)}/${dateISO.slice(0, 4)}`;
+}
+
+// Per-day quantity box for a mitra's roster card — ported from desktop's
+// MitraDayCell (marketing-performance-panel.tsx), but opens a Dialog instead
+// of a Popover (mobile's existing pattern, per log-kunjungan-sub-tab.tsx) and
+// shows a filled background instead of a corner dot when hasEntry is true
+// (narrow w-12 box has no room for both a legible dot and the qty/delta
+// text). Delta color/arrow convention matches MitraDayCell exactly: positive
+// = primary + up-arrow, negative = destructive + down-arrow, zero = muted
+// with no arrow, no-prior-day = an em-dash.
+function DayBox({
+  dateISO,
+  qty,
+  prevQty,
+  hasEntry,
+  onOpen,
+}: {
+  dateISO: string;
+  qty: number;
+  prevQty: number | null;
+  hasEntry: boolean;
+  onOpen: () => void;
+}) {
+  const delta = prevQty != null ? qty - prevQty : null;
+  const dayLabel = dateISO.slice(8, 10);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title="Klik untuk catat kunjungan"
+      className={cn(
+        "flex w-12 shrink-0 flex-col items-center gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums transition-colors",
+        hasEntry ? "bg-primary/15" : "bg-muted"
+      )}
+    >
+      <span className="text-[9px] text-muted-foreground">{dayLabel}</span>
+      <span className="font-medium">{formatQty(qty)}</span>
+      {delta != null ? (
+        <span
+          className={cn(
+            "flex items-center gap-0.5 text-[9px]",
+            delta > 0 && "text-primary",
+            delta < 0 && "text-destructive",
+            delta === 0 && "text-muted-foreground/50"
+          )}
+        >
+          {delta > 0 && <ArrowUp className="size-2.5 shrink-0" />}
+          {delta < 0 && <ArrowDown className="size-2.5 shrink-0" />}
+          {delta > 0 ? `+${formatQty(delta)}` : formatQty(delta)}
+        </span>
+      ) : (
+        <span className="text-[9px] text-muted-foreground/30">&mdash;</span>
+      )}
+    </button>
+  );
 }
 
 function SummaryCard({ label, general, actual, target }: { label: string; general: number; actual: number; target: number }) {
@@ -38,6 +115,22 @@ export function KinerjaMarketingSubTab() {
   const [trend, setTrend] = useState<{ performance: MarketingPerformanceTrendData; pangsaPasar: PangsaPasarTrendData } | null>(null);
   const [trendExpanded, setTrendExpanded] = useState(false);
   const [trendPending, startTrendTransition] = useTransition();
+
+  // Hasil Kunjungan dialog for a clicked mitra+date DayBox. Keyed per
+  // `${businessPartnerId}|${dateISO}` (many boxes per card, unlike
+  // log-kunjungan-sub-tab.tsx's one-dialog-per-mitra-for-today).
+  const [activeDay, setActiveDay] = useState<{ businessPartnerId: string; mitraName: string; dateISO: string } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [hasilKunjungan, setHasilKunjungan] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Read fresh after an await so a save/fetch for a day the user has since
+  // closed the dialog for (or clicked a different box on) can't paint stale
+  // state over the wrong dialog — same guard pattern as
+  // log-kunjungan-sub-tab.tsx's editingIdRef, keyed per mitra+date here.
+  const activeKeyRef = useRef<string | null>(null);
+  const [savePending, startSaveTransition] = useTransition();
+  const [hasEntry, setHasEntry] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +159,56 @@ export function KinerjaMarketingSubTab() {
         setTrend(result.data);
         setTrendExpanded(!trendExpanded);
       }
+    });
+  }
+
+  function openDay(businessPartnerId: string, mitraName: string, dateISO: string) {
+    const key = `${businessPartnerId}|${dateISO}`;
+    activeKeyRef.current = key;
+    setActiveDay({ businessPartnerId, mitraName, dateISO });
+    setHasilKunjungan("");
+    setSaveError(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    getVisitLogDetailAction(businessPartnerId, dateISO).then((result) => {
+      if (activeKeyRef.current !== key) return; // dialog moved on while this was in flight
+      setDetailLoading(false);
+      if (!result.success) {
+        setDetailError(result.error);
+        return;
+      }
+      if (result.data) {
+        setHasilKunjungan(result.data.HasilKunjungan ?? "");
+        setHasEntry((prev) => new Set(prev).add(key));
+      }
+    });
+  }
+
+  function closeDay() {
+    activeKeyRef.current = null;
+    setActiveDay(null);
+    setDetailError(null);
+    setSaveError(null);
+  }
+
+  function handleSaveVisitLog(formData: FormData) {
+    if (!activeDay) return;
+    const { businessPartnerId, dateISO } = activeDay;
+    const key = `${businessPartnerId}|${dateISO}`;
+    const note = String(formData.get("note") ?? "").trim();
+    setSaveError(null);
+    startSaveTransition(async () => {
+      const result = await saveVisitLogAction({ businessPartnerId, dateISO, hasilKunjungan: note || null });
+      // Dialog may have closed or moved to a different mitra+date while this
+      // save was in flight — only touch state if it's still showing the
+      // mitra+date this request was actually for.
+      if (activeKeyRef.current !== key) return;
+      if (!result.success) {
+        setSaveError(result.error);
+        return;
+      }
+      setHasEntry((prev) => new Set(prev).add(key));
+      closeDay();
     });
   }
 
@@ -124,11 +267,19 @@ export function KinerjaMarketingSubTab() {
             <p className="shrink-0 tabular-nums font-medium">{formatQty(total)} kantong</p>
           </div>
           <div className="flex gap-1.5">
-            {last5.map((i) => (
-              <span key={i} className="rounded bg-muted px-2 py-0.5 text-[11px] tabular-nums">
-                {formatQty(daily[i] ?? 0)}
-              </span>
-            ))}
+            {last5.map((i) => {
+              const dateISO = addDaysISO(data!.rangeStartISO, i);
+              return (
+                <DayBox
+                  key={i}
+                  dateISO={dateISO}
+                  qty={daily[i] ?? 0}
+                  prevQty={i > 0 ? (daily[i - 1] ?? 0) : null}
+                  hasEntry={hasEntry.has(`${m.BusinessPartnerID}|${dateISO}`)}
+                  onOpen={() => openDay(m.BusinessPartnerID, m.Name, dateISO)}
+                />
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -191,6 +342,44 @@ export function KinerjaMarketingSubTab() {
           )}
         </div>
       )}
+
+      <Dialog open={activeDay != null} onOpenChange={(open) => !open && closeDay()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Hasil Kunjungan — {activeDay?.mitraName}
+              {activeDay ? `, ${formatDateLong(activeDay.dateISO)}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {detailLoading ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Memuat...
+            </div>
+          ) : detailError ? (
+            <p className="text-xs text-destructive">{detailError}</p>
+          ) : (
+            <form action={handleSaveVisitLog} className="flex flex-col gap-3">
+              <Label htmlFor="note" className="sr-only">
+                Hasil Kunjungan
+              </Label>
+              <Textarea
+                id="note"
+                name="note"
+                rows={4}
+                defaultValue={hasilKunjungan}
+                placeholder="Catat hasil kunjungan ke mitra ini..."
+              />
+              {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+              <DialogFooter>
+                <Button type="submit" disabled={savePending}>
+                  {savePending ? "Menyimpan..." : "Simpan"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
