@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -139,6 +139,18 @@ export function SatpamBerandaClient({
 }) {
   const [tab, setTab] = useState<"BERANGKAT" | "DATANG">("BERANGKAT");
   const filtered = cards.filter((c) => c.tipe === tab);
+  const router = useRouter();
+
+  // Board data is server-fetched once at page load — poll for fresh Kartu
+  // Pengiriman/Riwayat without the satpam having to close and reopen the
+  // app. router.refresh() re-runs the page's Server Component fetch and
+  // hands this client component new props; it's a no-op on an inactive tab
+  // (mobile browsers throttle background timers) and doesn't reset local
+  // state like `tab`.
+  useEffect(() => {
+    const id = setInterval(() => router.refresh(), 30000);
+    return () => clearInterval(id);
+  }, [router]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
