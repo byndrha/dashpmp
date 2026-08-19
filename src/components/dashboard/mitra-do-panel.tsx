@@ -55,9 +55,12 @@ const INFO_COL_CLASS = "w-52 sm:w-56";
 // total cells and every row's DayChip so both line up exactly. Height is
 // min-h (not fixed) on both — either can grow to fit an Angka Pemesanan
 // readout line without breaking the shared width alignment. Widened from
-// w-12 (48px) so the Angka Pemesanan badge has room for a readable font
-// instead of being squeezed down to 7px text.
-const DAY_COL_WIDTH_CLASS = "w-16";
+// w-12 (48px) so the Angka Pemesanan badge has room for a readable font;
+// the header's own aggregate line can run to 4-digit qty + 4-digit percent
+// (e.g. "3.093|5155%" — the header's % is against the WHOLE filtered
+// mitra list's actual, deliberately not scaled down to just the mitra
+// who've logged a forecast so far), so w-24 gives it enough room too.
+const DAY_COL_WIDTH_CLASS = "w-24";
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
