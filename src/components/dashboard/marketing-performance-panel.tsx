@@ -383,21 +383,27 @@ function MarketingCard({
   // JoinDate genuinely is a string at runtime, since `new Date(dateObj)`
   // clones a Date input as-is. Matches the same normalization already used
   // in marketing-performance-trend.ts/pangsa-pasar-trend.ts.
-  const isExisting = (joinDate: string | null) =>
-    !joinDate || new Date(joinDate).getTime() < new Date(currentMonthStartISO).getTime();
-  const isNoo = (joinDate: string | null) =>
-    !!joinDate && new Date(joinDate).getTime() >= new Date(currentMonthStartISO).getTime();
+  // IsCrossWilayahProposal is optional here (not just on MarketingScopeAllMitra)
+  // because mitraPrioritas is MarketingMitraAssignment[] — the admin-curated
+  // Prioritas list, which by the precedence rule (marketing-performance.ts /
+  // marketing-performance-trend.ts) never carries the cross-wilayah flag in
+  // the first place, so an absent field correctly falls back to JoinDate-only
+  // bucketing for that list.
+  const isExisting = (m: { JoinDate: string | null; IsCrossWilayahProposal?: boolean }) =>
+    (!m.JoinDate || new Date(m.JoinDate).getTime() < new Date(currentMonthStartISO).getTime()) && !m.IsCrossWilayahProposal;
+  const isNoo = (m: { JoinDate: string | null; IsCrossWilayahProposal?: boolean }) =>
+    (!!m.JoinDate && new Date(m.JoinDate).getTime() >= new Date(currentMonthStartISO).getTime()) || !!m.IsCrossWilayahProposal;
 
   const sortedMitra = useMemo(
-    () => [...mitraPrioritas].filter((m) => isExisting(m.JoinDate)).sort(compareCapacityDesc),
+    () => [...mitraPrioritas].filter((m) => isExisting(m)).sort(compareCapacityDesc),
     [mitraPrioritas, currentMonthStartISO]
   );
   const sortedAllMitra = useMemo(
-    () => [...allMitra].filter((m) => isExisting(m.JoinDate)).sort(compareCapacityDesc),
+    () => [...allMitra].filter((m) => isExisting(m)).sort(compareCapacityDesc),
     [allMitra, currentMonthStartISO]
   );
   const sortedNooMitra = useMemo(
-    () => [...allMitra].filter((m) => isNoo(m.JoinDate)).sort(compareCapacityDesc),
+    () => [...allMitra].filter((m) => isNoo(m)).sort(compareCapacityDesc),
     [allMitra, currentMonthStartISO]
   );
   const showPrioritas = open || forceOpen;

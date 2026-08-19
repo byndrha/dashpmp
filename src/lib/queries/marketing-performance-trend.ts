@@ -59,6 +59,7 @@ interface MitraMeta {
   BusinessPartnerID: string;
   JoinDate: string | null;
   MarketingUserID: string | null;
+  IsCrossWilayahProposal: boolean;
 }
 
 // Per-Marketing (plus a company-wide `combined` row) monthly trend of
@@ -119,7 +120,12 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
   for (const r of mitraResult.recordset as { BusinessPartnerID: string; Wilayah: string; Kecamatan: string | null; JoinDate: string | null }[]) {
     const marketingName = resolveResponsibleMarketing(r.BusinessPartnerID, r.Wilayah, r.Kecamatan, assignments, mitraOverrides);
     const user = marketingName ? marketingByName.get(marketingName) : undefined;
-    mitraMeta.set(r.BusinessPartnerID, { BusinessPartnerID: r.BusinessPartnerID, JoinDate: r.JoinDate, MarketingUserID: user?.UserID ?? null });
+    mitraMeta.set(r.BusinessPartnerID, {
+      BusinessPartnerID: r.BusinessPartnerID,
+      JoinDate: r.JoinDate,
+      MarketingUserID: user?.UserID ?? null,
+      IsCrossWilayahProposal: crossWilayahOverrides.has(r.BusinessPartnerID) && !prioritasOverrides.has(r.BusinessPartnerID),
+    });
   }
 
   const actualByMitraMonth = new Map<string, Map<string, number>>();
@@ -167,7 +173,7 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
     for (const meta of mitraMeta.values()) {
       if (!meta.MarketingUserID) continue;
       if (meta.JoinDate == null || new Date(meta.JoinDate).getTime() >= nextMonthStart.getTime()) continue;
-      const isNoo = new Date(meta.JoinDate).getTime() >= monthStart.getTime();
+      const isNoo = new Date(meta.JoinDate).getTime() >= monthStart.getTime() || meta.IsCrossWilayahProposal;
       const actual = actualByMitraMonth.get(meta.BusinessPartnerID)?.get(monthStartISO) ?? 0;
       const capacity = snapshot.get(meta.BusinessPartnerID) ?? 0;
 

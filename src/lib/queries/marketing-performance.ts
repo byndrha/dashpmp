@@ -35,6 +35,15 @@ export interface MarketingScopeAllMitra {
   Kecamatan: string | null;
   Capacity: number | null;
   JoinDate: string | null;
+  PriceLevel: number | null;
+  // A mitra qualifying via cross-wilayah Pengajuan ownership (Task 2) counts
+  // as NOO every month it's resolved into this scope, not just its JoinDate
+  // month — see marketing-performance-trend.ts's isNoo for the same rule
+  // applied historically.
+  IsCrossWilayahProposal: boolean;
+  // Shown separately in the roster as "Mitra Prioritas", same admin-set
+  // DashboardMarketingMitra override desktop already curates.
+  IsPriorityOverride: boolean;
 }
 
 export interface MarketingPerformanceData {
@@ -141,7 +150,8 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
           ISNULL(NULLIF(LTRIM(RTRIM(NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
           NPWPAddress AS Kecamatan,
           Capacity,
-          JoinDate
+          JoinDate,
+          PriceLevel
       FROM BusinessPartner
       WHERE ISNULL(IsDeleted, 0) = 0
     `),
@@ -186,6 +196,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     Kecamatan: string | null;
     Capacity: number | null;
     JoinDate: string | null;
+    PriceLevel: number | null;
   }[]) {
     const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
     if (!cell) continue;
@@ -199,6 +210,9 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       Kecamatan: r.Kecamatan,
       Capacity: r.Capacity,
       JoinDate: r.JoinDate,
+      PriceLevel: r.PriceLevel,
+      IsCrossWilayahProposal: crossWilayahOverrides.has(r.BusinessPartnerID) && !prioritasOverrides.has(r.BusinessPartnerID),
+      IsPriorityOverride: prioritasOverrides.has(r.BusinessPartnerID),
     });
     allMitraByMarketing.set(cell.MarketingUserID, roster);
   }
