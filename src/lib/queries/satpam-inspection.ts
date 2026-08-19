@@ -8,6 +8,15 @@ export interface SatpamInspectionCard {
   vehicleNo: string | null;
   driverName: string | null;
   jamJadwal: string;
+  // Only set for tipe === "DATANG" — JamAktualBerangkat + the OSRM-estimated
+  // one-way DurasiMenit, the exact same "Dalam Perjalanan" end-time math the
+  // Papan Pengiriman board already uses for its own "Kembali ke Pabrik"
+  // marker (see pengiriman-board.tsx). null if either input is missing
+  // (shouldn't happen in practice — a DATANG card only exists once Status
+  // is already Terbit with a recorded Cek Berangkat, both of which imply
+  // JamAktualBerangkat is set; DurasiMenit could still be null for a Jadwal
+  // created before that column existed).
+  jamEstimasiKedatangan: string | null;
   qty10KG: number;
   qty5KG: number;
   status: "Draft" | "Terbit";
@@ -37,6 +46,8 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
         ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo,
         sm.Name AS DriverName,
         j.JamJadwal,
+        j.JamAktualBerangkat,
+        j.DurasiMenit,
         j.Status,
         (
           SELECT ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0)
@@ -73,6 +84,8 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
     VehicleNo: string | null;
     DriverName: string | null;
     JamJadwal: Date;
+    JamAktualBerangkat: Date | null;
+    DurasiMenit: number | null;
     Status: "Draft" | "Terbit";
     Qty10KG: number;
     Qty5KG: number;
@@ -88,6 +101,7 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
       vehicleNo: r.VehicleNo,
       driverName: r.DriverName,
       jamJadwal: r.JamJadwal.toISOString(),
+      jamEstimasiKedatangan: null,
       qty10KG: r.Qty10KG,
       qty5KG: r.Qty5KG,
       status: r.Status,
@@ -95,12 +109,17 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
       hasCheck: r.BerangkatCheckID != null,
     });
     if (r.Status === "Terbit" && r.BerangkatCheckID != null) {
+      const jamEstimasiKedatangan =
+        r.JamAktualBerangkat && r.DurasiMenit != null
+          ? new Date(r.JamAktualBerangkat.getTime() + r.DurasiMenit * 60_000).toISOString()
+          : null;
       cards.push({
         jadwalId: r.JadwalID,
         armadaNama: r.ArmadaNama,
         vehicleNo: r.VehicleNo,
         driverName: r.DriverName,
         jamJadwal: r.JamJadwal.toISOString(),
+        jamEstimasiKedatangan,
         qty10KG: r.Qty10KG,
         qty5KG: r.Qty5KG,
         status: r.Status,

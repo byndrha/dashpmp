@@ -21,6 +21,11 @@ import type { VehicleCheckRow } from "@/lib/vehicle-check-types";
 function InspectionCard({ card }: { card: SatpamInspectionCard }) {
   const router = useRouter();
   const ready = card.status === "Terbit";
+  // Kedatangan shows when the armada is estimated back at the pabrik
+  // (JamAktualBerangkat + estimated travel time), not the original
+  // departure schedule — falls back to jamJadwal only if the estimate
+  // genuinely isn't available (see the field's own doc comment).
+  const displayTime = card.tipe === "DATANG" && card.jamEstimasiKedatangan ? card.jamEstimasiKedatangan : card.jamJadwal;
 
   return (
     <Card className={`flex flex-row overflow-hidden p-0 ${ready ? "border-warning/40" : ""}`}>
@@ -38,9 +43,9 @@ function InspectionCard({ card }: { card: SatpamInspectionCard }) {
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm">
-              <Clock className="size-3.5" /> {formatTime(card.jamJadwal)}
+              <Clock className="size-3.5" /> {formatTime(displayTime)}
             </span>
-            <span className="text-xs text-muted-foreground">{formatDate(card.jamJadwal)}</span>
+            <span className="text-xs text-muted-foreground">{formatDate(displayTime)}</span>
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between border-t pt-2">
