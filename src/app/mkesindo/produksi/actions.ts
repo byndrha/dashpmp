@@ -29,6 +29,12 @@ import {
 } from "@/lib/queries/produksi-muatan";
 import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
 import { getAkunNamaMap } from "@/lib/queries/akun";
+import {
+  getKualitasRiwayat,
+  createKualitas,
+  type KualitasRow,
+  type CreateKualitasInput,
+} from "@/lib/queries/produksi-kualitas";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
@@ -194,6 +200,26 @@ export async function getDraftJadwalRiwayatForProduksiAction(): Promise<ActionRe
   return runAction(async () => {
     await requireProduksiView();
     return getDraftJadwalRiwayatForProduksi();
+  });
+}
+
+export async function getKualitasRiwayatAction(): Promise<ActionResult<KualitasRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getKualitasRiwayat();
+  });
+}
+
+export async function createKualitasAction(
+  input: Omit<CreateKualitasInput, "dicatatOlehUserId">
+): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    if (!input.mesinId) throw new AppError("Pilih mesin yang dipakai.");
+    if (!input.waktu) throw new AppError("Isi waktu pemeriksaan.");
+    const kualitasId = await createKualitas({ ...input, dicatatOlehUserId: session.user.id });
+    revalidatePath("/mkesindo/produksi-app");
+    return kualitasId;
   });
 }
 
