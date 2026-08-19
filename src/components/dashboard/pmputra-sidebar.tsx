@@ -62,13 +62,13 @@ export function PmputraSidebar({
             className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
           />
           <div className="flex min-w-0 flex-col gap-0.5 truncate group-data-[collapsible=icon]:hidden">
+            <p className="font-display font-semibold leading-tight">PT Prima Maesa Putra</p>
             <div className="flex items-center gap-1.5">
-              <p className="font-display font-semibold leading-tight">PT Prima Maesa Putra</p>
               <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
                 Es Balok
               </Badge>
+              <p className="text-[11px] leading-tight text-muted-foreground">Ponorogo</p>
             </div>
-            <p className="text-[11px] leading-tight text-muted-foreground">Ponorogo</p>
           </div>
         </div>
         {canSwitchPt && (
