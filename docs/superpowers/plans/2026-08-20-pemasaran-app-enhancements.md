@@ -215,13 +215,13 @@ git commit -m "feat: add general-purpose Keterangan field for Pengajuan approve/
 
 **Files:**
 - Modify: `src/lib/queries/marketing-wilayah.ts`
-- Modify: `src/app/mkesindo/pemasaran-app/actions.ts`
 - Modify: `src/app/mkesindo/(dashboard)/pemasaran/page.tsx`
 - Modify: `src/lib/queries/marketing-performance.ts`
 - Modify: `src/lib/queries/marketing-performance-trend.ts`
 
 **Interfaces:**
 - Produces: `getCrossWilayahProposalOverrides(assignments: MarketingWilayahAssignment[]): Promise<Map<string, string>>` in `marketing-wilayah.ts` — consumed by Task 3 (merged into the ownership-resolution override map both `getMarketingPerformance()` and `getMarketingPerformanceTrend()` already build).
+- `src/app/mkesindo/pemasaran-app/actions.ts` is NOT touched by this task — `getKinerjaMarketingAction()` there just calls `getMarketingPerformance()` and narrows the result, so it inherits the new overrides automatically once Step 2 lands.
 
 - [ ] **Step 1: Write `getCrossWilayahProposalOverrides()`**
 
@@ -348,7 +348,7 @@ manually to confirm the "cross-wilayah" classification looks right by hand.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/lib/queries/marketing-wilayah.ts src/app/mkesindo/pemasaran-app/actions.ts "src/app/mkesindo/(dashboard)/pemasaran/page.tsx" src/lib/queries/marketing-performance.ts src/lib/queries/marketing-performance-trend.ts
+git add src/lib/queries/marketing-wilayah.ts "src/app/mkesindo/(dashboard)/pemasaran/page.tsx" src/lib/queries/marketing-performance.ts src/lib/queries/marketing-performance-trend.ts
 git commit -m "feat: cross-wilayah Pengajuan proposals grant permanent mitra ownership"
 ```
 
