@@ -7,6 +7,7 @@ import {
   getMarketingMitraAssignments,
   resolveResponsibleMarketing,
   buildMitraOverrideMap,
+  getCrossWilayahProposalOverrides,
 } from "@/lib/queries/marketing-wilayah";
 
 // One (Marketing, Wilayah, Kecamatan) bucket — kept unaggregated (not
@@ -85,7 +86,13 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     getMarketingUsers(),
     getMarketingMitraAssignments(),
   ]);
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  const crossWilayahOverrides = await getCrossWilayahProposalOverrides(assignments);
+  const prioritasOverrides = buildMitraOverrideMap(mitraAssignments);
+  // Prioritas wins on conflict — spread crossWilayah first so prioritas
+  // entries overwrite any matching key.
+  const mitraOverrides = new Map([...crossWilayahOverrides, ...prioritasOverrides]);
+  // prioritasOverrides/crossWilayahOverrides stay in scope below (not just
+  // the merged mitraOverrides) for Task 3's per-row display flags.
 
   const pool = await getPool();
   const rangeStart = new Date(period.startDate);

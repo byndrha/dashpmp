@@ -274,3 +274,61 @@ export function resolveResponsibleMarketing(
   const wholeWilayah = assignments.find((a) => a.Wilayah === wilayah && a.Kecamatan === null);
   return wholeWilayah ? wholeWilayah.MarketingNama : null;
 }
+
+// Mitra whose approved Pengajuan was proposed by a marketing outside that
+// mitra's own Wilayah/Kecamatan coverage — the proposer stays responsible
+// regardless of territory, same override tier as an admin-set Mitra
+// Prioritas assignment (both feed the same override Map; Prioritas wins on
+// conflict — merged at each call site, not here). Computed live off
+// DashboardMitraPengajuan's already-permanent MarketingUserID +
+// ConvertedBusinessPartnerID link — no migration needed, this covers every
+// historical approval automatically.
+//
+// MarketingUserID here is a Postgres akun.id (same convention as
+// getMarketingWilayahAssignments above) — resolved to a name via a
+// separate Postgres query, never JOINed against an MSSQL table.
+export async function getCrossWilayahProposalOverrides(
+  assignments: MarketingWilayahAssignment[]
+): Promise<Map<string, string>> {
+  const mssqlPool = await getPool();
+  const pgPool = getPgPool();
+
+  const result = await mssqlPool.request().query(`
+    SELECT p.MarketingUserID, p.ConvertedBusinessPartnerID AS BusinessPartnerID,
+           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
+           bp.NPWPAddress AS Kecamatan
+    FROM DashboardMitraPengajuan p
+    JOIN BusinessPartner bp ON bp.BusinessPartnerID = p.ConvertedBusinessPartnerID
+    WHERE p.Status = 'Disetujui' AND p.ConvertedBusinessPartnerID IS NOT NULL
+  `);
+  const rows = result.recordset as {
+    MarketingUserID: string;
+    BusinessPartnerID: string;
+    Wilayah: string;
+    Kecamatan: string | null;
+  }[];
+
+  const akunIds = [...new Set(rows.map((r) => Number(r.MarketingUserID)).filter(Number.isFinite))];
+  const nameMap = new Map<number, string>();
+  if (akunIds.length > 0) {
+    const namesResult = await pgPool.query(`SELECT id, nama FROM akun WHERE id = ANY($1::int[])`, [akunIds]);
+    for (const r of namesResult.rows as { id: number; nama: string }[]) nameMap.set(r.id, r.nama);
+  }
+
+  const overrides = new Map<string, string>();
+  for (const r of rows) {
+    const marketingNama = nameMap.get(Number(r.MarketingUserID));
+    if (!marketingNama) continue;
+    // "Cross-wilayah" = no assignment row for THIS marketing covers the
+    // mitra's actual Wilayah/Kecamatan — same matching order as
+    // resolveResponsibleMarketing() itself (specific Kecamatan, then
+    // whole-Wilayah), just checked in the opposite direction (does this
+    // marketing's own coverage include this mitra, not "who covers it").
+    const ownAssignments = assignments.filter((a) => a.MarketingNama === marketingNama);
+    const covered = ownAssignments.some(
+      (a) => a.Wilayah === r.Wilayah && (a.Kecamatan === r.Kecamatan || a.Kecamatan === null)
+    );
+    if (!covered) overrides.set(r.BusinessPartnerID, marketingNama);
+  }
+  return overrides;
+}

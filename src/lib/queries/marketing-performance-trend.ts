@@ -6,6 +6,7 @@ import {
   getMarketingMitraAssignments,
   resolveResponsibleMarketing,
   buildMitraOverrideMap,
+  getCrossWilayahProposalOverrides,
 } from "@/lib/queries/marketing-wilayah";
 import { getMonthlyCapacitySnapshot } from "@/lib/queries/mitra-capacity-snapshot";
 import { getArmadaNooDailyCapacity } from "@/lib/queries/armada-noo-target";
@@ -107,7 +108,11 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
       `),
   ]);
 
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  const crossWilayahOverrides = await getCrossWilayahProposalOverrides(assignments);
+  const prioritasOverrides = buildMitraOverrideMap(mitraAssignments);
+  const mitraOverrides = new Map([...crossWilayahOverrides, ...prioritasOverrides]);
+  // prioritasOverrides/crossWilayahOverrides stay in scope below (not just
+  // the merged mitraOverrides) for Task 3's per-row display flags.
   const marketingByName = new Map(marketingUsers.map((u) => [u.Nama, u]));
 
   const mitraMeta = new Map<string, MitraMeta>();
