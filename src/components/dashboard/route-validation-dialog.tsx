@@ -1084,6 +1084,12 @@ export function RouteValidationDialog({
                   {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
                 </span>
               )}
+              {!isDraft && (
+                <span className="flex items-center gap-1">
+                  <span className="font-medium text-foreground">{time}</span>
+                  {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Tanpa driver"}
+                </span>
+              )}
             </p>
           )}
           <DialogDescription>Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum berangkat.</DialogDescription>
@@ -1140,14 +1146,7 @@ export function RouteValidationDialog({
                   Simpan
                 </Button>
               </div>
-            ) : (
-              <p className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium">{time}</span>
-                <span className="text-muted-foreground">
-                  {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Tanpa driver"}
-                </span>
-              </p>
-            )}
+            ) : null}
 
             {isDraft ? (
               <div className="flex flex-col gap-1.5">
