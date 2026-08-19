@@ -307,7 +307,15 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        // min-w-0 overrides the flex-item default (min-width: auto), which
+        // otherwise refuses to shrink this pane below its widest
+        // descendant's natural content width — a page with a wide
+        // horizontally-scrolling grid (e.g. Transaksi's per-tanggal table)
+        // could force the WHOLE page wider than the viewport and pan
+        // everything sideways together, defeating any local overflow-x-auto
+        // region (and any position:sticky pinned within it) instead of
+        // clipping/scrolling that content in place.
+        "relative flex w-full min-w-0 flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
       )}
       {...props}
