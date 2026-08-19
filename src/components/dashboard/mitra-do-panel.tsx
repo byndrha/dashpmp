@@ -261,14 +261,15 @@ function ContactLogButton({
   );
 }
 
-// Percentage is always against TODAY's own actual DO qty (the mitra's
-// current pace), regardless of which date's Angka Pemesanan is being shown
-// — a future date has no "actual" of its own yet to compare against, and a
-// past date's own historical actual isn't what "dari QTY DO aktual saat
-// ini" means. Omits the "%" suffix rather than showing a divide-by-zero
-// artifact when today's own qty is 0 or unknown.
-function formatPemesananLine(angkaPemesanan: number, todayQty: number | null): string {
-  const pct = todayQty != null && todayQty > 0 ? Math.round((angkaPemesanan / todayQty) * 100) : null;
+// The percentage is an achievement/variance read against the forecast: how
+// much actually got delivered on THIS SAME DATE relative to what this log
+// entry forecasted — e.g. forecast 60, 104 actually delivered that day ->
+// 173% (over-delivered relative to the forecast), forecast 60, 30 delivered
+// -> 50% (under-delivered). Only computed once the date has actually
+// elapsed (a future date's "actual" is just 0 so far, not a real shortfall)
+// and only when the forecast itself is a positive number.
+function formatPemesananLine(angkaPemesanan: number, actualQtyForDate: number, dateHasElapsed: boolean): string {
+  const pct = dateHasElapsed && angkaPemesanan > 0 ? Math.round((actualQtyForDate / angkaPemesanan) * 100) : null;
   return pct != null ? `${formatQty(angkaPemesanan)}|${pct}%` : formatQty(angkaPemesanan);
 }
 
@@ -290,7 +291,6 @@ function DayChip({
   target,
   isPast,
   contactSummary,
-  todayQty,
 }: {
   businessPartnerId: string;
   dateISO: string;
@@ -302,7 +302,6 @@ function DayChip({
   target: number | null;
   isPast: boolean;
   contactSummary: { chat?: number; telepon?: number } | undefined;
-  todayQty: number | null;
 }) {
   const state = !isPast ? "future" : target == null ? "neutral" : qty >= target ? "hit" : "miss";
   const day = Number(dateISO.slice(8, 10));
@@ -334,8 +333,8 @@ function DayChip({
       </span>
       {contactSummary && (contactSummary.chat != null || contactSummary.telepon != null) && (
         <span className="flex flex-col items-center gap-px text-[8px] leading-tight font-medium text-muted-foreground">
-          {contactSummary.chat != null && <span>{formatPemesananLine(contactSummary.chat, todayQty)}</span>}
-          {contactSummary.telepon != null && <span>{formatPemesananLine(contactSummary.telepon, todayQty)}</span>}
+          {contactSummary.chat != null && <span>{formatPemesananLine(contactSummary.chat, qty, isPast)}</span>}
+          {contactSummary.telepon != null && <span>{formatPemesananLine(contactSummary.telepon, qty, isPast)}</span>}
         </span>
       )}
     </div>
@@ -462,9 +461,6 @@ function MitraDOCard({
   // matches TargetHarian's own per-day meaning, and dividing by the full
   // range would understate the average for a range that isn't over yet.
   const avgQty = elapsedDays > 0 ? m.TotalQty / elapsedDays : null;
-  // "QTY DO aktual saat ini" for the Angka Pemesanan percentage — today's
-  // own DailyQty entry, when today actually falls within the visible range.
-  const todayQty = elapsedDays > 0 ? (m.DailyQty[elapsedDays - 1] ?? null) : null;
   return (
     <div className="flex items-stretch">
       {/* Sticky within the shared horizontal-scroll ancestor (not the page)
@@ -513,7 +509,6 @@ function MitraDOCard({
             target={m.TargetHarian}
             isPast={dateISO <= todayISO}
             contactSummary={contactSummaryMap.get(`${m.BusinessPartnerID}|${dateISO}`)}
-            todayQty={todayQty}
           />
         ))}
       </div>
@@ -643,7 +638,6 @@ export function MitraDOPanel({
     }
     return totals;
   }, [contactLogSummary, filteredActive, dates, daysInRange]);
-  const totalTodayQty = elapsedDays > 0 ? (totalPerDate[elapsedDays - 1] ?? null) : null;
 
   // "Yang ditampilkan" = whatever's actually rendered below — filteredActive
   // plus filteredInactive only when that section is toggled open, same
@@ -870,8 +864,12 @@ export function MitraDOPanel({
                   <span>{formatQty(totalPerDate[i])}</span>
                   {(pemesanan.hasChat || pemesanan.hasTelepon) && (
                     <span className="flex flex-col items-center gap-px text-[8px] leading-tight font-medium text-muted-foreground">
-                      {pemesanan.hasChat && <span>{formatPemesananLine(pemesanan.chat, totalTodayQty)}</span>}
-                      {pemesanan.hasTelepon && <span>{formatPemesananLine(pemesanan.telepon, totalTodayQty)}</span>}
+                      {pemesanan.hasChat && (
+                        <span>{formatPemesananLine(pemesanan.chat, totalPerDate[i], dateISO <= todayISO)}</span>
+                      )}
+                      {pemesanan.hasTelepon && (
+                        <span>{formatPemesananLine(pemesanan.telepon, totalPerDate[i], dateISO <= todayISO)}</span>
+                      )}
                     </span>
                   )}
                 </div>
