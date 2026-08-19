@@ -51,10 +51,12 @@ export default async function BerandaPage() {
     getTopMitraPiutang(),
     getPiutangPeriodSummary(businessMonthFilter),
   ]);
-  const { comparisons: salesDayComparison, todayHourly, currentWibHour } = await getSalesDayComparison(
-    todaySales,
-    businessToday
-  );
+  const {
+    comparisons: salesDayComparison,
+    todayHourly,
+    currentWibHour,
+    currentCumulative,
+  } = await getSalesDayComparison(todaySales, businessToday);
 
   // Penjualan Hari Ini must come from getSalesForDay (the same unrestricted
   // query the Penjualan module's "Hari Ini" card uses), NOT from summing
@@ -88,6 +90,7 @@ export default async function BerandaPage() {
           comparisons={salesDayComparison}
           todayHourly={todayHourly}
           currentWibHour={currentWibHour}
+          currentCumulative={currentCumulative}
         />
 
         <div className="flex flex-col gap-3">

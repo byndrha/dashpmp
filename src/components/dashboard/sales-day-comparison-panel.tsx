@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { TrendPill } from "@/components/dashboard/sales-chips";
 import { formatRupiah, formatDayMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { SalesDayComparison, HourlyPoint } from "@/lib/queries/sales-overview";
+import type { SalesDayComparison, SalesDayPoint, HourlyPoint } from "@/lib/queries/sales-overview";
 
 // Shorter than formatRupiah() — needed so a value + trend pill still fit on
 // one line inside this panel's narrow columns, same approach as
@@ -78,28 +78,35 @@ function HourlyComparisonTable({
 }
 
 // Quick-glance line shown even while a period's row is still collapsed —
-// only the current WIB hour is compared (the "jam yang sama" — same hour —
-// point), never the other 23 hours, which stay inside HourlyComparisonTable
-// until the row is actually expanded.
+// a cumulative "so far since the 14:00 WIB rollover" total (nominal +
+// kantong), not a single-hour bucket: `previousCumulative` is that period's
+// own rollover window capped at the same WIB wall-clock instant as
+// `currentCumulative` (the still-in-progress current period), so the two
+// sides are apples-to-apples. The other 23 individual hours stay inside
+// HourlyComparisonTable until the row is actually expanded.
 function CurrentHourPreview({
-  periodHourly,
-  todayHourly,
+  previousCumulative,
+  currentCumulative,
   currentWibHour,
 }: {
-  periodHourly: HourlyPoint[] | null | undefined;
-  todayHourly: HourlyPoint[];
+  previousCumulative: SalesDayPoint | null;
+  currentCumulative: SalesDayPoint;
   currentWibHour: number;
 }) {
-  const periodPoint = periodHourly?.[currentWibHour];
-  const todayPoint = todayHourly[currentWibHour];
-  if (!periodPoint || !todayPoint) return null;
-  const pct = pctChange(todayPoint.NetSales, periodPoint.NetSales);
+  if (!previousCumulative) return null;
+  const pct = pctChange(currentCumulative.NetSales, previousCumulative.NetSales);
   return (
     <div className="col-span-3 -mt-0.5 mb-1 flex flex-wrap items-center gap-1.5 pl-4 text-[9px] text-muted-foreground">
-      <span className="whitespace-nowrap">Jam {String(currentWibHour).padStart(2, "0")}:00</span>
-      <span className="tabular-nums">{compactRupiahFormatter.format(periodPoint.NetSales)}</span>
+      <span className="whitespace-nowrap">~ Jam {String(currentWibHour).padStart(2, "0")}:00</span>
+      <span className="tabular-nums">
+        {compactRupiahFormatter.format(previousCumulative.NetSales)}{" "}
+        <span>&middot; {previousCumulative.DOQty.toLocaleString("id-ID")} kantong</span>
+      </span>
       <span>vs</span>
-      <span className="tabular-nums text-foreground">{compactRupiahFormatter.format(todayPoint.NetSales)}</span>
+      <span className="tabular-nums text-foreground">
+        {compactRupiahFormatter.format(currentCumulative.NetSales)}{" "}
+        <span>&middot; {currentCumulative.DOQty.toLocaleString("id-ID")} kantong</span>
+      </span>
       <TrendPill percent={pct} />
     </div>
   );
@@ -116,10 +123,12 @@ export function SalesDayComparisonPanel({
   comparisons,
   todayHourly,
   currentWibHour,
+  currentCumulative,
 }: {
   comparisons: SalesDayComparison[];
   todayHourly: HourlyPoint[];
   currentWibHour: number;
+  currentCumulative: SalesDayPoint;
 }) {
   const current = comparisons[0]?.current;
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -197,7 +206,11 @@ export function SalesDayComparisonPanel({
                     </>
                   )}
                   {!isOpen && (
-                    <CurrentHourPreview periodHourly={c.hourly} todayHourly={todayHourly} currentWibHour={currentWibHour} />
+                    <CurrentHourPreview
+                      previousCumulative={c.previousCumulative}
+                      currentCumulative={currentCumulative}
+                      currentWibHour={currentWibHour}
+                    />
                   )}
                   {isOpen && c.hourly && (
                     <HourlyComparisonTable

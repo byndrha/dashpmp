@@ -90,6 +90,12 @@ export interface SalesDayComparison {
   dateISO: string;
   current: SalesDayPoint;
   previous: SalesDayPoint | null;
+  // This period's own rollover-window (14:00 WIB) cumulative total, capped
+  // at the same WIB wall-clock instant as SalesDayComparisonResult's own
+  // `currentCumulative` — an apples-to-apples "how far were we by this
+  // point" figure, distinct from `previous` (that period's FULL calendar-day
+  // total). null exactly when `previous` is null.
+  previousCumulative: SalesDayPoint | null;
   NominalPctChange: number | null;
   QtyPctChange: number | null;
   // This period's own 24-point WIB-hour breakdown — null exactly when
@@ -103,6 +109,9 @@ export interface SalesDayComparisonResult {
   // Current WIB wall-clock hour (0-23) — hours after this on "today" haven't
   // happened yet, so the UI can show "-" instead of a misleading 0.
   currentWibHour: number;
+  // Cumulative total from the most recent 14:00 WIB rollover to now — the
+  // "periode berjalan" figure behind each row's quick-glance preview line.
+  currentCumulative: SalesDayPoint;
 }
 
 // Same calendar day-of-month `monthsBack` months earlier, clamped to the
@@ -540,10 +549,34 @@ export async function getSalesDayComparison(
   const bulanLalu = sameDayMonthsBack(businessToday, 1);
   const tahunLalu = sameDayMonthsBack(businessToday, 12);
 
+  // "Periode berjalan" — cumulative from the most recent 14:00 WIB rollover
+  // to now, replacing the old single-hour-bucket compare behind each row's
+  // quick-glance preview line. businessToday is a UTC-midnight Date
+  // representing a WIB calendar date D whose window (per getBusinessDate())
+  // is [D-1 14:00 WIB, D 14:00 WIB) — the real UTC instant of that start is
+  // D's UTC-midnight timestamp minus 17h (see resolveBusinessDateTime's
+  // comment in business-date.ts for the same D-1/14:00 relationship).
+  const now = new Date();
+  const currentWindowStart = new Date(businessToday.getTime() - 17 * 60 * 60 * 1000);
+  // Every comparison label's rollover window is the same fixed offset from
+  // its own business-date value, so shifting a label by the gap between it
+  // and businessToday shifts both boundaries identically — giving each
+  // period's window capped at the SAME WIB wall-clock instant as `now`
+  // (apples-to-apples with the still-in-progress current period), not the
+  // full 14:00-to-14:00 span.
+  function cumulativeWindow(label: Date): { lo: Date; hi: Date } {
+    const offsetMs = label.getTime() - businessToday.getTime();
+    return { lo: new Date(currentWindowStart.getTime() + offsetMs), hi: new Date(now.getTime() + offsetMs) };
+  }
+  const cumKemarin = cumulativeWindow(kemarin);
+  const cumPekanLalu = cumulativeWindow(pekanLalu);
+  const cumBulanLalu = cumulativeWindow(bulanLalu);
+  const cumTahunLalu = cumulativeWindow(tahunLalu);
+
   // Lower-bounded by @tahunLalu (the earliest of the four dates) so SQL
   // Server can prune the scan, mirroring getSalesOverview()'s
   // twoYearsAgoMonthStart bound.
-  const [netResult, qtyResult] = await Promise.all([
+  const [netResult, qtyResult, cumNetResult, cumQtyResult] = await Promise.all([
     pool
       .request()
       .input("kemarin", sql.Date, kemarin)
@@ -579,6 +612,56 @@ export async function getSalesDayComparison(
         WHERE do_.IsDeleted = 0
           AND do_.TransDate >= @tahunLalu
       `),
+    // Cumulative rollover-window totals — same 5 windows (current +
+    // 4 comparisons), each an exact [lo, hi) instant range rather than a
+    // calendar-day DATE, hence sql.DateTime params instead of sql.Date.
+    pool
+      .request()
+      .input("curLo", sql.DateTime, currentWindowStart)
+      .input("curHi", sql.DateTime, now)
+      .input("kemarinLo", sql.DateTime, cumKemarin.lo)
+      .input("kemarinHi", sql.DateTime, cumKemarin.hi)
+      .input("pekanLaluLo", sql.DateTime, cumPekanLalu.lo)
+      .input("pekanLaluHi", sql.DateTime, cumPekanLalu.hi)
+      .input("bulanLaluLo", sql.DateTime, cumBulanLalu.lo)
+      .input("bulanLaluHi", sql.DateTime, cumBulanLalu.hi)
+      .input("tahunLaluLo", sql.DateTime, cumTahunLalu.lo)
+      .input("tahunLaluHi", sql.DateTime, cumTahunLalu.hi)
+      .query(`
+        SELECT
+            ISNULL(SUM(CASE WHEN TransDate >= @curLo AND TransDate < @curHi THEN Netto ELSE 0 END), 0) AS CurrentNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @kemarinLo AND TransDate < @kemarinHi THEN Netto ELSE 0 END), 0) AS KemarinCumNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @pekanLaluLo AND TransDate < @pekanLaluHi THEN Netto ELSE 0 END), 0) AS PekanLaluCumNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @bulanLaluLo AND TransDate < @bulanLaluHi THEN Netto ELSE 0 END), 0) AS BulanLaluCumNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @tahunLaluLo AND TransDate < @tahunLaluHi THEN Netto ELSE 0 END), 0) AS TahunLaluCumNet
+        FROM SalesInvoice
+        WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
+          AND TransDate >= @tahunLaluLo
+      `),
+    pool
+      .request()
+      .input("curLo", sql.DateTime, currentWindowStart)
+      .input("curHi", sql.DateTime, now)
+      .input("kemarinLo", sql.DateTime, cumKemarin.lo)
+      .input("kemarinHi", sql.DateTime, cumKemarin.hi)
+      .input("pekanLaluLo", sql.DateTime, cumPekanLalu.lo)
+      .input("pekanLaluHi", sql.DateTime, cumPekanLalu.hi)
+      .input("bulanLaluLo", sql.DateTime, cumBulanLalu.lo)
+      .input("bulanLaluHi", sql.DateTime, cumBulanLalu.hi)
+      .input("tahunLaluLo", sql.DateTime, cumTahunLalu.lo)
+      .input("tahunLaluHi", sql.DateTime, cumTahunLalu.hi)
+      .query(`
+        SELECT
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @curLo AND do_.TransDate < @curHi THEN dod.Delivered ELSE 0 END), 0) AS CurrentQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @kemarinLo AND do_.TransDate < @kemarinHi THEN dod.Delivered ELSE 0 END), 0) AS KemarinCumQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @pekanLaluLo AND do_.TransDate < @pekanLaluHi THEN dod.Delivered ELSE 0 END), 0) AS PekanLaluCumQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @bulanLaluLo AND do_.TransDate < @bulanLaluHi THEN dod.Delivered ELSE 0 END), 0) AS BulanLaluCumQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @tahunLaluLo AND do_.TransDate < @tahunLaluHi THEN dod.Delivered ELSE 0 END), 0) AS TahunLaluCumQty
+        FROM DeliveryOrder do_
+        JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= @tahunLaluLo
+      `),
   ]);
 
   const net = netResult.recordset[0] as {
@@ -593,6 +676,21 @@ export async function getSalesDayComparison(
     BulanLaluQty: number;
     TahunLaluQty: number;
   };
+  const cumNet = cumNetResult.recordset[0] as {
+    CurrentNet: number;
+    KemarinCumNet: number;
+    PekanLaluCumNet: number;
+    BulanLaluCumNet: number;
+    TahunLaluCumNet: number;
+  };
+  const cumQty = cumQtyResult.recordset[0] as {
+    CurrentQty: number;
+    KemarinCumQty: number;
+    PekanLaluCumQty: number;
+    BulanLaluCumQty: number;
+    TahunLaluCumQty: number;
+  };
+  const currentCumulative: SalesDayPoint = { NetSales: cumNet.CurrentNet, DOQty: cumQty.CurrentQty };
 
   const current: SalesDayPoint = { NetSales: today.NetSales, DOQty: today.Qty10KG + today.Qty5KG };
 
@@ -611,11 +709,18 @@ export async function getSalesDayComparison(
     new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jakarta", hour: "2-digit", hour12: false }).format(new Date())
   ) % 24;
 
-  const buildDay = (label: string, date: Date, key: string, previous: SalesDayPoint | null): SalesDayComparison => ({
+  const buildDay = (
+    label: string,
+    date: Date,
+    key: string,
+    previous: SalesDayPoint | null,
+    previousCumulative: SalesDayPoint | null
+  ): SalesDayComparison => ({
     label,
     dateISO: date.toISOString().slice(0, 10),
     current,
     previous,
+    previousCumulative,
     NominalPctChange: previous ? pctChange(current.NetSales, previous.NetSales) : null,
     QtyPctChange: previous ? pctChange(current.DOQty, previous.DOQty) : null,
     hourly: previous ? (hourly.get(key) ?? null) : null,
@@ -623,17 +728,28 @@ export async function getSalesDayComparison(
 
   return {
     comparisons: [
-      buildDay("Kemarin", kemarin, "kemarin", { NetSales: net.KemarinNet, DOQty: qty.KemarinQty }),
+      buildDay("Kemarin", kemarin, "kemarin", { NetSales: net.KemarinNet, DOQty: qty.KemarinQty }, {
+        NetSales: cumNet.KemarinCumNet,
+        DOQty: cumQty.KemarinCumQty,
+      }),
       buildDay(
         "Pekan Lalu",
         pekanLalu,
         "pekanLalu",
-        pekanLaluAvailable ? { NetSales: net.PekanLaluNet, DOQty: qty.PekanLaluQty } : null
+        pekanLaluAvailable ? { NetSales: net.PekanLaluNet, DOQty: qty.PekanLaluQty } : null,
+        pekanLaluAvailable ? { NetSales: cumNet.PekanLaluCumNet, DOQty: cumQty.PekanLaluCumQty } : null
       ),
-      buildDay("Bulan Lalu", bulanLalu, "bulanLalu", { NetSales: net.BulanLaluNet, DOQty: qty.BulanLaluQty }),
-      buildDay("Tahun Lalu", tahunLalu, "tahunLalu", { NetSales: net.TahunLaluNet, DOQty: qty.TahunLaluQty }),
+      buildDay("Bulan Lalu", bulanLalu, "bulanLalu", { NetSales: net.BulanLaluNet, DOQty: qty.BulanLaluQty }, {
+        NetSales: cumNet.BulanLaluCumNet,
+        DOQty: cumQty.BulanLaluCumQty,
+      }),
+      buildDay("Tahun Lalu", tahunLalu, "tahunLalu", { NetSales: net.TahunLaluNet, DOQty: qty.TahunLaluQty }, {
+        NetSales: cumNet.TahunLaluCumNet,
+        DOQty: cumQty.TahunLaluCumQty,
+      }),
     ],
     todayHourly: hourly.get("today") ?? [],
     currentWibHour,
+    currentCumulative,
   };
 }

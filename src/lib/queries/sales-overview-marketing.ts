@@ -89,6 +89,10 @@ export async function getSalesDayComparisonForMarketing(marketingUserId: string)
           dateISO: date.toISOString().slice(0, 10),
           current: zeroPoint,
           previous: zeroPoint,
+          // Not rendered by this scope's own beranda-tab.tsx (unlike the
+          // MKEsindo panel this mirrors) — zeroPoint keeps the shared type
+          // satisfied without computing a real rollover-window query here.
+          previousCumulative: zeroPoint,
           NominalPctChange: null,
           QtyPctChange: null,
           hourly: zeroHourly(),
@@ -96,6 +100,7 @@ export async function getSalesDayComparisonForMarketing(marketingUserId: string)
       ),
       todayHourly: zeroHourly(),
       currentWibHour: currentWibHour(),
+      currentCumulative: zeroPoint,
     };
   }
 
@@ -197,6 +202,7 @@ export async function getSalesDayComparisonForMarketing(marketingUserId: string)
         dateISO: date.toISOString().slice(0, 10),
         current: todayResult.point,
         previous: null,
+        previousCumulative: null,
         NominalPctChange: null,
         QtyPctChange: null,
         hourly: null,
@@ -207,6 +213,10 @@ export async function getSalesDayComparisonForMarketing(marketingUserId: string)
       dateISO: date.toISOString().slice(0, 10),
       current: todayResult.point,
       previous: result.point,
+      // Not rendered by this scope's own beranda-tab.tsx — see the
+      // mitraIds.length === 0 branch's comment above for why this stays a
+      // placeholder instead of a real rollover-window query.
+      previousCumulative: zeroPoint,
       NominalPctChange: pctChange(todayResult.point.NetSales, result.point.NetSales),
       QtyPctChange: pctChange(todayResult.point.DOQty, result.point.DOQty),
       hourly: result.hourly,
@@ -222,5 +232,6 @@ export async function getSalesDayComparisonForMarketing(marketingUserId: string)
     ],
     todayHourly: todayResult.hourly ?? zeroHourly(),
     currentWibHour: currentWibHour(),
+    currentCumulative: zeroPoint,
   };
 }
