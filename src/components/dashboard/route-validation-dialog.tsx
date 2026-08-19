@@ -1147,9 +1147,6 @@ export function RouteValidationDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <Button size="sm" variant="outline" className="shrink-0" disabled={pending} onClick={handleSaveDriverTime}>
-                  Simpan
-                </Button>
               </div>
             ) : null}
 
@@ -1158,6 +1155,9 @@ export function RouteValidationDialog({
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
                     Batalkan Draft
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={handleSaveDriverTime}>
+                    Simpan
                   </Button>
                   {jadwal?.JamMulaiMuat == null ? (
                     <Button
