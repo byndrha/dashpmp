@@ -19,6 +19,7 @@ import { PERUSAHAAN_STATUSES, type PerusahaanStatus, PERUSAHAAN_JENIS_BISNIS, ty
 import type { PerusahaanRow, PerusahaanInput } from "@/lib/queries/perusahaan";
 import type { PerusahaanDirektoriOption } from "@/lib/queries/akun";
 import type { KoneksiRow, UpsertKoneksiInput } from "@/lib/queries/perusahaan-koneksi";
+import type { GDriveKoneksiRow } from "@/lib/queries/perusahaan-gdrive";
 
 const STATUS_LABEL: Record<PerusahaanStatus, string> = {
   Draft: "Draft",
@@ -84,8 +85,10 @@ export function PerusahaanFormDialog({
   allRows,
   perusahaanDirektoriOptions,
   existingKoneksi,
+  existingGDrive,
   onOpenChange,
   onSubmit,
+  onDisconnectGDrive,
   pending,
   error,
 }: {
@@ -93,8 +96,10 @@ export function PerusahaanFormDialog({
   allRows: PerusahaanRow[];
   perusahaanDirektoriOptions: PerusahaanDirektoriOption[];
   existingKoneksi: KoneksiRow[];
+  existingGDrive: GDriveKoneksiRow[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: PerusahaanInput, koneksiBlocks: UpsertKoneksiInput[]) => void;
+  onDisconnectGDrive: (perusahaanId: number) => void;
   pending: boolean;
   error: string | null;
 }) {
@@ -341,6 +346,35 @@ export function PerusahaanFormDialog({
                 );
               })}
           </fieldset>
+
+          {direktoriId != null && (
+            <fieldset className="flex flex-col gap-2 rounded-lg border p-3">
+              <legend className="px-1 text-xs font-medium text-muted-foreground">Google Drive</legend>
+              {(() => {
+                const connected = existingGDrive.find((g) => g.perusahaanId === direktoriId);
+                if (!connected) {
+                  return (
+                    <a
+                      href={`/api/gdrive/oauth/start?perusahaanId=${direktoriId}`}
+                      className="inline-flex w-fit items-center rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-secondary"
+                    >
+                      Hubungkan Google Drive
+                    </a>
+                  );
+                }
+                return (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span>
+                      Terhubung: <span className="font-medium">{connected.connectedEmail}</span>
+                    </span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onDisconnectGDrive(direktoriId)}>
+                      Putuskan
+                    </Button>
+                  </div>
+                );
+              })()}
+            </fieldset>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="catatan">Catatan</Label>

@@ -8,12 +8,14 @@ import { cn } from "@/lib/utils";
 import type { PerusahaanRow, PerusahaanStatus, PerusahaanInput } from "@/lib/queries/perusahaan";
 import type { PerusahaanDirektoriOption } from "@/lib/queries/akun";
 import type { KoneksiRow, UpsertKoneksiInput } from "@/lib/queries/perusahaan-koneksi";
+import type { GDriveKoneksiRow } from "@/lib/queries/perusahaan-gdrive";
 import { PerusahaanFormDialog } from "@/components/dashboard/perusahaan-form-dialog";
 import {
   createPerusahaanAction,
   updatePerusahaanAction,
   deletePerusahaanAction,
   upsertKoneksiAction,
+  disconnectGDriveAction,
 } from "@/app/grup/perusahaan/actions";
 
 const STATUS_BADGE: Record<PerusahaanStatus, string> = {
@@ -32,10 +34,12 @@ export function PerusahaanList({
   rows,
   perusahaanDirektoriOptions,
   koneksi,
+  gdriveKoneksi,
 }: {
   rows: PerusahaanRow[];
   perusahaanDirektoriOptions: PerusahaanDirektoriOption[];
   koneksi: KoneksiRow[];
+  gdriveKoneksi: GDriveKoneksiRow[];
 }) {
   const [target, setTarget] = useState<PerusahaanRow | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +76,16 @@ export function PerusahaanList({
     if (!confirm(`Hapus PT "${row.Nama}"? Tindakan ini tidak dapat dibatalkan.`)) return;
     startTransition(async () => {
       const result = await deletePerusahaanAction(row.PerusahaanID);
+      if (!result.success) {
+        alert(result.error);
+      }
+    });
+  }
+
+  function handleDisconnectGDrive(perusahaanId: number) {
+    if (!confirm("Putuskan koneksi Google Drive? Upload/baca file untuk PT ini akan berhenti sampai dihubungkan ulang.")) return;
+    startTransition(async () => {
+      const result = await disconnectGDriveAction(perusahaanId);
       if (!result.success) {
         alert(result.error);
       }
@@ -151,8 +165,10 @@ export function PerusahaanList({
         allRows={rows}
         perusahaanDirektoriOptions={perusahaanDirektoriOptions}
         existingKoneksi={koneksi}
+        existingGDrive={gdriveKoneksi}
         onOpenChange={(open) => !open && setTarget(null)}
         onSubmit={handleSubmit}
+        onDisconnectGDrive={handleDisconnectGDrive}
         pending={pending}
         error={error}
       />

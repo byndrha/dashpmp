@@ -5,6 +5,7 @@ import { requireGrupAccess } from "@/lib/require-access";
 import { createPerusahaan, updatePerusahaan, softDeletePerusahaan, type PerusahaanInput } from "@/lib/queries/perusahaan";
 import { PERUSAHAAN_JENIS_BISNIS } from "@/lib/perusahaan-status";
 import { upsertKoneksi, deleteKoneksi, type UpsertKoneksiInput } from "@/lib/queries/perusahaan-koneksi";
+import { deleteGDriveKoneksi } from "@/lib/queries/perusahaan-gdrive";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 function assertValid(input: PerusahaanInput) {
@@ -63,6 +64,14 @@ export async function deleteKoneksiAction(id: number): Promise<ActionResult<void
   return runAction(async () => {
     await requireGrupAccess();
     await deleteKoneksi(id);
+    revalidatePath("/grup/perusahaan");
+  });
+}
+
+export async function disconnectGDriveAction(perusahaanId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    await deleteGDriveKoneksi(perusahaanId);
     revalidatePath("/grup/perusahaan");
   });
 }

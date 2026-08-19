@@ -2,14 +2,16 @@ import { requireGrupAccess } from "@/lib/require-access";
 import { listPerusahaan } from "@/lib/queries/perusahaan";
 import { listPerusahaanDirektori } from "@/lib/queries/akun";
 import { listAllKoneksi } from "@/lib/queries/perusahaan-koneksi";
+import { listAllGDriveKoneksi } from "@/lib/queries/perusahaan-gdrive";
 import { PerusahaanList } from "@/components/dashboard/perusahaan-list";
 
 export default async function PerusahaanPage() {
   await requireGrupAccess();
-  const [rows, perusahaanDirektoriOptions, koneksi] = await Promise.all([
+  const [rows, perusahaanDirektoriOptions, koneksi, gdriveKoneksi] = await Promise.all([
     listPerusahaan(),
     listPerusahaanDirektori(),
     listAllKoneksi(),
+    listAllGDriveKoneksi(),
   ]);
 
   return (
@@ -19,7 +21,12 @@ export default async function PerusahaanPage() {
         Registry PT — tautkan ke Perusahaan (Postgres) untuk mengatur koneksi database yang benar-benar dipakai
         dashboard.
       </p>
-      <PerusahaanList rows={rows} perusahaanDirektoriOptions={perusahaanDirektoriOptions} koneksi={koneksi} />
+      <PerusahaanList
+        rows={rows}
+        perusahaanDirektoriOptions={perusahaanDirektoriOptions}
+        koneksi={koneksi}
+        gdriveKoneksi={gdriveKoneksi}
+      />
     </div>
   );
 }
