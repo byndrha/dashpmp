@@ -70,11 +70,7 @@ const MIN_CARD_WIDTH = 92;
 const INFO_COL_WIDTH = 224;
 const DATE_SEGMENT_HEIGHT = 20;
 const HOUR_RULER_HEIGHT = 20;
-// +12 over the original 56px to fit DraggableJadwalCard's new Lokasi
-// Terjauh line — applied uniformly to every card type sharing this lane
-// height (ArmadaActivityCard, ExternalDoCard, DriverBlock, AutoSegmentCard),
-// which only centers a bit more empty space around their own shorter content.
-const CARD_HEIGHT = 68;
+const CARD_HEIGHT = 56;
 const CARD_GAP = 4;
 const ROW_TOP_PADDING = 8;
 
@@ -150,26 +146,36 @@ function useContainerWidth<T extends HTMLElement>(): [React.RefObject<T | null>,
   return [ref, width];
 }
 
-// Measures an element's own rendered height on mount and on resize — mirrors
-// useContainerWidth above. Used to offset the sticky timeline header block
-// beneath the sticky CardHeader, whose height varies as its button/
-// date-picker row wraps to a second line on narrow viewports.
-function useElementHeight<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
-  const ref = useRef<T | null>(null);
-  const [height, setHeight] = useState(48);
-
+// Keeps followerRef's sticky `top` pinned exactly to anchorRef's current
+// bottom edge (both read live via getBoundingClientRect, viewport-relative)
+// — stacks the timeline header directly below the sticky CardHeader with no
+// gap. Deliberately NOT "measure CardHeader's height once, then compute
+// top-14 + height": that approach drifted out of sync with the header's
+// real rendered height (e.g. when its button/date-picker row wraps to a
+// second line on a narrower viewport), leaving a visible blank gap between
+// the two sticky bars. Reading the anchor's actual live bottom edge on every
+// scroll/resize is self-correcting instead — whatever height CardHeader
+// ends up at, the follower always lands exactly at its bottom edge. Writes
+// directly to the DOM (no React state) to stay cheap on scroll.
+function useStickyBelow(anchorRef: React.RefObject<HTMLElement | null>, followerRef: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const h = entries[0]?.contentRect.height;
-      if (h) setHeight(h);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  return [ref, height];
+    function sync() {
+      const anchor = anchorRef.current;
+      const follower = followerRef.current;
+      if (!anchor || !follower) return;
+      follower.style.top = `${anchor.getBoundingClientRect().bottom}px`;
+    }
+    sync();
+    window.addEventListener("scroll", sync, { passive: true });
+    window.addEventListener("resize", sync);
+    const resizeObserver = new ResizeObserver(sync);
+    if (anchorRef.current) resizeObserver.observe(anchorRef.current);
+    return () => {
+      window.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+      resizeObserver.disconnect();
+    };
+  }, [anchorRef, followerRef]);
 }
 
 function CreateJadwalDialog({
@@ -566,10 +572,15 @@ function DraggableJadwalCard({
         <span className="text-sm font-bold tabular-nums">{j.TotalKantong}</span>
         <span className="text-[8px] text-muted-foreground">kantong</span>
       </div>
-      <p className="text-center text-[9px] tabular-nums text-muted-foreground">{j.TotalStop} tujuan</p>
-      {lokasiTerjauh && (
-        <p className="truncate text-center text-[8px] text-muted-foreground/80">{lokasiTerjauh}</p>
-      )}
+      {/* Kept on the SAME line as "N tujuan" (not its own 4th line) — a
+          standalone line at this card's tiny fixed height either clipped
+          silently against overflow-hidden or forced the whole card taller,
+          so this stayed reachable only via the button's title tooltip.
+          One truncated line, always in the DOM whenever there's a farthest
+          stop, is the concise, always-visible fix the user asked for. */}
+      <p className="truncate text-center text-[9px] tabular-nums text-muted-foreground">
+        {j.TotalStop} tujuan{lokasiTerjauh ? ` · ${lokasiTerjauh}` : ""}
+      </p>
     </button>
   );
 }
@@ -1337,7 +1348,9 @@ export function PengirimanBoard({
   const [salesOrderEditSignal, setSalesOrderEditSignal] = useState(0);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
-  const [cardHeaderRef, cardHeaderHeight] = useElementHeight<HTMLDivElement>();
+  const cardHeaderRef = useRef<HTMLDivElement>(null);
+  const timelineHeaderRef = useRef<HTMLDivElement>(null);
+  useStickyBelow(cardHeaderRef, timelineHeaderRef);
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
   const dayWidth = hourWidth * 24;
 
@@ -1533,14 +1546,16 @@ export function PengirimanBoard({
                   ROLLOVER_HOUR in business-date.ts) — so it spans two
                   actual calendar dates, called out here since the hour
                   numbers alone (14..23, 00..13) don't make that obvious.
-                  Sticky below the sticky CardHeader (offset by its measured
-                  height) so both stay pinned together while the armada
-                  rows scroll underneath; w-fit keeps its background
-                  covering the full scrollable width, not just the
-                  viewport-visible slice. */}
+                  Sticky directly below the sticky CardHeader — top is
+                  synced live to CardHeader's own bottom edge (useStickyBelow
+                  above), not a precomputed height, so both stay pinned
+                  together with no gap while the armada rows scroll
+                  underneath; w-fit keeps its background covering the full
+                  scrollable width, not just the viewport-visible slice. */}
               <div
+                ref={timelineHeaderRef}
                 className="sticky z-20 w-fit border-b bg-card"
-                style={{ top: `calc(3.5rem + ${cardHeaderHeight}px)` }}
+                style={{ top: "7rem" }}
               >
                 <div className="flex items-stretch">
                   <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
