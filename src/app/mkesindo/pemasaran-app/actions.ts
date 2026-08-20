@@ -1,7 +1,7 @@
 "use server";
 
 import { requireMarketing } from "@/lib/require-access";
-import { getVisitLogStatusForMarketing, type VisitLogStatusRow } from "@/lib/queries/marketing-visit-log-status";
+import { getVisitLogStatusForMarketing } from "@/lib/queries/marketing-visit-log-status";
 import { getSalesDayComparisonForMarketing } from "@/lib/queries/sales-overview-marketing";
 import { getMarketingVisitLogForDate, saveMarketingVisitLog, type MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
 import {
@@ -98,13 +98,6 @@ export async function getKinerjaMarketingTrendAction(
       performance: { ...performanceFull, rows: performanceFull.rows.filter((r) => r.MarketingUserID === session.user.id) },
       pangsaPasar: { ...pangsaPasarFull, rows: pangsaPasarFull.rows.filter((r) => r.MarketingUserID === session.user.id) },
     };
-  });
-}
-
-export async function getVisitLogStatusAction(dateISO: string): Promise<ActionResult<VisitLogStatusRow[]>> {
-  return runAction(async () => {
-    const session = await requireMarketing();
-    return getVisitLogStatusForMarketing(session.user.id, dateISO);
   });
 }
 

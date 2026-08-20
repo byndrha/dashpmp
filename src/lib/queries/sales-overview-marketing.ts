@@ -4,7 +4,7 @@ import {
   getMarketingWilayahAssignments,
   getMarketingMitraAssignments,
   resolveResponsibleMarketing,
-  buildMitraOverrideMap,
+  resolveMitraOverrides,
 } from "@/lib/queries/marketing-wilayah";
 import { getBusinessDate } from "@/lib/business-date";
 
@@ -24,7 +24,9 @@ async function resolveMitraIdsForMarketing(marketingUserId: string): Promise<str
     getMarketingWilayahAssignments(),
     getMarketingMitraAssignments(),
   ]);
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  // Merged crossWilayah + prioritas overrides — same resolution
+  // getMarketingPerformance() uses.
+  const mitraOverrides = await resolveMitraOverrides(assignments);
   const ownName =
     assignments.find((a) => a.MarketingUserID === marketingUserId)?.MarketingNama ??
     mitraAssignments.find((a) => a.MarketingUserID === marketingUserId)?.MarketingNama;

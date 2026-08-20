@@ -6,13 +6,19 @@ import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
 import { createSalesOrderFromPengajuan } from "@/lib/queries/sales-order";
 import { MARKETING_ROLE_ID, APPROVER_ROLE_IDS } from "@/lib/roles";
+import { AGEN_QTY_THRESHOLD, RPA_QTY_THRESHOLD } from "@/lib/mitra-classification";
 import { AppError } from "@/lib/action-result";
 
-// qty <= 10 -> Outlet (Gender "Female"), 10 < qty <= 100 -> Agen (Gender
-// "Male"), qty > 100 -> RPA (Gender "Other") — see PARTNER_TYPE_CASE in
-// aging.ts for the Gender->PartnerType mapping this feeds into.
-const AGEN_QTY_THRESHOLD = 10;
-const RPA_QTY_THRESHOLD = 100;
+// qty <= AGEN_QTY_THRESHOLD -> Outlet (Gender "Female"), AGEN_QTY_THRESHOLD <
+// qty <= RPA_QTY_THRESHOLD -> Agen (Gender "Male"), qty > RPA_QTY_THRESHOLD
+// -> RPA (Gender "Other") — see PARTNER_TYPE_CASE in aging.ts for the
+// Gender->PartnerType mapping this feeds into. Thresholds live in
+// lib/mitra-classification.ts (a plain, DB-import-free module) rather than
+// here, so pengajuan-sub-tab.tsx's client-side classifyPartnerType() can
+// import them directly without pulling this file's server-only mssql/pg
+// code into the client bundle — re-exported below for server-side callers
+// that already import other constants from this file.
+export { AGEN_QTY_THRESHOLD, RPA_QTY_THRESHOLD };
 
 export { MARKETING_ROLE_ID, APPROVER_ROLE_IDS };
 

@@ -4,9 +4,8 @@ import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
 import {
   getMarketingUsers,
   getMarketingWilayahAssignments,
-  getMarketingMitraAssignments,
   resolveResponsibleMarketing,
-  buildMitraOverrideMap,
+  resolveMitraOverrides,
 } from "@/lib/queries/marketing-wilayah";
 import type { MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 
@@ -63,10 +62,9 @@ export async function getPangsaPasarTrend(
   const pool = await getPool();
   const monthStarts = performanceTrend.months.map((iso) => new Date(iso));
 
-  const [assignments, marketingUsers, mitraAssignments, mitraResult] = await Promise.all([
+  const [assignments, marketingUsers, mitraResult] = await Promise.all([
     getMarketingWilayahAssignments(),
     getMarketingUsers(),
-    getMarketingMitraAssignments(),
     pool.request().query(`
       SELECT
           BusinessPartnerID,
@@ -78,7 +76,7 @@ export async function getPangsaPasarTrend(
       WHERE ISNULL(IsDeleted, 0) = 0
     `),
   ]);
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  const mitraOverrides = await resolveMitraOverrides(assignments);
   const marketingByName = new Map(marketingUsers.map((u) => [u.Nama, u]));
 
   const mitraMeta: MitraMeta[] = (

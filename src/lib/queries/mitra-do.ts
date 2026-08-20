@@ -4,9 +4,8 @@ import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
 import { getMitraList, getPriceLevelOptions } from "@/lib/queries/mitra";
 import {
   getMarketingWilayahAssignments,
-  getMarketingMitraAssignments,
   resolveResponsibleMarketing,
-  buildMitraOverrideMap,
+  resolveMitraOverrides,
 } from "@/lib/queries/marketing-wilayah";
 import type { PartnerType, DateRangeFilter } from "@/types/dashboard";
 
@@ -78,7 +77,7 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
   const daysInRange = Math.max(1, Math.round((rangeEnd.getTime() - rangeStart.getTime()) / 86400000));
   const todayISO = getBusinessDateISO();
 
-  const [dailyResult, priceLevels, allMitra, marketingAssignments, mitraAssignments] = await Promise.all([
+  const [dailyResult, priceLevels, allMitra, marketingAssignments] = await Promise.all([
     pool
       .request()
       .input("rangeStart", sql.Date, rangeStart)
@@ -106,10 +105,9 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
     getPriceLevelOptions(),
     getMitraList(),
     getMarketingWilayahAssignments(),
-    getMarketingMitraAssignments(),
   ]);
 
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  const mitraOverrides = await resolveMitraOverrides(marketingAssignments);
   const priceByLevel = new Map(priceLevels.map((p) => [p.Level, p.Price]));
   const rows = dailyResult.recordset as RawDailyRow[];
 

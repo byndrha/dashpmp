@@ -3,10 +3,8 @@ import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import {
   getMarketingUsers,
   getMarketingWilayahAssignments,
-  getMarketingMitraAssignments,
   resolveResponsibleMarketing,
-  buildMitraOverrideMap,
-  getCrossWilayahProposalOverrides,
+  resolveMitraOverrideSources,
 } from "@/lib/queries/marketing-wilayah";
 import { getMonthlyCapacitySnapshot } from "@/lib/queries/mitra-capacity-snapshot";
 import { getArmadaNooDailyCapacity } from "@/lib/queries/armada-noo-target";
@@ -78,10 +76,9 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
   const earliestMonthStart = monthStarts[0];
   const rangeEnd = monthBoundary(currentMonthStart, 1);
 
-  const [assignments, marketingUsers, mitraAssignments, mitraResult, dailyResult] = await Promise.all([
+  const [assignments, marketingUsers, mitraResult, dailyResult] = await Promise.all([
     getMarketingWilayahAssignments(),
     getMarketingUsers(),
-    getMarketingMitraAssignments(),
     pool.request().query(`
       SELECT
           BusinessPartnerID,
@@ -109,11 +106,10 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
       `),
   ]);
 
-  const crossWilayahOverrides = await getCrossWilayahProposalOverrides(assignments);
-  const prioritasOverrides = buildMitraOverrideMap(mitraAssignments);
-  const mitraOverrides = new Map([...crossWilayahOverrides, ...prioritasOverrides]);
-  // prioritasOverrides/crossWilayahOverrides stay in scope below (not just
-  // the merged mitraOverrides) for Task 3's per-row display flags.
+  // Single shared source for the crossWilayah/prioritas merge (and the
+  // per-source breakdown Task 3's IsCrossWilayahProposal flag needs below)
+  // — see resolveMitraOverrideSources() in marketing-wilayah.ts.
+  const { crossWilayahOverrides, prioritasOverrides, merged: mitraOverrides } = await resolveMitraOverrideSources(assignments);
   const marketingByName = new Map(marketingUsers.map((u) => [u.Nama, u]));
 
   const mitraMeta = new Map<string, MitraMeta>();
@@ -172,8 +168,12 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
 
     for (const meta of mitraMeta.values()) {
       if (!meta.MarketingUserID) continue;
-      if (meta.JoinDate == null || new Date(meta.JoinDate).getTime() >= nextMonthStart.getTime()) continue;
-      const isNoo = new Date(meta.JoinDate).getTime() >= monthStart.getTime() || meta.IsCrossWilayahProposal;
+      // A cross-wilayah-proposed mitra is permanently NOO regardless of
+      // JoinDate (per the accepted design), so it must never be skipped by
+      // the null/future-JoinDate guard below — that guard only applies to
+      // non-cross-wilayah mitra, for whom JoinDate is the sole NOO signal.
+      if (!meta.IsCrossWilayahProposal && (meta.JoinDate == null || new Date(meta.JoinDate).getTime() >= nextMonthStart.getTime())) continue;
+      const isNoo = meta.IsCrossWilayahProposal || (meta.JoinDate != null && new Date(meta.JoinDate).getTime() >= monthStart.getTime());
       const actual = actualByMitraMonth.get(meta.BusinessPartnerID)?.get(monthStartISO) ?? 0;
       const capacity = snapshot.get(meta.BusinessPartnerID) ?? 0;
 

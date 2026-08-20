@@ -2,9 +2,8 @@ import { getPool, sql } from "@/lib/db";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
 import {
   getMarketingWilayahAssignments,
-  getMarketingMitraAssignments,
   resolveResponsibleMarketing,
-  buildMitraOverrideMap,
+  resolveMitraOverrides,
 } from "@/lib/queries/marketing-wilayah";
 import type { PartnerType } from "@/types/dashboard";
 
@@ -54,7 +53,7 @@ export interface MitraRow {
 
 export async function getMitraList(): Promise<MitraRow[]> {
   const pool = await getPool();
-  const [result, marketingAssignments, mitraAssignments] = await Promise.all([
+  const [result, marketingAssignments] = await Promise.all([
     pool.request().query(`
       SELECT
           bp.BusinessPartnerID,
@@ -84,10 +83,9 @@ export async function getMitraList(): Promise<MitraRow[]> {
       ORDER BY bp.Name
     `),
     getMarketingWilayahAssignments(),
-    getMarketingMitraAssignments(),
   ]);
 
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  const mitraOverrides = await resolveMitraOverrides(marketingAssignments);
   return (result.recordset as Omit<MitraRow, "MarketingNama">[]).map((r) => ({
     ...r,
     MarketingNama: resolveResponsibleMarketing(r.BusinessPartnerID, r.Wilayah, r.Kecamatan, marketingAssignments, mitraOverrides),
@@ -100,7 +98,7 @@ export async function getMitraList(): Promise<MitraRow[]> {
 // call sites only need a handful of fields most of the time.
 export async function getMitraDetail(businessPartnerId: string): Promise<MitraRow | null> {
   const pool = await getPool();
-  const [result, marketingAssignments, mitraAssignments] = await Promise.all([
+  const [result, marketingAssignments] = await Promise.all([
     pool
       .request()
       .input("businessPartnerId", sql.VarChar(16), businessPartnerId)
@@ -132,13 +130,12 @@ export async function getMitraDetail(businessPartnerId: string): Promise<MitraRo
         WHERE ISNULL(bp.IsDeleted, 0) = 0 AND bp.BusinessPartnerID = @businessPartnerId
       `),
     getMarketingWilayahAssignments(),
-    getMarketingMitraAssignments(),
   ]);
 
   const row = (result.recordset as Omit<MitraRow, "MarketingNama">[])[0];
   if (!row) return null;
 
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  const mitraOverrides = await resolveMitraOverrides(marketingAssignments);
   return {
     ...row,
     MarketingNama: resolveResponsibleMarketing(row.BusinessPartnerID, row.Wilayah, row.Kecamatan, marketingAssignments, mitraOverrides),

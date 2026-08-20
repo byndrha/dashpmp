@@ -3,7 +3,7 @@ import {
   getMarketingWilayahAssignments,
   getMarketingMitraAssignments,
   resolveResponsibleMarketing,
-  buildMitraOverrideMap,
+  resolveMitraOverrides,
 } from "@/lib/queries/marketing-wilayah";
 
 export interface VisitLogStatusRow {
@@ -26,7 +26,11 @@ export async function getVisitLogStatusForMarketing(
     getMarketingWilayahAssignments(),
     getMarketingMitraAssignments(),
   ]);
-  const mitraOverrides = buildMitraOverrideMap(mitraAssignments);
+  // Merged crossWilayah + prioritas overrides — same resolution
+  // getMarketingPerformance() uses, so a cross-wilayah-proposed mitra
+  // resolves to its proposing marketing here too (not just the roster it
+  // came from).
+  const mitraOverrides = await resolveMitraOverrides(assignments);
 
   const pool = await getPool();
   const mitraResult = await pool.request().query(`

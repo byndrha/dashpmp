@@ -332,3 +332,30 @@ export async function getCrossWilayahProposalOverrides(
   }
   return overrides;
 }
+
+// Single source of truth for "who owns this mitra" override resolution —
+// every caller that needs the final merged override Map (not the
+// per-source breakdown) should use this instead of assembling the merge
+// itself. Prioritas wins over cross-wilayah on conflict (crossWilayah
+// spread first, prioritas second).
+export async function resolveMitraOverrideSources(assignments: MarketingWilayahAssignment[]): Promise<{
+  crossWilayahOverrides: Map<string, string>;
+  prioritasOverrides: Map<string, string>;
+  merged: Map<string, string>;
+}> {
+  const [mitraAssignments, crossWilayahOverrides] = await Promise.all([
+    getMarketingMitraAssignments(),
+    getCrossWilayahProposalOverrides(assignments),
+  ]);
+  const prioritasOverrides = buildMitraOverrideMap(mitraAssignments);
+  const merged = new Map([...crossWilayahOverrides, ...prioritasOverrides]);
+  return { crossWilayahOverrides, prioritasOverrides, merged };
+}
+
+// Convenience wrapper for callers that only need final ownership
+// resolution, not the per-source breakdown (Task 3's per-row
+// IsCrossWilayahProposal/IsPriorityOverride flags need the breakdown —
+// use resolveMitraOverrideSources for those instead).
+export async function resolveMitraOverrides(assignments: MarketingWilayahAssignment[]): Promise<Map<string, string>> {
+  return (await resolveMitraOverrideSources(assignments)).merged;
+}

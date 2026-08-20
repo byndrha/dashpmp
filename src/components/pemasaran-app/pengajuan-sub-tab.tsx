@@ -13,6 +13,12 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah, formatTime } from "@/lib/format";
 import { getPengajuanListAction, getPriceLevelOptionsAction } from "@/app/mkesindo/pemasaran-app/actions";
 import type { PengajuanRow, PengajuanStatus } from "@/lib/queries/mitra-pengajuan";
+// Value import (not just types) — kept from lib/mitra-classification.ts (a
+// plain, DB-import-free module), NOT from queries/mitra-pengajuan.ts, which
+// pulls in server-only mssql/pg code that would otherwise get bundled into
+// this client component (every other @/lib/queries import in this codebase
+// is type-only for exactly this reason).
+import { AGEN_QTY_THRESHOLD, RPA_QTY_THRESHOLD } from "@/lib/mitra-classification";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 
 const MitraLocationMap = dynamic(
@@ -29,12 +35,9 @@ const STATUS_VARIANT: Record<PengajuanStatus, "default" | "outline" | "destructi
 
 // Mirrors approvePengajuan()'s Gender classification in mitra-pengajuan.ts
 // exactly: qty > RPA_QTY_THRESHOLD -> RPA ("Other"), qty > AGEN_QTY_THRESHOLD
-// -> Agen ("Male"), else Outlet ("Female"). Kept in sync with that file's
-// AGEN_QTY_THRESHOLD/RPA_QTY_THRESHOLD values (10 / 100) rather than
-// importing them, since those constants aren't exported there.
-const AGEN_QTY_THRESHOLD = 10;
-const RPA_QTY_THRESHOLD = 100;
-
+// -> Agen ("Male"), else Outlet ("Female"). Imports the shared thresholds
+// (see the import above) instead of duplicating the literals, so they can
+// never drift apart.
 function classifyPartnerType(qtyKantong: number | null): "Outlet" | "Agen" | "RPA" | null {
   if (qtyKantong == null) return null;
   if (qtyKantong > RPA_QTY_THRESHOLD) return "RPA";

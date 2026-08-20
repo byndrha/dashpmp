@@ -4,10 +4,8 @@ import { getMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import {
   getMarketingUsers,
   getMarketingWilayahAssignments,
-  getMarketingMitraAssignments,
   resolveResponsibleMarketing,
-  buildMitraOverrideMap,
-  getCrossWilayahProposalOverrides,
+  resolveMitraOverrideSources,
 } from "@/lib/queries/marketing-wilayah";
 
 // One (Marketing, Wilayah, Kecamatan) bucket — kept unaggregated (not
@@ -89,19 +87,16 @@ const KINERJA_MARKETING_ROLLOVER_HOUR = 13;
 // included — one with no scope has no mitra to attribute deliveries to, so
 // showing them would just be a confusing all-zero row.
 export async function getMarketingPerformance(): Promise<MarketingPerformanceData> {
-  const [period, assignments, marketingUsers, mitraAssignments] = await Promise.all([
+  const [period, assignments, marketingUsers] = await Promise.all([
     getMarketingPeriodSetting(),
     getMarketingWilayahAssignments(),
     getMarketingUsers(),
-    getMarketingMitraAssignments(),
   ]);
-  const crossWilayahOverrides = await getCrossWilayahProposalOverrides(assignments);
-  const prioritasOverrides = buildMitraOverrideMap(mitraAssignments);
-  // Prioritas wins on conflict — spread crossWilayah first so prioritas
-  // entries overwrite any matching key.
-  const mitraOverrides = new Map([...crossWilayahOverrides, ...prioritasOverrides]);
-  // prioritasOverrides/crossWilayahOverrides stay in scope below (not just
-  // the merged mitraOverrides) for Task 3's per-row display flags.
+  // Single shared source for the crossWilayah/prioritas merge (and the
+  // per-source breakdown Task 3's IsCrossWilayahProposal/IsPriorityOverride
+  // flags need below) — see resolveMitraOverrideSources() in
+  // marketing-wilayah.ts.
+  const { crossWilayahOverrides, prioritasOverrides, merged: mitraOverrides } = await resolveMitraOverrideSources(assignments);
 
   const pool = await getPool();
   const rangeStart = new Date(period.startDate);
