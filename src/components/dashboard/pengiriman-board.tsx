@@ -1665,6 +1665,7 @@ export function PengirimanBoard({
         drivers={drivers}
         armadaId={openArmada?.ArmadaID ?? null}
         armadaNama={openArmada?.Nama ?? null}
+        armadaPlat={openArmada?.PlatNomor ?? null}
         konsumsiBBM={openArmada?.KonsumsiBBM ?? null}
         kapasitasMaks={openArmada?.KapasitasMaks ?? null}
         jenisBBM={openArmada?.JenisBBM ?? null}

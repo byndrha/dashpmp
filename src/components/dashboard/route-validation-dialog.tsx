@@ -103,14 +103,14 @@ function SortableStopRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex items-center gap-2 border-b bg-card px-3 py-2 text-sm last:border-b-0",
+        "flex items-center gap-2 border-b bg-card px-3 py-2.5 text-sm last:border-b-0",
         isDragging && "z-10 opacity-70 shadow-lg"
       )}
     >
       <button type="button" {...attributes} {...listeners} className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
         <GripVertical className="size-4" />
       </button>
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
         {index + 1}
       </span>
       <button
@@ -119,19 +119,24 @@ function SortableStopRow({
         disabled={disabled}
         className="min-w-0 flex-1 text-left hover:underline disabled:cursor-default disabled:hover:no-underline"
       >
-        <p className="truncate font-medium">{detail.CustomerName}</p>
-        <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-          <MapPin className="size-3 shrink-0" />
+        <p className="truncate text-base font-semibold">{detail.CustomerName}</p>
+        <p className="flex items-center gap-1 truncate text-muted-foreground">
+          <MapPin className="size-3.5 shrink-0" />
           {detail.Wilayah}
           {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
         </p>
       </button>
-      <span className="shrink-0 text-right tabular-nums text-muted-foreground">
-        <span className="block">
+      {/* w-24 forces the bonus suffix to wrap onto its own line instead of
+          pushing the row into horizontal overflow (confirmed live: without
+          a cap, this shrink-0 block held its full single-line width and
+          squeezed the name/location button next to it down to nothing on
+          the map+list split layout's narrower list column). */}
+      <span className="w-24 shrink-0 text-right tabular-nums">
+        <span className="font-medium">
           {formatKemasanQty(detail.Qty10KG, detail.Qty5KG)}
           {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
         </span>
-        <span className="block text-[10px]">~{estimateDeliveryMinutes(detail.Qty)} menit</span>
+        <span className="block text-xs text-muted-foreground">~{estimateDeliveryMinutes(detail.Qty)} menit</span>
       </span>
       {detail.Latitude == null && (
         <Badge variant="outline" className="shrink-0 border-destructive/30 text-[10px] text-destructive">
@@ -147,7 +152,7 @@ function SortableStopRow({
           printChecked ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:border-border"
         )}
       >
-        <Printer className="size-3.5" />
+        <Printer className="size-4" />
       </button>
       {onRemove && (
         <button
@@ -156,7 +161,7 @@ function SortableStopRow({
           onClick={() => onRemove(detail)}
           className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
-          <X className="size-3.5" />
+          <X className="size-4" />
         </button>
       )}
     </div>
@@ -170,6 +175,7 @@ export function RouteValidationDialog({
   drivers,
   armadaId,
   armadaNama,
+  armadaPlat,
   konsumsiBBM,
   kapasitasMaks,
   jenisBBM,
@@ -193,6 +199,9 @@ export function RouteValidationDialog({
   // Display-only, for the Share summary text — same ArmadaRow the caller
   // already resolved for konsumsiBBM/kapasitasMaks below.
   armadaNama: string | null;
+  // Display-only, shown in the header next to armadaNama — same ArmadaRow
+  // the caller already resolved (ArmadaRow.PlatNomor).
+  armadaPlat: string | null;
   // Fuel estimate input — the Armada the open Jadwal belongs to, resolved
   // by the caller (JadwalCard itself doesn't carry KonsumsiBBM, ArmadaRow
   // does).
@@ -1012,7 +1021,7 @@ export function RouteValidationDialog({
         <div ref={captureRef}>
         <DialogHeader className="p-4 pb-0">
           <div className="flex items-center justify-between gap-2 pr-8">
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
               Validasi Rute
               {jadwal && (
                 <Badge variant="outline" className={cn("text-[10px]", isDraft ? "border-dashed" : "border-primary/30 text-primary")}>
@@ -1085,20 +1094,15 @@ export function RouteValidationDialog({
             </div>
           </div>
           {jadwal && (
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Truck className="size-3.5" />
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span className="flex items-center gap-1.5 font-semibold">
+                {armadaPlat && <span>{armadaPlat}</span>}
+                <Truck className="size-4 text-muted-foreground" />
                 {armadaNama ?? "Armada"}
               </span>
-              {order.length > 0 && (
-                <span className="flex items-center gap-1">
-                  <Package className="size-3.5" />
-                  {formatKemasanQty(totalQty10KG, totalQty5KG)}
-                  {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
-                </span>
-              )}
+              <span className="text-muted-foreground">({order.length}) Tujuan</span>
               {!isDraft && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 text-muted-foreground">
                   <span className="font-medium text-foreground">{time}</span>
                   {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Tanpa driver"}
                 </span>
@@ -1158,40 +1162,6 @@ export function RouteValidationDialog({
               </div>
             ) : null}
 
-            {isDraft ? (
-              <div className="flex flex-col gap-1.5">
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
-                    Batalkan Draft
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={handleSaveDriverTime}>
-                    Simpan
-                  </Button>
-                  {jadwal?.JamMulaiMuat == null ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1"
-                      disabled={pending || isFutureDate}
-                      onClick={handleMuat}
-                    >
-                      Mulai Muat (Manual)
-                    </Button>
-                  ) : (
-                    <Button size="sm" className="flex-1" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
-                      {pending ? "Memproses..." : "Selesai Muat"}
-                    </Button>
-                  )}
-                </div>
-                {jadwal?.JamMulaiMuat == null && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Jalur utama: isi muatan lewat Aplikasi Produksi. Tombol ini cadangan manual — tidak mengurangi
-                    stok pallet.
-                  </p>
-                )}
-              </div>
-            ) : null}
-
             {isDraft && isFutureDate && (
               <p className="text-xs text-muted-foreground">
                 Keberangkatan ini dijadwalkan untuk {formatDate(businessDate)} — Mulai Muat dan Berangkat baru bisa
@@ -1205,23 +1175,66 @@ export function RouteValidationDialog({
               </p>
             )}
 
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground">
-                Daftar Tujuan ({order.length})
-                {order.length > 0 && (
-                  <span className="ml-2 tabular-nums">
-                    {formatKemasanQty(totalQty10KG, totalQty5KG)}
-                    {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
-                  </span>
-                )}
-              </p>
-              {isDraft && !adding && (
-                <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-xs" disabled={pending} onClick={handleOpenAdd}>
-                  <Plus className="size-3.5" />
-                  Tambahkan
-                </Button>
+            <div className={cn("flex flex-col rounded-lg border", capturing ? "max-h-none overflow-visible" : "max-h-72 overflow-y-auto")}>
+              {loading && <p className="py-6 text-center text-sm text-muted-foreground">Memuat...</p>}
+              {!loading && order.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada SO.</p>
+              )}
+              {!loading && order.length > 0 && (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={order.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
+                    {order.map((d, i) => (
+                      <SortableStopRow
+                        key={d.JadwalDetailID}
+                        detail={d}
+                        index={i}
+                        onEdit={onEditSalesOrder}
+                        disabled={!isDraft}
+                        printChecked={printSelected.has(d.JadwalDetailID)}
+                        onTogglePrint={togglePrint}
+                        onRemove={isDraft ? handleRemoveStop : undefined}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
+
+            {order.length > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2 text-sm">
+                <Package className="size-4 text-primary" />
+                <span className="font-medium">
+                  {formatKemasanQty(totalQty10KG, totalQty5KG)}
+                  {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
+                </span>
+              </div>
+            )}
+
+            {isDraft && (
+              <div className="flex flex-wrap items-center gap-2">
+                {!adding && (
+                  <Button size="sm" variant="ghost" className="gap-1.5" disabled={pending} onClick={handleOpenAdd}>
+                    <Plus className="size-3.5" />
+                    Tambahkan
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
+                  Batalkan Draft
+                </Button>
+                <Button size="sm" variant="outline" disabled={pending} onClick={handleSaveDriverTime}>
+                  Simpan
+                </Button>
+                {jadwal?.JamMulaiMuat == null ? (
+                  <Button size="sm" variant="outline" className="ml-auto" disabled={pending || isFutureDate} onClick={handleMuat}>
+                    Mulai Muat
+                  </Button>
+                ) : (
+                  <Button size="sm" className="ml-auto" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
+                    {pending ? "Memproses..." : "Selesai Muat"}
+                  </Button>
+                )}
+              </div>
+            )}
 
             {isDraft && adding && (
               <div className="flex flex-col gap-2 rounded-lg border p-2" data-capture-hide="true">
@@ -1278,31 +1291,6 @@ export function RouteValidationDialog({
               </div>
             )}
 
-            <div className={cn("flex flex-col rounded-lg border", capturing ? "max-h-none overflow-visible" : "max-h-72 overflow-y-auto")}>
-              {loading && <p className="py-6 text-center text-sm text-muted-foreground">Memuat...</p>}
-              {!loading && order.length === 0 && (
-                <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada SO.</p>
-              )}
-              {!loading && order.length > 0 && (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={order.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
-                    {order.map((d, i) => (
-                      <SortableStopRow
-                        key={d.JadwalDetailID}
-                        detail={d}
-                        index={i}
-                        onEdit={onEditSalesOrder}
-                        disabled={!isDraft}
-                        printChecked={printSelected.has(d.JadwalDetailID)}
-                        onTogglePrint={togglePrint}
-                        onRemove={isDraft ? handleRemoveStop : undefined}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              )}
-            </div>
-
             {printSelected.size > 0 && (
               <Button size="sm" variant="outline" className="gap-1.5" data-capture-hide="true" onClick={handlePrintSelected}>
                 <Printer className="size-3.5" />
@@ -1313,20 +1301,20 @@ export function RouteValidationDialog({
 
             {routeError && <p className="text-xs text-destructive">{routeError}</p>}
             {route && (
-              <div className="flex flex-wrap gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-xs">
+              <div className="flex flex-wrap gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
                 <span className="flex items-center gap-1">
-                  <RouteIcon className="size-3.5 text-muted-foreground" />
+                  <RouteIcon className="size-4 text-muted-foreground" />
                   {route.distanceKm.toLocaleString("id-ID")} km
                 </span>
                 <span className="flex items-center gap-1">
-                  <Clock className="size-3.5 text-muted-foreground" />
+                  <Clock className="size-4 text-muted-foreground" />
                   Tempuh {route.durationMinutes} + Bongkar {Math.round(bongkarTotalMenit)} + Konfirmasi{" "}
                   {konfirmasiTotalMenit} = {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)}{" "}
                   menit
                 </span>
                 {totalFuelLiters != null && (
                   <span className="flex items-center gap-1">
-                    <Fuel className="size-3.5 text-muted-foreground" />
+                    <Fuel className="size-4 text-muted-foreground" />
                     {totalFuelLiters.toLocaleString("id-ID")} L
                     {jenisBBM && ` (${jenisBBM})`}
                   </span>
@@ -1337,13 +1325,13 @@ export function RouteValidationDialog({
                 {extraFuelCost != null && (
                   <span className="flex items-center gap-1 text-muted-foreground">
                     + {formatRupiah(extraFuelCost)}
-                    <span className="text-[10px]">(BBM tambahan)</span>
+                    <span className="text-xs">(BBM tambahan)</span>
                   </span>
                 )}
                 {totalFuelCostWithExtra != null && (
                   <span className="flex items-center gap-1 font-semibold text-primary">
                     = {formatRupiah(totalFuelCostWithExtra)}
-                    <span className="text-[10px] font-normal text-muted-foreground">(Total, dibulatkan)</span>
+                    <span className="text-xs font-normal text-muted-foreground">(Total, dibulatkan)</span>
                   </span>
                 )}
               </div>
