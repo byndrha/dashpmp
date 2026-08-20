@@ -1351,8 +1351,41 @@ export function PengirimanBoard({
   const cardHeaderRef = useRef<HTMLDivElement>(null);
   const timelineHeaderRef = useRef<HTMLDivElement>(null);
   useStickyBelow(cardHeaderRef, timelineHeaderRef);
+  // The date/hour header used to live INSIDE containerRef (the armada rows'
+  // own overflow-x-auto scroller) so it could ride that element's native
+  // horizontal scroll for free. Confirmed live (getBoundingClientRect on
+  // both, before/after scrolling) that this broke its position:sticky
+  // entirely: containerRef's overflow-x-auto still gets treated as this
+  // header's nearest scrolling ancestor even with overflow-y-visible set
+  // alongside it, so instead of clamping at its `top`, it just scrolled
+  // away with the page like a static element — while the sticky CardHeader
+  // right above it, which sits OUTSIDE containerRef, worked correctly the
+  // whole time. Fix: the header now lives as a plain sibling of
+  // containerRef (outside its scroll context, so its own sticky is
+  // unaffected), with its date/hour cells in their OWN small
+  // overflow-x-auto strip whose scrollLeft is mirrored bidirectionally
+  // with containerRef below — same technique as mitra-do-panel.tsx's
+  // header/body split.
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const syncingTimelineScrollRef = useRef(false);
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
   const dayWidth = hourWidth * 24;
+
+  function handleContainerScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (syncingTimelineScrollRef.current) return;
+    if (!timelineScrollRef.current) return;
+    syncingTimelineScrollRef.current = true;
+    timelineScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    syncingTimelineScrollRef.current = false;
+  }
+
+  function handleTimelineScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (syncingTimelineScrollRef.current) return;
+    if (!containerRef.current) return;
+    syncingTimelineScrollRef.current = true;
+    containerRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    syncingTimelineScrollRef.current = false;
+  }
 
   const jadwalByArmada = useMemo(() => {
     const map = new Map<number, JadwalCardData[]>();
@@ -1534,86 +1567,94 @@ export function PengirimanBoard({
         {sortedArmada.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada armada. Tambah lewat &quot;Kelola Armada&quot;.</p>
         ) : (
-          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-            <div ref={containerRef} className="overflow-x-auto overflow-y-visible">
-              {/* Date segment bar + hour ruler — shared rows instead of
-                  repeating labels per armada, aligned to the exact same
-                  hourWidth grid every ArmadaRowBoard draws its own
-                  gridlines against, so both stay lined up while scrolling
-                  horizontally with the rows below. The axis starts at
-                  ROLLOVER_HOUR (14:00 WIB), not midnight, matching the
-                  business-date label this board is keyed on (see
-                  ROLLOVER_HOUR in business-date.ts) — so it spans two
-                  actual calendar dates, called out here since the hour
-                  numbers alone (14..23, 00..13) don't make that obvious.
-                  Sticky directly below the sticky CardHeader — top is
-                  synced live to CardHeader's own bottom edge (useStickyBelow
-                  above), not a precomputed height, so both stay pinned
-                  together with no gap while the armada rows scroll
-                  underneath; w-fit keeps its background covering the full
-                  scrollable width, not just the viewport-visible slice. */}
-              <div
-                ref={timelineHeaderRef}
-                className="sticky z-20 w-fit border-b bg-card"
-                style={{ top: "7rem" }}
-              >
-                <div className="flex items-stretch">
-                  <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
-                  <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: DATE_SEGMENT_HEIGHT }}>
-                    <div
-                      className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
-                      style={{ left: 0, width: (24 - ROLLOVER_HOUR) * hourWidth }}
-                    >
-                      {formatDate(shiftDateISO(businessDate, -1))}
-                    </div>
-                    <div
-                      className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
-                      style={{ left: (24 - ROLLOVER_HOUR) * hourWidth, width: ROLLOVER_HOUR * hourWidth }}
-                    >
-                      {formatDate(businessDate)}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-stretch">
-                  <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
-                  <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: HOUR_RULER_HEIGHT }}>
-                    {Array.from({ length: 24 }, (_, h) => (
+          <>
+            {/* Date segment bar + hour ruler — shared rows instead of
+                repeating labels per armada, aligned to the exact same
+                hourWidth grid every ArmadaRowBoard draws its own gridlines
+                against. The axis starts at ROLLOVER_HOUR (14:00 WIB), not
+                midnight, matching the business-date label this board is
+                keyed on (see ROLLOVER_HOUR in business-date.ts) — so it
+                spans two actual calendar dates, called out here since the
+                hour numbers alone (14..23, 00..13) don't make that obvious.
+                Sticky directly below the sticky CardHeader — top is synced
+                live to CardHeader's own bottom edge (useStickyBelow above).
+                Deliberately a SIBLING of containerRef below, not nested
+                inside it: confirmed live that containerRef's
+                overflow-x-auto still gets treated as this element's nearest
+                scrolling ancestor for position:sticky purposes even with
+                overflow-y-visible also set, which broke its sticky
+                entirely (it just scrolled away with the page instead of
+                clamping). Its own date/hour cells scroll horizontally in
+                their own strip instead, mirrored bidirectionally with
+                containerRef's scroll via handleTimelineScroll/
+                handleContainerScroll — same technique mitra-do-panel.tsx's
+                header/body split already uses. */}
+            <div ref={timelineHeaderRef} className="sticky z-20 border-b bg-card" style={{ top: "7rem" }}>
+              <div className="flex items-stretch">
+                <div className="w-56 shrink-0 bg-card" />
+                <div
+                  ref={timelineScrollRef}
+                  onScroll={handleTimelineScroll}
+                  className="no-scrollbar min-w-0 flex-1 overflow-x-auto border-l"
+                >
+                  <div style={{ width: dayWidth }}>
+                    <div className="relative" style={{ height: DATE_SEGMENT_HEIGHT }}>
                       <div
-                        key={h}
-                        className="absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums text-muted-foreground"
-                        style={{ left: h * hourWidth, width: hourWidth }}
+                        className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
+                        style={{ left: 0, width: (24 - ROLLOVER_HOUR) * hourWidth }}
                       >
-                        {String((h + ROLLOVER_HOUR) % 24).padStart(2, "0")}
+                        {formatDate(shiftDateISO(businessDate, -1))}
                       </div>
-                    ))}
+                      <div
+                        className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
+                        style={{ left: (24 - ROLLOVER_HOUR) * hourWidth, width: ROLLOVER_HOUR * hourWidth }}
+                      >
+                        {formatDate(businessDate)}
+                      </div>
+                    </div>
+                    <div className="relative" style={{ height: HOUR_RULER_HEIGHT }}>
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <div
+                          key={h}
+                          className="absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums text-muted-foreground"
+                          style={{ left: h * hourWidth, width: hourWidth }}
+                        >
+                          {String((h + ROLLOVER_HOUR) % 24).padStart(2, "0")}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-              {/* gap-y-3 separates one armada's whole block (its own
-                  timeline + its driver row underneath) from the next
-                  armada's block, so they don't visually stick together —
-                  the tight spacing WITHIN one armada's block (timeline to
-                  its own driver row, just a dashed border-t) is untouched. */}
-              <div className="flex flex-col divide-y gap-y-3">
-                {sortedArmada.map((a) => (
-                  <ArmadaRowBoard
-                    key={a.ArmadaID}
-                    armada={a}
-                    jadwal={jadwalByArmada.get(a.ArmadaID) ?? []}
-                    activities={activitiesByArmada.get(a.ArmadaID) ?? []}
-                    externalDeliveries={externalByArmada.get(a.ArmadaID) ?? []}
-                    hourWidth={hourWidth}
-                    dayWidth={dayWidth}
-                    onCardClick={setDetailJadwalId}
-                    onCreateClick={setCreateArmadaId}
-                    onCreateActivityClick={setCreateActivityArmadaId}
-                    onEditActivity={setEditingActivity}
-                    expeditionOptions={expeditionOptions}
-                  />
-                ))}
               </div>
             </div>
-          </DndContext>
+            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+              <div ref={containerRef} onScroll={handleContainerScroll} className="overflow-x-auto">
+                {/* gap-y-3 separates one armada's whole block (its own
+                    timeline + its driver row underneath) from the next
+                    armada's block, so they don't visually stick together —
+                    the tight spacing WITHIN one armada's block (timeline to
+                    its own driver row, just a dashed border-t) is untouched. */}
+                <div className="flex flex-col divide-y gap-y-3">
+                  {sortedArmada.map((a) => (
+                    <ArmadaRowBoard
+                      key={a.ArmadaID}
+                      armada={a}
+                      jadwal={jadwalByArmada.get(a.ArmadaID) ?? []}
+                      activities={activitiesByArmada.get(a.ArmadaID) ?? []}
+                      externalDeliveries={externalByArmada.get(a.ArmadaID) ?? []}
+                      hourWidth={hourWidth}
+                      dayWidth={dayWidth}
+                      onCardClick={setDetailJadwalId}
+                      onCreateClick={setCreateArmadaId}
+                      onCreateActivityClick={setCreateActivityArmadaId}
+                      onEditActivity={setEditingActivity}
+                      expeditionOptions={expeditionOptions}
+                    />
+                  ))}
+                </div>
+              </div>
+            </DndContext>
+          </>
         )}
       </CardContent>
 
