@@ -23,7 +23,8 @@ function rowToLocation(row: MitraRow): MitraLocationValue | null {
 }
 
 // Read-only mitra info popup, reused anywhere a mitra name is clickable
-// outside the Mitra module itself (Kinerja Marketing, Transaksi) — fetches
+// outside the Mitra module itself (Kinerja Marketing, pemasaran-app's Mitra
+// tab) — fetches
 // lazily on open rather than requiring the parent page to preload every
 // mitra's full detail just in case one gets clicked. The map section starts
 // as a plain (non-draggable) preview and only becomes the full editable

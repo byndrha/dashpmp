@@ -2,41 +2,53 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Pencil, Plus, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getMitraListAction, getWilayahDeliveryAction } from "@/app/mkesindo/pemasaran-app/actions";
-import type { MitraRow } from "@/lib/queries/mitra";
+import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
+import { getMitraListAction, getPriceLevelOptionsAction, getWilayahDeliveryAction } from "@/app/mkesindo/pemasaran-app/actions";
+import { formatRupiah } from "@/lib/format";
+import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
 import type { PemasaranWilayahDeliveryRow } from "@/lib/queries/pemasaran-wilayah-delivery";
 
 export function MitraTab() {
   const [mitra, setMitra] = useState<MitraRow[] | null>(null);
   const [wilayahStats, setWilayahStats] = useState<PemasaranWilayahDeliveryRow[] | null>(null);
+  const [priceLevels, setPriceLevels] = useState<PriceLevelOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"daftar" | "wilayah">("daftar");
+  const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getMitraListAction(), getWilayahDeliveryAction()]).then(([mitraResult, wilayahResult]) => {
-      if (cancelled) return;
-      if (!mitraResult.success) {
-        setError(mitraResult.error);
-        return;
+    Promise.all([getMitraListAction(), getWilayahDeliveryAction(), getPriceLevelOptionsAction()]).then(
+      ([mitraResult, wilayahResult, priceLevelResult]) => {
+        if (cancelled) return;
+        if (!mitraResult.success) {
+          setError(mitraResult.error);
+          return;
+        }
+        setMitra(mitraResult.data);
+        if (!wilayahResult.success) {
+          setError(wilayahResult.error);
+          return;
+        }
+        setWilayahStats(wilayahResult.data);
+        // Non-fatal if this one fails — the Harga line just falls back to
+        // "-" per-card (see priceByLevel below), not worth blocking the
+        // whole tab over.
+        if (priceLevelResult.success) setPriceLevels(priceLevelResult.data);
       }
-      setMitra(mitraResult.data);
-      if (!wilayahResult.success) {
-        setError(wilayahResult.error);
-        return;
-      }
-      setWilayahStats(wilayahResult.data);
-    });
+    );
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
 
   const filtered = useMemo(() => {
     if (!mitra) return [];
@@ -89,10 +101,14 @@ export function MitraTab() {
           </div>
           {filtered.map((m) => (
             <Card key={m.BusinessPartnerID}>
-              <CardContent className="p-3">
-                <Link href={`/mkesindo/pemasaran-app/mitra/${m.BusinessPartnerID}`} className="flex flex-col gap-1">
+              <CardContent className="flex items-start gap-1 p-3">
+                <button
+                  type="button"
+                  onClick={() => setDetailMitraId(m.BusinessPartnerID)}
+                  className="flex min-w-0 flex-1 flex-col gap-1 text-left"
+                >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium">{m.Name}</p>
+                    <p className="truncate text-sm font-medium">{m.Name}</p>
                     <Badge variant="outline" className="shrink-0 text-[10px]">
                       {m.PartnerType}
                     </Badge>
@@ -102,6 +118,21 @@ export function MitraTab() {
                     {m.Kecamatan ? ` - ${m.Kecamatan}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">{m.Capacity ?? 0} kantong/hari</p>
+                  <p className="text-xs text-muted-foreground">
+                    Harga:{" "}
+                    <span className="font-medium text-foreground">
+                      {m.PriceLevel != null && priceByLevel.has(m.PriceLevel)
+                        ? formatRupiah(priceByLevel.get(m.PriceLevel)!)
+                        : "-"}
+                    </span>
+                  </p>
+                </button>
+                <Link
+                  href={`/mkesindo/pemasaran-app/mitra/${m.BusinessPartnerID}/edit`}
+                  title="Edit Data Mitra"
+                  className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+                >
+                  <Pencil className="size-3.5" />
                 </Link>
               </CardContent>
             </Card>
@@ -117,6 +148,8 @@ export function MitraTab() {
           </Card>
         ))
       )}
+
+      <MitraDetailDialog businessPartnerId={detailMitraId} onOpenChange={(open) => !open && setDetailMitraId(null)} />
     </div>
   );
 }
