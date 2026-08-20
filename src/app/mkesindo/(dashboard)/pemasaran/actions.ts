@@ -16,7 +16,6 @@ import {
   addMarketingMitra,
   removeMarketingMitra,
 } from "@/lib/queries/marketing-wilayah";
-import { setMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import { setWilayahPotentialTarget } from "@/lib/queries/wilayah-potential-target";
 import {
   getMarketingVisitLogForDate,
@@ -149,20 +148,6 @@ export async function removeMarketingMitraAction(id: number): Promise<ActionResu
     revalidatePath("/mkesindo/pemasaran");
     revalidatePath("/mkesindo/mitra");
     revalidatePath("/mkesindo/transaksi");
-  });
-}
-
-export async function setMarketingPeriodSettingAction(input: {
-  startDate: string;
-  periodDays: number;
-}): Promise<ActionResult<void>> {
-  return runAction(async () => {
-    const user = await requireWilayahManager();
-    if (input.periodDays < 1 || input.periodDays > 62) {
-      throw new AppError("Panjang periode harus antara 1 dan 62 hari.");
-    }
-    await setMarketingPeriodSetting({ ...input, userId: user.id });
-    revalidatePath("/mkesindo/pemasaran");
   });
 }
 

@@ -1,6 +1,5 @@
 import { getPool, sql } from "@/lib/db";
 import { getBusinessDate, getBusinessDateISO, getBusinessDateWithRollover, monthBoundary } from "@/lib/business-date";
-import { getMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import {
   getMarketingUsers,
   getMarketingWilayahAssignments,
@@ -79,19 +78,19 @@ const KINERJA_MARKETING_ROLLOVER_HOUR = 13;
 
 // Per-Marketing counterpart to getMitraDOMonthly() — instead of one row per
 // mitra, buckets every mitra resolved (via DashboardMarketingWilayah) to a
-// Marketing's Wilayah/Kecamatan scope. The period is NOT the calendar month
-// used elsewhere in the app — it's the configurable range from
-// getMarketingPeriodSetting() (default: calendar month).
+// Marketing's Wilayah/Kecamatan scope. The period is always "this calendar
+// month, from the 1st through today" (see rangeStart/rangeEnd below) — no
+// longer admin-configurable (the old getMarketingPeriodSetting()-backed
+// "Atur Periode" control let the range drift arbitrarily, once observed
+// stretching data all the way into September while August was still the
+// current month; confirmed with the user 2026-08-20 that the range must
+// never reach past today in the current month).
 //
 // Only Marketing with at least one Wilayah/Kecamatan assignment are
 // included — one with no scope has no mitra to attribute deliveries to, so
 // showing them would just be a confusing all-zero row.
 export async function getMarketingPerformance(): Promise<MarketingPerformanceData> {
-  const [period, assignments, marketingUsers] = await Promise.all([
-    getMarketingPeriodSetting(),
-    getMarketingWilayahAssignments(),
-    getMarketingUsers(),
-  ]);
+  const [assignments, marketingUsers] = await Promise.all([getMarketingWilayahAssignments(), getMarketingUsers()]);
   // Single shared source for the crossWilayah/prioritas merge (and the
   // per-source breakdown Task 3's IsCrossWilayahProposal/IsPriorityOverride
   // flags need below) — see resolveMitraOverrideSources() in
@@ -99,28 +98,16 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   const { crossWilayahOverrides, prioritasOverrides, merged: mitraOverrides } = await resolveMitraOverrideSources(assignments);
 
   const pool = await getPool();
-  // Always the 1st of the current WIB business month — confirmed with the
-  // user 2026-08-20: the period is inherently "this month", self-correcting
-  // as months pass, NOT a static admin-set date (period.startDate used to
-  // anchor this, but a stale/mis-set value — e.g. left at "2026-08-20" —
-  // silently shrank the whole panel, including the mobile 5/7/30 Hari
-  // filter, to a 1-2 day window with no visible explanation). period's own
-  // periodDays still feeds configuredRangeEnd below as a minimum length,
-  // but no longer anchors where the range starts.
+  // Always the 1st of the current WIB business month, self-correcting as
+  // months pass.
   const rangeStart = monthBoundary(getBusinessDate());
-  const configuredRangeEnd = new Date(rangeStart.getTime() + period.periodDays * 86400000);
   const todayISO = getBusinessDateISO();
 
-  // Last day that must be visible, per the 13:00 WIB rollover above —
-  // rangeEnd is an EXCLUSIVE upper bound, so it needs to land one day past
-  // that last-visible day. Only ever extends the configured range, never
-  // shrinks it (a deliberately longer/custom-configured period stays
-  // untouched) — Math.max against a rangeStart-in-the-future setting also
-  // falls back to the configured length harmlessly, since the rollover
-  // floor would compute behind rangeStart in that case.
+  // Exclusive upper bound: today, one day later — per the 13:00 WIB
+  // rollover above, one more day past that once it's past 13:00 WIB. Never
+  // extends any further (no more admin-configurable minimum length here).
   const rolloverLastVisibleDay = getBusinessDateWithRollover(KINERJA_MARKETING_ROLLOVER_HOUR);
-  const rolloverMinRangeEnd = new Date(rolloverLastVisibleDay.getTime() + 86400000);
-  const rangeEnd = configuredRangeEnd.getTime() >= rolloverMinRangeEnd.getTime() ? configuredRangeEnd : rolloverMinRangeEnd;
+  const rangeEnd = new Date(rolloverLastVisibleDay.getTime() + 86400000);
   const periodDays = Math.round((rangeEnd.getTime() - rangeStart.getTime()) / 86400000);
 
   // Grouped per-mitra (not just per Wilayah/Kecamatan) so a mitra with a
@@ -245,7 +232,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
 
   return {
     periodDays,
-    rangeStartISO: period.startDate,
+    rangeStartISO: rangeStart.toISOString().slice(0, 10),
     todayISO,
     cells: [...cells.values()],
     mitraDailyQty,

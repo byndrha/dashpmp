@@ -116,7 +116,6 @@ export default async function PemasaranPage() {
         <MarketingPerformancePanel
           data={performanceForSession}
           kpiRows={kpiRows}
-          canManageSettings={canManageWilayah}
           mitraAssignments={mitraAssignmentsForSession}
           initialTrendBundle={trendBundle}
         />

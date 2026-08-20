@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, Settings2, Star, Users, ChevronDown, Loader2, Search } from "lucide-react";
+import { ArrowUp, ArrowDown, Star, Users, ChevronDown, Loader2, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +20,6 @@ import type { MarketingMitraAssignment } from "@/lib/queries/marketing-wilayah";
 import type { MarketingTrendRow } from "@/lib/queries/marketing-performance-trend";
 import type { PangsaPasarRow } from "@/lib/queries/pangsa-pasar-trend";
 import {
-  setMarketingPeriodSettingAction,
   getMarketingVisitLogAction,
   saveMarketingVisitLogAction,
   getMarketingTrendDataAction,
@@ -563,79 +561,6 @@ function MarketingCard({
   );
 }
 
-// startDate is no longer an editable field here — the period's start is
-// always the 1st of the current business month (self-correcting each
-// month, confirmed with the user 2026-08-20), computed server-side in
-// getMarketingPerformance() rather than read from admin config. This popover
-// still submits rangeStartISO as the (now purely informational) startDate
-// value setMarketingPeriodSettingAction expects, but periodDays — a
-// minimum-length fallback the range can still extend to — is the only
-// thing an admin can actually change here.
-function PeriodSettings({ rangeStartISO, periodDays }: { rangeStartISO: string; periodDays: number }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [days, setDays] = useState(String(periodDays));
-  const [pending, startTransition] = useTransition();
-
-  function handleSave() {
-    const parsedDays = Number(days);
-    if (Number.isNaN(parsedDays) || parsedDays < 1) {
-      toast.error("Panjang periode harus diisi dengan benar.");
-      return;
-    }
-    startTransition(async () => {
-      const result = await setMarketingPeriodSettingAction({ startDate: rangeStartISO, periodDays: parsedDays });
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      setOpen(false);
-      router.refresh();
-    });
-  }
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) setDays(String(periodDays));
-      }}
-    >
-      <PopoverTrigger render={<Button type="button" variant="outline" size="sm" />}>
-        <Settings2 className="size-3.5" />
-        Atur Periode
-      </PopoverTrigger>
-      <PopoverContent className="w-64" align="end">
-        <p className="mb-2 text-xs font-medium">Ubah Periode Kinerja Marketing</p>
-        <p className="mb-2 text-[11px] text-muted-foreground">
-          Periode selalu dimulai dari tanggal 1 bulan berjalan. Panjang di bawah ini hanya perpanjangan minimum jika
-          Anda ingin rentang lebih lebar dari sebulan.
-        </p>
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="periodDays" className="text-[11px] text-muted-foreground">
-              Panjang Periode (hari)
-            </Label>
-            <Input
-              id="periodDays"
-              type="number"
-              min={1}
-              max={62}
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              className="h-8 text-xs"
-            />
-          </div>
-          <Button size="sm" disabled={pending} onClick={handleSave}>
-            {pending ? "Menyimpan..." : "Simpan"}
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 const ALL = "all";
 
 // Highest target (Capacity) first; mitra with no target set sort last
@@ -659,13 +584,11 @@ function compareCapacityDesc(a: { Capacity: number | null }, b: { Capacity: numb
 export function MarketingPerformancePanel({
   data,
   kpiRows,
-  canManageSettings,
   mitraAssignments,
   initialTrendBundle,
 }: {
   data: MarketingPerformanceData;
   kpiRows: MarketingKPIRow[];
-  canManageSettings: boolean;
   mitraAssignments: MarketingMitraAssignment[];
   initialTrendBundle: MarketingTrendBundle | null;
 }) {
@@ -682,8 +605,8 @@ export function MarketingPerformancePanel({
 
   useEffect(() => {
     // Re-syncs local trend state whenever the server re-fetches the initial
-    // 3-month bundle (e.g. router.refresh() after a period-setting change) —
-    // same "seed local state from a prop via effect" pattern used elsewhere
+    // 3-month bundle (e.g. a page navigation/revalidation) — same "seed
+    // local state from a prop via effect" pattern used elsewhere
     // in this codebase (mitra-detail-dialog.tsx, greeting-header.tsx, etc.).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTrendBundle(initialTrendBundle);
@@ -866,7 +789,6 @@ export function MarketingPerformancePanel({
             {trendBundle && !trendBundle.showCombined && (
               <TrendExpandButton expanded={trendExpanded} onToggle={handleTrendToggle} pending={trendPending} />
             )}
-            {canManageSettings && <PeriodSettings rangeStartISO={rangeStartISO} periodDays={periodDays} />}
           </div>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">

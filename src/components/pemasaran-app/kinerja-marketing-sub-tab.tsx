@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Star, Loader2, Users, ArrowUp, ArrowDown, Search, List } from "lucide-react";
+import { Loader2, Users, ArrowUp, ArrowDown, Search, List, Star } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,15 @@ function formatDateLong(dateISO: string): string {
   return `${dateISO.slice(8, 10)}/${dateISO.slice(5, 7)}/${dateISO.slice(0, 4)}`;
 }
 
+// Real day count of the month `monthStartISO` (a "YYYY-MM-01" string)
+// belongs to — 28-31, used both as the 3rd window button's value and its
+// displayed label (e.g. "31 Hari" in August, "28 Hari" in a non-leap
+// February), confirmed with the user 2026-08-20.
+function daysInMonthOf(monthStartISO: string): number {
+  const d = new Date(monthStartISO);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
 // Per-day quantity box for a mitra's roster card — ported from desktop's
 // MitraDayCell (marketing-performance-panel.tsx), but opens a Dialog instead
 // of a Popover (mobile's existing pattern, per log-kunjungan-sub-tab.tsx) and
@@ -48,10 +58,11 @@ function formatDateLong(dateISO: string): string {
 // text). Delta color/arrow convention matches MitraDayCell exactly: positive
 // = primary + up-arrow, negative = destructive + down-arrow, zero = muted
 // with no arrow, no-prior-day = an em-dash. isPast also mirrors MitraDayCell
-// (show "-" and suppress the delta for a day that hasn't happened yet,
-// since `windowIndices` is the last N indices of the *configured* period,
-// which can extend past today) — additionally disabled/non-clickable here,
-// since there's no point opening a visit-log dialog for a future day.
+// (show "-" and suppress the delta for a day that hasn't happened yet —
+// windowIndices can briefly include "tomorrow" once past the 13:00 WIB
+// rollover, see KINERJA_MARKETING_ROLLOVER_HOUR in marketing-performance.ts)
+// — additionally disabled/non-clickable here, since there's no point
+// opening a visit-log dialog for a future day.
 function DayBox({
   dateISO,
   qty,
@@ -121,14 +132,17 @@ export function KinerjaMarketingSubTab() {
   const [data, setData] = useState<KinerjaMarketingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showNoo, setShowNoo] = useState(false);
-  // Both default open (matches today's always-shown behavior) — the toggle
-  // just lets the rep collapse whichever section they aren't using, same
-  // mechanism as showNoo above.
-  const [showPrioritas, setShowPrioritas] = useState(true);
-  const [showSemuaMitra, setShowSemuaMitra] = useState(true);
+  // Default collapsed, same as showNoo — confirmed with the user
+  // 2026-08-20.
+  const [showPrioritas, setShowPrioritas] = useState(false);
+  const [showSemuaMitra, setShowSemuaMitra] = useState(false);
   const [search, setSearch] = useState("");
   const [wilayahFilter, setWilayahFilter] = useState<string | null>(null);
-  const [windowDays, setWindowDays] = useState<5 | 7 | 30>(5);
+  const [windowDays, setWindowDays] = useState(5);
+  // Popup detail (info + lokasi) for a clicked mitra card — same
+  // businessPartnerId-driven dialog /mkesindo/pemasaran-app/mitra's own
+  // cards open.
+  const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
 
   const [trend, setTrend] = useState<{ performance: MarketingPerformanceTrendData; pangsaPasar: PangsaPasarTrendData } | null>(null);
   const [trendExpanded, setTrendExpanded] = useState(false);
@@ -304,14 +318,17 @@ export function KinerjaMarketingSubTab() {
     );
   }
 
-  // windowDays (5/7/30, from the date-range control below) is capped to
-  // data.periodDays — the configured Kinerja Marketing period defaults to a
-  // full calendar month (getMarketingPeriodSetting()'s DEFAULT_SETTING is
-  // periodDays: 31), so the 30-day option is already covered without
-  // widening the query window; Math.min just protects against a shorter
-  // admin-configured period.
-  const windowSize = Math.min(windowDays, data.periodDays);
-  const windowIndices = Array.from({ length: windowSize }, (_, i) => data.periodDays - windowSize + i);
+  // Last `windowDays` days ENDING today (not the end of the fetched
+  // period, which can briefly include tomorrow — see
+  // KINERJA_MARKETING_ROLLOVER_HOUR in marketing-performance.ts), clamped
+  // to never go earlier than the period's own start (month start). E.g. on
+  // 20 Agustus: "5 Hari" -> 15-20 Agu, "31 Hari" (August's own day count,
+  // see daysInMonthOf) -> clamped at 1-20 Agu, never into September.
+  // Confirmed with the user 2026-08-20.
+  const todayIndex = Math.round((new Date(todayISO).getTime() - new Date(data.rangeStartISO).getTime()) / 86400000);
+  const windowStartIndex = Math.max(0, todayIndex - windowDays);
+  const windowIndices = Array.from({ length: todayIndex - windowStartIndex + 1 }, (_, i) => windowStartIndex + i);
+  const monthDayCount = daysInMonthOf(data.rangeStartISO);
   const ownTrendRow = trend?.performance.rows[0];
   const ownPangsaPasarRow = trend?.pangsaPasar.rows[0];
   const currentMonth = ownTrendRow?.months[ownTrendRow.months.length - 1];
@@ -322,12 +339,13 @@ export function KinerjaMarketingSubTab() {
     return (
       <Card key={m.BusinessPartnerID}>
         <CardContent className="flex flex-col gap-1.5 p-3">
-          <div className="flex items-start justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setDetailMitraId(m.BusinessPartnerID)}
+            className="flex w-full items-start justify-between gap-2 text-left"
+          >
             <div>
-              <p className="flex items-center gap-1 text-sm font-medium">
-                {(m.Capacity ?? 0) > 0 && <Star className="size-3 fill-warning text-warning" />}
-                {m.Name}
-              </p>
+              <p className="text-sm font-medium">{m.Name}</p>
               <p className="text-xs text-muted-foreground">
                 {m.Wilayah}
                 {m.Kecamatan ? ` - ${m.Kecamatan}` : ""} · Target {formatQty(m.Capacity ?? 0)}/hari
@@ -338,7 +356,7 @@ export function KinerjaMarketingSubTab() {
               <span className="text-lg font-semibold tabular-nums">{formatQty(total)}</span>
               <span className="text-[10px] text-muted-foreground">kantong</span>
             </div>
-          </div>
+          </button>
           <div className="flex gap-1.5 overflow-x-auto">
             {windowIndices.map((i) => {
               const dateISO = addDaysISO(data!.rangeStartISO, i);
@@ -395,7 +413,7 @@ export function KinerjaMarketingSubTab() {
             </SelectContent>
           </Select>
           <div className="ml-auto flex gap-1">
-            {([5, 7, 30] as const).map((d) => (
+            {[5, 7, monthDayCount].map((d) => (
               <Button
                 key={d}
                 type="button"
@@ -518,6 +536,8 @@ export function KinerjaMarketingSubTab() {
           )}
         </DialogContent>
       </Dialog>
+
+      <MitraDetailDialog businessPartnerId={detailMitraId} onOpenChange={(open) => !open && setDetailMitraId(null)} />
     </div>
   );
 }
