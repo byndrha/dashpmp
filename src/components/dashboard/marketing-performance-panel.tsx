@@ -563,21 +563,28 @@ function MarketingCard({
   );
 }
 
+// startDate is no longer an editable field here — the period's start is
+// always the 1st of the current business month (self-correcting each
+// month, confirmed with the user 2026-08-20), computed server-side in
+// getMarketingPerformance() rather than read from admin config. This popover
+// still submits rangeStartISO as the (now purely informational) startDate
+// value setMarketingPeriodSettingAction expects, but periodDays — a
+// minimum-length fallback the range can still extend to — is the only
+// thing an admin can actually change here.
 function PeriodSettings({ rangeStartISO, periodDays }: { rangeStartISO: string; periodDays: number }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [startDate, setStartDate] = useState(rangeStartISO);
   const [days, setDays] = useState(String(periodDays));
   const [pending, startTransition] = useTransition();
 
   function handleSave() {
     const parsedDays = Number(days);
-    if (!startDate || Number.isNaN(parsedDays) || parsedDays < 1) {
-      toast.error("Tanggal mulai dan panjang periode harus diisi dengan benar.");
+    if (Number.isNaN(parsedDays) || parsedDays < 1) {
+      toast.error("Panjang periode harus diisi dengan benar.");
       return;
     }
     startTransition(async () => {
-      const result = await setMarketingPeriodSettingAction({ startDate, periodDays: parsedDays });
+      const result = await setMarketingPeriodSettingAction({ startDate: rangeStartISO, periodDays: parsedDays });
       if (!result.success) {
         toast.error(result.error);
         return;
@@ -592,10 +599,7 @@ function PeriodSettings({ rangeStartISO, periodDays }: { rangeStartISO: string; 
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) {
-          setStartDate(rangeStartISO);
-          setDays(String(periodDays));
-        }
+        if (next) setDays(String(periodDays));
       }}
     >
       <PopoverTrigger render={<Button type="button" variant="outline" size="sm" />}>
@@ -604,19 +608,11 @@ function PeriodSettings({ rangeStartISO, periodDays }: { rangeStartISO: string; 
       </PopoverTrigger>
       <PopoverContent className="w-64" align="end">
         <p className="mb-2 text-xs font-medium">Ubah Periode Kinerja Marketing</p>
+        <p className="mb-2 text-[11px] text-muted-foreground">
+          Periode selalu dimulai dari tanggal 1 bulan berjalan. Panjang di bawah ini hanya perpanjangan minimum jika
+          Anda ingin rentang lebih lebar dari sebulan.
+        </p>
         <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="periodStart" className="text-[11px] text-muted-foreground">
-              Tanggal Mulai
-            </Label>
-            <Input
-              id="periodStart"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-8 text-xs"
-            />
-          </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="periodDays" className="text-[11px] text-muted-foreground">
               Panjang Periode (hari)
