@@ -4,7 +4,11 @@ import { requireMarketing } from "@/lib/require-access";
 import { getVisitLogStatusForMarketing, type VisitLogStatusRow } from "@/lib/queries/marketing-visit-log-status";
 import { getSalesDayComparisonForMarketing } from "@/lib/queries/sales-overview-marketing";
 import { getMarketingVisitLogForDate, saveMarketingVisitLog, type MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
-import { getMarketingPerformance, type MarketingPerformanceData } from "@/lib/queries/marketing-performance";
+import {
+  getMarketingPerformance,
+  type MarketingPerformanceData,
+  type MarketingScopeAllMitra,
+} from "@/lib/queries/marketing-performance";
 import { getPemasaranWilayahDelivery, type PemasaranWilayahDeliveryRow } from "@/lib/queries/pemasaran-wilayah-delivery";
 import { getPengajuanList, createPengajuan, type PengajuanRow, type PengajuanInput } from "@/lib/queries/mitra-pengajuan";
 import {
@@ -46,14 +50,27 @@ export async function getBerandaDataAction(): Promise<
   });
 }
 
-export async function getKinerjaMarketingAction(): Promise<ActionResult<MarketingPerformanceData>> {
+// Adds Harga (Rupiah, resolved from PriceLevel) onto each roster row —
+// resolved server-side here (one hargaByLevel lookup) rather than threading
+// PriceLevelOption[] through every RosterCard on the client.
+export type MarketingScopeAllMitraWithHarga = MarketingScopeAllMitra & { Harga: number | null };
+
+export type KinerjaMarketingData = Omit<MarketingPerformanceData, "allMitraByMarketing"> & {
+  allMitraByMarketing: Record<string, MarketingScopeAllMitraWithHarga[]>;
+};
+
+export async function getKinerjaMarketingAction(): Promise<ActionResult<KinerjaMarketingData>> {
   return runAction(async () => {
     const session = await requireMarketing();
-    const data = await getMarketingPerformance();
+    const [data, priceLevels] = await Promise.all([getMarketingPerformance(), getPriceLevelOptions()]);
+    const priceByLevel = new Map(priceLevels.map((p) => [p.Level, p.Price]));
     // data.mitraDailyQty and data.allMitraByMarketing cover every marketing's
     // resolved mitra, not just the caller's — must be narrowed to the
     // caller's own roster before leaving this action, same as cells below.
-    const ownMitraRoster = data.allMitraByMarketing[session.user.id] ?? [];
+    const ownMitraRoster: MarketingScopeAllMitraWithHarga[] = (data.allMitraByMarketing[session.user.id] ?? []).map((m) => ({
+      ...m,
+      Harga: m.PriceLevel != null ? (priceByLevel.get(m.PriceLevel) ?? null) : null,
+    }));
     const mitraDailyQty: Record<string, number[]> = {};
     for (const m of ownMitraRoster) {
       const qty = data.mitraDailyQty[m.BusinessPartnerID];

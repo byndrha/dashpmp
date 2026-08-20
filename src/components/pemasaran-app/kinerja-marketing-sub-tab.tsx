@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Star, Loader2, Users, ArrowUp, ArrowDown } from "lucide-react";
+import { Star, Loader2, Users, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { formatRupiah } from "@/lib/format";
 import {
   getKinerjaMarketingAction,
   getKinerjaMarketingTrendAction,
   getVisitLogDetailAction,
   saveVisitLogAction,
 } from "@/app/mkesindo/pemasaran-app/actions";
-import type { MarketingPerformanceData } from "@/lib/queries/marketing-performance";
+import type { KinerjaMarketingData } from "@/app/mkesindo/pemasaran-app/actions";
 import type { MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 import type { PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
 import { MatriksPerformaTable, PangsaPasarTable, TrendExpandButton } from "@/components/dashboard/marketing-trend-tables";
@@ -46,9 +49,9 @@ function formatDateLong(dateISO: string): string {
 // = primary + up-arrow, negative = destructive + down-arrow, zero = muted
 // with no arrow, no-prior-day = an em-dash. isPast also mirrors MitraDayCell
 // (show "-" and suppress the delta for a day that hasn't happened yet,
-// since `last5` is the last 5 indices of the *configured* period, which can
-// extend past today) — additionally disabled/non-clickable here, since
-// there's no point opening a visit-log dialog for a future day.
+// since `windowIndices` is the last N indices of the *configured* period,
+// which can extend past today) — additionally disabled/non-clickable here,
+// since there's no point opening a visit-log dialog for a future day.
 function DayBox({
   dateISO,
   qty,
@@ -115,9 +118,12 @@ function SummaryCard({ label, general, actual, target }: { label: string; genera
 }
 
 export function KinerjaMarketingSubTab() {
-  const [data, setData] = useState<MarketingPerformanceData | null>(null);
+  const [data, setData] = useState<KinerjaMarketingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showNoo, setShowNoo] = useState(false);
+  const [search, setSearch] = useState("");
+  const [wilayahFilter, setWilayahFilter] = useState<string | null>(null);
+  const [windowDays, setWindowDays] = useState<5 | 7 | 30>(5);
 
   const [trend, setTrend] = useState<{ performance: MarketingPerformanceTrendData; pangsaPasar: PangsaPasarTrendData } | null>(null);
   const [trendExpanded, setTrendExpanded] = useState(false);
@@ -224,19 +230,64 @@ export function KinerjaMarketingSubTab() {
 
   const todayISO = data?.todayISO ?? "";
   const currentMonthStartISO = todayISO ? `${todayISO.slice(0, 7)}-01` : "";
-  const existingRoster = useMemo(
+
+  // Distinct Wilayah values across the caller's own roster, for the filter
+  // dropdown below — client-side only, not a separate query (unlike the
+  // dedicated WilayahSelect used by mitra create/edit forms, which resolves
+  // real official region codes).
+  const wilayahOptions = useMemo(
+    () => [...new Set(roster.map((m) => m.Wilayah).filter((w): w is string => !!w))].sort(),
+    [roster]
+  );
+
+  // search/wilayahFilter apply on top of every bucket below (name substring
+  // match case-insensitive, Wilayah exact match) — inlined into each
+  // `.filter()` chain rather than a shared predicate so useMemo's own
+  // dependency arrays stay the source of truth (matches this file's existing
+  // style; no new abstraction).
+  const searchLower = search.trim().toLowerCase();
+
+  // 3-way split, replacing the old existing/NOO split now that
+  // IsPriorityOverride/IsCrossWilayahProposal live directly on each roster
+  // row (Task 3): Prioritas wins over both other buckets (no double-listing
+  // — both other filters explicitly exclude it), Semua Mitra is the
+  // JoinDate-based "existing" collapse minus Prioritas and cross-wilayah
+  // mitra, and Mitra NOO now also picks up cross-wilayah mitra regardless of
+  // JoinDate (a cross-wilayah Pengajuan owner counts as NOO every month it's
+  // resolved into this scope, same rule marketing-performance-trend.ts's
+  // isNoo applies historically).
+  const prioritasRoster = useMemo(
     () =>
       roster
-        .filter((m) => !m.JoinDate || new Date(m.JoinDate).getTime() < new Date(currentMonthStartISO).getTime())
+        .filter((m) => m.IsPriorityOverride)
+        .filter((m) => (!searchLower || m.Name.toLowerCase().includes(searchLower)) && (!wilayahFilter || m.Wilayah === wilayahFilter))
         .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
-    [roster, currentMonthStartISO]
+    [roster, searchLower, wilayahFilter]
+  );
+  const semuaMitraRoster = useMemo(
+    () =>
+      roster
+        .filter(
+          (m) =>
+            !m.IsPriorityOverride &&
+            !m.IsCrossWilayahProposal &&
+            (!m.JoinDate || new Date(m.JoinDate).getTime() < new Date(currentMonthStartISO).getTime())
+        )
+        .filter((m) => (!searchLower || m.Name.toLowerCase().includes(searchLower)) && (!wilayahFilter || m.Wilayah === wilayahFilter))
+        .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
+    [roster, currentMonthStartISO, searchLower, wilayahFilter]
   );
   const nooRoster = useMemo(
     () =>
       roster
-        .filter((m) => !!m.JoinDate && new Date(m.JoinDate).getTime() >= new Date(currentMonthStartISO).getTime())
+        .filter(
+          (m) =>
+            !m.IsPriorityOverride &&
+            (m.IsCrossWilayahProposal || (!!m.JoinDate && new Date(m.JoinDate).getTime() >= new Date(currentMonthStartISO).getTime()))
+        )
+        .filter((m) => (!searchLower || m.Name.toLowerCase().includes(searchLower)) && (!wilayahFilter || m.Wilayah === wilayahFilter))
         .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
-    [roster, currentMonthStartISO]
+    [roster, currentMonthStartISO, searchLower, wilayahFilter]
   );
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
@@ -248,8 +299,14 @@ export function KinerjaMarketingSubTab() {
     );
   }
 
-  const windowSize = Math.min(5, data.periodDays);
-  const last5 = Array.from({ length: windowSize }, (_, i) => data.periodDays - windowSize + i);
+  // windowDays (5/7/30, from the date-range control below) is capped to
+  // data.periodDays — the configured Kinerja Marketing period defaults to a
+  // full calendar month (getMarketingPeriodSetting()'s DEFAULT_SETTING is
+  // periodDays: 31), so the 30-day option is already covered without
+  // widening the query window; Math.min just protects against a shorter
+  // admin-configured period.
+  const windowSize = Math.min(windowDays, data.periodDays);
+  const windowIndices = Array.from({ length: windowSize }, (_, i) => data.periodDays - windowSize + i);
   const ownTrendRow = trend?.performance.rows[0];
   const ownPangsaPasarRow = trend?.pangsaPasar.rows[0];
   const currentMonth = ownTrendRow?.months[ownTrendRow.months.length - 1];
@@ -270,11 +327,12 @@ export function KinerjaMarketingSubTab() {
                 {m.Wilayah}
                 {m.Kecamatan ? ` - ${m.Kecamatan}` : ""} · Target {formatQty(m.Capacity ?? 0)}/hari
               </p>
+              {m.Harga != null && <p className="text-xs text-muted-foreground">Harga {formatRupiah(m.Harga)}</p>}
             </div>
             <p className="shrink-0 tabular-nums font-medium">{formatQty(total)} kantong</p>
           </div>
-          <div className="flex gap-1.5">
-            {last5.map((i) => {
+          <div className="flex gap-1.5 overflow-x-auto">
+            {windowIndices.map((i) => {
               const dateISO = addDaysISO(data!.rangeStartISO, i);
               return (
                 <DayBox
@@ -304,10 +362,60 @@ export function KinerjaMarketingSubTab() {
         </div>
       )}
 
-      {existingRoster.length > 0 && (
+      <div className="flex flex-col gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Cari nama mitra..."
+            className="pl-8"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Select value={wilayahFilter ?? "all"} onValueChange={(v) => setWilayahFilter(v === "all" ? null : (v as string))}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Wilayah" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Wilayah</SelectItem>
+              {wilayahOptions.map((w) => (
+                <SelectItem key={w} value={w}>
+                  {w}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="ml-auto flex gap-1">
+            {([5, 7, 30] as const).map((d) => (
+              <Button
+                key={d}
+                type="button"
+                size="sm"
+                variant={windowDays === d ? "default" : "outline"}
+                className="h-8 px-2.5 text-xs"
+                onClick={() => setWindowDays(d)}
+              >
+                {d} Hari
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {prioritasRoster.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="px-1 text-xs font-semibold text-muted-foreground">Existing</p>
-          {existingRoster.map((m) => (
+          <p className="px-1 text-xs font-semibold text-muted-foreground">Mitra Prioritas</p>
+          {prioritasRoster.map((m) => (
+            <RosterCard key={m.BusinessPartnerID} m={m} />
+          ))}
+        </div>
+      )}
+
+      {semuaMitraRoster.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="px-1 text-xs font-semibold text-muted-foreground">Semua Mitra</p>
+          {semuaMitraRoster.map((m) => (
             <RosterCard key={m.BusinessPartnerID} m={m} />
           ))}
         </div>
