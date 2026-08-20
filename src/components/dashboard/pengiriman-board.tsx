@@ -575,7 +575,7 @@ function DraggableJadwalCard({
           {isDraft ? "Draf" : "Berangkat"}
         </span>
       </div>
-      <div className="flex flex-col items-center leading-none">
+      <div className="flex flex-col items-center leading-none -mt-2.5">
         <span className="text-sm font-bold tabular-nums">{j.TotalKantong}</span>
         <span className="text-[8px] text-muted-foreground">kantong</span>
       </div>
@@ -1129,36 +1129,36 @@ function ArmadaRowBoard({
                 {armada.Status}
               </Badge>
             </div>
-            <p className="truncate text-xs text-muted-foreground">{armada.PlatNomor ?? "-"}</p>
+            <div className="flex items-center justify-evenly gap-1">
+              <p className="truncate text-xs text-muted-foreground">{armada.PlatNomor ?? "-"}</p>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-6"
+                disabled={armada.Status !== "Baik"}
+                title="Aktivitas Armada"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateActivityClick(armada.ArmadaID);
+                }}
+              >
+                <Wrench className="size-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-6"
+                disabled={armada.Status !== "Baik"}
+                title="Pengiriman Baru"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateClick(armada.ArmadaID);
+                }}
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center justify-end gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-6"
-            disabled={armada.Status !== "Baik"}
-            title="Aktivitas Armada"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreateActivityClick(armada.ArmadaID);
-            }}
-          >
-            <Wrench className="size-3.5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-6"
-            disabled={armada.Status !== "Baik"}
-            title="Pengiriman Baru"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreateClick(armada.ArmadaID);
-            }}
-          >
-            <Plus className="size-3.5" />
-          </Button>
         </div>
         <div className="grid grid-cols-3 gap-1 rounded-md border bg-muted/20 px-1.5 py-1 text-center">
           <div>

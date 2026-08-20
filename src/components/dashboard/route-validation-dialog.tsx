@@ -1061,11 +1061,27 @@ export function RouteValidationDialog({
         <DialogHeader className="p-4 pb-0">
           <div className="flex items-center justify-between gap-2 pr-8">
             <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
-              Validasi Rute
               {jadwal && (
                 <Badge variant="outline" className={cn("text-[10px]", isDraft ? "border-dashed" : "border-primary/30 text-primary")}>
                   {jadwal.Status}
                 </Badge>
+              )}
+              Validasi Rute
+              {jadwal && (
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm rounded-lg border bg-primary/5 px-2 py-1">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    {armadaPlat && <span>{armadaPlat}</span>}
+                    <Truck className="size-4 text-muted-foreground" />
+                    {armadaNama ?? "Armada"}
+                  </span>
+                  <span className="text-muted-foreground">({order.length}) Tujuan</span>
+                  {!isDraft && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <span className="font-medium text-foreground">{time}</span>
+                      {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Tanpa driver"}
+                    </span>
+                  )}
+                </p>
               )}
             </DialogTitle>
             <div className="flex shrink-0 items-center gap-2">
@@ -1132,22 +1148,6 @@ export function RouteValidationDialog({
               )}
             </div>
           </div>
-          {jadwal && (
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              <span className="flex items-center gap-1.5 font-semibold">
-                {armadaPlat && <span>{armadaPlat}</span>}
-                <Truck className="size-4 text-muted-foreground" />
-                {armadaNama ?? "Armada"}
-              </span>
-              <span className="text-muted-foreground">({order.length}) Tujuan</span>
-              {!isDraft && (
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <span className="font-medium text-foreground">{time}</span>
-                  {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Tanpa driver"}
-                </span>
-              )}
-            </p>
-          )}
           <DialogDescription className="sr-only">
             Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum berangkat.
           </DialogDescription>
@@ -1163,7 +1163,7 @@ export function RouteValidationDialog({
         <div className={cn("flex flex-col", showMap ? "md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]" : "md:p-4 md:pt-2")}>
           {showMap && (
             <div className="order-1 flex flex-col gap-3 md:order-2">
-              <div className="h-[34vh] min-h-[220px] w-full overflow-hidden md:h-auto md:min-h-[440px] md:rounded-lg">
+              <div className="h-[34vh] min-h-[220px] w-full overflow-hidden md:h-auto md:min-h-[220px] md:rounded-lg">
                 {pabrik && order.length > 0 ? (
                   <RouteMap
                     pabrik={pabrik}
@@ -1285,7 +1285,7 @@ export function RouteValidationDialog({
               </p>
             )}
 
-            <div className={cn("flex flex-col rounded-lg border", capturing ? "max-h-none overflow-visible" : "max-h-72 overflow-y-auto")}>
+            <div className={cn("flex flex-col rounded-lg border", capturing ? "max-h-none overflow-visible" : "max-h-80 overflow-y-auto")}>
               {loading && <p className="py-6 text-center text-sm text-muted-foreground">Memuat...</p>}
               {!loading && order.length === 0 && (
                 <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada SO.</p>
