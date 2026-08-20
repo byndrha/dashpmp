@@ -1,5 +1,5 @@
 import { getPool, sql } from "@/lib/db";
-import { getBusinessDateISO, getBusinessDateWithRollover } from "@/lib/business-date";
+import { getBusinessDate, getBusinessDateISO, getBusinessDateWithRollover, monthBoundary } from "@/lib/business-date";
 import { getMarketingPeriodSetting } from "@/lib/queries/marketing-period";
 import {
   getMarketingUsers,
@@ -99,7 +99,15 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   const { crossWilayahOverrides, prioritasOverrides, merged: mitraOverrides } = await resolveMitraOverrideSources(assignments);
 
   const pool = await getPool();
-  const rangeStart = new Date(period.startDate);
+  // Always the 1st of the current WIB business month — confirmed with the
+  // user 2026-08-20: the period is inherently "this month", self-correcting
+  // as months pass, NOT a static admin-set date (period.startDate used to
+  // anchor this, but a stale/mis-set value — e.g. left at "2026-08-20" —
+  // silently shrank the whole panel, including the mobile 5/7/30 Hari
+  // filter, to a 1-2 day window with no visible explanation). period's own
+  // periodDays still feeds configuredRangeEnd below as a minimum length,
+  // but no longer anchors where the range starts.
+  const rangeStart = monthBoundary(getBusinessDate());
   const configuredRangeEnd = new Date(rangeStart.getTime() + period.periodDays * 86400000);
   const todayISO = getBusinessDateISO();
 
