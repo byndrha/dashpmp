@@ -182,13 +182,20 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
         const bucket = isNoo ? row.months[i].noo : row.months[i].existing;
         bucket.general += 1;
         bucket.bagQtyActual += actual;
-        if (!isNoo) bucket.bagQtyTarget += capacity ?? 0;
+        // capacity is a DAILY figure (BusinessPartner.Capacity, snapshotted
+        // — see getMonthlyCapacitySnapshot) while bagQtyActual accumulates
+        // the WHOLE month's DO qty, so it must be scaled by `days` to be
+        // comparable — the same daily->monthly scaling NOO's own target
+        // already does a few lines below (targetNooThisMonth). Without
+        // this, Existing's pct compared a monthly total against a bare
+        // daily-target sum and read as 1000%+.
+        if (!isNoo) bucket.bagQtyTarget += (capacity ?? 0) * days;
       }
 
       const combinedBucket = isNoo ? combined[i].noo : combined[i].existing;
       combinedBucket.general += 1;
       combinedBucket.bagQtyActual += actual;
-      if (!isNoo) combinedBucket.bagQtyTarget += capacity ?? 0;
+      if (!isNoo) combinedBucket.bagQtyTarget += (capacity ?? 0) * days;
     }
 
     // Target NOO is one shared figure added once per row per month (never
