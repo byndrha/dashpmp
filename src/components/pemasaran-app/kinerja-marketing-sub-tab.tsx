@@ -44,34 +44,41 @@ function formatDateLong(dateISO: string): string {
 // (narrow w-12 box has no room for both a legible dot and the qty/delta
 // text). Delta color/arrow convention matches MitraDayCell exactly: positive
 // = primary + up-arrow, negative = destructive + down-arrow, zero = muted
-// with no arrow, no-prior-day = an em-dash.
+// with no arrow, no-prior-day = an em-dash. isPast also mirrors MitraDayCell
+// (show "-" and suppress the delta for a day that hasn't happened yet,
+// since `last5` is the last 5 indices of the *configured* period, which can
+// extend past today) — additionally disabled/non-clickable here, since
+// there's no point opening a visit-log dialog for a future day.
 function DayBox({
   dateISO,
   qty,
   prevQty,
+  isPast,
   hasEntry,
   onOpen,
 }: {
   dateISO: string;
   qty: number;
   prevQty: number | null;
+  isPast: boolean;
   hasEntry: boolean;
   onOpen: () => void;
 }) {
-  const delta = prevQty != null ? qty - prevQty : null;
+  const delta = isPast && prevQty != null ? qty - prevQty : null;
   const dayLabel = dateISO.slice(8, 10);
   return (
     <button
       type="button"
       onClick={onOpen}
-      title="Klik untuk catat kunjungan"
+      disabled={!isPast}
+      title={isPast ? "Klik untuk catat kunjungan" : "Belum terjadi"}
       className={cn(
-        "flex w-12 shrink-0 flex-col items-center gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums transition-colors",
+        "flex w-12 shrink-0 flex-col items-center gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums transition-colors disabled:cursor-default disabled:opacity-60",
         hasEntry ? "bg-primary/15" : "bg-muted"
       )}
     >
       <span className="text-[9px] text-muted-foreground">{dayLabel}</span>
-      <span className="font-medium">{formatQty(qty)}</span>
+      <span className="font-medium">{isPast ? formatQty(qty) : "-"}</span>
       {delta != null ? (
         <span
           className={cn(
@@ -275,6 +282,7 @@ export function KinerjaMarketingSubTab() {
                   dateISO={dateISO}
                   qty={daily[i] ?? 0}
                   prevQty={i > 0 ? (daily[i - 1] ?? 0) : null}
+                  isPast={dateISO <= todayISO}
                   hasEntry={hasEntry.has(`${m.BusinessPartnerID}|${dateISO}`)}
                   onOpen={() => openDay(m.BusinessPartnerID, m.Name, dateISO)}
                 />
