@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Star, Loader2, Users, ArrowUp, ArrowDown, Search } from "lucide-react";
+import { Star, Loader2, Users, ArrowUp, ArrowDown, Search, List } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,6 +121,11 @@ export function KinerjaMarketingSubTab() {
   const [data, setData] = useState<KinerjaMarketingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showNoo, setShowNoo] = useState(false);
+  // Both default open (matches today's always-shown behavior) — the toggle
+  // just lets the rep collapse whichever section they aren't using, same
+  // mechanism as showNoo above.
+  const [showPrioritas, setShowPrioritas] = useState(true);
+  const [showSemuaMitra, setShowSemuaMitra] = useState(true);
   const [search, setSearch] = useState("");
   const [wilayahFilter, setWilayahFilter] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState<5 | 7 | 30>(5);
@@ -329,7 +334,10 @@ export function KinerjaMarketingSubTab() {
               </p>
               {m.Harga != null && <p className="text-xs text-muted-foreground">Harga {formatRupiah(m.Harga)}</p>}
             </div>
-            <p className="shrink-0 tabular-nums font-medium">{formatQty(total)} kantong</p>
+            <div className="flex shrink-0 flex-col items-end leading-none">
+              <span className="text-lg font-semibold tabular-nums">{formatQty(total)}</span>
+              <span className="text-[10px] text-muted-foreground">kantong</span>
+            </div>
           </div>
           <div className="flex gap-1.5 overflow-x-auto">
             {windowIndices.map((i) => {
@@ -405,19 +413,33 @@ export function KinerjaMarketingSubTab() {
 
       {prioritasRoster.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="px-1 text-xs font-semibold text-muted-foreground">Mitra Prioritas</p>
-          {prioritasRoster.map((m) => (
-            <RosterCard key={m.BusinessPartnerID} m={m} />
-          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-fit gap-1 px-1 text-xs text-muted-foreground"
+            onClick={() => setShowPrioritas((v) => !v)}
+          >
+            <Star className={cn("size-3.5", showPrioritas && "fill-warning text-warning")} />
+            {showPrioritas ? "Sembunyikan" : "Tampilkan"} {prioritasRoster.length} Mitra Prioritas
+          </Button>
+          {showPrioritas && prioritasRoster.map((m) => <RosterCard key={m.BusinessPartnerID} m={m} />)}
         </div>
       )}
 
       {semuaMitraRoster.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="px-1 text-xs font-semibold text-muted-foreground">Semua Mitra</p>
-          {semuaMitraRoster.map((m) => (
-            <RosterCard key={m.BusinessPartnerID} m={m} />
-          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-fit gap-1 px-1 text-xs text-muted-foreground"
+            onClick={() => setShowSemuaMitra((v) => !v)}
+          >
+            <List className={cn("size-3.5", showSemuaMitra && "text-primary")} />
+            {showSemuaMitra ? "Sembunyikan" : "Tampilkan"} {semuaMitraRoster.length} Semua Mitra
+          </Button>
+          {showSemuaMitra && semuaMitraRoster.map((m) => <RosterCard key={m.BusinessPartnerID} m={m} />)}
         </div>
       )}
 
