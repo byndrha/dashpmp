@@ -47,6 +47,7 @@ import {
   type FuelBar,
   type VehicleCheckPhoto,
 } from "@/lib/queries/vehicle-check";
+import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
@@ -194,6 +195,13 @@ export async function konfirmasiBerangkatAction(jadwalId: number): Promise<Actio
 // when a dialog opens.
 export async function getJadwalDetailAction(jadwalId: number): Promise<JadwalDetailRow[]> {
   return getJadwalDetail(jadwalId);
+}
+
+// For Efektifitas Armada's weighted-average selling price — same
+// "Es Tube Jual" price-level lookup used across the app (mitra-list.tsx,
+// mitra-do-panel.tsx).
+export async function getPriceLevelOptionsAction(): Promise<PriceLevelOption[]> {
+  return getPriceLevelOptions();
 }
 
 export async function getAvailableSalesOrdersAction(businessDate: string): Promise<AvailableSalesOrder[]> {

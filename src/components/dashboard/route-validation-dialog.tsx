@@ -6,7 +6,7 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TimeInput } from "@/components/ui/time-input";
@@ -59,7 +59,9 @@ import {
   getVehicleChecksForJadwalAction,
   createVehicleCheckAction,
   checkArmadaConflictAction,
+  getPriceLevelOptionsAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
+import type { PriceLevelOption } from "@/lib/queries/mitra";
 
 const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((m) => m.RouteMap), {
   ssr: false,
@@ -246,6 +248,10 @@ export function RouteValidationDialog({
   const [time, setTime] = useState("00:00");
   const [driverId, setDriverId] = useState("");
   const [pabrik, setPabrik] = useState<{ latitude: number; longitude: number } | null>(null);
+  // For Efektifitas Armada's weighted-average selling price — refetched
+  // per dialog open alongside pabrik below, same convention this file
+  // already uses rather than a separate mount-once fetch.
+  const [priceLevels, setPriceLevels] = useState<PriceLevelOption[]>([]);
   const [route, setRoute] = useState<MultiPointRoute | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -422,6 +428,7 @@ export function RouteValidationDialog({
       .then((res) => res.json())
       .then((data: { latitude: number; longitude: number }) => setPabrik(data))
       .catch(() => setPabrik(null));
+    getPriceLevelOptionsAction().then(setPriceLevels);
   }, [jadwalId]);
 
   // Recomputes the route whenever the stop order or the pabrik location
@@ -852,6 +859,38 @@ export function RouteValidationDialog({
     return Math.ceil((totalFuelCost + extraFuelCost) / 1000) * 1000;
   }, [totalFuelCost, extraFuelCost]);
 
+  // Efektifitas Armada — confirmed formula with the user 2026-08-20:
+  // 1. Jarak Tempuh (km) x rata-rata harga jual per kantong
+  // 2. Total konsumsi BBM x harga per liter (== totalFuelCost above, the
+  //    BASE fuel cost — deliberately not totalFuelCostWithExtra, the
+  //    formula only asked for consumption x price/liter)
+  // 3. (Hasil 1 - Hasil 2) / Jarak Tempuh (km) -> Rupiah margin per km
+  const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
+  // Weighted by each stop's own kantong qty (total revenue / total
+  // kantong) rather than a flat average of price LEVELS, so a few
+  // high-qty stops at one price level aren't diluted by many low-qty
+  // stops at another. Stops with no resolved price level/price are
+  // excluded from both the revenue and qty sums.
+  const avgHargaJualPerKantong = useMemo(() => {
+    let revenue = 0;
+    let qty = 0;
+    for (const o of order) {
+      const price = o.PriceLevel != null ? priceByLevel.get(o.PriceLevel) : undefined;
+      if (price == null) continue;
+      revenue += price * o.Qty;
+      qty += o.Qty;
+    }
+    return qty > 0 ? revenue / qty : null;
+  }, [order, priceByLevel]);
+  const efektivitasHasil1 = useMemo(() => {
+    if (route == null || avgHargaJualPerKantong == null) return null;
+    return route.distanceKm * avgHargaJualPerKantong;
+  }, [route, avgHargaJualPerKantong]);
+  const efektivitasPerKm = useMemo(() => {
+    if (efektivitasHasil1 == null || totalFuelCost == null || route == null || route.distanceKm <= 0) return null;
+    return (efektivitasHasil1 - totalFuelCost) / route.distanceKm;
+  }, [efektivitasHasil1, totalFuelCost, route]);
+
   // Aggregate bongkar time across every stop in the current order — the
   // per-stop "~X menit" label (SortableStopRow) shows this same function's
   // result for one stop; this is the sum across all of them, feeding the
@@ -1123,16 +1162,85 @@ export function RouteValidationDialog({
             matching how a desktop map + form split is usually laid out. */}
         <div className={cn("flex flex-col", showMap ? "md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]" : "md:p-4 md:pt-2")}>
           {showMap && (
-            <div className="order-1 h-[34vh] min-h-[220px] w-full overflow-hidden md:order-2 md:h-auto md:min-h-[440px] md:rounded-lg">
-              {pabrik && order.length > 0 ? (
-                <RouteMap
-                  pabrik={pabrik}
-                  stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
-                  geometry={route?.geometry ?? null}
-                  refitTrigger={refitTrigger}
-                />
-              ) : (
-                <Skeleton className="h-full w-full md:rounded-lg" />
+            <div className="order-1 flex flex-col gap-3 md:order-2">
+              <div className="h-[34vh] min-h-[220px] w-full overflow-hidden md:h-auto md:min-h-[440px] md:rounded-lg">
+                {pabrik && order.length > 0 ? (
+                  <RouteMap
+                    pabrik={pabrik}
+                    stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
+                    geometry={route?.geometry ?? null}
+                    refitTrigger={refitTrigger}
+                  />
+                ) : (
+                  <Skeleton className="h-full w-full md:rounded-lg" />
+                )}
+              </div>
+
+              {/* Efektifitas Armada — Rupiah margin per km, confirmed
+                  formula with the user 2026-08-20: (1) Jarak Tempuh x
+                  rata-rata harga jual/kantong, minus (2) konsumsi BBM x
+                  harga/liter (the base fuel cost, not the +15% buffer),
+                  divided by (3) Jarak Tempuh again. Every step's own inputs
+                  and result are spelled out (not just the final number) so
+                  staff can see where the figure comes from. Gated on
+                  `route` existing, same precondition the BBM breakdown
+                  block below already uses. */}
+              {route && (
+                <div className="flex flex-col gap-2.5 rounded-lg border bg-muted/30 p-3 text-sm">
+                  <p className="flex items-center gap-1.5 font-semibold">
+                    <Gauge className="size-4 text-primary" />
+                    Efektifitas Armada
+                  </p>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      1
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Jarak Tempuh &times; Harga Jual rata-rata/kantong</p>
+                      {avgHargaJualPerKantong != null ? (
+                        <p className="tabular-nums">
+                          {route.distanceKm.toLocaleString("id-ID")} km &times; {formatRupiah(avgHargaJualPerKantong)} ={" "}
+                          <span className="font-semibold">{formatRupiah(efektivitasHasil1 ?? 0)}</span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">Harga jual mitra pada rute ini belum diketahui.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      2
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Konsumsi BBM &times; Harga per Liter</p>
+                      {totalFuelLiters != null && totalFuelCost != null ? (
+                        <p className="tabular-nums">
+                          {totalFuelLiters.toLocaleString("id-ID")} L &times; {formatRupiah(biayaBBMPerLiter ?? 0)} ={" "}
+                          <span className="font-semibold">{formatRupiah(totalFuelCost)}</span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">Konsumsi BBM armada belum diketahui.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 border-t pt-2.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      3
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">(Hasil 1 &minus; Hasil 2) &divide; Jarak Tempuh</p>
+                      {efektivitasHasil1 != null && totalFuelCost != null && efektivitasPerKm != null ? (
+                        <p className="tabular-nums">
+                          ({formatRupiah(efektivitasHasil1)} &minus; {formatRupiah(totalFuelCost)}) &divide;{" "}
+                          {route.distanceKm.toLocaleString("id-ID")} km ={" "}
+                          <span className="font-semibold text-primary">{formatRupiah(efektivitasPerKm)}/km</span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">Belum bisa dihitung — lengkapi data di atas dulu.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}

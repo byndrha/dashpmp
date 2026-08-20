@@ -719,6 +719,12 @@ export interface JadwalDetailRow {
   MobileNo: string | null;
   Latitude: number | null;
   Longitude: number | null;
+  // BusinessPartner.PriceLevel (1-8) — resolved to a Rupiah/kantong figure
+  // client-side via getPriceLevelOptions(), same pattern as mitra-list.tsx
+  // and mitra-do-panel.tsx. Feeds Efektifitas Armada's weighted-average
+  // selling price in RouteValidationDialog. Null when the mitra has no
+  // price level set.
+  PriceLevel: number | null;
 }
 
 // Always sources customer/qty/address from SalesOrder/SalesOrderDetail via
@@ -747,7 +753,8 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
           bp.Address AS Alamat,
           bp.MobileNo,
           ml.Latitude,
-          ml.Longitude
+          ml.Longitude,
+          bp.PriceLevel
       FROM DashboardPengirimanJadwalDetail jd
       JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
       JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
@@ -755,7 +762,7 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
       LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
       WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
       GROUP BY jd.JadwalDetailID, jd.SalesOrderID, jd.DeliveryOrderID, jd.SalesInvoiceID, jd.Urutan,
-               bp.Name, bp.NPWPName, bp.NPWPAddress, bp.Address, bp.MobileNo, ml.Latitude, ml.Longitude
+               bp.Name, bp.NPWPName, bp.NPWPAddress, bp.Address, bp.MobileNo, ml.Latitude, ml.Longitude, bp.PriceLevel
       ORDER BY jd.Urutan
     `);
   const rows = result.recordset as (Omit<JadwalDetailRow, "InvoiceToken"> & { SalesInvoiceID: string | null })[];
