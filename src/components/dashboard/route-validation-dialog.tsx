@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/time-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
@@ -1133,7 +1134,7 @@ export function RouteValidationDialog({
             {isDraft ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 shrink-0" />
-                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32 shrink-0" />
+                <TimeInput value={time} onChange={setTime} className="shrink-0" />
                 <Select value={driverId} onValueChange={(v) => setDriverId(v ?? "")}>
                   <SelectTrigger className="min-w-40 flex-1">
                     <SelectValue placeholder="Driver">

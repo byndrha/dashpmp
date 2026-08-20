@@ -4,7 +4,7 @@ import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { formatDate, formatTime } from "@/lib/format";
 import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
-import { estimateTravelMinutes, estimateTripMinutes, type LatLng } from "@/lib/route-estimate";
+import { estimateTravelMinutes, estimateTripMinutes, haversineKm, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { getBusinessDateISO } from "@/lib/business-date";
@@ -90,6 +90,13 @@ export interface JadwalCard {
   // (findOverlappingJadwalForArmada) uses to size each Jadwal's busy
   // window.
   EstimasiDurasiMenit: number;
+  // The Wilayah/Kecamatan of whichever stop on this Jadwal's route sits
+  // farthest (straight-line) from the pabrik — null when no stop has a
+  // resolved DashboardMitraLocation, e.g. a Jadwal whose stops were never
+  // geocoded. Computed alongside the travel-time estimate in
+  // estimateTravelMinutesForJadwal (same bulk per-stop query), not a
+  // route-order concept — just "how far does this run reach".
+  LokasiTerjauh: { Wilayah: string; Kecamatan: string | null } | null;
 }
 
 // A real DeliveryOrder created directly in the desktop ERP app (not through
@@ -253,8 +260,8 @@ export async function getPengirimanBoard(
     getPabrikLocation(),
   ]);
 
-  const jadwalRows = jadwalResult.recordset as Omit<JadwalCard, "JamKembaliAktual">[];
-  const [travelByJadwalId, jamKembaliMap] = await Promise.all([
+  const jadwalRows = jadwalResult.recordset as Omit<JadwalCard, "JamKembaliAktual" | "LokasiTerjauh">[];
+  const [{ travelByJadwalId, farthestByJadwalId }, jamKembaliMap] = await Promise.all([
     estimateTravelMinutesForJadwal(pool, pabrik, jadwalRows),
     getJamKembaliAktualMap(jadwalRows.map((jr) => jr.JadwalID)),
   ]);
@@ -262,6 +269,7 @@ export async function getPengirimanBoard(
     ...jr,
     EstimasiDurasiMenit: jr.EstimasiDurasiMenit + (travelByJadwalId.get(jr.JadwalID) ?? 0),
     JamKembaliAktual: jamKembaliMap.get(jr.JadwalID) ?? null,
+    LokasiTerjauh: farthestByJadwalId.get(jr.JadwalID) ?? null,
   }));
 
   return { armada, jadwal, externalDeliveries: externalResult.recordset };
@@ -615,21 +623,28 @@ export async function getDriverTimeline(salesmanId: string, businessDateISO: str
   }));
 }
 
-// Bulk-resolves the travel-time component of EstimasiDurasiMenit for every
-// Jadwal on the board in a single extra query (rather than one round-trip
-// per Jadwal) — fetches every stop's coordinates grouped by JadwalID
-// (ordered by Urutan, though the haversine estimate is order-sensitive only
-// in aggregate distance, not in a way that matters for a rough estimate),
-// then per Jadwal prefers the real OSRM DurasiMenit (Terbit, already
-// travel-only — see startBerangkat) over the haversine heuristic (Draft, or
-// a legacy Terbit row created before DurasiMenit existed).
+// Bulk-resolves the travel-time component of EstimasiDurasiMenit, and the
+// farthest-from-pabrik stop's Wilayah/Kecamatan (JadwalCard.LokasiTerjauh),
+// for every Jadwal on the board in a single extra query (rather than one
+// round-trip per Jadwal) — fetches every stop's coordinates + Wilayah/
+// Kecamatan grouped by JadwalID (ordered by Urutan, though both the
+// haversine travel estimate and the farthest-stop pick are order-independent
+// — travel sums a per-leg distance regardless of iteration order, and
+// farthest just takes a max), then per Jadwal prefers the real OSRM
+// DurasiMenit (Terbit, already travel-only — see startBerangkat) over the
+// haversine heuristic (Draft, or a legacy Terbit row created before
+// DurasiMenit existed).
 async function estimateTravelMinutesForJadwal(
   pool: sql.ConnectionPool,
   pabrik: { latitude: number; longitude: number },
-  jadwalRows: Omit<JadwalCard, "JamKembaliAktual">[]
-): Promise<Map<number, number>> {
+  jadwalRows: Omit<JadwalCard, "JamKembaliAktual" | "LokasiTerjauh">[]
+): Promise<{
+  travelByJadwalId: Map<number, number>;
+  farthestByJadwalId: Map<number, { Wilayah: string; Kecamatan: string | null } | null>;
+}> {
   const travelByJadwalId = new Map<number, number>();
-  if (jadwalRows.length === 0) return travelByJadwalId;
+  const farthestByJadwalId = new Map<number, { Wilayah: string; Kecamatan: string | null } | null>();
+  if (jadwalRows.length === 0) return { travelByJadwalId, farthestByJadwalId };
 
   const request = pool.request();
   const placeholders = jadwalRows.map((jr, i) => {
@@ -637,27 +652,47 @@ async function estimateTravelMinutesForJadwal(
     return `@jid${i}`;
   });
   const stopsResult = await request.query(`
-    SELECT jd.JadwalID, ml.Latitude, ml.Longitude
+    SELECT jd.JadwalID, ml.Latitude, ml.Longitude,
+           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
+           bp.NPWPAddress AS Kecamatan
     FROM DashboardPengirimanJadwalDetail jd
     JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+    JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
     WHERE jd.JadwalID IN (${placeholders.join(",")}) AND jd.IsDeleted = 0
     ORDER BY jd.JadwalID, jd.Urutan
   `);
+  type StopRow = { JadwalID: number; Latitude: number | null; Longitude: number | null; Wilayah: string; Kecamatan: string | null };
   const stopsByJadwal = new Map<number, LatLng[]>();
-  for (const row of stopsResult.recordset as { JadwalID: number; Latitude: number | null; Longitude: number | null }[]) {
+  const locatedStopsByJadwal = new Map<number, (LatLng & { Wilayah: string; Kecamatan: string | null })[]>();
+  for (const row of stopsResult.recordset as StopRow[]) {
     if (row.Latitude == null || row.Longitude == null) continue;
     const arr = stopsByJadwal.get(row.JadwalID) ?? [];
     arr.push({ lat: row.Latitude, lng: row.Longitude });
     stopsByJadwal.set(row.JadwalID, arr);
+    const located = locatedStopsByJadwal.get(row.JadwalID) ?? [];
+    located.push({ lat: row.Latitude, lng: row.Longitude, Wilayah: row.Wilayah, Kecamatan: row.Kecamatan });
+    locatedStopsByJadwal.set(row.JadwalID, located);
   }
 
   const pabrikLatLng: LatLng = { lat: pabrik.latitude, lng: pabrik.longitude };
   for (const jr of jadwalRows) {
     const travel = jr.DurasiMenit ?? estimateTravelMinutes(pabrikLatLng, stopsByJadwal.get(jr.JadwalID) ?? []);
     travelByJadwalId.set(jr.JadwalID, travel);
+
+    const located = locatedStopsByJadwal.get(jr.JadwalID) ?? [];
+    let farthest: { Wilayah: string; Kecamatan: string | null } | null = null;
+    let farthestKm = -1;
+    for (const stop of located) {
+      const km = haversineKm(pabrikLatLng, stop);
+      if (km > farthestKm) {
+        farthestKm = km;
+        farthest = { Wilayah: stop.Wilayah, Kecamatan: stop.Kecamatan };
+      }
+    }
+    farthestByJadwalId.set(jr.JadwalID, farthest);
   }
-  return travelByJadwalId;
+  return { travelByJadwalId, farthestByJadwalId };
 }
 
 export interface JadwalDetailRow {

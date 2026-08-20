@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/time-input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -69,7 +70,11 @@ const MIN_CARD_WIDTH = 92;
 const INFO_COL_WIDTH = 224;
 const DATE_SEGMENT_HEIGHT = 20;
 const HOUR_RULER_HEIGHT = 20;
-const CARD_HEIGHT = 56;
+// +12 over the original 56px to fit DraggableJadwalCard's new Lokasi
+// Terjauh line — applied uniformly to every card type sharing this lane
+// height (ArmadaActivityCard, ExternalDoCard, DriverBlock, AutoSegmentCard),
+// which only centers a bit more empty space around their own shorter content.
+const CARD_HEIGHT = 68;
 const CARD_GAP = 4;
 const ROW_TOP_PADDING = 8;
 
@@ -143,6 +148,28 @@ function useContainerWidth<T extends HTMLElement>(): [React.RefObject<T | null>,
   }, []);
 
   return [ref, width];
+}
+
+// Measures an element's own rendered height on mount and on resize — mirrors
+// useContainerWidth above. Used to offset the sticky timeline header block
+// beneath the sticky CardHeader, whose height varies as its button/
+// date-picker row wraps to a second line on narrow viewports.
+function useElementHeight<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
+  const ref = useRef<T | null>(null);
+  const [height, setHeight] = useState(48);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height;
+      if (h) setHeight(h);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, height];
 }
 
 function CreateJadwalDialog({
@@ -240,7 +267,7 @@ function CreateJadwalDialog({
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32" />
+            <TimeInput value={time} onChange={setTime} />
             {kapasitasMaks != null && (
               <span
                 className={cn(
@@ -433,14 +460,12 @@ function MergeExternalDialog({
               }}
               className="w-40"
             />
-            <Input
-              type="time"
+            <TimeInput
               value={time}
-              onChange={(e) => {
-                setTime(e.target.value);
+              onChange={(v) => {
+                setTime(v);
                 setTimeEdited(true);
               }}
-              className="w-32"
             />
             <span className="ml-auto text-xs text-muted-foreground">{totalKantong} kantong</span>
           </div>
@@ -497,6 +522,9 @@ function DraggableJadwalCard({
     data: { jadwalId: j.JadwalID },
     disabled: !isDraft,
   });
+  const lokasiTerjauh = j.LokasiTerjauh
+    ? `${j.LokasiTerjauh.Wilayah}${j.LokasiTerjauh.Kecamatan ? ` - ${j.LokasiTerjauh.Kecamatan}` : ""}`
+    : null;
 
   return (
     <button
@@ -505,6 +533,7 @@ function DraggableJadwalCard({
       {...attributes}
       type="button"
       onClick={() => !isDragging && onCardClick(j.JadwalID)}
+      title={lokasiTerjauh ? `Lokasi pengiriman terjauh: ${lokasiTerjauh}` : undefined}
       className={cn(
         "absolute flex flex-col justify-between overflow-hidden rounded-md border p-1.5 text-left shadow-sm",
         isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30 bg-primary/10",
@@ -538,6 +567,9 @@ function DraggableJadwalCard({
         <span className="text-[8px] text-muted-foreground">kantong</span>
       </div>
       <p className="text-center text-[9px] tabular-nums text-muted-foreground">{j.TotalStop} tujuan</p>
+      {lokasiTerjauh && (
+        <p className="truncate text-center text-[8px] text-muted-foreground/80">{lokasiTerjauh}</p>
+      )}
     </button>
   );
 }
@@ -793,8 +825,8 @@ function ArmadaActivityFormDialog({
             </SelectContent>
           </Select>
           <div className="grid grid-cols-2 gap-2">
-            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <TimeInput value={startTime} onChange={setStartTime} className="w-full" />
+            <TimeInput value={endTime} onChange={setEndTime} className="w-full" />
           </div>
           <Input placeholder="Catatan (opsional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -1305,6 +1337,7 @@ export function PengirimanBoard({
   const [salesOrderEditSignal, setSalesOrderEditSignal] = useState(0);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
+  const [cardHeaderRef, cardHeaderHeight] = useElementHeight<HTMLDivElement>();
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
   const dayWidth = hourWidth * 24;
 
@@ -1443,51 +1476,53 @@ export function PengirimanBoard({
   }
 
   return (
-    <Card className="relative">
-      {isPending && (
-        <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-primary/15">
-          <div className="h-full w-1/3 animate-indeterminate rounded-full bg-primary" />
-        </div>
-      )}
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-        <div>
-          <CardTitle className="font-display">
-            Papan Pengiriman {isToday ? "Hari Ini" : formatDate(businessDate)}
-          </CardTitle>
-          <CardDescription>{jadwal.length} keberangkatan terjadwal</CardDescription>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ArmadaManager armada={armada} expeditionOptions={expeditionOptions} />
-          <DriverManager drivers={driverProfiles} />
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Input
-              type="date"
-              value={businessDate}
-              disabled={isPending}
-              onChange={(e) => e.target.value && goToDate(e.target.value)}
-              className="h-8 w-40 text-xs"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-8"
-              disabled={isPending}
-              onClick={() => shiftDate(1)}
-            >
-              <ChevronRight className="size-4" />
-            </Button>
+    <Card className="relative overflow-visible">
+      <div ref={cardHeaderRef} className="sticky top-14 z-30 border-b bg-card">
+        {isPending && (
+          <div className="absolute inset-x-0 bottom-0 z-10 h-0.5 overflow-hidden bg-primary/15">
+            <div className="h-full w-1/3 animate-indeterminate rounded-full bg-primary" />
           </div>
-        </div>
-      </CardHeader>
+        )}
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle className="font-display">
+              Papan Pengiriman {isToday ? "Hari Ini" : formatDate(businessDate)}
+            </CardTitle>
+            <CardDescription>{jadwal.length} keberangkatan terjadwal</CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ArmadaManager armada={armada} expeditionOptions={expeditionOptions} />
+            <DriverManager drivers={driverProfiles} />
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Input
+                type="date"
+                value={businessDate}
+                disabled={isPending}
+                onChange={(e) => e.target.value && goToDate(e.target.value)}
+                className="h-8 w-40 text-xs"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8"
+                disabled={isPending}
+                onClick={() => shiftDate(1)}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </div>
       <CardContent>
         {sortedArmada.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada armada. Tambah lewat &quot;Kelola Armada&quot;.</p>
         ) : (
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-            <div ref={containerRef} className="overflow-x-auto">
+            <div ref={containerRef} className="overflow-x-auto overflow-y-visible">
               {/* Date segment bar + hour ruler — shared rows instead of
                   repeating labels per armada, aligned to the exact same
                   hourWidth grid every ArmadaRowBoard draws its own
@@ -1497,36 +1532,46 @@ export function PengirimanBoard({
                   business-date label this board is keyed on (see
                   ROLLOVER_HOUR in business-date.ts) — so it spans two
                   actual calendar dates, called out here since the hour
-                  numbers alone (14..23, 00..13) don't make that obvious. */}
-              <div className="flex items-stretch">
-                <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
-                <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: DATE_SEGMENT_HEIGHT }}>
-                  <div
-                    className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
-                    style={{ left: 0, width: (24 - ROLLOVER_HOUR) * hourWidth }}
-                  >
-                    {formatDate(shiftDateISO(businessDate, -1))}
-                  </div>
-                  <div
-                    className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
-                    style={{ left: (24 - ROLLOVER_HOUR) * hourWidth, width: ROLLOVER_HOUR * hourWidth }}
-                  >
-                    {formatDate(businessDate)}
+                  numbers alone (14..23, 00..13) don't make that obvious.
+                  Sticky below the sticky CardHeader (offset by its measured
+                  height) so both stay pinned together while the armada
+                  rows scroll underneath; w-fit keeps its background
+                  covering the full scrollable width, not just the
+                  viewport-visible slice. */}
+              <div
+                className="sticky z-20 w-fit border-b bg-card"
+                style={{ top: `calc(3.5rem + ${cardHeaderHeight}px)` }}
+              >
+                <div className="flex items-stretch">
+                  <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
+                  <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: DATE_SEGMENT_HEIGHT }}>
+                    <div
+                      className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
+                      style={{ left: 0, width: (24 - ROLLOVER_HOUR) * hourWidth }}
+                    >
+                      {formatDate(shiftDateISO(businessDate, -1))}
+                    </div>
+                    <div
+                      className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
+                      style={{ left: (24 - ROLLOVER_HOUR) * hourWidth, width: ROLLOVER_HOUR * hourWidth }}
+                    >
+                      {formatDate(businessDate)}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-stretch">
-                <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
-                <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: HOUR_RULER_HEIGHT }}>
-                  {Array.from({ length: 24 }, (_, h) => (
-                    <div
-                      key={h}
-                      className="absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums text-muted-foreground"
-                      style={{ left: h * hourWidth, width: hourWidth }}
-                    >
-                      {String((h + ROLLOVER_HOUR) % 24).padStart(2, "0")}
-                    </div>
-                  ))}
+                <div className="flex items-stretch">
+                  <div className="sticky left-0 z-10 w-56 shrink-0 bg-card" />
+                  <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: HOUR_RULER_HEIGHT }}>
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <div
+                        key={h}
+                        className="absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums text-muted-foreground"
+                        style={{ left: h * hourWidth, width: hourWidth }}
+                      >
+                        {String((h + ROLLOVER_HOUR) % 24).padStart(2, "0")}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               {/* gap-y-3 separates one armada's whole block (its own

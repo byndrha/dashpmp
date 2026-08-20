@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { addDays, subDays, format, parseISO } from "date-fns";
 import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Wallet, Coins, Package, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,9 +55,24 @@ export function SalesTodayPanel({
   const [dateISO, setDateISO] = useState(initialDateISO);
   const [data, setData] = useState(initialData);
   const [pending, startTransition] = useTransition();
+  // The day before whichever day is currently displayed (dateISO), not
+  // necessarily "yesterday" relative to today — re-fetched whenever dateISO
+  // changes (mount included) so the prev/next buttons keep this figure in
+  // sync with the panel's own displayed day, per the comparison's intent.
+  const [yesterdayQty, setYesterdayQty] = useState<number | null>(null);
 
   const isToday = dateISO === businessTodayISO;
   const canGoNext = dateISO < businessTodayISO;
+
+  useEffect(() => {
+    let cancelled = false;
+    getSalesForDayAction(toISO(subDays(parseISO(dateISO), 1))).then((result) => {
+      if (!cancelled) setYesterdayQty(result.Qty10KG + result.Qty5KG);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dateISO]);
 
   function navigate(nextDateISO: string) {
     setDateISO(nextDateISO);
@@ -139,7 +154,7 @@ export function SalesTodayPanel({
               </span>
             </div>
           </div>
-          <div className="mt-2 border-t pt-2">
+          <div className="mt-2 flex items-center justify-between gap-2 border-t pt-2">
             <span
               title="Harga rata-rata"
               aria-label="Harga rata-rata"
@@ -148,6 +163,16 @@ export function SalesTodayPanel({
               <Coins className="size-3" />
               {formatRupiahAvg(data.AvgPrice)}
             </span>
+            {yesterdayQty != null && (
+              <span
+                title="Kantong terkirim kemarin — pembanding untuk tanggal yang sedang ditampilkan"
+                aria-label="Kantong terkirim kemarin"
+                className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+              >
+                <Truck className="size-3" />
+                {yesterdayQty.toLocaleString("id-ID")} kemarin
+              </span>
+            )}
           </div>
         </div>
       </CardContent>

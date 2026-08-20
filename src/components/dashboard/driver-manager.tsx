@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { Pencil, X, EyeOff, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/time-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -236,13 +237,13 @@ function DriverFormDialog({
               <Label htmlFor="jamMulai" className="text-xs text-muted-foreground">
                 Jam Mulai Kerja
               </Label>
-              <Input id="jamMulai" type="time" value={jamMulaiKerja} onChange={(e) => setJamMulaiKerja(e.target.value)} />
+              <TimeInput id="jamMulai" value={jamMulaiKerja} onChange={setJamMulaiKerja} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="jamSelesai" className="text-xs text-muted-foreground">
                 Jam Selesai Kerja
               </Label>
-              <Input id="jamSelesai" type="time" value={jamSelesaiKerja} onChange={(e) => setJamSelesaiKerja(e.target.value)} />
+              <TimeInput id="jamSelesai" value={jamSelesaiKerja} onChange={setJamSelesaiKerja} />
             </div>
           </div>
 
