@@ -672,22 +672,48 @@ export function MitraDOPanel({
   // contactLogSummary) — the header's own "akumulasi dari data keseluruhan
   // ... dari seluruh mitra" readout, one line per channel, same
   // formatPemesananLine shape as each mitra row's own readout.
+  //
+  // actualChat/actualTelepon deliberately do NOT reuse totalPerDate[i] (the
+  // delivered total across ALL filteredActive mitra) as the pct denominator
+  // — only a handful of mitra typically have a logged forecast on any given
+  // date, so comparing everyone's delivery total against just their forecast
+  // produced nonsensical readings (e.g. 2.997 kantong delivered by 275
+  // mitra vs. one mitra's own "15" forecast -> 19980%). Instead, each
+  // channel's actual is summed only across the SAME mitra that logged a
+  // forecast for that date+channel, mirroring how each mitra row's own
+  // badge already compares one mitra's forecast against that same mitra's
+  // own qty.
   const totalPemesananPerDate = useMemo(() => {
     const dateIndex = new Map(dates.map((d, i) => [d, i]));
-    const totals: { chat: number; telepon: number; hasChat: boolean; hasTelepon: boolean }[] = Array.from(
-      { length: daysInRange },
-      () => ({ chat: 0, telepon: 0, hasChat: false, hasTelepon: false })
-    );
-    const filteredIds = new Set(filteredActive.map((m) => m.BusinessPartnerID));
+    const mitraById = new Map(filteredActive.map((m) => [m.BusinessPartnerID, m]));
+    const totals: {
+      chat: number;
+      telepon: number;
+      hasChat: boolean;
+      hasTelepon: boolean;
+      actualChat: number;
+      actualTelepon: number;
+    }[] = Array.from({ length: daysInRange }, () => ({
+      chat: 0,
+      telepon: 0,
+      hasChat: false,
+      hasTelepon: false,
+      actualChat: 0,
+      actualTelepon: 0,
+    }));
     for (const entry of contactLogSummary) {
-      if (!filteredIds.has(entry.BusinessPartnerID)) continue;
+      const mitra = mitraById.get(entry.BusinessPartnerID);
+      if (!mitra) continue;
       const i = dateIndex.get(entry.LogDate);
       if (i == null) continue;
+      const actualQty = mitra.DailyQty[i];
       if (entry.ContactType === "Chat") {
         totals[i].chat += entry.AngkaPemesanan;
+        totals[i].actualChat += actualQty;
         totals[i].hasChat = true;
       } else {
         totals[i].telepon += entry.AngkaPemesanan;
+        totals[i].actualTelepon += actualQty;
         totals[i].hasTelepon = true;
       }
     }
@@ -944,14 +970,14 @@ export function MitraDOPanel({
                       {pemesanan.hasChat && (
                         <PemesananBadge
                           angkaPemesanan={pemesanan.chat}
-                          actualQtyForDate={totalPerDate[i]}
+                          actualQtyForDate={pemesanan.actualChat}
                           dateHasElapsed={dateISO <= todayISO}
                         />
                       )}
                       {pemesanan.hasTelepon && (
                         <PemesananBadge
                           angkaPemesanan={pemesanan.telepon}
-                          actualQtyForDate={totalPerDate[i]}
+                          actualQtyForDate={pemesanan.actualTelepon}
                           dateHasElapsed={dateISO <= todayISO}
                         />
                       )}
