@@ -9,8 +9,12 @@ import {
   deleteMitra,
   setMitraSuspended,
   getMitraDetail,
+  getTermOfPaymentOptions,
+  getPriceLevelOptions,
   type MitraInput,
   type MitraRow,
+  type TermOfPaymentOption,
+  type PriceLevelOption,
 } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
@@ -93,5 +97,21 @@ export async function getMitraDetailAction(businessPartnerId: string): Promise<A
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
     return getMitraDetail(businessPartnerId);
+  });
+}
+
+// Bundled in one round-trip for MitraEditDialog (mitra-edit-dialog.tsx) —
+// both are needed to render MitraFormDialog's Harga/Tenggat Bayar selects,
+// same two queries MitraPage already fetches server-side for MitraList's
+// own inline edit flow.
+export async function getMitraEditOptionsAction(): Promise<
+  ActionResult<{ termOptions: TermOfPaymentOption[]; priceLevels: PriceLevelOption[] }>
+> {
+  return runAction(async () => {
+    const session = await auth();
+    if (!session?.user?.id) throw new AppError("Unauthorized");
+
+    const [termOptions, priceLevels] = await Promise.all([getTermOfPaymentOptions(), getPriceLevelOptions()]);
+    return { termOptions, priceLevels };
   });
 }

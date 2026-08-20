@@ -30,6 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
+import { MitraEditDialog } from "@/components/dashboard/mitra-edit-dialog";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
@@ -419,6 +420,10 @@ function TargetButton({ businessPartnerId, target }: { businessPartnerId: string
         render={
           <button
             type="button"
+            // The card this sits in is now click-to-edit (see MitraDOCard) —
+            // stop the click here so opening the Target popover doesn't also
+            // open the Edit Mitra dialog underneath it.
+            onClick={(e) => e.stopPropagation()}
             className="ml-auto flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors hover:bg-muted"
           />
         }
@@ -481,6 +486,7 @@ function MitraDOCard({
   todayISO,
   elapsedDays,
   contactSummaryMap,
+  onCardClick,
 }: {
   m: MitraDORow;
   dates: string[];
@@ -489,6 +495,7 @@ function MitraDOCard({
   // Keyed `${BusinessPartnerID}|${dateISO}` — built once in MitraDOPanel from
   // the page's batch-fetched contactLogSummary, not per-card.
   contactSummaryMap: Map<string, { chat?: number; telepon?: number }>;
+  onCardClick: (businessPartnerId: string) => void;
 }) {
   const trend = getTrend(m.DailyQty, elapsedDays);
   // Average per elapsed day, not per every day in the visible range —
@@ -502,8 +509,17 @@ function MitraDOCard({
           date columns to its right scroll underneath it. bg-card keeps
           scrolled-under cells from showing through. Total/%/trend paired
           on the right of each line (not a separate 4th line) to fit
-          everything in this narrower fixed-width column. */}
-      <div className={cn("sticky left-0 z-10 flex shrink-0 flex-col justify-center gap-1 bg-card py-3 pr-3", INFO_COL_CLASS)}>
+          everything in this narrower fixed-width column. Clicking anywhere
+          in this box (except the Target pill, which stops its own
+          propagation — see TargetButton) opens the same Edit Mitra dialog
+          /mkesindo/mitra uses. */}
+      <div
+        onClick={() => onCardClick(m.BusinessPartnerID)}
+        className={cn(
+          "sticky left-0 z-10 flex shrink-0 cursor-pointer flex-col justify-center gap-1 bg-card py-3 pr-3 transition-colors hover:bg-muted/40",
+          INFO_COL_CLASS
+        )}
+      >
         <div className="flex items-start justify-between gap-1">
           <p className="flex min-w-0 items-center gap-1.5 font-medium">
             <span className="truncate">{m.Name}</span>
@@ -579,6 +595,7 @@ export function MitraDOPanel({
   const [showAll, setShowAll] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("target");
   const [search, setSearch] = useState("");
+  const [editMitraId, setEditMitraId] = useState<string | null>(null);
   const { active, inactive, daysInRange, rangeStartISO, todayISO } = data;
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
@@ -960,6 +977,7 @@ export function MitraDOPanel({
                   todayISO={todayISO}
                   elapsedDays={elapsedDays}
                   contactSummaryMap={contactSummaryMap}
+                  onCardClick={setEditMitraId}
                 />
               ))}
             </div>
@@ -974,6 +992,7 @@ export function MitraDOPanel({
                     todayISO={todayISO}
                     elapsedDays={elapsedDays}
                     contactSummaryMap={contactSummaryMap}
+                    onCardClick={setEditMitraId}
                   />
                 ))}
               </div>
@@ -981,6 +1000,8 @@ export function MitraDOPanel({
           </div>
         )}
       </CardContent>
+
+      <MitraEditDialog businessPartnerId={editMitraId} onOpenChange={(open) => !open && setEditMitraId(null)} />
     </div>
   );
 }

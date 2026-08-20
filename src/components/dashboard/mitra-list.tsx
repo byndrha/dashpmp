@@ -74,7 +74,7 @@ function emptyForm(): MitraInput {
   };
 }
 
-function rowToForm(row: MitraRow): MitraInput {
+export function rowToForm(row: MitraRow): MitraInput {
   return {
     name: row.Name ?? "",
     mobileNo: row.Kontak ?? "",
@@ -88,12 +88,16 @@ function rowToForm(row: MitraRow): MitraInput {
   };
 }
 
-function rowToLocation(row: MitraRow): MitraLocationValue | null {
+export function rowToLocation(row: MitraRow): MitraLocationValue | null {
   if (row.Latitude == null || row.Longitude == null) return null;
   return { latitude: row.Latitude, longitude: row.Longitude, alamat: row.GeoAlamat };
 }
 
-function MitraFormDialog({
+// Exported so MitraEditDialog (mitra-edit-dialog.tsx) can reuse this same
+// form — reused anywhere "Edit Mitra" needs to open outside the Mitra
+// module itself (Transaksi's Mitra DO panel), same pattern as
+// MitraDetailDialog's cross-module reuse.
+export function MitraFormDialog({
   open,
   onOpenChange,
   initial,
