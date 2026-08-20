@@ -947,7 +947,7 @@ export function MitraDOPanel({
         </div>
       </CardHeader>
       <CardContent>
-        {filteredActive.length === 0 ? (
+        {displayedMitra.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada Delivery Order bulan ini.</p>
         ) : (
           <div ref={bodyScrollRef} onScroll={handleBodyScroll} className="overflow-x-auto">
