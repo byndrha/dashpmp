@@ -541,7 +541,14 @@ function DraggableJadwalCard({
       onClick={() => !isDragging && onCardClick(j.JadwalID)}
       title={lokasiTerjauh ? `Lokasi pengiriman terjauh: ${lokasiTerjauh}` : undefined}
       className={cn(
-        "absolute flex flex-col justify-between overflow-hidden rounded-md border p-1.5 text-left shadow-sm",
+        // justify-start + a small explicit gap, not justify-between —
+        // confirmed live (DevTools) that justify-between's auto-distributed
+        // spacing let the "N tujuan" line's own height push past this
+        // card's fixed CARD_HEIGHT, silently clipped by overflow-hidden.
+        // Packing tightly from the top instead reclaims the empty space
+        // justify-between left above the kantong number, which is what the
+        // 3rd line actually needed to stay inside the box.
+        "absolute flex flex-col justify-start gap-0.5 overflow-hidden rounded-md border p-1.5 text-left shadow-sm",
         isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30 bg-primary/10",
         isDragging && "z-20 opacity-70 shadow-lg"
       )}
@@ -557,7 +564,7 @@ function DraggableJadwalCard({
         transform: CSS.Translate.toString(transform),
       }}
     >
-      <div className="flex items-center justify-between gap-1">
+      <div className="flex items-center justify-between gap-1 leading-none">
         <span className="text-[10px] font-semibold tabular-nums">{formatTime(j.JamJadwal)}</span>
         <span
           className={cn(
@@ -578,7 +585,7 @@ function DraggableJadwalCard({
           so this stayed reachable only via the button's title tooltip.
           One truncated line, always in the DOM whenever there's a farthest
           stop, is the concise, always-visible fix the user asked for. */}
-      <p className="truncate text-center text-[9px] tabular-nums text-muted-foreground">
+      <p className="truncate text-center text-[9px] leading-none tabular-nums text-muted-foreground">
         {j.TotalStop} tujuan{lokasiTerjauh ? ` · ${lokasiTerjauh}` : ""}
       </p>
     </button>
