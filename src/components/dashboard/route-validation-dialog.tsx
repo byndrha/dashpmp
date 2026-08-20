@@ -825,17 +825,23 @@ export function RouteValidationDialog({
     if (totalFuelLiters == null || biayaBBMPerLiter == null) return null;
     return Math.round(totalFuelLiters * biayaBBMPerLiter);
   }, [totalFuelLiters, biayaBBMPerLiter]);
-  // "Biaya BBM tambahan": an extra buffer figure on top of the normal fuel
-  // cost above, shown separately (never merged into totalFuelCost) — for
-  // every complete 5km of route distance, add the cost of 5km worth of
-  // fuel. Confirmed formula with the user: floor(distanceKm / 5) * (5km
-  // worth of fuel cost), not a re-scaling of the existing total.
+  // "Biaya BBM tambahan": a 15% buffer on top of the base fuel cost above,
+  // shown separately (never merged into totalFuelCost) — confirmed formula
+  // with the user 2026-08-20, replacing the old floor(distanceKm/5) segment
+  // formula. Applies uniformly to every jenisBBM (Solar, Pertalite, etc.),
+  // since it's a flat percentage of whatever totalFuelCost already resolved
+  // to for that fuel type.
   const extraFuelCost = useMemo(() => {
-    if (route == null || konsumsiBBM == null || biayaBBMPerLiter == null) return null;
-    const segments = Math.floor(route.distanceKm / 5);
-    const costPer5Km = 5 * konsumsiBBM * biayaBBMPerLiter;
-    return Math.round(segments * costPer5Km);
-  }, [route, konsumsiBBM, biayaBBMPerLiter]);
+    if (totalFuelCost == null) return null;
+    return Math.round(totalFuelCost * 0.15);
+  }, [totalFuelCost]);
+  // Base + tambahan, rounded UP (never down) to the nearest Rp1.000 — also
+  // confirmed mandatory with the user, e.g. 93.840 + 14.076 = 107.916 ->
+  // 108.000.
+  const totalFuelCostWithExtra = useMemo(() => {
+    if (totalFuelCost == null || extraFuelCost == null) return null;
+    return Math.ceil((totalFuelCost + extraFuelCost) / 1000) * 1000;
+  }, [totalFuelCost, extraFuelCost]);
 
   // Aggregate bongkar time across every stop in the current order — the
   // per-stop "~X menit" label (SortableStopRow) shows this same function's
@@ -1332,6 +1338,12 @@ export function RouteValidationDialog({
                   <span className="flex items-center gap-1 text-muted-foreground">
                     + {formatRupiah(extraFuelCost)}
                     <span className="text-[10px]">(BBM tambahan)</span>
+                  </span>
+                )}
+                {totalFuelCostWithExtra != null && (
+                  <span className="flex items-center gap-1 font-semibold text-primary">
+                    = {formatRupiah(totalFuelCostWithExtra)}
+                    <span className="text-[10px] font-normal text-muted-foreground">(Total, dibulatkan)</span>
                   </span>
                 )}
               </div>
