@@ -1328,10 +1328,7 @@ export function RouteValidationDialog({
                   <span className="flex items-center gap-1 text-muted-foreground">+ {formatRupiah(extraFuelCost)}</span>
                 )}
                 {totalFuelCostWithExtra != null && (
-                  <span className="flex items-center gap-1 font-semibold text-primary">
-                    = {formatRupiah(totalFuelCostWithExtra)}
-                    <span className="text-xs font-normal text-muted-foreground">(Total, dibulatkan)</span>
-                  </span>
+                  <span className="flex items-center gap-1 font-semibold text-primary">= {formatRupiah(totalFuelCostWithExtra)}</span>
                 )}
               </div>
             )}
