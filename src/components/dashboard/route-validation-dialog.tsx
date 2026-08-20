@@ -126,12 +126,12 @@ function SortableStopRow({
           {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
         </p>
       </button>
-      {/* w-24 forces the bonus suffix to wrap onto its own line instead of
-          pushing the row into horizontal overflow (confirmed live: without
-          a cap, this shrink-0 block held its full single-line width and
-          squeezed the name/location button next to it down to nothing on
-          the map+list split layout's narrower list column). */}
-      <span className="w-24 shrink-0 text-right tabular-nums">
+      {/* Widened per explicit user request (confirmed OK with the tighter
+          name/location column that results) so "155 kantong (10 KG)" fits
+          on one line instead of wrapping — was w-24, which avoided the
+          name/location column being squeezed to zero width but wrapped
+          this qty text awkwardly. */}
+      <span className="w-40 shrink-0 text-right tabular-nums">
         <span className="font-medium">
           {formatKemasanQty(detail.Qty10KG, detail.Qty5KG)}
           {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
@@ -1109,7 +1109,9 @@ export function RouteValidationDialog({
               )}
             </p>
           )}
-          <DialogDescription>Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum berangkat.</DialogDescription>
+          <DialogDescription className="sr-only">
+            Atur waktu, driver, urutan pengiriman, dan validasi rute sebelum berangkat.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Mobile (default): map first, full-bleed, then the config panel
@@ -1323,10 +1325,7 @@ export function RouteValidationDialog({
                   <span className="flex items-center gap-1 font-medium">{formatRupiah(totalFuelCost)}</span>
                 )}
                 {extraFuelCost != null && (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    + {formatRupiah(extraFuelCost)}
-                    <span className="text-xs">(BBM tambahan)</span>
-                  </span>
+                  <span className="flex items-center gap-1 text-muted-foreground">+ {formatRupiah(extraFuelCost)}</span>
                 )}
                 {totalFuelCostWithExtra != null && (
                   <span className="flex items-center gap-1 font-semibold text-primary">
