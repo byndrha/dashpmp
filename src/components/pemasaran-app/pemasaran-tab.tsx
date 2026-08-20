@@ -3,15 +3,13 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { KinerjaMarketingSubTab } from "@/components/pemasaran-app/kinerja-marketing-sub-tab";
-import { LogKunjunganSubTab } from "@/components/pemasaran-app/log-kunjungan-sub-tab";
 import { PengirimanSubTab } from "@/components/pemasaran-app/pengiriman-sub-tab";
 import { PengajuanSubTab } from "@/components/pemasaran-app/pengajuan-sub-tab";
 
-type SubTabKey = "kinerja" | "kunjungan" | "pengiriman" | "pengajuan";
+type SubTabKey = "kinerja" | "pengiriman" | "pengajuan";
 
 const SUB_TABS: { key: SubTabKey; label: string }[] = [
   { key: "kinerja", label: "Kinerja Marketing" },
-  { key: "kunjungan", label: "Log Kunjungan" },
   { key: "pengiriman", label: "Pengiriman" },
   { key: "pengajuan", label: "Pengajuan" },
 ];
@@ -46,7 +44,6 @@ export function PemasaranTab() {
       </div>
       <div className="min-h-0 flex-1">
         {visited.has("kinerja") && <div className={cn(activeSubTab !== "kinerja" && "hidden")}><KinerjaMarketingSubTab /></div>}
-        {visited.has("kunjungan") && <div className={cn(activeSubTab !== "kunjungan" && "hidden")}><LogKunjunganSubTab /></div>}
         {visited.has("pengiriman") && <div className={cn(activeSubTab !== "pengiriman" && "hidden")}><PengirimanSubTab /></div>}
         {visited.has("pengajuan") && <div className={cn(activeSubTab !== "pengajuan" && "hidden")}><PengajuanSubTab /></div>}
       </div>
