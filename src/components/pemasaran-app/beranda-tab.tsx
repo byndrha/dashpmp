@@ -31,6 +31,12 @@ export function BerandaTab() {
   const [topPiutang, setTopPiutang] = useState<TopMitraPiutangRow[] | null>(null);
   const [delivery, setDelivery] = useState<PemasaranWilayahDeliveryRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Kept separate from `error` on purpose: a failure fetching the Pengiriman
+  // table shouldn't blank the entire Beranda tab (sales + top piutang cards
+  // included) the way `error` does below — it should only replace this one
+  // card's content, mirroring how pengiriman-sub-tab.tsx used to fail
+  // independently of the rest of the page before this table moved here.
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<TopMitraPiutangRow | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
   // See top-mitra-piutang-panel.tsx's editingNoteIdRef for why this exists:
@@ -61,7 +67,7 @@ export function BerandaTab() {
     getWilayahDeliveryAction().then((result) => {
       if (cancelled) return;
       if (!result.success) {
-        setError(result.error);
+        setDeliveryError(result.error);
         return;
       }
       setDelivery(result.data);
@@ -171,7 +177,9 @@ export function BerandaTab() {
           <CardTitle className="text-sm">Pengiriman per Wilayah</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
-          {!delivery ? (
+          {deliveryError ? (
+            <p className="p-4 text-sm text-destructive">{deliveryError}</p>
+          ) : !delivery ? (
             <div className="flex h-24 items-center justify-center">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
