@@ -25,6 +25,53 @@ function stopIcon(order: number) {
   });
 }
 
+// Top-down truck (cargo box + cab), not a pin — the front (cab) points
+// geographic north at bearingDeg=0 and rotates from there, so passing the
+// route's own heading at the driver's nearest point makes the icon's front
+// track the direction of travel rather than just marking a location.
+function truckIcon(bearingDeg: number) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="width:28px;height:28px;transform:rotate(${bearingDeg}deg);transform-origin:50% 50%;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">
+      <svg viewBox="0 0 24 24" width="28" height="28">
+        <rect x="7" y="10" width="10" height="12" rx="1.5" fill="#2563eb" stroke="white" stroke-width="1.2" />
+        <rect x="8.5" y="2" width="7" height="9" rx="1.5" fill="#1d4ed8" stroke="white" stroke-width="1.2" />
+      </svg>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+}
+
+// Nearest-segment heading: finds the route polyline segment whose midpoint
+// is closest to the driver's current position, then returns that segment's
+// compass bearing. A single GPS ping has no bearing of its own (no prior
+// point to compare against) — the route geometry itself stands in for
+// "which way is the truck facing" between 10-second polls, matching what
+// the driver-app design settled on (bearing from route, not from position
+// history).
+function bearingToNearestSegment(position: [number, number], route: [number, number][]): number {
+  if (route.length < 2) return 0;
+  let bestDistSq = Infinity;
+  let bestBearing = 0;
+  for (let i = 0; i < route.length - 1; i++) {
+    const [lat1, lng1] = route[i];
+    const [lat2, lng2] = route[i + 1];
+    const midLat = (lat1 + lat2) / 2;
+    const midLng = (lng1 + lng2) / 2;
+    const distSq = (position[0] - midLat) ** 2 + (position[1] - midLng) ** 2;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      const toRad = (d: number) => (d * Math.PI) / 180;
+      const dLng = toRad(lng2 - lng1);
+      const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+      const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+      bestBearing = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+    }
+  }
+  return bestBearing;
+}
+
 type Stop = JadwalDetailRow & { Latitude: number; Longitude: number };
 
 // Keeps the map framed on the whole route (pabrik + every stop + the
@@ -134,6 +181,7 @@ export function RouteMap({
   stops,
   geometry,
   refitTrigger = 0,
+  driverPosition = null,
 }: {
   pabrik: { latitude: number; longitude: number };
   stops: (JadwalDetailRow & { Latitude: number; Longitude: number })[];
@@ -143,12 +191,20 @@ export function RouteMap({
   geometry: [number, number][] | null;
   // Bump to force an immediate, un-animated bounds re-fit — see FitBounds.
   refitTrigger?: number;
+  // Live driver GPS, polled by the caller every 10s once "Mulai Muat" is
+  // done — null hides the marker entirely (not yet loading, no ping ever
+  // received, or the caller hasn't started polling yet). Deliberately left
+  // out of FitBounds below: re-framing the whole map on every 10s ping
+  // would fight any manual pan/zoom and jump the view around as the truck
+  // moves, when the point is to watch it move within a fixed frame.
+  driverPosition?: { latitude: number; longitude: number } | null;
 }) {
   const polylinePositions: [number, number][] | undefined = geometry?.map(([lng, lat]) => [lat, lng]);
   const mapRef = useRef<L.Map | null>(null);
   const markerRefs = useRef<Map<number, L.Marker>>(new Map());
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   const tile = TILE_SOURCES[mapStyle];
+  const driverBearing = driverPosition && polylinePositions ? bearingToNearestSegment([driverPosition.latitude, driverPosition.longitude], polylinePositions) : 0;
 
   function handleSelectStop(stop: Stop) {
     mapRef.current?.flyTo([stop.Latitude, stop.Longitude], 15);
@@ -193,6 +249,9 @@ export function RouteMap({
           </Marker>
         ))}
         {polylinePositions && <Polyline positions={polylinePositions} pathOptions={{ color: "#2563eb", weight: 4 }} />}
+        {driverPosition && (
+          <Marker position={[driverPosition.latitude, driverPosition.longitude]} icon={truckIcon(driverBearing)} zIndexOffset={1000} />
+        )}
       </MapContainer>
 
       <StopSearchBox stops={stops} onSelect={handleSelectStop} />

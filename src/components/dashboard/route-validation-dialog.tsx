@@ -6,7 +6,7 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History, Gauge } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History, Gauge, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TimeInput } from "@/components/ui/time-input";
@@ -32,12 +32,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah, formatTime, formatKemasanQty } from "@/lib/format";
 import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
-import type { JadwalCard as JadwalCardData, JadwalDetailRow, AvailableSalesOrder, ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
+import type { JadwalCard as JadwalCardData, JadwalDetailRow, DriverStopRow, AvailableSalesOrder, ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
 import type { FuelType } from "@/lib/armada-fuel";
 import { VehicleCheckDialog } from "@/components/dashboard/vehicle-check-dialog";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
+import { StopDeliveryProofDialog } from "@/components/dashboard/stop-delivery-proof-dialog";
 import type {
   VehicleCheckRow,
   VehicleCheckTipe,
@@ -60,6 +61,7 @@ import {
   createVehicleCheckAction,
   checkArmadaConflictAction,
   getPriceLevelOptionsAction,
+  getDriverPositionAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 
@@ -85,16 +87,24 @@ function SortableStopRow({
   printChecked,
   onTogglePrint,
   onRemove,
+  hasDeparted,
+  onOpenProof,
 }: {
-  detail: JadwalDetailRow;
+  detail: DriverStopRow;
   index: number;
-  onEdit: (detail: JadwalDetailRow) => void;
+  onEdit: (detail: DriverStopRow) => void;
   disabled: boolean;
   printChecked: boolean;
   onTogglePrint: (jadwalDetailId: number) => void;
   // Only usable while the Jadwal is still Draft (matches
   // removeSalesOrderFromJadwal's own guard) — omitted/hidden once Terbit.
-  onRemove?: (detail: JadwalDetailRow) => void;
+  onRemove?: (detail: DriverStopRow) => void;
+  // Once the armada is Berangkat, the print-for-SI icon no longer makes
+  // sense here (per-stop invoices are already settled by then) — it's
+  // replaced per-row by a checkmark the moment that stop's own delivery
+  // completes (detail.JamSelesai), opening the proof-of-delivery popup.
+  hasDeparted: boolean;
+  onOpenProof: (detail: DriverStopRow) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: detail.JadwalDetailID,
@@ -145,17 +155,30 @@ function SortableStopRow({
           Tanpa lokasi
         </Badge>
       )}
-      <button
-        type="button"
-        title={printChecked ? "Batal tandai untuk dicetak" : "Tandai untuk dicetak"}
-        onClick={() => onTogglePrint(detail.JadwalDetailID)}
-        className={cn(
-          "shrink-0 rounded border p-1 transition-colors",
-          printChecked ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:border-border"
-        )}
-      >
-        <Printer className="size-4" />
-      </button>
+      {!hasDeparted ? (
+        <button
+          type="button"
+          title={printChecked ? "Batal tandai untuk dicetak" : "Tandai untuk dicetak"}
+          onClick={() => onTogglePrint(detail.JadwalDetailID)}
+          className={cn(
+            "shrink-0 rounded border p-1 transition-colors",
+            printChecked ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:border-border"
+          )}
+        >
+          <Printer className="size-4" />
+        </button>
+      ) : detail.JamSelesai != null ? (
+        <button
+          type="button"
+          title="Lihat bukti pengiriman"
+          onClick={() => onOpenProof(detail)}
+          className="shrink-0 rounded border border-transparent p-1 text-green-600 transition-colors hover:border-border hover:bg-green-600/10"
+        >
+          <CheckCircle2 className="size-4" />
+        </button>
+      ) : (
+        <span className="size-6 shrink-0" />
+      )}
       {onRemove && (
         <button
           type="button"
@@ -236,7 +259,7 @@ export function RouteValidationDialog({
   salesOrderEditSignal: number;
 }) {
   const [loading, setLoading] = useState(false);
-  const [order, setOrder] = useState<JadwalDetailRow[]>([]);
+  const [order, setOrder] = useState<DriverStopRow[]>([]);
   const [vehicleChecks, setVehicleChecks] = useState<VehicleCheckRow[]>([]);
   // Freely editable delivery date — the primary override for this Jadwal's
   // departure day. Kept as its own field (not derived from businessDate's
@@ -252,6 +275,13 @@ export function RouteValidationDialog({
   // per dialog open alongside pabrik below, same convention this file
   // already uses rather than a separate mount-once fetch.
   const [priceLevels, setPriceLevels] = useState<PriceLevelOption[]>([]);
+  // Live driver GPS for RouteMap's rotating truck marker — polled every 10s
+  // once Mulai Muat is done, see the effect below. Null hides the marker.
+  const [driverPosition, setDriverPosition] = useState<{ latitude: number; longitude: number } | null>(null);
+  // The stop whose "Lihat bukti pengiriman" checkmark was clicked — null
+  // closes StopDeliveryProofDialog, same open-via-prop convention this
+  // dialog itself uses (open={jadwalId != null}).
+  const [proofDetail, setProofDetail] = useState<DriverStopRow | null>(null);
   const [route, setRoute] = useState<MultiPointRoute | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -364,6 +394,9 @@ export function RouteValidationDialog({
     // A conflict popup left open from a previously-shown Jadwal must never
     // resurface against whichever Jadwal is opened next.
     setConflict(null);
+    // Same reasoning — a proof-of-delivery popup for a stop on the
+    // previous Jadwal must not stay open against the newly-opened one.
+    setProofDetail(null);
 
     if (jadwalId == null) {
       setOrder([]);
@@ -430,6 +463,36 @@ export function RouteValidationDialog({
       .catch(() => setPabrik(null));
     getPriceLevelOptionsAction().then(setPriceLevels);
   }, [jadwalId]);
+
+  // Live driver position for RouteMap's rotating truck marker — starts
+  // once "Mulai Muat" has actually happened (confirmed 2026-08-20: shows
+  // the driver's real position "mengikuti rute pengiriman" from that
+  // point on) and keeps polling every 10 seconds (explicit request — 20s
+  // was judged too slow) for as long as this dialog stays open on this
+  // Jadwal. Requires a linked driver account (SalesmanID) — no account,
+  // no ping to look up.
+  const jamMulaiMuat = jadwal?.JamMulaiMuat ?? null;
+  const salesmanIdForTracking = jadwal?.SalesmanID ?? null;
+  useEffect(() => {
+    if (jadwalId == null || jamMulaiMuat == null || !salesmanIdForTracking) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDriverPosition(null);
+      return;
+    }
+    let cancelled = false;
+    function poll() {
+      getDriverPositionAction(salesmanIdForTracking!).then((pos) => {
+        if (cancelled) return;
+        setDriverPosition(pos ? { latitude: pos.latitude, longitude: pos.longitude } : null);
+      });
+    }
+    poll();
+    const interval = setInterval(poll, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [jadwalId, jamMulaiMuat, salesmanIdForTracking]);
 
   // Recomputes the route whenever the stop order or the pabrik location
   // changes. Every stop must have a saved coordinate — otherwise a full
@@ -559,7 +622,7 @@ export function RouteValidationDialog({
   // Removing the last remaining stop also deletes the now-empty Jadwal
   // itself (removeSalesOrderFromJadwal's own cleanup) — nothing left to
   // show, so this closes the dialog the same way "Batalkan Draft" does.
-  function handleRemoveStop(detail: JadwalDetailRow) {
+  function handleRemoveStop(detail: DriverStopRow) {
     if (jadwalId == null) return;
     if (!confirm(`Keluarkan "${detail.CustomerName}" dari draft ini?`)) return;
     const targetId = jadwalId;
@@ -785,6 +848,7 @@ export function RouteValidationDialog({
 
   const isDraft = jadwal?.Status === "Draft";
   const isWaitingDeparture = jadwal?.Status === "Terbit" && jadwal?.JamAktualBerangkat == null;
+  const hasDeparted = jadwal?.JamAktualBerangkat != null;
   const hasBerangkatCheck = vehicleChecks.some((c) => c.tipe === "BERANGKAT");
   const jamKembaliAktual = vehicleChecks.find((c) => c.tipe === "DATANG")?.checkedAt ?? null;
 
@@ -1170,6 +1234,7 @@ export function RouteValidationDialog({
                     stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
                     geometry={route?.geometry ?? null}
                     refitTrigger={refitTrigger}
+                    driverPosition={driverPosition}
                   />
                 ) : (
                   <Skeleton className="h-full w-full md:rounded-lg" />
@@ -1303,6 +1368,8 @@ export function RouteValidationDialog({
                         printChecked={printSelected.has(d.JadwalDetailID)}
                         onTogglePrint={togglePrint}
                         onRemove={isDraft ? handleRemoveStop : undefined}
+                        hasDeparted={hasDeparted}
+                        onOpenProof={setProofDetail}
                       />
                     ))}
                   </SortableContext>
@@ -1467,6 +1534,7 @@ export function RouteValidationDialog({
             </div>
           </div>
         )}
+        <StopDeliveryProofDialog detail={proofDetail} onOpenChange={(open) => !open && setProofDetail(null)} />
         {conflict && (
           <ArmadaConflictDialog
             conflict={conflict.info}

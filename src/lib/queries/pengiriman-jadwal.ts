@@ -2668,3 +2668,118 @@ export async function confirmStopDelivery(
     throw err;
   }
 }
+
+export interface StopDeliveryProofItem {
+  itemId: string;
+  name: string;
+  qtyDimuat: number;
+  qtyDiterima: number;
+  qtyRetur: number;
+  fotoReturUrl: string | null;
+  keteranganRetur: string | null;
+}
+
+export interface StopDeliveryProof {
+  stopDeliveryId: number;
+  jamTiba: string | null;
+  jamSelesai: string;
+  fotoBuktiUrls: string[];
+  tandaTanganUrl: string;
+  tanpaPembayaran: boolean;
+  salesReturnId: string | null;
+  items: StopDeliveryProofItem[];
+  // Most recent payment posted against this stop's SalesInvoiceID — read
+  // back from the same SalesPayment/SalesPaymentDetail tables
+  // recordDriverPaymentAction (pelunasan.ts's recordPayment) writes to.
+  // Null when tanpaPembayaran is true, the stop has no invoice (merged
+  // external-DO case), or no payment has been recorded yet.
+  payment: { voucherNo: string; amount: number; transDate: string } | null;
+}
+
+// Read-back for the RouteValidationDialog's proof-of-delivery popup —
+// everything confirmStopDelivery wrote for one already-completed stop.
+// Returns null for a stop with no JamSelesai yet (nothing to show).
+export async function getStopDeliveryProof(jadwalDetailId: number): Promise<StopDeliveryProof | null> {
+  const pool = await getPool();
+
+  const stopResult = await pool
+    .request()
+    .input("id", sql.Int, jadwalDetailId).query(`
+      SELECT sd.StopDeliveryID, sd.JamTiba, sd.JamSelesai, sd.FotoBuktiUrls, sd.TandaTanganUrl,
+             sd.TanpaPembayaran, sd.SalesReturnID, jd.SalesInvoiceID
+      FROM DashboardPengirimanStopDelivery sd
+      JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalDetailID = sd.JadwalDetailID
+      WHERE sd.JadwalDetailID = @id AND sd.JamSelesai IS NOT NULL
+    `);
+  const stopRow = stopResult.recordset[0] as
+    | {
+        StopDeliveryID: number;
+        JamTiba: Date | null;
+        JamSelesai: Date;
+        FotoBuktiUrls: string | null;
+        TandaTanganUrl: string | null;
+        TanpaPembayaran: boolean;
+        SalesReturnID: string | null;
+        SalesInvoiceID: string | null;
+      }
+    | undefined;
+  if (!stopRow) return null;
+
+  const [itemsResult, paymentResult] = await Promise.all([
+    pool
+      .request()
+      .input("stopDeliveryId", sql.Int, stopRow.StopDeliveryID).query(`
+        SELECT sdi.ItemID, sod.Name, sdi.QtyDimuat, sdi.QtyDiterima, sdi.QtyRetur, sdi.FotoReturUrl, sdi.KeteranganRetur
+        FROM DashboardPengirimanStopDeliveryItem sdi
+        LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderDetailID = sdi.SalesOrderDetailID
+        WHERE sdi.StopDeliveryID = @stopDeliveryId
+      `),
+    stopRow.TanpaPembayaran || !stopRow.SalesInvoiceID
+      ? Promise.resolve(null)
+      : pool
+          .request()
+          .input("siId", sql.VarChar(16), stopRow.SalesInvoiceID).query(`
+            SELECT TOP 1 sp.VoucherNo, spd.Amount, sp.TransDate
+            FROM SalesPaymentDetail spd
+            JOIN SalesPayment sp ON sp.SalesPaymentID = spd.SalesPaymentID
+            WHERE spd.SalesInvoiceID = @siId AND spd.IsDeleted = 0
+            ORDER BY sp.TransDate DESC
+          `),
+  ]);
+
+  const items = (
+    itemsResult.recordset as {
+      ItemID: string;
+      Name: string | null;
+      QtyDimuat: number;
+      QtyDiterima: number;
+      QtyRetur: number;
+      FotoReturUrl: string | null;
+      KeteranganRetur: string | null;
+    }[]
+  ).map((r) => ({
+    itemId: r.ItemID,
+    name: r.Name ?? r.ItemID,
+    qtyDimuat: r.QtyDimuat,
+    qtyDiterima: r.QtyDiterima,
+    qtyRetur: r.QtyRetur,
+    fotoReturUrl: r.FotoReturUrl,
+    keteranganRetur: r.KeteranganRetur,
+  }));
+
+  const paymentRow = paymentResult?.recordset[0] as { VoucherNo: string; Amount: number; TransDate: Date } | undefined;
+
+  return {
+    stopDeliveryId: stopRow.StopDeliveryID,
+    jamTiba: stopRow.JamTiba ? new Date(stopRow.JamTiba).toISOString() : null,
+    jamSelesai: new Date(stopRow.JamSelesai).toISOString(),
+    fotoBuktiUrls: stopRow.FotoBuktiUrls ? (JSON.parse(stopRow.FotoBuktiUrls) as string[]) : [],
+    tandaTanganUrl: stopRow.TandaTanganUrl ?? "",
+    tanpaPembayaran: stopRow.TanpaPembayaran,
+    salesReturnId: stopRow.SalesReturnID,
+    items,
+    payment: paymentRow
+      ? { voucherNo: paymentRow.VoucherNo, amount: paymentRow.Amount, transDate: new Date(paymentRow.TransDate).toISOString() }
+      : null,
+  };
+}

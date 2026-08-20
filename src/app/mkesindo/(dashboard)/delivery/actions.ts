@@ -14,15 +14,18 @@ import {
   startMuat,
   selesaiMuat,
   konfirmasiBerangkat,
-  getJadwalDetail,
+  getDriverJadwalStops,
+  getStopDeliveryProof,
   getAvailableSalesOrders,
   mergeExternalDeliveriesIntoJadwal,
   getMaxSalesOrderTransDateForDeliveries,
   checkArmadaConflict,
-  type JadwalDetailRow,
+  type DriverStopRow,
+  type StopDeliveryProof,
   type AvailableSalesOrder,
   type ArmadaConflictInfo,
 } from "@/lib/queries/pengiriman-jadwal";
+import { getLatestDriverPosition, type DriverPosition } from "@/lib/queries/akun-lokasi";
 import {
   getArmadaActivities,
   createArmadaActivity,
@@ -192,9 +195,24 @@ export async function konfirmasiBerangkatAction(jadwalId: number): Promise<Actio
 }
 
 // Read-only — no revalidatePath needed, these just fetch data on demand
-// when a dialog opens.
-export async function getJadwalDetailAction(jadwalId: number): Promise<JadwalDetailRow[]> {
-  return getJadwalDetail(jadwalId);
+// when a dialog opens. Switched from getJadwalDetail to getDriverJadwalStops
+// so RouteValidationDialog gets each stop's JamSelesai (drives the
+// print-icon → checkmark swap) alongside the same customer/qty/address data
+// it already had.
+export async function getJadwalDetailAction(jadwalId: number): Promise<DriverStopRow[]> {
+  return getDriverJadwalStops(jadwalId);
+}
+
+// Live driver position for the RouteMap's rotating truck marker — null
+// when the driver has no linked account or hasn't sent a ping yet.
+export async function getDriverPositionAction(salesmanId: string): Promise<DriverPosition | null> {
+  return getLatestDriverPosition(salesmanId);
+}
+
+// Proof-of-delivery popup data for one completed stop — null if the stop
+// isn't actually done yet.
+export async function getStopDeliveryProofAction(jadwalDetailId: number): Promise<StopDeliveryProof | null> {
+  return getStopDeliveryProof(jadwalDetailId);
 }
 
 // For Efektifitas Armada's weighted-average selling price — same

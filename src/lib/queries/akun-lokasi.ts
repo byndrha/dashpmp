@@ -59,3 +59,34 @@ export async function getLatestMarketingPositions(): Promise<MarketingPosition[]
     recordedAt: r.recorded_at.toISOString(),
   }));
 }
+
+export interface DriverPosition {
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+}
+
+// Latest ping for the driver account linked to a Jadwal's SalesmanID — no
+// role filter (unlike getLatestMarketingPositions) since salesman_id is
+// unique to whichever driver account owns it. Returns null when the driver
+// has no linked account, or the account has never sent a ping (including
+// stale pings the RETENTION_DAYS self-cleanup already dropped).
+export async function getLatestDriverPosition(salesmanId: string): Promise<DriverPosition | null> {
+  const pool = getPgPool();
+  const result = await pool.query<{
+    latitude: number;
+    longitude: number;
+    recorded_at: Date;
+  }>(
+    `SELECT al.latitude, al.longitude, al.recorded_at
+     FROM akun a
+     JOIN akun_lokasi al ON al.akun_id = a.id
+     WHERE a.salesman_id = $1
+     ORDER BY al.recorded_at DESC
+     LIMIT 1`,
+    [salesmanId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return { latitude: row.latitude, longitude: row.longitude, recordedAt: row.recorded_at.toISOString() };
+}
