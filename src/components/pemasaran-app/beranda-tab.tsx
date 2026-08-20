@@ -9,11 +9,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatRupiah } from "@/lib/format";
-import { getBerandaDataAction, setMitraNoteAction } from "@/app/mkesindo/pemasaran-app/actions";
+import { getBerandaDataAction, getWilayahDeliveryAction, setMitraNoteAction } from "@/app/mkesindo/pemasaran-app/actions";
 import type { SalesDayComparisonResult } from "@/lib/queries/sales-overview";
 import type { TopMitraPiutangRow } from "@/lib/queries/top-mitra-piutang";
 import type { PiutangStatus } from "@/lib/queries/aging";
+import type { PemasaranWilayahDeliveryRow } from "@/lib/queries/pemasaran-wilayah-delivery";
 import { cn } from "@/lib/utils";
+
+function formatQty(value: number): string {
+  return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+}
 
 const STATUS_BADGE_VARIANT: Record<PiutangStatus, string> = {
   Sehat: "border-primary/30 bg-primary/5 text-primary",
@@ -24,6 +29,7 @@ const STATUS_BADGE_VARIANT: Record<PiutangStatus, string> = {
 export function BerandaTab() {
   const [sales, setSales] = useState<SalesDayComparisonResult | null>(null);
   const [topPiutang, setTopPiutang] = useState<TopMitraPiutangRow[] | null>(null);
+  const [delivery, setDelivery] = useState<PemasaranWilayahDeliveryRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<TopMitraPiutangRow | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -44,6 +50,21 @@ export function BerandaTab() {
       }
       setSales(result.data.sales);
       setTopPiutang(result.data.topPiutang);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWilayahDeliveryAction().then((result) => {
+      if (cancelled) return;
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setDelivery(result.data);
     });
     return () => {
       cancelled = true;
@@ -142,6 +163,49 @@ export function BerandaTab() {
               </div>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Pengiriman per Wilayah</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          {!delivery ? (
+            <div className="flex h-24 items-center justify-center">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="px-3 py-2 text-left font-medium">Wilayah</th>
+                  <th className="px-3 py-2 text-right font-medium">Bulan Ini</th>
+                  <th className="px-3 py-2 text-right font-medium">Bulan Lalu</th>
+                  <th className="px-3 py-2 text-right font-medium">%</th>
+                  <th className="px-3 py-2 text-right font-medium">Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                {delivery.map((r) => (
+                  <tr key={r.Wilayah} className="border-b last:border-0">
+                    <td className="px-3 py-2">{r.Wilayah}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatQty(r.AvgPerHariThisMonth)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatQty(r.AvgPerHariLastMonth)}</td>
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right tabular-nums",
+                        r.PctChange == null ? "text-muted-foreground" : r.PctChange >= 0 ? "text-primary" : "text-destructive"
+                      )}
+                    >
+                      {r.PctChange != null ? `${r.PctChange.toFixed(1)}%` : "-"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatQty(r.TotalTarget)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </CardContent>
       </Card>
 
