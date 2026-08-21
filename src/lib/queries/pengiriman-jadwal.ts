@@ -1965,14 +1965,26 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
       // (mergeExternalDeliveriesIntoJadwal): that DO was already issued by
       // the desktop ERP, so it must never be re-created, and it never gets
       // an auto-created SalesInvoice either (its invoicing, if any, is the
-      // desktop ERP's own separate concern) — only its TransDate gets
-      // corrected to this now-confirmed loading-complete moment (same
-      // GETDATE() reference as JamSelesaiMuat above; the original desktop-app
-      // TransDate was just whenever the document was typed in).
+      // desktop ERP's own separate concern).
+      //
+      // TransDate is deliberately left untouched here — this used to
+      // overwrite it with GETDATE() on the assumption that a merged DO's
+      // typed-in date was arbitrary. Confirmed wrong 2026-08-22: staff
+      // intentionally set TransDate on these DOs to whichever WIB business
+      // period (14:00-to-14:00 rollover, same convention as
+      // getBusinessDateWithRollover) the real-world delivery falls into —
+      // e.g. a delivery at 21:00 WIB is deliberately dated the NEXT
+      // calendar day when it's after the 14:00 rollover. A live example
+      // (MKE/DO/003102/2026-08/003/001, dated 22 Agustus 2026 for a
+      // delivery at 21:00 WIB on 21 Agustus) had its TransDate silently
+      // flipped back to 21 Agustus by this UPDATE the moment Selesai Muat
+      // ran, discarding that intentional business-period date. Once a DO
+      // already exists, its TransDate is the desktop ERP's — and now
+      // staff's own — data to own, not this dashboard's to "correct".
       if (detail.DeliveryOrderID) {
         await new sql.Request(transaction)
           .input("doId", sql.VarChar(16), detail.DeliveryOrderID)
-          .query(`UPDATE DeliveryOrder SET TransDate = GETDATE(), ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
+          .query(`UPDATE DeliveryOrder SET ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
         continue;
       }
 
