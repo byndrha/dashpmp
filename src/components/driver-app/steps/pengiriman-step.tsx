@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Fuel, Siren, Phone, MapPin } from "lucide-react";
+import { ArrowLeft, Fuel, Siren, Coffee, Phone, MapPin } from "lucide-react";
 import { formatKemasanQty } from "@/lib/format";
 import { SwipeToConfirm } from "@/components/driver-app/swipe-to-confirm";
 import { PengirimanMap } from "./pengiriman-map";
 import { BbmDialog } from "./bbm-dialog";
 import { KendalaDialog } from "./kendala-dialog";
+import { IstirahatDialog } from "./istirahat-dialog";
 import { CallChoiceDialog } from "./call-choice-dialog";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 import type { BbmContext } from "@/components/driver-app/stop-flow";
@@ -52,6 +53,7 @@ export function PengirimanStep({
   const [bbmOpen, setBbmOpen] = useState(false);
   const [kendalaOpen, setKendalaOpen] = useState(false);
   const [kendalaReported, setKendalaReported] = useState(false);
+  const [istirahatOpen, setIstirahatOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
 
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
@@ -241,6 +243,14 @@ export function PengirimanStep({
           >
             <Siren className="size-4.5" />
           </button>
+          <button
+            type="button"
+            onClick={() => setIstirahatOpen(true)}
+            className="flex size-10 items-center justify-center rounded-full bg-card shadow-md"
+            title="Istirahat"
+          >
+            <Coffee className="size-4.5" />
+          </button>
         </div>
       </div>
 
@@ -330,6 +340,12 @@ export function PengirimanStep({
         jadwalId={jadwalId}
         jadwalDetailId={activeStop.JadwalDetailID}
         onReported={() => setKendalaReported(true)}
+      />
+      <IstirahatDialog
+        open={istirahatOpen}
+        onOpenChange={setIstirahatOpen}
+        jadwalId={jadwalId}
+        onStarted={() => window.location.reload()}
       />
     </div>
   );
