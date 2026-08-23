@@ -137,6 +137,9 @@ function SortableStopRow({
           {detail.Wilayah}
           {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
         </p>
+        {detail.JamTiba != null && (
+          <p className="text-xs text-muted-foreground">Tiba {formatTime(detail.JamTiba)}</p>
+        )}
       </button>
       {/* Widened per explicit user request (confirmed OK with the tighter
           name/location column that results) so "155 kantong (10 KG)" fits
@@ -153,6 +156,15 @@ function SortableStopRow({
       {detail.Latitude == null && (
         <Badge variant="outline" className="shrink-0 border-destructive/30 text-[10px] text-destructive">
           Tanpa lokasi
+        </Badge>
+      )}
+      {detail.IsTerkendala && (
+        <Badge
+          variant="outline"
+          className="shrink-0 border-destructive/30 text-[10px] text-destructive"
+          title={detail.TerkendalaAlasan ?? undefined}
+        >
+          Terkendala
         </Badge>
       )}
       {!hasDeparted ? (
