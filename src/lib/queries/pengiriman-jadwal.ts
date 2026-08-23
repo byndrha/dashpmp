@@ -2227,6 +2227,13 @@ export interface DriverStopRow extends JadwalDetailRow {
   // (SalesPayment.BusinessPartnerID) — fetched here rather than making
   // that screen do its own extra round-trip.
   BusinessPartnerID: string;
+  // UrutanOverride is driver-app-only convenience ordering — see the
+  // Global Constraints note in this plan: getDriverJadwalStops() itself
+  // must keep sorting by plain Urutan; only stop-flow.tsx re-sorts by
+  // UrutanOverride ?? Urutan client-side.
+  UrutanOverride: number | null;
+  IsTerkendala: boolean;
+  TerkendalaAlasan: string | null;
 }
 
 // Merges getJadwalDetail's existing per-stop data (customer/qty/address —
@@ -2240,24 +2247,39 @@ export async function getDriverJadwalStops(jadwalId: number): Promise<DriverStop
     pool
       .request()
       .input("jadwalId", sql.Int, jadwalId).query(`
-        SELECT jd.JadwalDetailID, sd.JamTiba, sd.JamSelesai, so.BusinessPartnerID
+        SELECT jd.JadwalDetailID, sd.JamTiba, sd.JamSelesai, so.BusinessPartnerID, jd.UrutanOverride,
+               tk.Alasan AS TerkendalaAlasan
         FROM DashboardPengirimanJadwalDetail jd
         JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
         LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+        LEFT JOIN DashboardPengirimanTerkendala tk ON tk.JadwalDetailID = jd.JadwalDetailID AND tk.IsResolved = 0
         WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
       `),
   ]);
   const extraByDetailId = new Map(
     (
-      extraRows.recordset as { JadwalDetailID: number; JamTiba: Date | null; JamSelesai: Date | null; BusinessPartnerID: string }[]
+      extraRows.recordset as {
+        JadwalDetailID: number;
+        JamTiba: Date | null;
+        JamSelesai: Date | null;
+        BusinessPartnerID: string;
+        UrutanOverride: number | null;
+        TerkendalaAlasan: string | null;
+      }[]
     ).map((r) => [r.JadwalDetailID, r])
   );
-  return stops.map((s) => ({
-    ...s,
-    JamTiba: extraByDetailId.get(s.JadwalDetailID)?.JamTiba ?? null,
-    JamSelesai: extraByDetailId.get(s.JadwalDetailID)?.JamSelesai ?? null,
-    BusinessPartnerID: extraByDetailId.get(s.JadwalDetailID)?.BusinessPartnerID ?? "",
-  }));
+  return stops.map((s) => {
+    const extra = extraByDetailId.get(s.JadwalDetailID);
+    return {
+      ...s,
+      JamTiba: extra?.JamTiba ?? null,
+      JamSelesai: extra?.JamSelesai ?? null,
+      BusinessPartnerID: extra?.BusinessPartnerID ?? "",
+      UrutanOverride: extra?.UrutanOverride ?? null,
+      IsTerkendala: extra?.TerkendalaAlasan != null,
+      TerkendalaAlasan: extra?.TerkendalaAlasan ?? null,
+    };
+  });
 }
 
 export interface StopOrderItem {
