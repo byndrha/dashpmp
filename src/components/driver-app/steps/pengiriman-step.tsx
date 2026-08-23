@@ -11,10 +11,11 @@ import { BbmDialog } from "./bbm-dialog";
 import { KendalaDialog } from "./kendala-dialog";
 import { IstirahatDialog } from "./istirahat-dialog";
 import { CallChoiceDialog } from "./call-choice-dialog";
+import { TerkendalaDialog } from "./terkendala-dialog";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 import type { BbmContext } from "@/components/driver-app/stop-flow";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
-import { recordStopArrivalAction } from "@/app/mkesindo/driver-app/actions";
+import { recordStopArrivalAction, moveTerkendalaStopAction } from "@/app/mkesindo/driver-app/actions";
 
 // Expanded sheet height as a fraction of the viewport — recomputed on
 // resize; DEFAULT_EXPANDED_HEIGHT is just the value used for the one frame
@@ -56,6 +57,15 @@ export function PengirimanStep({
   const [kendalaReported, setKendalaReported] = useState(false);
   const [istirahatOpen, setIstirahatOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
+  // A driver only sees the "Laporkan Pengiriman Terkendala" link after
+  // attempting to call THIS stop's customer. No reset effect is needed when
+  // the active stop changes: stop-flow.tsx already mounts a fresh
+  // PengirimanStep instance per stop via `key={activeStop.JadwalDetailID}`
+  // (see its comment), so this state's own useState(false) initializer
+  // handles the reset — an effect here would just be a same-render
+  // duplicate of that remount and trips the set-state-in-effect lint rule.
+  const [hasAttemptedCall, setHasAttemptedCall] = useState(false);
+  const [terkendalaOpen, setTerkendalaOpen] = useState(false);
 
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [route, setRoute] = useState<MultiPointRoute | null>(null);
@@ -204,6 +214,23 @@ export function PengirimanStep({
 
   const stopMarkers = validStops.map((s, i) => ({ lat: s.Latitude, lng: s.Longitude, label: i + 1 }));
 
+  // remainingDetailIdsInOrder must reflect the SAME effective order
+  // (UrutanOverride ?? Urutan) that stop-flow.tsx already sorted
+  // remainingStops into — moveTerkendalaStop swaps by position within this
+  // exact list, so passing anything else would swap the wrong neighbor.
+  function handleMoveTerkendala(jadwalDetailId: number, direction: "up" | "down") {
+    setError(null);
+    const remainingDetailIdsInOrder = remainingStops.map((s) => s.JadwalDetailID);
+    startTransition(async () => {
+      const result = await moveTerkendalaStopAction(jadwalDetailId, direction, remainingDetailIdsInOrder);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="relative h-dvh w-full overflow-hidden">
       <PengirimanMap
@@ -317,7 +344,10 @@ export function PengirimanStep({
             {activeStop.MobileNo && (
               <button
                 type="button"
-                onClick={() => setCallOpen(true)}
+                onClick={() => {
+                  setCallOpen(true);
+                  setHasAttemptedCall(true);
+                }}
                 className="flex size-12 shrink-0 items-center justify-center rounded-full bg-green-600 text-white shadow-md"
                 title="Hubungi Pelanggan"
               >
@@ -325,6 +355,15 @@ export function PengirimanStep({
               </button>
             )}
           </div>
+          {hasAttemptedCall && !activeStop.IsTerkendala && (
+            <button
+              type="button"
+              onClick={() => setTerkendalaOpen(true)}
+              className="px-4 pb-2 text-center text-xs text-destructive underline"
+            >
+              Tidak bisa dihubungi? Laporkan Pengiriman Terkendala
+            </button>
+          )}
           <p className="px-4 pt-1 pb-3 text-center text-xs text-muted-foreground">{remainingStops.length} lokasi tersisa</p>
 
           {error && <p className="px-4 pb-2 text-sm text-destructive">{error}</p>}
@@ -339,12 +378,35 @@ export function PengirimanStep({
                   {i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{s.CustomerName}</p>
+                  <p className="truncate font-medium">
+                    {s.CustomerName}
+                    {s.IsTerkendala && <span className="ml-1.5 font-medium text-destructive">Terkendala</span>}
+                  </p>
                   <p className="truncate text-xs text-muted-foreground">
                     {formatKemasanQty(s.Qty10KG, s.Qty5KG)} &mdash; {s.Wilayah} {s.Kecamatan ? `| ${s.Kecamatan}` : ""}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs text-muted-foreground">{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-"}</span>
+                {s.IsTerkendala && (
+                  <div className="flex shrink-0 flex-col items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveTerkendala(s.JadwalDetailID, "up")}
+                      className="text-muted-foreground"
+                      title="Pindah ke atas"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveTerkendala(s.JadwalDetailID, "down")}
+                      className="text-muted-foreground"
+                      title="Pindah ke bawah"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -365,6 +427,12 @@ export function PengirimanStep({
         onOpenChange={setIstirahatOpen}
         jadwalId={jadwalId}
         onStarted={() => window.location.reload()}
+      />
+      <TerkendalaDialog
+        open={terkendalaOpen}
+        onOpenChange={setTerkendalaOpen}
+        jadwalDetailId={activeStop.JadwalDetailID}
+        onReported={() => router.refresh()}
       />
     </div>
   );

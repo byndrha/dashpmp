@@ -50,6 +50,25 @@ export function StopFlow({
 }) {
   const router = useRouter();
   const [stops, setStops] = useState(initialStops);
+
+  // pengiriman-step.tsx's terkendala report/reorder flows call
+  // router.refresh() to pick up a fresh IsTerkendala/UrutanOverride from the
+  // server, but `stops` is a local mirror seeded once via useState above —
+  // a parent-driven refresh alone would re-render this component with a new
+  // `initialStops` prop without touching that mirror, since React preserves
+  // state across a props-only update. Re-sync during render (React's
+  // documented "adjusting state when a prop changes" pattern — see
+  // https://react.dev/learn/you-might-not-need-an-effect) rather than in a
+  // useEffect, which would cause an extra commit-then-recommit render pass
+  // for every server refetch. This never fires from handleBerhasilDone's own
+  // optimistic update below, since that doesn't change `initialStops`'s
+  // reference.
+  const [prevInitialStops, setPrevInitialStops] = useState(initialStops);
+  if (initialStops !== prevInitialStops) {
+    setPrevInitialStops(initialStops);
+    setStops(initialStops);
+  }
+
   const [step, setStep] = useState<StepName>("peta");
   const [konfirKirimResult, setKonfirKirimResult] = useState<KonfirKirimResult | null>(null);
   const [salesInvoiceId, setSalesInvoiceId] = useState<string | null>(null);
@@ -58,7 +77,14 @@ export function StopFlow({
   // first of these. Passed down whole (not just a count) so the Pengiriman
   // screen's map markers and "Lihat Daftar Tujuan" list share one source
   // of truth with whatever "N lokasi tersisa" it displays.
-  const remainingStops = stops.filter((s) => s.JamSelesai == null);
+  //
+  // This is the ONLY place in the whole codebase that re-sorts by
+  // UrutanOverride ?? Urutan — getDriverJadwalStops() deliberately keeps
+  // sorting by plain Urutan since desktop's RouteValidationDialog shares
+  // that same query function and must not see driver-app-only reordering.
+  const remainingStops = stops
+    .filter((s) => s.JamSelesai == null)
+    .sort((a, b) => (a.UrutanOverride ?? a.Urutan) - (b.UrutanOverride ?? b.Urutan));
   const activeStop = remainingStops[0] ?? null;
 
   if (!activeStop) {
