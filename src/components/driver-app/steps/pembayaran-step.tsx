@@ -46,7 +46,6 @@ export function PembayaranStep({
     if (amount == null) return;
     const result = await recordDriverPaymentAction({
       businessPartnerId,
-      perusahaanId,
       metodePembayaranKode: input.metodeKode,
       notes: input.catatan ?? undefined,
       allocations: [{ salesInvoiceId, amount }],

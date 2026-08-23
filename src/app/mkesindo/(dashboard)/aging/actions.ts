@@ -61,20 +61,24 @@ export async function getOutstandingInvoicesAction(
   });
 }
 
-// konteks is deliberately excluded from the caller-supplied input (Omit)
-// and pinned below instead of trusted from the client — see the pin site.
+// konteks and perusahaanId are deliberately excluded from the
+// caller-supplied input (Omit) and pinned below from the session instead
+// of trusted from the client — see the pin site.
 export async function recordPaymentAction(
-  input: Omit<RecordPaymentInput, "konteks">
+  input: Omit<RecordPaymentInput, "konteks" | "perusahaanId">
 ): Promise<ActionResult<RecordPaymentResult>> {
   return runAction(async () => {
     const session = await auth();
     if (!session?.user?.id) throw new AppError("Unauthorized");
+    if (!session.user.perusahaanId) throw new AppError("Akun ini belum ditautkan ke perusahaan, hubungi Admin.");
 
-    // konteks is pinned here, never trusted from the client — same
-    // reasoning as recordDriverPaymentAction's own pin in driver-app's
-    // actions.ts: without this, a forged request from this surface could
-    // claim a different konteks and reach a channel not meant for kasir.
-    const result = await recordPayment({ ...input, konteks: "kasir" });
+    // konteks and perusahaanId are pinned here, never trusted from the
+    // client — same reasoning as recordDriverPaymentAction's own pin in
+    // driver-app's actions.ts: without this, a forged request from this
+    // surface could claim a different konteks/company and reach a
+    // channel not meant for kasir, or another company's metode_pembayaran
+    // configuration.
+    const result = await recordPayment({ ...input, konteks: "kasir", perusahaanId: session.user.perusahaanId });
     revalidatePath("/mkesindo/aging");
     revalidatePath("/mkesindo");
     return result;

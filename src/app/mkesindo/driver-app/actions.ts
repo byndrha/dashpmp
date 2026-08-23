@@ -86,13 +86,22 @@ export async function confirmStopDeliveryAction(
   });
 }
 
-// konteks is deliberately excluded from the caller-supplied input (Omit)
-// and pinned below instead of trusted from the client — see the pin site.
+// konteks and perusahaanId are deliberately excluded from the
+// caller-supplied input (Omit) and pinned below from the session instead
+// of trusted from the client — see the pin site.
 export async function recordDriverPaymentAction(
-  input: Omit<RecordPaymentInput, "konteks">
+  input: Omit<RecordPaymentInput, "konteks" | "perusahaanId">
 ): Promise<ActionResult<RecordPaymentResult>> {
   return runAction(async () => {
-    const salesmanId = await requireOwnSalesmanId();
+    const session = await requireDriver();
+    if (!session.user.salesmanId) {
+      throw new AppError("Akun ini belum ditautkan ke data Driver, hubungi Admin.");
+    }
+    if (!session.user.perusahaanId) {
+      throw new AppError("Akun ini belum ditautkan ke perusahaan, hubungi Admin.");
+    }
+    const salesmanId = session.user.salesmanId;
+    const perusahaanId = session.user.perusahaanId;
     // Real current outstanding for every invoice of this mitra, fetched
     // once and reused for every allocation below — the Tunai flow is
     // "pay this invoice in full", so the submitted amount must match the
@@ -115,12 +124,13 @@ export async function recordDriverPaymentAction(
         throw new AppError("Jumlah pembayaran tidak sesuai dengan sisa tagihan invoice ini.");
       }
     }
-    // konteks is pinned here, never trusted from the client — mirrors
-    // salesmanId above (derived from the session, not the request body).
-    // Without this, a forged request could claim konteks:"kasir" and
-    // reach a kasir-only channel (e.g. Kas Besar) through this driver
-    // action despite the konteks check inside recordPayment() itself.
-    return recordPayment({ ...input, konteks: "driver" });
+    // konteks and perusahaanId are pinned here, never trusted from the
+    // client — mirrors salesmanId above (derived from the session, not
+    // the request body). Without this, a forged request could claim
+    // konteks:"kasir" and reach a kasir-only channel (e.g. Kas Besar)
+    // through this driver action despite the konteks check inside
+    // recordPayment() itself.
+    return recordPayment({ ...input, konteks: "driver", perusahaanId });
   });
 }
 

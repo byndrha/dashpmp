@@ -87,7 +87,6 @@ export function PelunasanDialog({
 
     const result = await recordPaymentAction({
       businessPartnerId,
-      perusahaanId,
       metodePembayaranKode: input.metodeKode,
       notes: input.catatan ?? undefined,
       allocations: activeLines.map(([salesInvoiceId, l]) => ({ salesInvoiceId, amount: Number(l.amount) })),
