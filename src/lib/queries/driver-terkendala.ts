@@ -72,6 +72,13 @@ export async function moveTerkendalaStop(
   const otherDetailId = remainingDetailIdsInOrder[swapWithIndex];
 
   const pool = await getPool();
+  // Must confirm: (1) both detail rows are non-deleted, (2) they resolve to
+  // the SAME JadwalID (not merely to "some" Jadwal owned by this salesman —
+  // remainingDetailIdsInOrder is client-supplied, so without this a driver
+  // with two active Jadwals could swap UrutanOverride across unrelated
+  // routes), and (3) that one shared Jadwal is non-deleted and owned by the
+  // calling salesmanId. Joining "other" onto "jd.JadwalID" directly encodes
+  // the same-Jadwal requirement instead of checking each id independently.
   const ownershipCheck = await pool
     .request()
     .input("id", sql.Int, jadwalDetailId)
@@ -79,10 +86,13 @@ export async function moveTerkendalaStop(
     .input("salesmanId", sql.VarChar(16), salesmanId).query(`
       SELECT COUNT(*) AS Cnt
       FROM DashboardPengirimanJadwalDetail jd
+      JOIN DashboardPengirimanJadwalDetail other
+        ON other.JadwalDetailID = @otherId AND other.IsDeleted = 0 AND other.JadwalID = jd.JadwalID
       JOIN DashboardPengirimanJadwal j ON j.JadwalID = jd.JadwalID
-      WHERE jd.JadwalDetailID IN (@id, @otherId) AND j.SalesmanID = @salesmanId AND j.IsDeleted = 0
+      WHERE jd.JadwalDetailID = @id AND jd.IsDeleted = 0
+        AND j.SalesmanID = @salesmanId AND j.IsDeleted = 0
     `);
-  if ((ownershipCheck.recordset[0] as { Cnt: number }).Cnt !== 2) {
+  if ((ownershipCheck.recordset[0] as { Cnt: number }).Cnt !== 1) {
     throw new AppError("Anda tidak memiliki akses ke salah satu tujuan ini.");
   }
 
