@@ -1,9 +1,9 @@
 import { getPool, sql } from "@/lib/db";
-import { PAYMENT_CHANNELS, type RecordPaymentInput, type RecordPaymentResult } from "@/lib/pelunasan-types";
+import type { RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
 import { AppError } from "@/lib/action-result";
+import { getMetodePembayaranByKode } from "@/lib/queries/metode-pembayaran";
 
-export type { PaymentChannelId, PaymentAllocationInput, RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
-export { PAYMENT_CHANNELS };
+export type { PaymentAllocationInput, RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
 
 const BRANCH_ID = "011";
 const DEPARTMENT_ID = "0110";
@@ -110,6 +110,14 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
   const allocations = input.allocations.filter((a) => a.amount > 0);
   if (allocations.length === 0) throw new AppError("Tidak ada alokasi pembayaran yang valid.");
 
+  const metode = await getMetodePembayaranByKode(input.perusahaanId, input.metodePembayaranKode);
+  if (!metode || !metode.isActive) {
+    throw new AppError("Metode pembayaran tidak ditemukan atau sudah tidak aktif.");
+  }
+  if (metode.wajibCatatan && !input.notes?.trim()) {
+    throw new AppError("Catatan wajib diisi untuk metode pembayaran ini.");
+  }
+
   const pool = await getPool();
   const invoiceIds = allocations.map((a) => a.salesInvoiceId);
 
@@ -142,7 +150,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
     .input("notes", sql.VarChar(512), input.notes ?? "")
     .input("bpId", sql.VarChar(16), input.businessPartnerId)
     .input("amount", sql.Decimal(23, 4), totalAmount)
-    .input("coaId", sql.VarChar(16), input.chartOfAccountId)
+    .input("coaId", sql.VarChar(16), metode.coaId)
     .input("branchId", sql.VarChar(16), BRANCH_ID)
     .input("departmentId", sql.VarChar(16), DEPARTMENT_ID).query(`
       INSERT INTO SalesPayment
@@ -180,6 +188,13 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
            0, 0, 0, NULL, NULL, NULL, NULL)
       `);
   }
+
+  await pool
+    .request()
+    .input("spId", sql.VarChar(16), salesPaymentId)
+    .input("metodeKode", sql.VarChar(64), input.metodePembayaranKode)
+    .input("catatan", sql.VarChar(500), input.notes ?? null)
+    .query(`INSERT INTO DashboardSalesPaymentMetode (SalesPaymentID, MetodeKode, Catatan) VALUES (@spId, @metodeKode, @catatan)`);
 
   return { salesPaymentId, voucherNo, totalAmount, totalDeposit };
 }
