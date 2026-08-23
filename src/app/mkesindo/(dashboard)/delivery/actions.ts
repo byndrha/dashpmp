@@ -51,6 +51,7 @@ import {
   type VehicleCheckPhoto,
 } from "@/lib/queries/vehicle-check";
 import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
+import { getIstirahatForJadwal, type IstirahatSession } from "@/lib/queries/driver-istirahat";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
@@ -207,6 +208,13 @@ export async function getJadwalDetailAction(jadwalId: number): Promise<DriverSto
 // when the driver has no linked account or hasn't sent a ping yet.
 export async function getDriverPositionAction(salesmanId: string): Promise<DriverPosition | null> {
   return getLatestDriverPosition(salesmanId);
+}
+
+// For Validasi Rute's Riwayat Status time summary (Task 11) — every
+// istirahat session logged against this Jadwal, in-progress ones included
+// (see getIstirahatForJadwal's own comment on live duration).
+export async function getIstirahatForJadwalAction(jadwalId: number): Promise<IstirahatSession[]> {
+  return getIstirahatForJadwal(jadwalId);
 }
 
 // Proof-of-delivery popup data for one completed stop — null if the stop

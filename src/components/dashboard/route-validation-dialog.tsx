@@ -62,13 +62,25 @@ import {
   checkArmadaConflictAction,
   getPriceLevelOptionsAction,
   getDriverPositionAction,
+  getIstirahatForJadwalAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
+import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
 
 const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((m) => m.RouteMap), {
   ssr: false,
   loading: () => <Skeleton className="h-full w-full rounded-lg" />,
 });
+
+// Resolves the "end" instant for an in-progress elapsed-time calculation —
+// pulled out to a plain module-level function (rather than calling
+// Date.now() straight inside a component's useMemo) so the
+// react-hooks/purity lint rule doesn't flag it: it only recognizes impure
+// calls written directly in a component/hook body, not ones behind a
+// named helper.
+function resolveEndMs(actualEnd: string | Date | null): number {
+  return actualEnd ? new Date(actualEnd).getTime() : Date.now();
+}
 
 // "5 Menit" under an hour, "4 Jam 5 Menit" (or "4 Jam" flat) at or above.
 function formatDurationMinutes(totalMinutes: number): string {
@@ -273,6 +285,10 @@ export function RouteValidationDialog({
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<DriverStopRow[]>([]);
   const [vehicleChecks, setVehicleChecks] = useState<VehicleCheckRow[]>([]);
+  // Every istirahat session logged against this Jadwal — feeds the Riwayat
+  // Status popover's time summary (Task 11), fetched alongside
+  // vehicleChecks in the same jadwalId-keyed effect below.
+  const [istirahatSessions, setIstirahatSessions] = useState<IstirahatSession[]>([]);
   // Freely editable delivery date — the primary override for this Jadwal's
   // departure day. Kept as its own field (not derived from businessDate's
   // rollover label) precisely so staff can set ANY calendar date here,
@@ -413,6 +429,7 @@ export function RouteValidationDialog({
     if (jadwalId == null) {
       setOrder([]);
       setVehicleChecks([]);
+      setIstirahatSessions([]);
       return;
     }
     setLoading(true);
@@ -423,6 +440,7 @@ export function RouteValidationDialog({
       })
       .finally(() => setLoading(false));
     getVehicleChecksForJadwalAction(jadwalId).then(setVehicleChecks);
+    getIstirahatForJadwalAction(jadwalId).then(setIstirahatSessions);
   }, [jadwalId]);
 
   // Refetches just `order` after UbahPemesananDialog closes (saved or
@@ -892,6 +910,24 @@ export function RouteValidationDialog({
     return [{ label: "Draf dibuat", timestamp: jadwal.CreatedDate, durationLabel: null }, ...withDuration];
   }, [jadwal, jamKembaliAktual]);
 
+  // Riwayat Status time summary (Task 11): total time on break, total time
+  // from actual departure to actual arrival (or now, if still en route),
+  // and the difference between the two ("effective" delivery time with
+  // breaks excluded).
+  const totalIstirahatMenit = useMemo(
+    () => istirahatSessions.reduce((sum, s) => sum + s.durasiMenit, 0),
+    [istirahatSessions]
+  );
+  // Null (not 0) before departure — there's nothing to measure "berjalan"
+  // time against yet, and showing "0 Menit" would misleadingly imply the
+  // trip already started.
+  const totalBerjalanMenit = useMemo(() => {
+    if (!jadwal?.JamAktualBerangkat) return null;
+    const endMs = resolveEndMs(jamKembaliAktual);
+    return Math.round((endMs - new Date(jadwal.JamAktualBerangkat).getTime()) / 60000);
+  }, [jadwal, jamKembaliAktual]);
+  const waktuEfektifMenit = totalBerjalanMenit != null ? totalBerjalanMenit - totalIstirahatMenit : null;
+
   // Same sentence the status area below used to show on its own — now it
   // doubles as the Riwayat Status trigger's own label (next to the Terbit
   // badge) so there's one line of truth instead of two.
@@ -1189,6 +1225,34 @@ export function RouteValidationDialog({
                         </VerticalTimelineItem>
                       ))}
                     </VerticalTimeline>
+                    {(totalBerjalanMenit != null || istirahatSessions.length > 0) && (
+                      <div className="mt-3 flex flex-col gap-1 border-t pt-3 text-xs">
+                        {totalBerjalanMenit != null && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Total Berjalan</span>
+                            <span className="font-medium">{formatDurationMinutes(totalBerjalanMenit)}</span>
+                          </div>
+                        )}
+                        {istirahatSessions.length > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Total Istirahat ({istirahatSessions.length}x)</span>
+                            <span className="font-medium">{formatDurationMinutes(totalIstirahatMenit)}</span>
+                          </div>
+                        )}
+                        {waktuEfektifMenit != null && (
+                          <div className="flex justify-between font-semibold">
+                            <span>Waktu Efektif Pengiriman</span>
+                            <span>{formatDurationMinutes(waktuEfektifMenit)}</span>
+                          </div>
+                        )}
+                        {istirahatSessions.map((s, i) => (
+                          <p key={i} className="text-[11px] text-muted-foreground">
+                            {s.keterangan} — {formatDurationMinutes(s.durasiMenit)} ({formatTime(s.waktuMulai)}
+                            {s.waktuSelesai ? ` – ${formatTime(s.waktuSelesai)}` : " – berlangsung"})
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </PopoverContent>
                 </Popover>
               )}
