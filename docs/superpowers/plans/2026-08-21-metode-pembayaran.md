@@ -580,7 +580,7 @@ export interface RecordPaymentResult {
 }
 ```
 
-Delete `PAYMENT_CHANNELS` and `PaymentChannelId` entirely — every remaining reference is fixed in Tasks 8/9.
+Delete `PAYMENT_CHANNELS` and `PaymentChannelId` entirely — every remaining reference is fixed in Tasks 6, 9, and 10.
 
 - [ ] **Step 3: Update `recordPayment()`**
 
@@ -614,7 +614,7 @@ await pool
 
 - [ ] **Step 4: Type-check and lint**
 
-Run: `npx tsc --noEmit` (filter `.next/`) — fix every call site that still passes `chartOfAccountId` (Tasks 8/9 handle the two UI call sites; this step just confirms the compiler has found them).
+Run: `npx tsc --noEmit` (filter `.next/`) — expect errors at every call site that still passes `chartOfAccountId` (Task 6's driver-app action, Task 9's driver-app `PembayaranStep`, and Task 10's kasir `PelunasanDialog`/`recordPaymentAction` fix those; this step just confirms the compiler has found them all — do not fix them here, that would step outside this task's scope).
 Run: `npx eslint src/lib/pelunasan-types.ts src/lib/queries/pelunasan.ts src/lib/queries/chart-of-account.ts`.
 
 - [ ] **Step 5: Commit**
