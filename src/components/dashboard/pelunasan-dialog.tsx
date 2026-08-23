@@ -89,6 +89,7 @@ export function PelunasanDialog({
       businessPartnerId,
       perusahaanId,
       metodePembayaranKode: input.metodeKode,
+      konteks: "kasir",
       notes: input.catatan ?? undefined,
       allocations: activeLines.map(([salesInvoiceId, l]) => ({ salesInvoiceId, amount: Number(l.amount) })),
     });

@@ -48,6 +48,7 @@ export function PembayaranStep({
       businessPartnerId,
       perusahaanId,
       metodePembayaranKode: input.metodeKode,
+      konteks: "driver",
       notes: input.catatan ?? undefined,
       allocations: [{ salesInvoiceId, amount }],
     });

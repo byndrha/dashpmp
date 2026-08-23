@@ -76,6 +76,12 @@ export function QrPaymentPanel({
           setSelectedMetode(v as MetodePembayaranRow["metode"]);
           const first = (rows ?? []).find((r) => r.metode === v);
           setSelectedKode(first?.kode ?? null);
+          // wajib_catatan exists precisely because there's no automatic
+          // proof a Transfer/QRIS-Statis payment happened — the note IS
+          // the audit trail, so a note typed on one channel must never
+          // survive a switch to a different channel.
+          setCatatan("");
+          setError(null);
         }}
       >
         <TabsList>
@@ -95,7 +101,11 @@ export function QrPaymentPanel({
                     type="button"
                     size="sm"
                     variant={selectedKode === r.kode ? "default" : "outline"}
-                    onClick={() => setSelectedKode(r.kode)}
+                    onClick={() => {
+                      setSelectedKode(r.kode);
+                      setCatatan("");
+                      setError(null);
+                    }}
                   >
                     {r.jenis === "qris_static" ? "QRIS Statis" : r.jenis === "qris_dinamis" ? "QRIS Dinamis" : r.kode}
                   </Button>

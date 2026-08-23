@@ -114,6 +114,12 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
   if (!metode || !metode.isActive) {
     throw new AppError("Metode pembayaran tidak ditemukan atau sudah tidak aktif.");
   }
+  // getMetodePembayaranByKode (unlike listActiveMetodePembayaran) doesn't
+  // filter by konteks, since it's also used for lookups that don't care —
+  // so the write path must check it explicitly before any DB writes.
+  if (!metode.konteks.includes(input.konteks)) {
+    throw new AppError("Metode pembayaran ini tidak tersedia untuk konteks ini.");
+  }
   if (metode.wajibCatatan && !input.notes?.trim()) {
     throw new AppError("Catatan wajib diisi untuk metode pembayaran ini.");
   }
