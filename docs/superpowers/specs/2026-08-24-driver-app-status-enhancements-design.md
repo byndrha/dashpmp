@@ -50,6 +50,8 @@ ALTER TABLE DashboardPengirimanJadwalDetail ADD UrutanOverride INT NULL
 
 `UrutanOverride`, when non-null, wins over `Urutan` purely for driver-app's own remaining-stops ordering — desktop Validasi Rute's stop list and history continue to read `Urutan` unchanged.
 
+**Important layering note**: `getDriverJadwalStops()` (`src/lib/queries/pengiriman-jadwal.ts`) is shared — it's driver-app's own read path AND, since an earlier session, also what `RouteValidationDialog` reads via `getJadwalDetailAction` (desktop). This function's own `ORDER BY` must stay exactly `Urutan` (unchanged) even after it starts also selecting `UrutanOverride` — it must NOT re-sort by `UrutanOverride ?? Urutan` itself, or desktop's stop list would silently reorder whenever a driver moves a Terkendala stop. The `UrutanOverride ?? Urutan` re-sort happens ONE layer up, client-side, only inside driver-app's own `stop-flow.tsx` (where `remainingStops` is derived) — desktop's `RouteValidationDialog` never performs this re-sort and keeps rendering whatever order `getDriverJadwalStops()` returns (i.e., plain `Urutan`).
+
 ## 1. Arrival gating (`PengirimanStep`)
 
 - Compute `distanceToActiveStopKm = haversineKm(position, { lat: activeStop.Latitude, lng: activeStop.Longitude })` whenever `position` (already tracked) updates.
@@ -79,7 +81,7 @@ Because the layout re-checks `getActiveIstirahat` on every load (including a fre
 
 - `PengirimanStep` tracks a local `hasAttemptedCall` boolean (set true once `CallChoiceDialog` has been opened for the current `activeStop`, reset when `activeStop` changes). While true, a small text link "Tidak bisa dihubungi? Laporkan Pengiriman Terkendala" renders near the phone button.
 - **`TerkendalaDialog`** (new, separate from `KendalaDialog`): dropdown Alamat tidak ditemukan / Lokasi tutup / Penerima tidak merespon / Lainnya (free text). On confirm: `reportTerkendalaAction(jadwalDetailId, alasan)` → `INSERT INTO DashboardPengirimanTerkendala (JadwalDetailID, SalesmanID, Alasan) VALUES (...)`, then sets that detail's `UrutanOverride` to `MAX(current remaining stops' effective order) + 1` (pushing it to last among what's left).
-- The destination list in `PengirimanStep` re-sorts by `UrutanOverride ?? Urutan`. The flagged stop's row gets a "Terkendala" badge (same visual treatment as the existing "Kendala dilaporkan" ETA-line text) plus ▲▼ buttons that swap its `UrutanOverride` with the adjacent stop's effective position (a new `moveTerkendalaStopAction(jadwalDetailId, direction: "up" | "down")`).
+- The destination list in `PengirimanStep` (via `stop-flow.tsx`'s `remainingStops` derivation) re-sorts by `UrutanOverride ?? Urutan` client-side — see the layering note under Data Model above; `getDriverJadwalStops()` itself keeps returning plain-`Urutan` order. The flagged stop's row gets a "Terkendala" badge (same visual treatment as the existing "Kendala dilaporkan" ETA-line text) plus ▲▼ buttons that swap its `UrutanOverride` with the adjacent stop's effective position (a new `moveTerkendalaStopAction(jadwalDetailId, direction: "up" | "down")`).
 - No block on eventually delivering there — Tiba/Konfirmasi Kirim/Konfirmasi Terima proceed unchanged once the driver reaches it.
 
 ## 4. Two display additions
@@ -101,5 +103,5 @@ Individual istirahat sessions (keterangan + duration) are listed in the same pop
 
 - `DashboardPengirimanTerkendala`/`DashboardPengirimanIstirahat` are entirely separate from `DashboardPengirimanKendala` — no shared table, no shared dialog.
 - The istirahat lock's source of truth is always the server row (`WaktuSelesai IS NULL`), never client-only state — this is what makes it survive an app kill.
-- `UrutanOverride` is driver-app-only convenience ordering; it must never be written to or read by anything on the desktop side, so the staff-authored `Urutan`/history stays exactly as it was.
+- `UrutanOverride` is driver-app-only convenience ordering. `getDriverJadwalStops()` may SELECT it (both driver-app and desktop's `RouteValidationDialog` share this function), but must never sort by it — only `stop-flow.tsx`'s client-side `remainingStops` derivation applies the `UrutanOverride ?? Urutan` re-sort. The staff-authored `Urutan`/history stays exactly as it was on desktop.
 - Arrival gating has no override path when GPS fails — the phone button is the only always-available action in that state.
