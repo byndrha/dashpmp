@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Fuel, Siren, Coffee, Phone, MapPin } from "lucide-react";
 import { formatKemasanQty } from "@/lib/format";
+import { haversineKm } from "@/lib/route-estimate";
 import { SwipeToConfirm } from "@/components/driver-app/swipe-to-confirm";
 import { PengirimanMap } from "./pengiriman-map";
 import { BbmDialog } from "./bbm-dialog";
@@ -181,6 +182,14 @@ export function PengirimanStep({
     return map;
   }, [effectiveRoute, validStops]);
 
+  const ARRIVAL_RADIUS_KM = 0.1; // 100 meters
+
+  const distanceToActiveStopKm =
+    position != null && activeStop.Latitude != null && activeStop.Longitude != null
+      ? haversineKm(position, { lat: activeStop.Latitude, lng: activeStop.Longitude })
+      : null;
+  const canShowArrivalSwipe = distanceToActiveStopKm != null && distanceToActiveStopKm <= ARRIVAL_RADIUS_KM;
+
   function handleArrived() {
     setError(null);
     startTransition(async () => {
@@ -294,7 +303,17 @@ export function PengirimanStep({
           </div>
 
           <div className="flex items-center gap-2 px-4">
-            <SwipeToConfirm label="Geser untuk Tiba" pending={pending} onConfirm={handleArrived} className="flex-1" />
+            {canShowArrivalSwipe ? (
+              <SwipeToConfirm label="Geser untuk Tiba" pending={pending} onConfirm={handleArrived} className="flex-1" />
+            ) : (
+              <p className="flex-1 rounded-full border border-dashed border-border px-4 py-3 text-center text-xs text-muted-foreground">
+                {position == null
+                  ? "Lokasi tidak terdeteksi — aktifkan GPS"
+                  : distanceToActiveStopKm == null
+                    ? "Koordinat tujuan tidak tersedia"
+                    : `±${Math.round(distanceToActiveStopKm * 1000)}m menuju tujuan`}
+              </p>
+            )}
             {activeStop.MobileNo && (
               <button
                 type="button"
