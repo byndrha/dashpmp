@@ -29,6 +29,8 @@ import { getDriverProfiles, type DriverProfileRow } from "@/lib/queries/driver-p
 import { getPabrikLocation, type PabrikLocation } from "@/lib/queries/pabrik-location";
 import { recordMasukSpbu, updateFuelLog } from "@/lib/queries/driver-fuel";
 import { recordKendala } from "@/lib/queries/driver-kendala";
+import { getActiveIstirahat, startIstirahat, endIstirahat, type ActiveIstirahat } from "@/lib/queries/driver-istirahat";
+import { reportTerkendala, moveTerkendalaStop } from "@/lib/queries/driver-terkendala";
 import type { JenisKendala } from "@/lib/kendala-options";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { getBusinessDateISO } from "@/lib/business-date";
@@ -231,5 +233,64 @@ export async function reportKendalaAction(
     const salesmanId = await requireOwnSalesmanId();
     await assertOwnsJadwalDetail(jadwalDetailId, salesmanId);
     await recordKendala(jadwalId, jadwalDetailId, salesmanId, jenisKendala, hubungiTeknisi);
+  });
+}
+
+// Checked from the driver-app root layout on every load, not from a
+// specific Jadwal's stop-flow screen — a driver can only ever be on one
+// break at a time regardless of which route is active, so this is
+// deliberately NOT scoped via assertOwnsJadwal/assertOwnsJadwalDetail;
+// requireOwnSalesmanId() alone is the right gate, matching
+// getActiveIstirahat's own salesmanId-only signature.
+export async function getActiveIstirahatAction(): Promise<ActionResult<ActiveIstirahat | null>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    return getActiveIstirahat(salesmanId);
+  });
+}
+
+export async function startIstirahatAction(jadwalId: number, keterangan: string): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwal(jadwalId, salesmanId);
+    const id = await startIstirahat(jadwalId, salesmanId, keterangan);
+    revalidatePath("/mkesindo/driver-app");
+    return id;
+  });
+}
+
+// endIstirahat scopes its own UPDATE by SalesmanID in the WHERE clause
+// (0 rows affected throws) rather than a separate ownership lookup, so no
+// assertOwnsJadwal/assertOwnsJadwalDetail call is needed here.
+export async function endIstirahatAction(istirahatId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await endIstirahat(istirahatId, salesmanId);
+    revalidatePath("/mkesindo/driver-app");
+  });
+}
+
+export async function reportTerkendalaAction(jadwalDetailId: number, alasan: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwalDetail(jadwalDetailId, salesmanId);
+    await reportTerkendala(jadwalDetailId, salesmanId, alasan);
+    revalidatePath("/mkesindo/driver-app");
+  });
+}
+
+// moveTerkendalaStop already performs its own ownership check internally
+// (both detail ids must resolve to the same Jadwal, owned by salesmanId),
+// so no separate assertOwnsJadwal/assertOwnsJadwalDetail call is needed
+// here either.
+export async function moveTerkendalaStopAction(
+  jadwalDetailId: number,
+  direction: "up" | "down",
+  remainingDetailIdsInOrder: number[]
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await moveTerkendalaStop(jadwalDetailId, salesmanId, direction, remainingDetailIdsInOrder);
+    revalidatePath("/mkesindo/driver-app");
   });
 }
