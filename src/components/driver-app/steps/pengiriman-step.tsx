@@ -192,6 +192,19 @@ export function PengirimanStep({
     return map;
   }, [effectiveRoute, validStops]);
 
+  // Same cumulative pattern as distanceByDetailId, but summing leg travel
+  // times instead of leg distances.
+  const durationByDetailId = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!effectiveRoute) return map;
+    let cumulative = 0;
+    validStops.forEach((s, i) => {
+      cumulative += effectiveRoute.legs[i]?.durationMinutes ?? 0;
+      map.set(s.JadwalDetailID, cumulative);
+    });
+    return map;
+  }, [effectiveRoute, validStops]);
+
   const ARRIVAL_RADIUS_KM = 0.1; // 100 meters
 
   const distanceToActiveStopKm =
@@ -372,6 +385,7 @@ export function PengirimanStep({
         <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-2">
           {remainingStops.map((s, i) => {
             const distanceKm = distanceByDetailId.get(s.JadwalDetailID);
+            const durationMin = durationByDetailId.get(s.JadwalDetailID);
             return (
               <div key={s.JadwalDetailID} className="flex items-start gap-2 border-b border-border/50 py-2 text-sm last:border-0">
                 <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-foreground text-[10px] font-medium">
@@ -386,7 +400,10 @@ export function PengirimanStep({
                     {formatKemasanQty(s.Qty10KG, s.Qty5KG)} &mdash; {s.Wilayah} {s.Kecamatan ? `| ${s.Kecamatan}` : ""}
                   </p>
                 </div>
-                <span className="shrink-0 text-xs text-muted-foreground">{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-"}</span>
+                <span className="shrink-0 text-right text-xs text-muted-foreground">
+                  <span className="block">{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-"}</span>
+                  {durationMin != null && <span className="block">~{Math.round(durationMin)} menit</span>}
+                </span>
                 {s.IsTerkendala && (
                   <div className="flex shrink-0 flex-col items-center gap-0.5">
                     <button
