@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { formatRupiah } from "@/lib/format";
 import { getInvoiceOutstandingAction, recordDriverPaymentAction } from "@/app/mkesindo/driver-app/actions";
+import { QrPaymentPanel } from "@/components/dashboard/qr-payment-panel";
 
 export function PembayaranStep({
   salesInvoiceId,
   businessPartnerId,
+  perusahaanId,
   onDone,
 }: {
   salesInvoiceId: string;
   businessPartnerId: string;
+  perusahaanId: number;
   onDone: () => void;
 }) {
   const [amount, setAmount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumped by the "Coba Lagi" button below to re-run the effect. Without
   // this, a failed getInvoiceOutstandingAction call (network blip, transient
@@ -41,20 +42,16 @@ export function PembayaranStep({
     };
   }, [businessPartnerId, salesInvoiceId, retryToken]);
 
-  async function handleTunai() {
+  async function handleSubmit(input: { metodeKode: string; catatan: string | null }) {
     if (amount == null) return;
-    setError(null);
-    setSubmitting(true);
     const result = await recordDriverPaymentAction({
       businessPartnerId,
-      chartOfAccountId: "014",
+      perusahaanId,
+      metodePembayaranKode: input.metodeKode,
+      notes: input.catatan ?? undefined,
       allocations: [{ salesInvoiceId, amount }],
     });
-    setSubmitting(false);
-    if (!result.success) {
-      setError(result.error);
-      return;
-    }
+    if (!result.success) throw new Error(result.error);
     onDone();
   }
 
@@ -67,39 +64,22 @@ export function PembayaranStep({
         <p className="text-2xl font-semibold">{loading ? "Memuat..." : amount != null ? formatRupiah(amount) : "-"}</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <Button variant="default">Tunai</Button>
-        <Button variant="outline" disabled className="opacity-50">
-          Dynamic QR
-          <span className="block text-[10px]">Segera Hadir</span>
-        </Button>
-        <Button variant="outline" disabled className="opacity-50">
-          QR Statis
-          <span className="block text-[10px]">Segera Hadir</span>
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <p className="text-sm text-muted-foreground">Konfirmasi telah menerima pembayaran tunai dari mitra untuk pengiriman ini.</p>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {error && amount == null && !loading ? (
-          <Button
-            className="w-full"
-            variant="outline"
-            onClick={() => {
-              setLoading(true);
-              setError(null);
-              setRetryToken((t) => t + 1);
-            }}
-          >
-            Coba Lagi
-          </Button>
-        ) : (
-          <Button className="w-full" disabled={submitting || loading || amount == null} onClick={handleTunai}>
-            {submitting ? "Menyimpan..." : "Selesaikan Pembayaran"}
-          </Button>
-        )}
-      </div>
+      {error && amount == null && !loading ? (
+        <button
+          type="button"
+          className="rounded-md border px-3 py-2 text-sm"
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            setRetryToken((t) => t + 1);
+          }}
+        >
+          Coba Lagi
+        </button>
+      ) : (
+        amount != null && <QrPaymentPanel perusahaanId={perusahaanId} konteks="driver" amount={amount} onSubmit={handleSubmit} />
+      )}
+      {error && amount != null && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

@@ -37,6 +37,7 @@ export function StopFlow({
   initialStops,
   pabrik,
   driverName,
+  perusahaanId,
 }: {
   jadwalId: number;
   armadaNama: string;
@@ -45,6 +46,7 @@ export function StopFlow({
   initialStops: DriverStopRow[];
   pabrik: { lat: number; lng: number };
   driverName: string;
+  perusahaanId: number;
 }) {
   const router = useRouter();
   const [stops, setStops] = useState(initialStops);
@@ -132,6 +134,7 @@ export function StopFlow({
         <PembayaranStep
           salesInvoiceId={salesInvoiceId!}
           businessPartnerId={activeStop.BusinessPartnerID}
+          perusahaanId={perusahaanId}
           onDone={handlePembayaranDone}
         />
       );

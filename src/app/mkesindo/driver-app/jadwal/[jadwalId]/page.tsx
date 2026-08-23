@@ -23,6 +23,7 @@ export default async function DriverJadwalPage({ params }: { params: Promise<{ j
   // would otherwise surface as the generic Next.js error page instead
   // of an Indonesian message.
   if (!session.user.salesmanId) notFound();
+  if (!session.user.perusahaanId) notFound();
   try {
     await assertOwnsJadwal(id, session.user.salesmanId);
   } catch {
@@ -48,6 +49,7 @@ export default async function DriverJadwalPage({ params }: { params: Promise<{ j
       initialStops={stops}
       pabrik={{ lat: pabrik.latitude, lng: pabrik.longitude }}
       driverName={session.user.name ?? session.user.username}
+      perusahaanId={session.user.perusahaanId}
     />
   );
 }
