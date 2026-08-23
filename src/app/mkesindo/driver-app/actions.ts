@@ -86,7 +86,11 @@ export async function confirmStopDeliveryAction(
   });
 }
 
-export async function recordDriverPaymentAction(input: RecordPaymentInput): Promise<ActionResult<RecordPaymentResult>> {
+// konteks is deliberately excluded from the caller-supplied input (Omit)
+// and pinned below instead of trusted from the client — see the pin site.
+export async function recordDriverPaymentAction(
+  input: Omit<RecordPaymentInput, "konteks">
+): Promise<ActionResult<RecordPaymentResult>> {
   return runAction(async () => {
     const salesmanId = await requireOwnSalesmanId();
     // Real current outstanding for every invoice of this mitra, fetched
@@ -111,7 +115,12 @@ export async function recordDriverPaymentAction(input: RecordPaymentInput): Prom
         throw new AppError("Jumlah pembayaran tidak sesuai dengan sisa tagihan invoice ini.");
       }
     }
-    return recordPayment(input);
+    // konteks is pinned here, never trusted from the client — mirrors
+    // salesmanId above (derived from the session, not the request body).
+    // Without this, a forged request could claim konteks:"kasir" and
+    // reach a kasir-only channel (e.g. Kas Besar) through this driver
+    // action despite the konteks check inside recordPayment() itself.
+    return recordPayment({ ...input, konteks: "driver" });
   });
 }
 

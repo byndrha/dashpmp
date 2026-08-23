@@ -61,12 +61,20 @@ export async function getOutstandingInvoicesAction(
   });
 }
 
-export async function recordPaymentAction(input: RecordPaymentInput): Promise<ActionResult<RecordPaymentResult>> {
+// konteks is deliberately excluded from the caller-supplied input (Omit)
+// and pinned below instead of trusted from the client — see the pin site.
+export async function recordPaymentAction(
+  input: Omit<RecordPaymentInput, "konteks">
+): Promise<ActionResult<RecordPaymentResult>> {
   return runAction(async () => {
     const session = await auth();
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
-    const result = await recordPayment(input);
+    // konteks is pinned here, never trusted from the client — same
+    // reasoning as recordDriverPaymentAction's own pin in driver-app's
+    // actions.ts: without this, a forged request from this surface could
+    // claim a different konteks and reach a channel not meant for kasir.
+    const result = await recordPayment({ ...input, konteks: "kasir" });
     revalidatePath("/mkesindo/aging");
     revalidatePath("/mkesindo");
     return result;
