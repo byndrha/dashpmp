@@ -2389,6 +2389,7 @@ interface SalesOrderDetailForReturn {
   ItemID: string;
   Name: string;
   Qty: number;
+  Unit: string;
   Price: number;
 }
 
@@ -2422,11 +2423,15 @@ export async function confirmStopDelivery(
   // merged-external-DO case (mergeExternalDeliveriesIntoJadwal): that DO was
   // already issued by the desktop ERP before this Jadwal existed, so
   // selesaiMuat (above) deliberately never creates a dashboard SalesInvoice
-  // for it — invoicing for an externally-issued DO is the desktop ERP's own
-  // concern. This confirmation still records the physical delivery in full
-  // (photos, signature, DeliveryOrderDetail.Delivered, SalesReturn if any)
-  // but every SalesInvoice*/SalesInvoiceDetail write below is skipped for
-  // such a row — there is no invoice row to touch.
+  // for it at Selesai Muat time. Confirmed live 2026-08-21 that leaving it
+  // at that meant NO SalesInvoice existed anywhere for such a stop by the
+  // time the driver got here — which in turn made driver-app's own payment
+  // step get silently skipped (it gates on this same SalesInvoiceID being
+  // non-null). So this function now creates the SalesInvoice itself right
+  // here if one still doesn't exist, built directly at the confirmed
+  // accepted qty (see the salesInvoiceId branch below) — the desktop ERP is
+  // no longer the only place this can happen, and staff should stop typing
+  // one in manually for a stop that already went through driver-app.
 
   const existingStop = await pool
     .request()
@@ -2446,14 +2451,14 @@ export async function confirmStopDelivery(
   const soResult = await pool
     .request()
     .input("soId", sql.VarChar(16), detailRow.SalesOrderID)
-    .query(`SELECT BusinessPartnerID FROM SalesOrder WHERE SalesOrderID = @soId`);
-  const soRow = soResult.recordset[0] as { BusinessPartnerID: string } | undefined;
+    .query(`SELECT BusinessPartnerID, DueDate, TermOfPaymentID FROM SalesOrder WHERE SalesOrderID = @soId`);
+  const soRow = soResult.recordset[0] as SalesOrderForPublish | undefined;
   if (!soRow) throw new AppError(`Sales Order ${detailRow.SalesOrderID} tidak ditemukan.`);
 
   const sodResult = await pool
     .request()
     .input("soId", sql.VarChar(16), detailRow.SalesOrderID)
-    .query(`SELECT SalesOrderDetailID, ItemID, Name, Qty, Price FROM SalesOrderDetail WHERE SalesOrderID = @soId`);
+    .query(`SELECT SalesOrderDetailID, ItemID, Name, Qty, Unit, Price FROM SalesOrderDetail WHERE SalesOrderID = @soId`);
   const soDetails = sodResult.recordset as SalesOrderDetailForReturn[];
   const soDetailById = new Map(soDetails.map((d) => [d.SalesOrderDetailID, d]));
 
@@ -2572,15 +2577,16 @@ export async function confirmStopDelivery(
     // within this one already-filtered DO/SI pair is used, never a global
     // ID comparison. This gives a real, safe key (SalesInvoiceDetailID, the
     // actual primary key) to update on instead.
+    let salesInvoiceId = detailRow.SalesInvoiceID;
     const salesInvoiceDetailIdBySoDetailId = new Map<string, string>();
-    if (detailRow.SalesInvoiceID) {
+    if (salesInvoiceId) {
       const doDetailsResult = await new sql.Request(transaction)
         .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
         .query(`SELECT DeliveryOrderDetailID, SalesOrderDetailID FROM DeliveryOrderDetail WHERE DeliveryOrderID = @doId ORDER BY DeliveryOrderDetailID`);
       const doDetailRows = doDetailsResult.recordset as { DeliveryOrderDetailID: string; SalesOrderDetailID: string }[];
 
       const siDetailsResult = await new sql.Request(transaction)
-        .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
+        .input("siId", sql.VarChar(16), salesInvoiceId)
         .query(`SELECT SalesInvoiceDetailID FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId ORDER BY SalesInvoiceDetailID`);
       const siDetailRows = siDetailsResult.recordset as { SalesInvoiceDetailID: string }[];
 
@@ -2591,6 +2597,76 @@ export async function confirmStopDelivery(
       doDetailRows.forEach((doDetail, i) => {
         salesInvoiceDetailIdBySoDetailId.set(doDetail.SalesOrderDetailID, siDetailRows[i].SalesInvoiceDetailID);
       });
+    } else {
+      // Merged-external-DO case with no SI anywhere yet (confirmed live
+      // 2026-08-21: a real example sat un-invoiced from delivery all the way
+      // until a staff member manually typed one into the desktop ERP 1.5
+      // hours later, at the ORIGINAL un-returned qty — which is also what
+      // let driver-app's payment step get skipped entirely, since it gated
+      // on this same SalesInvoiceID being non-null). Built directly at the
+      // already-confirmed accepted qty/amount per item (mirrors selesaiMuat's
+      // SI creation shape above) — no separate "create full, then reduce"
+      // step needed since what was actually accepted is already known here.
+      salesInvoiceId = await nextSalesInvoiceId(transaction);
+      const siVoucherSeq = await nextSIVoucherSeq(transaction, yearMonth);
+      const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+      const totalAmount = input.items.reduce((sum, item) => sum + item.qtyDiterima * soDetailById.get(item.salesOrderDetailId)!.Price, 0);
+
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), salesInvoiceId)
+        .input("voucherNo", sql.VarChar(128), siVoucherNo)
+        .input("dueDate", sql.DateTime, soRow.DueDate)
+        .input("termOfPaymentId", sql.VarChar(16), soRow.TermOfPaymentID)
+        .input("soId", sql.VarChar(16), detailRow.SalesOrderID)
+        .input("doId", sql.VarChar(16), detailRow.DeliveryOrderID)
+        .input("bpId", sql.VarChar(16), soRow.BusinessPartnerID)
+        .input("branchId", sql.VarChar(16), BRANCH_ID)
+        .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+        .input("amount", sql.Decimal(23, 4), totalAmount)
+        .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID).query(`
+          INSERT INTO SalesInvoice
+            (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
+             SalesOrderID, DeliveryOrderID, SalesDepositID, BusinessPartnerID, BranchID, DepartmentID,
+             Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, BankID, Paid, Deposit, PaidDate,
+             IsClosed, IsDeleted, ModifiedDate, Rate, CurrencyID, IsAccountReceiveable, StatusForm,
+             SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
+             DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
+          VALUES
+            (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
+             @soId, @doId, '', @bpId, @branchId, @departmentId,
+             @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
+             0, 0, GETDATE(), 1, '', 1, 1,
+             @salesmanId, 0, 0, 0, 0, '', 0,
+             0, '', 0, '')
+        `);
+
+      for (const item of input.items) {
+        if (item.qtyDiterima <= 0) continue;
+        const sod = soDetailById.get(item.salesOrderDetailId)!;
+        const siDetailId = await nextSalesInvoiceDetailId(transaction);
+        const amount = item.qtyDiterima * sod.Price;
+        await new sql.Request(transaction)
+          .input("id", sql.VarChar(16), siDetailId)
+          .input("siId", sql.VarChar(16), salesInvoiceId)
+          .input("itemId", sql.VarChar(160), sod.ItemID)
+          .input("name", sql.VarChar(160), sod.Name)
+          .input("qty", sql.Decimal(23, 4), item.qtyDiterima)
+          .input("unit", sql.VarChar(8), sod.Unit)
+          .input("price", sql.Decimal(23, 4), sod.Price)
+          .input("amount", sql.Decimal(23, 4), amount).query(`
+            INSERT INTO SalesInvoiceDetail
+              (SalesInvoiceDetailID, SalesInvoiceID, ItemID, Qty, Unit, Ratio, UnitRatio, Price, Disc, DiscValue,
+               DiscRp, Amount, Name, Value, Netto, Description, WaiterName, Cashback, Total)
+            VALUES
+              (@id, @siId, @itemId, @qty, @unit, 1, 1, @price, 0, 0,
+               0, @amount, @name, @amount, @amount, '', '', 0, NULL)
+          `);
+      }
+
+      await new sql.Request(transaction)
+        .input("detailId", sql.Int, input.jadwalDetailId)
+        .input("siId", sql.VarChar(16), salesInvoiceId)
+        .query(`UPDATE DashboardPengirimanJadwalDetail SET SalesInvoiceID = @siId WHERE JadwalDetailID = @detailId`);
     }
 
     for (const item of input.items) {
@@ -2622,9 +2698,10 @@ export async function confirmStopDelivery(
       // (the formal ERP document) and DashboardPengirimanStopDeliveryItem.QtyRetur
       // (this dashboard's own per-stop record).
       //
-      // Skipped entirely for the merged-external-DO case (no
-      // detailRow.SalesInvoiceID, see the gate check above) — there is no
-      // dashboard-owned SalesInvoiceDetail row to update.
+      // Skipped when detailRow.SalesInvoiceID was null on entry (the
+      // merged-external-DO case) — that branch above already created a
+      // fresh SalesInvoiceDetail row at the correct accepted qty/amount
+      // directly, so there's nothing here left to update.
       if (detailRow.SalesInvoiceID) {
         const salesInvoiceDetailId = salesInvoiceDetailIdBySoDetailId.get(sod.SalesOrderDetailID);
         if (!salesInvoiceDetailId) throw new AppError(`Baris invoice untuk item ${sod.Name} tidak ditemukan.`);
@@ -2660,8 +2737,9 @@ export async function confirmStopDelivery(
 
     // Recompute the invoice header from its now-updated detail rows — the
     // step vCustomerStatement's Outstanding calculation depends on. Skipped
-    // for the merged-external-DO case (no detailRow.SalesInvoiceID) — no
-    // dashboard-owned SalesInvoice header exists to recompute.
+    // when detailRow.SalesInvoiceID was null on entry — that branch above
+    // already inserted the SalesInvoice header at the correct total amount
+    // directly, so there's nothing to recompute here.
     if (detailRow.SalesInvoiceID) {
       const totalResult = await new sql.Request(transaction)
         .input("siId", sql.VarChar(16), detailRow.SalesInvoiceID)
@@ -2674,7 +2752,7 @@ export async function confirmStopDelivery(
     }
 
     await transaction.commit();
-    return { stopDeliveryId: existingStopRow.StopDeliveryID, salesInvoiceId: detailRow.SalesInvoiceID };
+    return { stopDeliveryId: existingStopRow.StopDeliveryID, salesInvoiceId };
   } catch (err) {
     await transaction.rollback();
     throw err;
