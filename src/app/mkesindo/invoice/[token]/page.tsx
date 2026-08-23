@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getInvoiceByToken } from "@/lib/queries/invoice-public";
+import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 import { formatDate, formatTime, formatRupiah } from "@/lib/format";
 import { InvoicePaymentRedirect } from "@/components/invoice-payment-redirect";
+import { QrPaymentPanel } from "@/components/dashboard/qr-payment-panel";
 
 // Public, unguessable-token page — no reason for a search engine to index
 // it, and the generic title avoids leaking the internal dashboard's name
@@ -29,7 +31,7 @@ function LineItemTable({ lines }: { lines: { Name: string; Qty: number; Amount: 
 
 export default async function PublicInvoicePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const invoice = await getInvoiceByToken(token);
+  const [invoice, perusahaanId] = await Promise.all([getInvoiceByToken(token), getMkesindoPerusahaanId()]);
 
   if (!invoice) {
     return (
@@ -80,11 +82,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
               <p className="text-xs text-muted-foreground">Total Tagihan</p>
               <p className="text-2xl font-semibold">{formatRupiah(invoice.Netto)}</p>
             </div>
-            <div className="mt-4 flex flex-col items-center gap-2">
-              <div className="flex size-48 items-center justify-center rounded-lg bg-black">
-                <span className="text-xs text-white">QRIS segera hadir</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Pembayaran QRIS akan tersedia di sini</p>
+            <div className="mt-4">
+              <QrPaymentPanel perusahaanId={perusahaanId} konteks="publik" amount={invoice.Netto} />
             </div>
           </>
         )}
