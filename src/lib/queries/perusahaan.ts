@@ -1,5 +1,7 @@
 import { getPool, sql } from "@/lib/db";
+import { getPgPool } from "@/lib/pg";
 import { encryptSecret } from "@/lib/crypto-secret";
+import { AppError } from "@/lib/action-result";
 import { PERUSAHAAN_STATUSES, type PerusahaanStatus, type PerusahaanJenisBisnis } from "@/lib/perusahaan-status";
 
 export { PERUSAHAAN_STATUSES, type PerusahaanStatus };
@@ -164,6 +166,24 @@ export async function updatePerusahaan(id: number, input: PerusahaanInput): Prom
       WHERE PerusahaanID = @id
     `);
   }
+}
+
+// Resolves the Postgres "directory" DB's perusahaan.id for kode="mkesindo"
+// — reused wherever a route tree is hardcoded to one company (the same
+// convention as db.ts's getPool()/resolveKoneksi("mkesindo", "utama")) but
+// still needs a real perusahaanId to hand to company-scoped Postgres
+// queries (e.g. metode_pembayaran). Deliberately generic/standalone, not
+// aging-specific — the public invoice page reuses this too.
+export async function getMkesindoPerusahaanId(): Promise<number> {
+  const pool = getPgPool();
+  const result = await pool.query<{ id: number }>(`SELECT id FROM perusahaan WHERE kode = $1`, ["mkesindo"]);
+  const row = result.rows[0];
+  if (!row) {
+    throw new AppError(
+      'No perusahaan row for kode="mkesindo" — the Postgres directory DB is missing its seed row (see docs/superpowers/specs/2026-07-30-postgres-directory-multi-company.md).'
+    );
+  }
+  return row.id;
 }
 
 export async function softDeletePerusahaan(id: number): Promise<void> {

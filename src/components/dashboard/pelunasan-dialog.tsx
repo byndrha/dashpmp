@@ -1,22 +1,18 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, HandCoins } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { QrPaymentPanel } from "@/components/dashboard/qr-payment-panel";
 import { formatRupiah, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { PAYMENT_CHANNELS, type PaymentChannelId } from "@/lib/pelunasan-types";
 import type { OutstandingInvoice } from "@/lib/queries/pelunasan";
 import { getOutstandingInvoicesAction, recordPaymentAction } from "@/app/mkesindo/(dashboard)/aging/actions";
 import { toast } from "sonner";
@@ -29,18 +25,18 @@ interface LineState {
 export function PelunasanDialog({
   businessPartnerId,
   customerName,
+  perusahaanId,
   open,
   onOpenChange,
 }: {
   businessPartnerId: string;
   customerName: string;
+  perusahaanId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [invoices, setInvoices] = useState<OutstandingInvoice[] | null>(null);
   const [lines, setLines] = useState<Record<string, LineState>>({});
-  const [channel, setChannel] = useState<PaymentChannelId>("014");
-  const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     if (!open) return;
@@ -86,25 +82,25 @@ export function PelunasanDialog({
     return sum + (inv ? Number(l.amount) - inv.Outstanding : 0);
   }, 0);
 
-  function handleSubmit() {
+  async function handlePaymentSubmit(input: { metodeKode: string; catatan: string | null }) {
     if (activeLines.length === 0) return;
 
-    startTransition(async () => {
-      const result = await recordPaymentAction({
-        businessPartnerId,
-        chartOfAccountId: channel,
-        allocations: activeLines.map(([salesInvoiceId, l]) => ({ salesInvoiceId, amount: Number(l.amount) })),
-      });
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(
-        `Pembayaran ${result.data.voucherNo} tercatat — ${formatRupiah(result.data.totalAmount)}` +
-          (result.data.totalDeposit > 0 ? ` (termasuk deposit ${formatRupiah(result.data.totalDeposit)})` : "")
-      );
-      onOpenChange(false);
+    const result = await recordPaymentAction({
+      businessPartnerId,
+      perusahaanId,
+      metodePembayaranKode: input.metodeKode,
+      notes: input.catatan ?? undefined,
+      allocations: activeLines.map(([salesInvoiceId, l]) => ({ salesInvoiceId, amount: Number(l.amount) })),
     });
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(
+      `Pembayaran ${result.data.voucherNo} tercatat — ${formatRupiah(result.data.totalAmount)}` +
+        (result.data.totalDeposit > 0 ? ` (termasuk deposit ${formatRupiah(result.data.totalDeposit)})` : "")
+    );
+    onOpenChange(false);
   }
 
   return (
@@ -122,22 +118,6 @@ export function PelunasanDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2">
-            <Label>Kanal Pembayaran</Label>
-            <Select value={channel} onValueChange={(v) => v && setChannel(v as PaymentChannelId)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAYMENT_CHANNELS.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto rounded border p-2">
             {invoices === null && (
               <p className="py-6 text-center text-sm text-muted-foreground">Memuat invoice outstanding...</p>
@@ -204,13 +184,16 @@ export function PelunasanDialog({
               Termasuk kelebihan bayar {formatRupiah(totalDeposit)} yang akan tercatat sebagai deposit.
             </p>
           )}
-        </div>
 
-        <DialogFooter>
-          <Button onClick={handleSubmit} disabled={pending || activeLines.length === 0}>
-            {pending ? "Menyimpan..." : "Simpan Pembayaran"}
-          </Button>
-        </DialogFooter>
+          {activeLines.length > 0 && (
+            <QrPaymentPanel
+              perusahaanId={perusahaanId}
+              konteks="kasir"
+              amount={totalDibayar}
+              onSubmit={handlePaymentSubmit}
+            />
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

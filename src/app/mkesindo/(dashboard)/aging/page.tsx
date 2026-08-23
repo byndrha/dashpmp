@@ -5,6 +5,7 @@ import { getWilayahList } from "@/lib/queries/wilayah";
 import { getPiutangPeriodSummary } from "@/lib/queries/piutang-summary";
 import { getTodayReceivablePayments } from "@/lib/queries/piutang-payments";
 import { getCollectionPriority } from "@/lib/queries/collection-priority";
+import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
@@ -35,12 +36,13 @@ export default async function AgingPage({
   // UTC-midnight Date getTodayReceivablePayments expects.
   const businessPaymentsDate = new Date(paymentsDate);
 
-  const [rows, wilayahList, periodSummary, paymentsRows, priorityRows] = await Promise.all([
+  const [rows, wilayahList, periodSummary, paymentsRows, priorityRows, perusahaanId] = await Promise.all([
     getAgingReceivables(wilayah),
     getWilayahList(),
     getPiutangPeriodSummary(filter),
     getTodayReceivablePayments(businessPaymentsDate),
     getCollectionPriority(),
+    getMkesindoPerusahaanId(),
   ]);
 
   const totalOutstanding = rows.reduce((sum, r) => sum + r.Outstanding, 0);
@@ -90,7 +92,7 @@ export default async function AgingPage({
       <PiutangStatusPanel buckets={statusBuckets} />
 
       <PiutangTabs
-        invoicePanel={<AgingTable rows={rows} />}
+        invoicePanel={<AgingTable rows={rows} perusahaanId={perusahaanId} />}
         pembayaranPanel={<PiutangPaymentsPanel rows={paymentsRows} businessDate={paymentsDate} todayISO={todayISO} />}
         prioritasPanel={<CollectionPriorityTable rows={priorityRows} />}
       />

@@ -161,7 +161,7 @@ function InvoiceRow({ invoice }: { invoice: AgingRow }) {
   );
 }
 
-function MitraAgingCard({ group }: { group: MitraAgingGroup }) {
+function MitraAgingCard({ group, perusahaanId }: { group: MitraAgingGroup; perusahaanId: number }) {
   const [expanded, setExpanded] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const hasMore = group.invoices.length > COLLAPSED_PREVIEW_COUNT;
@@ -238,6 +238,7 @@ function MitraAgingCard({ group }: { group: MitraAgingGroup }) {
     <PelunasanDialog
       businessPartnerId={group.BusinessPartnerID}
       customerName={group.CustomerName}
+      perusahaanId={perusahaanId}
       open={payOpen}
       onOpenChange={setPayOpen}
     />
@@ -245,7 +246,7 @@ function MitraAgingCard({ group }: { group: MitraAgingGroup }) {
   );
 }
 
-export function AgingTable({ rows }: { rows: AgingRow[] }) {
+export function AgingTable({ rows, perusahaanId }: { rows: AgingRow[]; perusahaanId: number }) {
   const [search, setSearch] = useState("");
   const [partnerType, setPartnerType] = useState("all");
   const [status, setStatus] = useState("all");
@@ -385,7 +386,7 @@ export function AgingTable({ rows }: { rows: AgingRow[] }) {
 
       <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @4xl:grid-cols-3">
         {pageRows.map((g) => (
-          <MitraAgingCard key={g.BusinessPartnerID} group={g} />
+          <MitraAgingCard key={g.BusinessPartnerID} group={g} perusahaanId={perusahaanId} />
         ))}
         {pageRows.length === 0 && (
           <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Tidak ada data.</p>
