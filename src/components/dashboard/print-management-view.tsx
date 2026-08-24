@@ -19,8 +19,10 @@ import {
   cancelPrintQueueJobAction,
   reorderPendingPrintQueueAction,
   retryPrintQueueJobAction,
+  setPrintFormatSettingsAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PrintQueueHistoryRow } from "@/lib/queries/print-queue";
+import type { PrintFormatSettings } from "@/lib/queries/print-format-settings";
 
 const STATUS_BADGE_CLASS: Record<PrintQueueHistoryRow["status"], string> = {
   Pending: "border-border text-muted-foreground",
@@ -118,8 +120,66 @@ function SortableHistoryRow({
   );
 }
 
-export function PrintManagementView({ initialHistory }: { initialHistory: PrintQueueHistoryRow[] }) {
+const PREVIEW_COLUMNS = 32;
+
+function center(text: string): string {
+  const pad = Math.max(0, Math.floor((PREVIEW_COLUMNS - text.length) / 2));
+  return " ".repeat(pad) + text;
+}
+
+function padRight(text: string, amount: string): string {
+  const gap = Math.max(1, PREVIEW_COLUMNS - text.length - amount.length);
+  return text + " ".repeat(gap) + amount;
+}
+
+function buildReceiptPreviewText(settings: PrintFormatSettings): string {
+  const lines: string[] = [];
+  lines.push(center("SI AWAL"));
+  lines.push(center("MKE/SI/000001/2026-08"));
+  lines.push(center("24-08-2026 10:00"));
+  lines.push("");
+  lines.push("Mitra: Toko Contoh");
+  if (settings.showMitraAddress) lines.push("Jl. Contoh No. 1, Ponorogo");
+  lines.push("Armada: Truk 1 (AE 1234 SH)");
+  if (settings.showDriverName) lines.push("Driver: Budi");
+  lines.push("");
+  lines.push("-".repeat(PREVIEW_COLUMNS));
+  lines.push("Es Kristal 10KG x10");
+  lines.push(padRight("", "Rp250.000"));
+  lines.push("-".repeat(PREVIEW_COLUMNS));
+  lines.push(padRight("TOTAL:", "Rp250.000"));
+  lines.push("");
+  if (settings.showBankTransfer) {
+    lines.push("Transfer ke:");
+    lines.push("BCA 1234567890");
+    lines.push("a.n. PT Mitra Kelola Esindo");
+    lines.push("");
+  }
+  if (settings.showQrCode) {
+    lines.push(center("Scan untuk lihat tagihan"));
+    lines.push(center("& bayar QRIS:"));
+    lines.push(center("[ QR CODE ]"));
+    lines.push("");
+  }
+  if (settings.showDisclaimer) {
+    lines.push(center("SI Awal - nominal dapat"));
+    lines.push(center("berubah sesuai kondisi"));
+    lines.push(center("pengiriman di lapangan"));
+  }
+  return lines.join("\n");
+}
+
+export function PrintManagementView({
+  initialHistory,
+  initialSettings,
+}: {
+  initialHistory: PrintQueueHistoryRow[];
+  initialSettings: PrintFormatSettings;
+  businessDate: string;
+}) {
   const [history, setHistory] = useState(initialHistory);
+  const [settings, setSettings] = useState(initialSettings);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [dateFrom, setDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [statusFilter, setStatusFilter] = useState<PrintQueueHistoryRow["status"] | "all">("all");
@@ -201,6 +261,23 @@ export function PrintManagementView({ initialHistory }: { initialHistory: PrintQ
         await refetch();
       }
     });
+  }
+
+  function handleSaveSettings() {
+    setSavingSettings(true);
+    startTransition(async () => {
+      const result = await setPrintFormatSettingsAction(settings);
+      setSavingSettings(false);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Pengaturan format SI disimpan.");
+    });
+  }
+
+  function toggleSetting(key: keyof PrintFormatSettings) {
+    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
   const pendingIds = history.filter((r) => r.status === "Pending").map((r) => r.printQueueId);
@@ -299,6 +376,34 @@ export function PrintManagementView({ initialHistory }: { initialHistory: PrintQ
               </DndContext>
             </TableBody>
           </Table>
+        </div>
+      </TabsContent>
+
+      <TabsContent value="format" className="flex flex-col gap-4 lg:flex-row">
+        <div className="flex flex-1 flex-col gap-3 rounded-lg border p-4">
+          {(
+            [
+              ["showMitraAddress", "Alamat mitra"],
+              ["showDriverName", "Nama driver"],
+              ["showBankTransfer", "Blok transfer bank"],
+              ["showQrCode", "QR code tagihan"],
+              ["showDisclaimer", "Baris disclaimer nominal"],
+            ] as [keyof PrintFormatSettings, string][]
+          ).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={settings[key]} onChange={() => toggleSetting(key)} className="size-4" />
+              {label}
+            </label>
+          ))}
+          <Button onClick={handleSaveSettings} disabled={savingSettings} className="mt-2 w-fit">
+            Simpan Pengaturan
+          </Button>
+        </div>
+        <div className="flex-1 rounded-lg border bg-muted/30 p-4">
+          <p className="mb-2 text-xs text-muted-foreground">Pratinjau (58mm, 32 kolom)</p>
+          <pre className="mx-auto w-fit whitespace-pre bg-white p-3 font-mono text-xs text-black shadow">
+            {buildReceiptPreviewText(settings)}
+          </pre>
         </div>
       </TabsContent>
     </Tabs>
