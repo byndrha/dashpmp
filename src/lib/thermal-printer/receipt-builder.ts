@@ -83,7 +83,7 @@ export async function buildReceiptBytes(data: ThermalReceiptData, settings: Prin
     .initialize()
     .align("center")
     .bold(true)
-    .line("Pabrik Rs PMP Group")
+    .line("Pabrik Es PMP Group")
     .line("Es Kristal | Ponorogo")
     .bold(false)
     .line(data.voucherNo)
