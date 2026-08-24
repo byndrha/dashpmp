@@ -570,22 +570,33 @@ function DraggableJadwalCard({
         <span
           className={cn(
             "rounded px-1 py-px text-[8px] font-medium",
+            // Each label names the LATEST milestone already reached, not the
+            // next action still pending — Draf -> Mulai Muat -> Selesai Muat
+            // (menunggu Berangkat) -> Berangkat -> Selesai. Amber covers both
+            // still-at-the-yard stages (loading in progress / done, waiting
+            // to leave); primary/emerald are reserved for "actually on the
+            // road" and "returned", matching the desktop dialog's own
+            // currentStatusLabel wording for the same milestones.
             isDraft
               ? j.JamMulaiMuat == null
                 ? "bg-muted-foreground/20 text-muted-foreground"
                 : "bg-amber-500/15 text-amber-600"
-              : j.JamKembaliAktual
-                ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
-                : "bg-primary/20 text-primary"
+              : j.JamAktualBerangkat == null
+                ? "bg-amber-500/15 text-amber-600"
+                : j.JamKembaliAktual
+                  ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                  : "bg-primary/20 text-primary"
           )}
         >
           {isDraft
             ? j.JamMulaiMuat == null
-              ? "Mulai Muat"
-              : "Selesai Muat"
-            : j.JamKembaliAktual
-              ? "Selesai"
-              : "Berangkat"}
+              ? "Draf"
+              : "Mulai Muat"
+            : j.JamAktualBerangkat == null
+              ? "Selesai Muat"
+              : j.JamKembaliAktual
+                ? "Selesai"
+                : "Berangkat"}
         </span>
       </div>
       <div className="flex flex-col items-center leading-none -mt-2.5">
