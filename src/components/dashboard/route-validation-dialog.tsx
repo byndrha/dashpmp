@@ -63,6 +63,7 @@ import {
   getPriceLevelOptionsAction,
   getDriverPositionAction,
   getIstirahatForJadwalAction,
+  enqueueManualReprintAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
@@ -96,8 +97,7 @@ function SortableStopRow({
   index,
   onEdit,
   disabled,
-  printChecked,
-  onTogglePrint,
+  onReprint,
   onRemove,
   hasDeparted,
   onOpenProof,
@@ -106,12 +106,11 @@ function SortableStopRow({
   index: number;
   onEdit: (detail: DriverStopRow) => void;
   disabled: boolean;
-  printChecked: boolean;
-  onTogglePrint: (jadwalDetailId: number) => void;
+  onReprint: (jadwalDetailId: number) => void;
   // Only usable while the Jadwal is still Draft (matches
   // removeSalesOrderFromJadwal's own guard) — omitted/hidden once Terbit.
   onRemove?: (detail: DriverStopRow) => void;
-  // Once the armada is Berangkat, the print-for-SI icon no longer makes
+  // Once the armada is Berangkat, the manual-reprint icon no longer makes
   // sense here (per-stop invoices are already settled by then) — it's
   // replaced per-row by a checkmark the moment that stop's own delivery
   // completes (detail.JamSelesai), opening the proof-of-delivery popup.
@@ -180,17 +179,16 @@ function SortableStopRow({
         </Badge>
       )}
       {!hasDeparted ? (
-        <button
-          type="button"
-          title={printChecked ? "Batal tandai untuk dicetak" : "Tandai untuk dicetak"}
-          onClick={() => onTogglePrint(detail.JadwalDetailID)}
-          className={cn(
-            "shrink-0 rounded border p-1 transition-colors",
-            printChecked ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:border-border"
-          )}
-        >
-          <Printer className="size-4" />
-        </button>
+        detail.InvoiceToken != null && (
+          <button
+            type="button"
+            title="Cetak ulang SI"
+            onClick={() => onReprint(detail.JadwalDetailID)}
+            className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border"
+          >
+            <Printer className="size-3.5" />
+          </button>
+        )
       ) : detail.JamSelesai != null ? (
         <button
           type="button"
@@ -342,40 +340,16 @@ export function RouteValidationDialog({
   const [availableToAdd, setAvailableToAdd] = useState<AvailableSalesOrder[]>([]);
   const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
-  const [printSelected, setPrintSelected] = useState<Set<number>>(new Set());
-  const [printError, setPrintError] = useState<string | null>(null);
 
-  function togglePrint(jadwalDetailId: number) {
-    setPrintSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(jadwalDetailId)) next.delete(jadwalDetailId);
-      else next.add(jadwalDetailId);
-      return next;
-    });
-  }
-
-  // Opens the printable invoice for every currently-marked stop that already
-  // has an InvoiceToken (a stop marked before Selesai Muat runs has none yet
-  // — nothing to open for it here; the auto-print in handleSelesaiMuat is
-  // what actually opens it the moment its token becomes available). Stops
-  // marked but still missing a token are reported instead of silently
-  // skipped, so a Draft-stage click doesn't look like it did nothing.
-  function handlePrintSelected() {
-    setPrintError(null);
-    let missingCount = 0;
-    for (const d of order) {
-      if (!printSelected.has(d.JadwalDetailID)) continue;
-      if (d.InvoiceToken) {
-        window.open(`/mkesindo/invoice/${d.InvoiceToken}`, "_blank");
-      } else {
-        missingCount++;
+  function handleReprint(jadwalDetailId: number) {
+    startTransition(async () => {
+      const result = await enqueueManualReprintAction(jadwalDetailId);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
       }
-    }
-    if (missingCount > 0) {
-      setPrintError(
-        `${missingCount} SI belum terbit — SI baru dibuat otomatis saat "Selesai Muat" diklik. Tetap ditandai; akan otomatis tercetak begitu Selesai Muat selesai.`
-      );
-    }
+      toast.success("SI ditambahkan ke antrian cetak.");
+    });
   }
 
   const jadwalId = jadwal?.JadwalID ?? null;
@@ -416,8 +390,6 @@ export function RouteValidationDialog({
     setAdding(false);
     setSelectedToAdd(new Set());
     setAddError(null);
-    setPrintSelected(new Set());
-    setPrintError(null);
     setShowMap(true);
     // A conflict popup left open from a previously-shown Jadwal must never
     // resurface against whichever Jadwal is opened next.
@@ -712,11 +684,10 @@ export function RouteValidationDialog({
     });
   }
 
-  // Selesai Muat creates the real DO+SI documents (see selesaiMuat) and
-  // auto-opens the invoice for every stop marked in printSelected — same
-  // window.open mechanism handlePrintSelected already uses, just triggered
-  // automatically instead of manually, and without closing this dialog so
-  // the operator can keep working here while the print tabs load.
+  // Selesai Muat creates the real DO+SI documents (see selesaiMuat); actual
+  // printing of those documents is entirely the print queue's job now (see
+  // Task 4/11 — selesaiMuat itself enqueues a print job per stop), so this
+  // handler has no printing-related code of its own.
   //
   // Persists the currently-selected driver/time FIRST, same safety net the
   // old (now-removed) handleBerangkat had before it called startBerangkat:
@@ -761,15 +732,6 @@ export function RouteValidationDialog({
       if (!selesaiMuatResult.success) {
         if (jadwalIdRef.current === targetId) setError(selesaiMuatResult.error);
         return;
-      }
-      // The DO/SI documents were genuinely created regardless of which
-      // Jadwal this dialog has since moved on to show — auto-opening their
-      // invoices is a real consequence of a real action, not display state
-      // tied to this dialog, so it's deliberately not gated on jadwalIdRef.
-      for (const t of selesaiMuatResult.data) {
-        if (printSelected.has(t.jadwalDetailId)) {
-          window.open(`/mkesindo/invoice/${t.invoiceToken}`, "_blank");
-        }
       }
       const rows = await getJadwalDetailAction(targetId);
       if (jadwalIdRef.current === targetId) setOrder(rows);
@@ -1441,8 +1403,7 @@ export function RouteValidationDialog({
                         index={i}
                         onEdit={onEditSalesOrder}
                         disabled={!isDraft}
-                        printChecked={printSelected.has(d.JadwalDetailID)}
-                        onTogglePrint={togglePrint}
+                        onReprint={handleReprint}
                         onRemove={isDraft ? handleRemoveStop : undefined}
                         hasDeparted={hasDeparted}
                         onOpenProof={setProofDetail}
@@ -1543,14 +1504,6 @@ export function RouteValidationDialog({
                 </div>
               </div>
             )}
-
-            {printSelected.size > 0 && (
-              <Button size="sm" variant="outline" className="gap-1.5" data-capture-hide="true" onClick={handlePrintSelected}>
-                <Printer className="size-3.5" />
-                Cetak SI Terpilih ({printSelected.size})
-              </Button>
-            )}
-            {printError && <p className="text-xs text-destructive">{printError}</p>}
 
             {routeError && <p className="text-xs text-destructive">{routeError}</p>}
             {route && (
