@@ -493,7 +493,7 @@ export async function enqueueManualReprintAction(jadwalDetailId: number): Promis
 
 export async function getThermalReceiptDataAction(salesInvoiceId: string): Promise<ActionResult<ThermalReceiptData>> {
   return runAction(async () => {
-    await requireModuleAccess("delivery");
-    return getThermalReceiptData(salesInvoiceId);
+    const session = await requireModuleAccess("delivery");
+    return getThermalReceiptData(salesInvoiceId, session.user.name ?? "-");
   });
 }

@@ -27,6 +27,11 @@ declare module "esc-pos-encoder" {
     newline(): this;
     rule(): this;
     qrcode(data: string, options?: EscPosQrCodeOptions): this;
+    // input accepts an HTMLImageElement/HTMLCanvasElement (or several
+    // Node-only shapes this repo never uses, since receipt-builder.ts is
+    // browser-only) — width/height are in printer dots and must each be a
+    // multiple of 8, per the library's own runtime validation.
+    image(input: HTMLImageElement | HTMLCanvasElement, width: number, height: number): this;
     cut(): this;
     encode(): Uint8Array;
   }

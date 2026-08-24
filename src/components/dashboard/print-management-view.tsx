@@ -134,8 +134,8 @@ function padRight(text: string, amount: string): string {
 
 function buildReceiptPreviewText(settings: PrintFormatSettings): string {
   const lines: string[] = [];
-  lines.push(center("Es Kristal - Pabrik Es PMP Group"));
-  lines.push(center("| Ponorogo"));
+  lines.push(center("Pabrik Rs PMP Group"));
+  lines.push(center("Es Kristal | Ponorogo"));
   lines.push(center("MKE/SI/000001/2026-08"));
   lines.push(center("24-08-2026 10:00"));
   lines.push("");
@@ -143,6 +143,7 @@ function buildReceiptPreviewText(settings: PrintFormatSettings): string {
   if (settings.showMitraAddress) lines.push("Jl. Contoh No. 1, Ponorogo");
   lines.push("Armada: Truk 1 (AE 1234 SH)");
   if (settings.showDriverName) lines.push("Driver: Budi");
+  lines.push("Operasional: Nama Staf");
   lines.push("");
   lines.push("-".repeat(PREVIEW_COLUMNS));
   lines.push("Es Kristal 10KG x10");
@@ -150,16 +151,13 @@ function buildReceiptPreviewText(settings: PrintFormatSettings): string {
   lines.push("-".repeat(PREVIEW_COLUMNS));
   lines.push(padRight("TOTAL:", "Rp250.000"));
   lines.push("");
-  if (settings.showBankTransfer) {
-    lines.push("Transfer ke:");
-    lines.push("BCA 1234567890");
-    lines.push("a.n. PT Mitra Kelola Esindo");
+  if (settings.showQrCode) {
+    lines.push(center("[ QRIS STATIS ]"));
     lines.push("");
   }
-  if (settings.showQrCode) {
-    lines.push(center("Scan untuk lihat tagihan"));
-    lines.push(center("& bayar QRIS:"));
-    lines.push(center("[ QR CODE ]"));
+  if (settings.showBankTransfer) {
+    lines.push("BCA 1234567890");
+    lines.push("a.n. PT Mitra Kelola Esindo");
     lines.push("");
   }
   if (settings.showDisclaimer) {
@@ -388,7 +386,7 @@ export function PrintManagementView({
               ["showMitraAddress", "Alamat mitra"],
               ["showDriverName", "Nama driver"],
               ["showBankTransfer", "Blok transfer bank"],
-              ["showQrCode", "QR code tagihan"],
+              ["showQrCode", "Gambar QRIS Statis"],
               ["showDisclaimer", "Baris disclaimer nominal"],
             ] as [keyof PrintFormatSettings, string][]
           ).map(([key, label]) => (

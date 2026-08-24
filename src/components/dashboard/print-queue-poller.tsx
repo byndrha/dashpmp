@@ -153,7 +153,7 @@ export function PrintQueuePoller() {
           continue;
         }
         try {
-          await conn.send(buildReceiptBytes(dataResult.data, formatSettings));
+          await conn.send(await buildReceiptBytes(dataResult.data, formatSettings));
         } catch (err) {
           const action = await handleAttemptFailure(
             `Cetak gagal — periksa printer (kertas/koneksi). ${err instanceof Error ? err.message : ""}`

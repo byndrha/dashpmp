@@ -31,13 +31,60 @@ const THERMAL_PAPER_COLUMNS_58MM = 32;
 // can never suffer this mismatch.
 const HORIZONTAL_RULE = "-".repeat(THERMAL_PAPER_COLUMNS_58MM);
 
-export function buildReceiptBytes(data: ThermalReceiptData, settings: PrintFormatSettings): Uint8Array {
+// Target size (in printer dots) for the QRIS Statis image's LONGER side —
+// the other side is scaled proportionally from the source image's real
+// aspect ratio (see buildQrisImage below), so a non-square upload (a QR
+// code with a bank logo strip, for instance) never comes out stretched.
+const QRIS_IMAGE_TARGET_DOTS = 200;
+
+// GS v 0 (the raster-image print command @point-of-sale/receipt-printer-
+// encoder's .image() emits) requires both dimensions to be a multiple of 8
+// dots — this rounds to the nearest multiple of 8 without ever collapsing
+// a real dimension to 0.
+function roundToMultipleOf8(dots: number): number {
+  return Math.max(8, Math.round(dots / 8) * 8);
+}
+
+// Decodes the data: URI into an <img> element and computes the width/height
+// (in dots, multiples of 8) to print it at, preserving the source image's
+// own aspect ratio. Resolves null if the image fails to decode (a
+// corrupted/unsupported data URI) — the caller treats that exactly like a
+// missing image, silently omitting the QRIS block rather than failing the
+// whole print job over a decorative asset.
+async function loadQrisImageElement(
+  dataUri: string
+): Promise<{ element: HTMLImageElement; width: number; height: number } | null> {
+  try {
+    const element = new Image();
+    element.src = dataUri;
+    await element.decode();
+    const naturalWidth = element.naturalWidth || 1;
+    const naturalHeight = element.naturalHeight || 1;
+    const scale = QRIS_IMAGE_TARGET_DOTS / Math.max(naturalWidth, naturalHeight);
+    return {
+      element,
+      width: roundToMultipleOf8(naturalWidth * scale),
+      height: roundToMultipleOf8(naturalHeight * scale),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function buildReceiptBytes(data: ThermalReceiptData, settings: PrintFormatSettings): Promise<Uint8Array> {
+  // Decoded before any bytes are queued — the encoder's chained builder
+  // methods are synchronous, so any async work (image decoding) has to
+  // finish first rather than being interleaved mid-chain.
+  const qrisImage =
+    settings.showQrCode && data.qrisStatisImageDataUri ? await loadQrisImageElement(data.qrisStatisImageDataUri) : null;
+
   const encoder = new EscPosEncoder({ columns: THERMAL_PAPER_COLUMNS_58MM });
   encoder
     .initialize()
     .align("center")
     .bold(true)
-    .line("Es Kristal - Pabrik Es PMP Group | Ponorogo")
+    .line("Pabrik Rs PMP Group")
+    .line("Es Kristal | Ponorogo")
     .bold(false)
     .line(data.voucherNo)
     .line(`${formatDate(data.transDate)} ${formatTime(data.transDate)}`)
@@ -49,6 +96,7 @@ export function buildReceiptBytes(data: ThermalReceiptData, settings: PrintForma
 
   encoder.line(`Armada: ${data.armadaNama}${data.vehicleNo ? ` (${data.vehicleNo})` : ""}`);
   if (settings.showDriverName) encoder.line(`Driver: ${data.driverName ?? "-"}`);
+  encoder.line(`Operasional: ${data.operationalName}`);
 
   encoder.newline().line(HORIZONTAL_RULE);
 
@@ -65,27 +113,15 @@ export function buildReceiptBytes(data: ThermalReceiptData, settings: PrintForma
     .align("left")
     .newline();
 
+  if (qrisImage) {
+    encoder.align("center").image(qrisImage.element, qrisImage.width, qrisImage.height).align("left").newline();
+  }
+
   if (data.bankTransfer && settings.showBankTransfer) {
     encoder
-      .line("Transfer ke:")
       .line(`${data.bankTransfer.bankNama} ${data.bankTransfer.nomorRekening}`)
       .line(`a.n. ${data.bankTransfer.atasNama}`)
       .newline();
-  }
-
-  if (settings.showQrCode) {
-    encoder
-      .align("center")
-      .line("Scan untuk lihat tagihan & bayar QRIS:")
-      // model: 1 — many budget ESC/POS-clone printers (including this one)
-      // only implement QR "model 1"; the library's own default (model 2,
-      // used when no model is specified) prints as a firmware error message
-      // instead of a code on hardware that doesn't support it. Untested
-      // hypothesis against the real printer — confirm this actually renders
-      // a scannable code before treating it as settled.
-      .qrcode(data.invoiceUrl, { model: 1, size: 6 })
-      .newline()
-      .align("left");
   }
 
   if (settings.showDisclaimer) {
