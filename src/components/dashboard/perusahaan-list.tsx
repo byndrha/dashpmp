@@ -195,7 +195,7 @@ export function PerusahaanList({
           value once on mount, so this key forces a remount when switching
           between PTs while the dialog stays conceptually "open". */}
       <PerusahaanFormDialog
-        key={target === "new" ? "new" : target ? target.PerusahaanID : "closed"}
+        key={target === "new" ? "form-new" : target ? `form-${target.PerusahaanID}` : "form-closed"}
         target={target}
         allRows={rows}
         perusahaanDirektoriOptions={perusahaanDirektoriOptions}
@@ -209,7 +209,7 @@ export function PerusahaanList({
       />
 
       <PaymentMethodDialog
-        key={paymentTarget ? paymentTarget.PerusahaanID : "closed"}
+        key={paymentTarget ? `payment-${paymentTarget.PerusahaanID}` : "payment-closed"}
         perusahaanId={paymentPerusahaanId}
         perusahaanNama={paymentTarget?.Nama ?? ""}
         chartOfAccountOptions={chartOfAccountOptions}
