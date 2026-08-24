@@ -39,6 +39,7 @@ import type { FuelType } from "@/lib/armada-fuel";
 import { VehicleCheckDialog } from "@/components/dashboard/vehicle-check-dialog";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { StopDeliveryProofDialog } from "@/components/dashboard/stop-delivery-proof-dialog";
+import { triggerPrintQueuePollNow } from "@/components/dashboard/print-queue-poller";
 import type {
   VehicleCheckRow,
   VehicleCheckTipe,
@@ -372,6 +373,9 @@ export function RouteValidationDialog({
         return;
       }
       toast.success("SI ditambahkan ke antrian cetak.");
+      // Nudge PrintQueuePoller to drain right away instead of leaving this
+      // job to wait for its next scheduled tick (up to POLL_INTERVAL_MS).
+      triggerPrintQueuePollNow();
     });
   }
 
