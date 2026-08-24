@@ -52,12 +52,15 @@ export function usePrinterConnection() {
   }, []);
 
   const disconnect = useCallback(() => {
-    setConnection((prev) => {
-      prev?.disconnect();
-      return null;
-    });
+    // The disconnect side effect is called directly here (not inside the
+    // setConnection updater) because React Strict Mode double-invokes
+    // state-updater functions in dev to surface impurities — a real
+    // ThermalPrinterConnection.disconnect() call is a side effect and would
+    // fire twice per call in dev if it lived inside the updater.
+    connection?.disconnect();
+    setConnection(null);
     setStatus("disconnected");
-  }, []);
+  }, [connection]);
 
   return { status, connection, connectBluetooth, connectUsb, disconnect };
 }
