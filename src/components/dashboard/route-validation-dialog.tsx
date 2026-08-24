@@ -98,6 +98,7 @@ function SortableStopRow({
   onEdit,
   disabled,
   onReprint,
+  reprinting,
   onRemove,
   hasDeparted,
   onOpenProof,
@@ -107,6 +108,12 @@ function SortableStopRow({
   onEdit: (detail: DriverStopRow) => void;
   disabled: boolean;
   onReprint: (jadwalDetailId: number) => void;
+  // True while THIS row's own reprint request is in flight — disables the
+  // icon so a fast repeat-click can't fire enqueueManualReprintAction
+  // multiple times for the same stop (each call is an unconditional INSERT
+  // with no dedup, so duplicates would each get physically reprinted by the
+  // print-queue poller).
+  reprinting: boolean;
   // Only usable while the Jadwal is still Draft (matches
   // removeSalesOrderFromJadwal's own guard) — omitted/hidden once Terbit.
   onRemove?: (detail: DriverStopRow) => void;
@@ -184,7 +191,8 @@ function SortableStopRow({
             type="button"
             title="Cetak ulang SI"
             onClick={() => onReprint(detail.JadwalDetailID)}
-            className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border"
+            disabled={reprinting}
+            className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border disabled:cursor-default disabled:opacity-50"
           >
             <Printer className="size-3.5" />
           </button>
@@ -341,9 +349,21 @@ export function RouteValidationDialog({
   const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
 
+  // Tracks the single JadwalDetailID (if any) whose reprint request is
+  // currently in flight — disables just that row's icon (see
+  // SortableStopRow's reprinting prop) so a fast repeat-click can't enqueue
+  // duplicate print-queue rows before the first request's toast lands.
+  // Deliberately its own state rather than reusing the shared `pending`
+  // boolean from useTransition above: `pending` also gates unrelated
+  // buttons elsewhere in this dialog (e.g. "Tambah"), so tying it to a
+  // reprint click would needlessly disable those too.
+  const [reprintingId, setReprintingId] = useState<number | null>(null);
+
   function handleReprint(jadwalDetailId: number) {
+    setReprintingId(jadwalDetailId);
     startTransition(async () => {
       const result = await enqueueManualReprintAction(jadwalDetailId);
+      setReprintingId(null);
       if (!result.success) {
         toast.error(result.error);
         return;
@@ -1404,6 +1424,7 @@ export function RouteValidationDialog({
                         onEdit={onEditSalesOrder}
                         disabled={!isDraft}
                         onReprint={handleReprint}
+                        reprinting={reprintingId === d.JadwalDetailID}
                         onRemove={isDraft ? handleRemoveStop : undefined}
                         hasDeparted={hasDeparted}
                         onOpenProof={setProofDetail}
