@@ -33,14 +33,18 @@ export interface PendingPrintJob {
 }
 
 // Oldest first — a batch enqueued together (one Selesai Muat with several
-// stops) prints in the same order the stops were created.
+// stops) prints in the same order the stops were created. CreatedAt is a
+// DATETIME (~3.33ms resolution) set via GETDATE() per-INSERT, so rows from a
+// tight-loop batch insert can land on the identical rounded timestamp;
+// PrintQueueID (IDENTITY, monotonic with insert order) breaks the tie so the
+// creation-order guarantee is exact, not merely probable.
 export async function getPendingPrintQueue(): Promise<PendingPrintJob[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT PrintQueueID, SalesInvoiceID, JadwalID
     FROM DashboardPrintQueue
     WHERE Status = 'Pending'
-    ORDER BY CreatedAt
+    ORDER BY CreatedAt, PrintQueueID
   `);
   return (result.recordset as { PrintQueueID: number; SalesInvoiceID: string; JadwalID: number }[]).map((r) => ({
     printQueueId: r.PrintQueueID,
