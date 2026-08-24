@@ -124,16 +124,52 @@ export async function markPrintQueueError(printQueueId: number): Promise<void> {
 // SalesInvoiceID/JadwalID server-side rather than trusting a client-supplied
 // SalesInvoiceID, then enqueues exactly like the automatic path (IsManual=1
 // is the only difference), so there is one drain code path, not two.
+//
+// Self-healing fallback: DashboardPengirimanJadwalDetail.SalesInvoiceID can
+// be null even when a real SalesInvoice already exists for this stop's
+// DeliveryOrderID — confirmed live 2026-08-24 (MKE/SO/003550/2026-08/003/001
+// / MKE/DO/003504/.../MKE/SI/003498/...): any Jadwal that went through
+// selesaiMuat()'s merged-external-DO branch BEFORE that branch was fixed to
+// link/create a SalesInvoice never had this column written at all, even
+// though a SalesInvoice was later created for it elsewhere (confirmStopDelivery,
+// or the desktop ERP directly). Rather than surface a misleading "belum
+// terbit" for a stop that genuinely already has an invoice, fall back to
+// looking it up by DeliveryOrderID (same quote-wrapping quirk documented in
+// invoice-public.ts/thermal-receipt.ts/pengiriman-jadwal.ts) and self-heal
+// the link before enqueueing.
 export async function enqueueManualReprint(jadwalDetailId: number): Promise<void> {
   const pool = await getPool();
   const result = await pool
     .request()
     .input("id", sql.Int, jadwalDetailId)
     .query(
-      `SELECT SalesInvoiceID, JadwalID FROM DashboardPengirimanJadwalDetail WHERE JadwalDetailID = @id AND IsDeleted = 0`
+      `SELECT SalesInvoiceID, DeliveryOrderID, JadwalID FROM DashboardPengirimanJadwalDetail WHERE JadwalDetailID = @id AND IsDeleted = 0`
     );
-  const row = result.recordset[0] as { SalesInvoiceID: string | null; JadwalID: number } | undefined;
+  const row = result.recordset[0] as
+    | { SalesInvoiceID: string | null; DeliveryOrderID: string | null; JadwalID: number }
+    | undefined;
   if (!row) throw new AppError("Tujuan ini tidak ditemukan.");
-  if (!row.SalesInvoiceID) throw new AppError("SI untuk tujuan ini belum terbit — jalankan Selesai Muat terlebih dahulu.");
-  await enqueuePrintJob(pool, row.SalesInvoiceID.replace(/'/g, "").trim(), row.JadwalID, true);
+
+  let salesInvoiceId = row.SalesInvoiceID ? row.SalesInvoiceID.replace(/'/g, "").trim() : null;
+
+  if (!salesInvoiceId && row.DeliveryOrderID) {
+    const existingSiResult = await pool
+      .request()
+      .input("doId", sql.VarChar(16), row.DeliveryOrderID)
+      .query(
+        `SELECT SalesInvoiceID FROM SalesInvoice WHERE REPLACE(DeliveryOrderID, '''', '') = @doId AND IsDeleted = 0`
+      );
+    const existing = (existingSiResult.recordset[0] as { SalesInvoiceID: string } | undefined)?.SalesInvoiceID;
+    if (existing) {
+      salesInvoiceId = existing;
+      await pool
+        .request()
+        .input("detailId", sql.Int, jadwalDetailId)
+        .input("siId", sql.VarChar(16), existing)
+        .query(`UPDATE DashboardPengirimanJadwalDetail SET SalesInvoiceID = @siId WHERE JadwalDetailID = @detailId`);
+    }
+  }
+
+  if (!salesInvoiceId) throw new AppError("SI untuk tujuan ini belum terbit — jalankan Selesai Muat terlebih dahulu.");
+  await enqueuePrintJob(pool, salesInvoiceId, row.JadwalID, true);
 }

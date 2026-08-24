@@ -1901,6 +1901,91 @@ interface SalesOrderDetailForPublish {
 // regardless of how the failure happened, so the single catch block below
 // rolls back rather than manually re-deleting/reverting each row it
 // created.
+// Shared by both branches of selesaiMuat's per-detail loop below: creates a
+// SalesInvoice (+ SalesInvoiceDetail lines, at the full ordered qty/amount —
+// the "SI Awal" preliminary shape, same as every other SalesInvoice this
+// function creates) for one stop, against an ALREADY-KNOWN DeliveryOrderID
+// (freshly created moments earlier for a normal stop, or an existing
+// desktop-ERP DeliveryOrder for a merged-external-DO stop — this function
+// never creates or touches DeliveryOrder/DeliveryOrderDetail itself).
+// Updates DashboardPengirimanJadwalDetail.SalesInvoiceID and returns the new
+// SalesInvoiceID so the caller can push an invoiceToken and enqueue a print
+// job.
+export async function createSalesInvoiceForStop(
+  transaction: sql.Transaction,
+  params: { jadwalDetailId: number; salesOrderId: string; deliveryOrderId: string; salesmanId: string | null; yearMonth: string }
+): Promise<string> {
+  const soResult = await new sql.Request(transaction)
+    .input("soId", sql.VarChar(16), params.salesOrderId)
+    .query(`SELECT BusinessPartnerID, DueDate, TermOfPaymentID FROM SalesOrder WHERE SalesOrderID = @soId`);
+  const so = soResult.recordset[0] as SalesOrderForPublish | undefined;
+  if (!so) throw new AppError(`Sales Order ${params.salesOrderId} tidak ditemukan.`);
+
+  const sodResult = await new sql.Request(transaction)
+    .input("soId", sql.VarChar(16), params.salesOrderId)
+    .query(`SELECT SalesOrderDetailID, ItemID, Name, Qty, Unit, Price, Amount FROM SalesOrderDetail WHERE SalesOrderID = @soId`);
+  const soDetails = sodResult.recordset as (SalesOrderDetailForPublish & { Amount: number })[];
+
+  const salesInvoiceId = await nextSalesInvoiceId(transaction);
+  const siVoucherSeq = await nextSIVoucherSeq(transaction, params.yearMonth);
+  const siVoucherNo = `MKE/SI/${siVoucherSeq}/${params.yearMonth}/${DOC_SUFFIX}`;
+  const totalAmount = soDetails.reduce((sum, sod) => sum + sod.Amount, 0);
+  await new sql.Request(transaction)
+    .input("id", sql.VarChar(16), salesInvoiceId)
+    .input("voucherNo", sql.VarChar(128), siVoucherNo)
+    .input("dueDate", sql.DateTime, so.DueDate)
+    .input("termOfPaymentId", sql.VarChar(16), so.TermOfPaymentID)
+    .input("soId", sql.VarChar(16), params.salesOrderId)
+    .input("doId", sql.VarChar(16), params.deliveryOrderId)
+    .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
+    .input("branchId", sql.VarChar(16), BRANCH_ID)
+    .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+    .input("amount", sql.Decimal(23, 4), totalAmount)
+    .input("salesmanId", sql.VarChar(16), params.salesmanId).query(`
+      INSERT INTO SalesInvoice
+        (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
+         SalesOrderID, DeliveryOrderID, SalesDepositID, BusinessPartnerID, BranchID, DepartmentID,
+         Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, BankID, Paid, Deposit, PaidDate,
+         IsClosed, IsDeleted, ModifiedDate, Rate, CurrencyID, IsAccountReceiveable, StatusForm,
+         SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
+         DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
+      VALUES
+        (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
+         @soId, @doId, '', @bpId, @branchId, @departmentId,
+         @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
+         0, 0, GETDATE(), 1, '', 1, 1,
+         @salesmanId, 0, 0, 0, 0, '', 0,
+         0, '', 0, '')
+    `);
+
+  for (const sod of soDetails) {
+    const siDetailId = await nextSalesInvoiceDetailId(transaction);
+    await new sql.Request(transaction)
+      .input("id", sql.VarChar(16), siDetailId)
+      .input("siId", sql.VarChar(16), salesInvoiceId)
+      .input("itemId", sql.VarChar(160), sod.ItemID)
+      .input("name", sql.VarChar(160), sod.Name)
+      .input("qty", sql.Decimal(23, 4), sod.Qty)
+      .input("unit", sql.VarChar(8), sod.Unit)
+      .input("price", sql.Decimal(23, 4), sod.Price)
+      .input("amount", sql.Decimal(23, 4), sod.Amount).query(`
+        INSERT INTO SalesInvoiceDetail
+          (SalesInvoiceDetailID, SalesInvoiceID, ItemID, Qty, Unit, Ratio, UnitRatio, Price, Disc, DiscValue,
+           DiscRp, Amount, Name, Value, Netto, Description, WaiterName, Cashback, Total)
+        VALUES
+          (@id, @siId, @itemId, @qty, @unit, 1, 1, @price, 0, 0,
+           0, @amount, @name, @amount, @amount, '', '', 0, NULL)
+      `);
+  }
+
+  await new sql.Request(transaction)
+    .input("detailId", sql.Int, params.jadwalDetailId)
+    .input("siId", sql.VarChar(16), salesInvoiceId)
+    .query(`UPDATE DashboardPengirimanJadwalDetail SET SalesInvoiceID = @siId WHERE JadwalDetailID = @detailId`);
+
+  return salesInvoiceId;
+}
+
 export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: number; invoiceToken: string }[]> {
   const pool = await getPool();
 
@@ -1999,9 +2084,9 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
       // e.g. partway through this same loop), skip it instead of creating a
       // duplicate DO/SI. Also covers the merged-external-DO case
       // (mergeExternalDeliveriesIntoJadwal): that DO was already issued by
-      // the desktop ERP, so it must never be re-created, and it never gets
-      // an auto-created SalesInvoice either (its invoicing, if any, is the
-      // desktop ERP's own separate concern).
+      // the desktop ERP, so it must never be re-created here — but (as of
+      // 2026-08-24) it DOES still get an SI Awal, just via the branch below
+      // instead of the fresh-DO path further down this loop.
       //
       // TransDate is deliberately left untouched here — this used to
       // overwrite it with GETDATE() on the assumption that a merged DO's
@@ -2021,6 +2106,50 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         await new sql.Request(transaction)
           .input("doId", sql.VarChar(16), detail.DeliveryOrderID)
           .query(`UPDATE DeliveryOrder SET ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
+
+        // This stop's DO already existed before this Jadwal's own Selesai
+        // Muat ran — but per [[transdate-wib-utc-boundary-bug]]-style live
+        // confirmation (2026-08-24: 100% of Terbit stops in the last 3 days
+        // were merged-external-DO with NO SalesInvoice anywhere, silently
+        // never reaching the thermal-print pipeline at all), most real
+        // traffic goes through this branch, not the fresh-DO one below — so
+        // it must create an SI Awal too, not skip invoicing entirely.
+        // First check whether this DO was already invoiced directly in the
+        // desktop ERP (a real possibility, independent of this dashboard) —
+        // SalesInvoice.DeliveryOrderID on ERP-authored rows is stored
+        // wrapped in literal single quotes (same quirk documented in
+        // invoice-public.ts/thermal-receipt.ts), so match both forms. Never
+        // create a second invoice for the same DO.
+        const existingSiResult = await new sql.Request(transaction)
+          .input("doId", sql.VarChar(16), detail.DeliveryOrderID)
+          .query(
+            `SELECT SalesInvoiceID FROM SalesInvoice WHERE REPLACE(DeliveryOrderID, '''', '') = @doId AND IsDeleted = 0`
+          );
+        const existingSalesInvoiceId = (existingSiResult.recordset[0] as { SalesInvoiceID: string } | undefined)
+          ?.SalesInvoiceID;
+
+        const salesInvoiceId = existingSalesInvoiceId
+          ? existingSalesInvoiceId
+          : await createSalesInvoiceForStop(transaction, {
+              jadwalDetailId: detail.JadwalDetailID,
+              salesOrderId: detail.SalesOrderID,
+              deliveryOrderId: detail.DeliveryOrderID,
+              salesmanId: headerRow.SalesmanID,
+              yearMonth,
+            });
+
+        if (existingSalesInvoiceId) {
+          // Already invoiced elsewhere — just link it back so the print
+          // pipeline (and the Mitra module's own SalesInvoice-based views)
+          // can find it, no duplicate document created.
+          await new sql.Request(transaction)
+            .input("detailId", sql.Int, detail.JadwalDetailID)
+            .input("siId", sql.VarChar(16), salesInvoiceId)
+            .query(`UPDATE DashboardPengirimanJadwalDetail SET SalesInvoiceID = @siId WHERE JadwalDetailID = @detailId`);
+        }
+
+        invoiceTokens.push({ jadwalDetailId: detail.JadwalDetailID, invoiceToken: encodeInvoiceToken(salesInvoiceId) });
+        await enqueuePrintJob(transaction, salesInvoiceId, jadwalId, false);
         continue;
       }
 
@@ -2083,65 +2212,24 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
           `);
       }
 
-      // --- SalesInvoice (new — reuses createTakeAwayPemesanan's exact
-      // column/value shape from takeaway.ts) ---
-      const salesInvoiceId = await nextSalesInvoiceId(transaction);
-      const siVoucherSeq = await nextSIVoucherSeq(transaction, yearMonth);
-      const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
-      const totalAmount = soDetails.reduce((sum, sod) => sum + sod.Amount, 0);
-      await new sql.Request(transaction)
-        .input("id", sql.VarChar(16), salesInvoiceId)
-        .input("voucherNo", sql.VarChar(128), siVoucherNo)
-        .input("dueDate", sql.DateTime, so.DueDate)
-        .input("termOfPaymentId", sql.VarChar(16), so.TermOfPaymentID)
-        .input("soId", sql.VarChar(16), detail.SalesOrderID)
-        .input("doId", sql.VarChar(16), deliveryOrderId)
-        .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
-        .input("branchId", sql.VarChar(16), BRANCH_ID)
-        .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
-        .input("amount", sql.Decimal(23, 4), totalAmount)
-        .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID).query(`
-          INSERT INTO SalesInvoice
-            (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
-             SalesOrderID, DeliveryOrderID, SalesDepositID, BusinessPartnerID, BranchID, DepartmentID,
-             Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, BankID, Paid, Deposit, PaidDate,
-             IsClosed, IsDeleted, ModifiedDate, Rate, CurrencyID, IsAccountReceiveable, StatusForm,
-             SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
-             DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
-          VALUES
-            (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
-             @soId, @doId, '', @bpId, @branchId, @departmentId,
-             @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
-             0, 0, GETDATE(), 1, '', 1, 1,
-             @salesmanId, 0, 0, 0, 0, '', 0,
-             0, '', 0, '')
-        `);
-
-      for (const sod of soDetails) {
-        const siDetailId = await nextSalesInvoiceDetailId(transaction);
-        await new sql.Request(transaction)
-          .input("id", sql.VarChar(16), siDetailId)
-          .input("siId", sql.VarChar(16), salesInvoiceId)
-          .input("itemId", sql.VarChar(160), sod.ItemID)
-          .input("name", sql.VarChar(160), sod.Name)
-          .input("qty", sql.Decimal(23, 4), sod.Qty)
-          .input("unit", sql.VarChar(8), sod.Unit)
-          .input("price", sql.Decimal(23, 4), sod.Price)
-          .input("amount", sql.Decimal(23, 4), sod.Amount).query(`
-            INSERT INTO SalesInvoiceDetail
-              (SalesInvoiceDetailID, SalesInvoiceID, ItemID, Qty, Unit, Ratio, UnitRatio, Price, Disc, DiscValue,
-               DiscRp, Amount, Name, Value, Netto, Description, WaiterName, Cashback, Total)
-            VALUES
-              (@id, @siId, @itemId, @qty, @unit, 1, 1, @price, 0, 0,
-               0, @amount, @name, @amount, @amount, '', '', 0, NULL)
-          `);
-      }
-
+      // DeliveryOrderID must be persisted before createSalesInvoiceForStop's
+      // own UPDATE touches this same row (that UPDATE only sets
+      // SalesInvoiceID, never DeliveryOrderID — the merged-external-DO
+      // branch above reuses an already-persisted DeliveryOrderID and must
+      // never overwrite it, so DeliveryOrderID is deliberately this
+      // branch's own responsibility, not the shared helper's).
       await new sql.Request(transaction)
         .input("detailId", sql.Int, detail.JadwalDetailID)
         .input("doId", sql.VarChar(16), deliveryOrderId)
-        .input("siId", sql.VarChar(16), salesInvoiceId)
-        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = @doId, SalesInvoiceID = @siId WHERE JadwalDetailID = @detailId`);
+        .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = @doId WHERE JadwalDetailID = @detailId`);
+
+      const salesInvoiceId = await createSalesInvoiceForStop(transaction, {
+        jadwalDetailId: detail.JadwalDetailID,
+        salesOrderId: detail.SalesOrderID,
+        deliveryOrderId,
+        salesmanId: headerRow.SalesmanID,
+        yearMonth,
+      });
 
       invoiceTokens.push({ jadwalDetailId: detail.JadwalDetailID, invoiceToken: encodeInvoiceToken(salesInvoiceId) });
 
