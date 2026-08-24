@@ -89,11 +89,12 @@ export async function getThermalReceiptData(salesInvoiceId: string): Promise<The
     const deliveryResult = await pool
       .request()
       .input("doId", sql.VarChar(16), deliveryOrderId).query(`
-        SELECT a.Nama AS ArmadaNama, do_.VehicleNo, sm.Name AS DriverName
+        SELECT a.Nama AS ArmadaNama, ed.VehicleNo, sm.Name AS DriverName
         FROM DeliveryOrder do_
         LEFT JOIN DashboardPengirimanJadwalDetail jadd ON jadd.DeliveryOrderID = do_.DeliveryOrderID AND jadd.IsDeleted = 0
         LEFT JOIN DashboardPengirimanJadwal jad ON jad.JadwalID = jadd.JadwalID
         LEFT JOIN DashboardArmada a ON a.ArmadaID = jad.ArmadaID
+        LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
         LEFT JOIN Salesman sm ON sm.SalesmanID = jad.SalesmanID
         WHERE do_.DeliveryOrderID = @doId AND do_.IsDeleted = 0
       `);

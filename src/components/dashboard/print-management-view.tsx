@@ -134,7 +134,8 @@ function padRight(text: string, amount: string): string {
 
 function buildReceiptPreviewText(settings: PrintFormatSettings): string {
   const lines: string[] = [];
-  lines.push(center("SI AWAL"));
+  lines.push(center("Es Kristal - Pabrik Es PMP Group"));
+  lines.push(center("| Ponorogo"));
   lines.push(center("MKE/SI/000001/2026-08"));
   lines.push(center("24-08-2026 10:00"));
   lines.push("");

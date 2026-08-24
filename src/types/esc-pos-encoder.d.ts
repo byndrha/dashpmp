@@ -14,6 +14,7 @@ declare module "esc-pos-encoder" {
   type EscPosAlignment = "left" | "center" | "right";
 
   interface EscPosQrCodeOptions {
+    model?: 1 | 2; // QR model — defaults to 2 when omitted; some clone printers only support 1
     size?: number; // module size, validated to the range 1-8
   }
 

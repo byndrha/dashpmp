@@ -22,13 +22,22 @@ import type { PrintFormatSettings } from "@/lib/queries/print-format-settings";
 // right-aligned amount and word-wrap boundary on real 58mm paper.
 const THERMAL_PAPER_COLUMNS_58MM = 32;
 
+// The encoder's own .rule() helper prints a Unicode box-drawing character
+// (─, CP437) — on hardware with no matching printer profile configured (see
+// the constructor comment above), the active codepage table on the actual
+// printer may not agree with the byte the library picks for that glyph, so
+// nothing visible comes out. A plain ASCII hyphen is identical across every
+// single-byte codepage an ESC/POS printer could possibly be set to, so it
+// can never suffer this mismatch.
+const HORIZONTAL_RULE = "-".repeat(THERMAL_PAPER_COLUMNS_58MM);
+
 export function buildReceiptBytes(data: ThermalReceiptData, settings: PrintFormatSettings): Uint8Array {
   const encoder = new EscPosEncoder({ columns: THERMAL_PAPER_COLUMNS_58MM });
   encoder
     .initialize()
     .align("center")
     .bold(true)
-    .line("SI AWAL")
+    .line("Es Kristal - Pabrik Es PMP Group | Ponorogo")
     .bold(false)
     .line(data.voucherNo)
     .line(`${formatDate(data.transDate)} ${formatTime(data.transDate)}`)
@@ -41,14 +50,14 @@ export function buildReceiptBytes(data: ThermalReceiptData, settings: PrintForma
   encoder.line(`Armada: ${data.armadaNama}${data.vehicleNo ? ` (${data.vehicleNo})` : ""}`);
   if (settings.showDriverName) encoder.line(`Driver: ${data.driverName ?? "-"}`);
 
-  encoder.newline().rule();
+  encoder.newline().line(HORIZONTAL_RULE);
 
   for (const line of data.lines) {
     encoder.line(`${line.name} x${line.qty}`).align("right").line(formatRupiah(line.amount)).align("left");
   }
 
   encoder
-    .rule()
+    .line(HORIZONTAL_RULE)
     .bold(true)
     .align("right")
     .line(`TOTAL: ${formatRupiah(data.total)}`)
@@ -68,7 +77,13 @@ export function buildReceiptBytes(data: ThermalReceiptData, settings: PrintForma
     encoder
       .align("center")
       .line("Scan untuk lihat tagihan & bayar QRIS:")
-      .qrcode(data.invoiceUrl, { size: 6 })
+      // model: 1 — many budget ESC/POS-clone printers (including this one)
+      // only implement QR "model 1"; the library's own default (model 2,
+      // used when no model is specified) prints as a firmware error message
+      // instead of a code on hardware that doesn't support it. Untested
+      // hypothesis against the real printer — confirm this actually renders
+      // a scannable code before treating it as settled.
+      .qrcode(data.invoiceUrl, { model: 1, size: 6 })
       .newline()
       .align("left");
   }
