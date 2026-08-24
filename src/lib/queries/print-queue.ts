@@ -32,6 +32,23 @@ export interface PendingPrintJob {
   jadwalId: number;
 }
 
+export interface PrintQueueHistoryRow {
+  printQueueId: number;
+  salesInvoiceId: string;
+  voucherNo: string | null;
+  mitraName: string | null;
+  armadaNama: string | null;
+  vehicleNo: string | null;
+  jadwalId: number;
+  jamJadwal: Date | null;
+  status: "Pending" | "Printing" | "Dicetak" | "Error" | "Dibatalkan";
+  isManual: boolean;
+  failCount: number;
+  sortOrder: number | null;
+  createdAt: Date;
+  printedAt: Date | null;
+}
+
 // Oldest first — a batch enqueued together (one Selesai Muat with several
 // stops) prints in the same order the stops were created. CreatedAt is a
 // DATETIME (~3.33ms resolution) set via GETDATE() per-INSERT, so rows from a
@@ -41,10 +58,10 @@ export interface PendingPrintJob {
 export async function getPendingPrintQueue(): Promise<PendingPrintJob[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT PrintQueueID, SalesInvoiceID, JadwalID
+    SELECT PrintQueueID, SalesInvoiceID, JadwalID, SortOrder
     FROM DashboardPrintQueue
     WHERE Status = 'Pending'
-    ORDER BY CreatedAt, PrintQueueID
+    ORDER BY COALESCE(SortOrder, PrintQueueID)
   `);
   return (result.recordset as { PrintQueueID: number; SalesInvoiceID: string; JadwalID: number }[]).map((r) => ({
     printQueueId: r.PrintQueueID,
@@ -172,4 +189,114 @@ export async function enqueueManualReprint(jadwalDetailId: number): Promise<void
 
   if (!salesInvoiceId) throw new AppError("SI untuk tujuan ini belum terbit — jalankan Selesai Muat terlebih dahulu.");
   await enqueuePrintJob(pool, salesInvoiceId, row.JadwalID, true);
+}
+
+export async function getPrintQueueHistory(filters: {
+  dateFrom: string; // ISO date (YYYY-MM-DD), inclusive
+  dateTo: string;   // ISO date (YYYY-MM-DD), inclusive
+  status?: PrintQueueHistoryRow["status"];
+}): Promise<PrintQueueHistoryRow[]> {
+  const pool = await getPool();
+  const request = pool
+    .request()
+    .input("dateFrom", sql.Date, filters.dateFrom)
+    .input("dateTo", sql.Date, filters.dateTo);
+  if (filters.status) request.input("status", sql.VarChar(20), filters.status);
+
+  const result = await request.query(`
+    SELECT pq.PrintQueueID, pq.SalesInvoiceID, si.VoucherNo, bp.Name AS MitraName,
+           a.Nama AS ArmadaNama, ed.VehicleNo, pq.JadwalID, jad.JamJadwal,
+           pq.Status, pq.IsManual, pq.FailCount, pq.SortOrder, pq.CreatedAt, pq.PrintedAt
+    FROM DashboardPrintQueue pq
+    LEFT JOIN SalesInvoice si ON si.SalesInvoiceID = pq.SalesInvoiceID
+    LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = si.BusinessPartnerID
+    LEFT JOIN DashboardPengirimanJadwal jad ON jad.JadwalID = pq.JadwalID
+    LEFT JOIN DashboardArmada a ON a.ArmadaID = jad.ArmadaID
+    LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+    WHERE pq.CreatedAt >= @dateFrom AND pq.CreatedAt < DATEADD(DAY, 1, @dateTo)
+      ${filters.status ? "AND pq.Status = @status" : ""}
+    ORDER BY pq.CreatedAt DESC, pq.PrintQueueID DESC
+  `);
+
+  return (
+    result.recordset as {
+      PrintQueueID: number;
+      SalesInvoiceID: string;
+      VoucherNo: string | null;
+      MitraName: string | null;
+      ArmadaNama: string | null;
+      VehicleNo: string | null;
+      JadwalID: number;
+      JamJadwal: Date | null;
+      Status: PrintQueueHistoryRow["status"];
+      IsManual: boolean;
+      FailCount: number;
+      SortOrder: number | null;
+      CreatedAt: Date;
+      PrintedAt: Date | null;
+    }[]
+  ).map((r) => ({
+    printQueueId: r.PrintQueueID,
+    salesInvoiceId: r.SalesInvoiceID,
+    voucherNo: r.VoucherNo,
+    mitraName: r.MitraName,
+    armadaNama: r.ArmadaNama,
+    vehicleNo: r.VehicleNo,
+    jadwalId: r.JadwalID,
+    jamJadwal: r.JamJadwal,
+    status: r.Status,
+    isManual: r.IsManual,
+    failCount: r.FailCount,
+    sortOrder: r.SortOrder,
+    createdAt: r.CreatedAt,
+    printedAt: r.PrintedAt,
+  }));
+}
+
+// Only transitions a row that is still 'Pending' — mirrors claimPrintQueueJob's
+// own atomic UPDATE ... WHERE Status = 'Pending' pattern. Returns false if the
+// row had already left Pending (already printing/printed/errored/cancelled)
+// by the time this ran.
+export async function cancelPrintQueueJob(printQueueId: number): Promise<boolean> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.Int, printQueueId)
+    .query(`UPDATE DashboardPrintQueue SET Status = 'Dibatalkan' WHERE PrintQueueID = @id AND Status = 'Pending'`);
+  return result.rowsAffected[0] > 0;
+}
+
+// Re-sequences every row named in orderedIds to 10, 20, 30, ... in that
+// order — but only touches a row while it's still Pending (the WHERE guard
+// on each UPDATE), so a row that left Pending in the race between the
+// client reading the list and submitting the reorder is silently skipped,
+// not an error. Individual per-row UPDATEs rather than a single batched
+// statement — the queue is small (a handful of Pending rows at a time) and
+// this keeps the "skip if no longer Pending" logic simple.
+export async function reorderPendingPrintQueue(orderedIds: number[]): Promise<void> {
+  const pool = await getPool();
+  for (let i = 0; i < orderedIds.length; i++) {
+    await pool
+      .request()
+      .input("id", sql.Int, orderedIds[i])
+      .input("sortOrder", sql.Int, (i + 1) * 10)
+      .query(`UPDATE DashboardPrintQueue SET SortOrder = @sortOrder WHERE PrintQueueID = @id AND Status = 'Pending'`);
+  }
+}
+
+// Looks up the given row's SalesInvoiceID/JadwalID and enqueues a brand new
+// Pending job (IsManual = true) — the given row itself is never touched, so
+// DashboardPrintQueue stays an honest append-only audit log (a Dicetak row
+// stays Dicetak forever). Reuses enqueuePrintJob, the same insert path the
+// automatic Selesai Muat batch and the per-stop manual reprint icon already
+// use — one insert path, not two.
+export async function retryPrintQueueJob(printQueueId: number): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.Int, printQueueId)
+    .query(`SELECT SalesInvoiceID, JadwalID FROM DashboardPrintQueue WHERE PrintQueueID = @id`);
+  const row = result.recordset[0] as { SalesInvoiceID: string; JadwalID: number } | undefined;
+  if (!row) throw new AppError("Job cetak ini tidak ditemukan.");
+  await enqueuePrintJob(pool, row.SalesInvoiceID, row.JadwalID, true);
 }
