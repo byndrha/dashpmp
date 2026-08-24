@@ -56,7 +56,8 @@ export function PrintQueuePoller() {
         const jobsResult = await getPendingPrintQueueAction();
         if (!jobsResult.success || jobsResult.data.length === 0) return;
 
-        for (const job of jobsResult.data) {
+        for (let i = 0; i < jobsResult.data.length; i++) {
+          const job = jobsResult.data[i];
           const dataResult = await getThermalReceiptDataAction(job.salesInvoiceId);
           if (!dataResult.success) {
             toast.error(`Gagal ambil data SI untuk struk: ${dataResult.error}`);
@@ -68,11 +69,24 @@ export function PrintQueuePoller() {
             toast.error(`Cetak gagal — periksa printer (kertas/koneksi). ${err instanceof Error ? err.message : ""}`);
             break;
           }
-          await markPrintQueueDoneAction(job.printQueueId);
-          // Gap AFTER each successful print (not before the first one) —
-          // gives the printer's internal buffer time to flush the previous
-          // receipt before the next job's bytes start arriving.
-          await new Promise((resolve) => setTimeout(resolve, PRINT_GAP_MS));
+          const doneResult = await markPrintQueueDoneAction(job.printQueueId);
+          if (!doneResult.success) {
+            // The physical print already happened, but the DB write that
+            // marks it done failed — the job will look "Pending" again on
+            // the next poll tick and get reprinted. That's an acceptable,
+            // rare edge case (transient DB error right after a successful
+            // send); we still stop the batch so we don't compound it by
+            // racing further prints against an unreliable DB.
+            toast.error(`Cetak berhasil tapi gagal update status antrian: ${doneResult.error}`);
+            break;
+          }
+          // Gap AFTER each successful print, but only if there's a next job
+          // to process — never wait after the last job in the batch. Gives
+          // the printer's internal buffer time to flush the previous receipt
+          // before the next job's bytes start arriving.
+          if (i < jobsResult.data.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, PRINT_GAP_MS));
+          }
         }
       } finally {
         draining.current = false;
