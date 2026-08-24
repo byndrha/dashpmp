@@ -52,7 +52,16 @@ import {
 } from "@/lib/queries/vehicle-check";
 import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
 import { getIstirahatForJadwal, type IstirahatSession } from "@/lib/queries/driver-istirahat";
-import { getPendingPrintQueue, markPrintQueueDone, enqueueManualReprint, type PendingPrintJob } from "@/lib/queries/print-queue";
+import {
+  getPendingPrintQueue,
+  markPrintQueueDone,
+  enqueueManualReprint,
+  claimPrintQueueJob,
+  incrementPrintQueueFailCount,
+  markPrintQueueError,
+  revertPrintQueueJobToPending,
+  type PendingPrintJob,
+} from "@/lib/queries/print-queue";
 import { getThermalReceiptData, type ThermalReceiptData } from "@/lib/queries/thermal-receipt";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
@@ -371,6 +380,50 @@ export async function markPrintQueueDoneAction(printQueueId: number): Promise<Ac
   return runAction(async () => {
     await requireModuleAccess("delivery");
     await markPrintQueueDone(printQueueId);
+  });
+}
+
+// Atomic claim-before-print (Finding 1 of the final review): the poller
+// calls this before fetching receipt data / sending to the printer. A
+// `false` result means another poller (e.g. a second open tab) already
+// claimed this job — the caller should skip it silently, not toast an
+// error.
+export async function claimPrintQueueJobAction(printQueueId: number): Promise<ActionResult<boolean>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return claimPrintQueueJob(printQueueId);
+  });
+}
+
+// Dead-letter/retry-limit support (Finding 2 of the final review): called
+// on a failed print attempt. Un-claims the row back to 'Pending' so the
+// next poll tick can retry it, unless the caller escalates to 'Error' via
+// markPrintQueueErrorAction once the returned failCount reaches the limit.
+export async function incrementPrintQueueFailCountAction(printQueueId: number): Promise<ActionResult<{ failCount: number }>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return incrementPrintQueueFailCount(printQueueId);
+  });
+}
+
+// Marks a job permanently failed after it has exhausted its retry limit —
+// excluded from getPendingPrintQueue's WHERE Status = 'Pending' so it can
+// no longer wedge the FIFO queue for everyone.
+export async function markPrintQueueErrorAction(printQueueId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    await markPrintQueueError(printQueueId);
+  });
+}
+
+// Un-sticks a claimed job back to 'Pending' when the physical print
+// succeeded but the follow-up "mark done" write failed — see
+// revertPrintQueueJobToPending's own comment for why this is needed now
+// that claimPrintQueueJobAction moves a row out of 'Pending' up front.
+export async function revertPrintQueueJobToPendingAction(printQueueId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    await revertPrintQueueJobToPending(printQueueId);
   });
 }
 

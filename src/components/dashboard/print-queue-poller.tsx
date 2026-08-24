@@ -10,7 +10,16 @@ import {
   getPendingPrintQueueAction,
   markPrintQueueDoneAction,
   getThermalReceiptDataAction,
+  claimPrintQueueJobAction,
+  incrementPrintQueueFailCountAction,
+  markPrintQueueErrorAction,
+  revertPrintQueueJobToPendingAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
+
+// A job that fails this many times in a row is marked 'Error' (a terminal
+// state, excluded from getPendingPrintQueue's WHERE Status = 'Pending') and
+// skipped rather than left to wedge the FIFO queue for everyone forever.
+const MAX_FAIL_COUNT = 3;
 
 const POLL_INTERVAL_MS = 4000;
 const PRINT_GAP_MS = 5000;
@@ -58,25 +67,75 @@ export function PrintQueuePoller() {
 
         for (let i = 0; i < jobsResult.data.length; i++) {
           const job = jobsResult.data[i];
+
+          // Claim-before-print (final review Finding 1): the row lock this
+          // UPDATE takes prevents two concurrent pollers (e.g. two open
+          // browser tabs) from both printing the same job. If another
+          // poller already claimed it, skip silently — this is the
+          // expected steady-state outcome of a race, not an error worth
+          // interrupting the batch or the user over.
+          const claimResult = await claimPrintQueueJobAction(job.printQueueId);
+          if (!claimResult.success || !claimResult.data) {
+            continue;
+          }
+
+          // Shared failure handler for the two "attempt to produce a
+          // printed receipt" steps below (fetch data, send to printer).
+          // Dead-letter/retry-limit (final review Finding 2): a LOW fail
+          // count might just be "printer ran out of paper" — worth
+          // pausing the whole batch so the next poll tick retries this
+          // same job before touching anything after it. Once a job has
+          // failed MAX_FAIL_COUNT times in a row, though, it's more likely
+          // a permanent problem (deleted SalesInvoice, malformed data) —
+          // mark it 'Error' (excluded from getPendingPrintQueue's `WHERE
+          // Status = 'Pending'`) and move on so it can't wedge the queue
+          // for everyone forever.
+          const handleAttemptFailure = async (message: string): Promise<"break" | "continue"> => {
+            const failResult = await incrementPrintQueueFailCountAction(job.printQueueId);
+            if (!failResult.success) {
+              // Couldn't even record the failure (transient DB error on
+              // top of the print failure) — fall back to the pre-existing
+              // behavior rather than guessing at a fail count we don't
+              // actually have.
+              toast.error(message);
+              return "break";
+            }
+            if (failResult.data.failCount >= MAX_FAIL_COUNT) {
+              await markPrintQueueErrorAction(job.printQueueId);
+              toast.error(`SI ini gagal dicetak 3x, dilewati — cek printer/data. (${message})`);
+              return "continue";
+            }
+            toast.error(message);
+            return "break";
+          };
+
           const dataResult = await getThermalReceiptDataAction(job.salesInvoiceId);
           if (!dataResult.success) {
-            toast.error(`Gagal ambil data SI untuk struk: ${dataResult.error}`);
-            break;
+            const action = await handleAttemptFailure(`Gagal ambil data SI untuk struk: ${dataResult.error}`);
+            if (action === "break") break;
+            continue;
           }
           try {
             await conn.send(buildReceiptBytes(dataResult.data));
           } catch (err) {
-            toast.error(`Cetak gagal — periksa printer (kertas/koneksi). ${err instanceof Error ? err.message : ""}`);
-            break;
+            const action = await handleAttemptFailure(
+              `Cetak gagal — periksa printer (kertas/koneksi). ${err instanceof Error ? err.message : ""}`
+            );
+            if (action === "break") break;
+            continue;
           }
           const doneResult = await markPrintQueueDoneAction(job.printQueueId);
           if (!doneResult.success) {
             // The physical print already happened, but the DB write that
-            // marks it done failed — the job will look "Pending" again on
-            // the next poll tick and get reprinted. That's an acceptable,
-            // rare edge case (transient DB error right after a successful
-            // send); we still stop the batch so we don't compound it by
-            // racing further prints against an unreliable DB.
+            // marks it done failed. The claim step above already moved this
+            // row to 'Printing', so without reverting it here it would be
+            // stuck forever (getPendingPrintQueue only looks at 'Pending').
+            // Revert it back to 'Pending' so the job will look "Pending"
+            // again on the next poll tick and get reprinted. That's an
+            // acceptable, rare edge case (transient DB error right after a
+            // successful send); we still stop the batch so we don't compound
+            // it by racing further prints against an unreliable DB.
+            await revertPrintQueueJobToPendingAction(job.printQueueId);
             toast.error(`Cetak berhasil tapi gagal update status antrian: ${doneResult.error}`);
             break;
           }

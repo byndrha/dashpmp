@@ -61,6 +61,65 @@ export async function markPrintQueueDone(printQueueId: number): Promise<void> {
     .query(`UPDATE DashboardPrintQueue SET Status = 'Dicetak', PrintedAt = GETDATE() WHERE PrintQueueID = @id`);
 }
 
+// Atomically claims one pending job before printing — the row lock this
+// UPDATE takes (held until commit, unlike a plain SELECT's shared lock)
+// prevents two concurrent pollers (e.g. two open browser tabs) from both
+// printing the same job before either marks it done. Returns false if
+// another caller already claimed it (or it's no longer Pending).
+export async function claimPrintQueueJob(printQueueId: number): Promise<boolean> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.Int, printQueueId)
+    .query(`UPDATE DashboardPrintQueue SET Status = 'Printing' WHERE PrintQueueID = @id AND Status = 'Pending'`);
+  return result.rowsAffected[0] > 0;
+}
+
+// Called after a failed print attempt (fetch-data or send failure). Also
+// un-claims the row (reverts 'Printing' -> 'Pending') in the same statement
+// so the next poll tick — by this poller or another one — can retry it,
+// unless the caller escalates it to 'Error' after this returns failCount >= 3.
+export async function incrementPrintQueueFailCount(printQueueId: number): Promise<{ failCount: number }> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("id", sql.Int, printQueueId)
+    .query(
+      `UPDATE DashboardPrintQueue SET FailCount = FailCount + 1, Status = 'Pending' OUTPUT INSERTED.FailCount WHERE PrintQueueID = @id`
+    );
+  const row = result.recordset[0] as { FailCount: number } | undefined;
+  return { failCount: row?.FailCount ?? 0 };
+}
+
+// Reverts a claimed-but-not-yet-marked-done job back to 'Pending' when the
+// DB write that marks it 'Dicetak' fails right after a successful physical
+// print. Needed because claimPrintQueueJob already moves the row out of
+// 'Pending' before the print is attempted (see Finding 1 above) — without
+// this, a markPrintQueueDone failure would leave the row stuck at
+// 'Printing' forever, since getPendingPrintQueue only ever looks at
+// Status = 'Pending'. Re-exposes the same "reprint on the next tick"
+// behavior the poller's pre-claim code already accepted as a rare edge
+// case for this specific failure (the print already physically happened).
+export async function revertPrintQueueJobToPending(printQueueId: number): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.Int, printQueueId)
+    .query(`UPDATE DashboardPrintQueue SET Status = 'Pending' WHERE PrintQueueID = @id AND Status = 'Printing'`);
+}
+
+// Terminal state for a job that has failed 3 times — excluded from
+// getPendingPrintQueue's WHERE Status = 'Pending' automatically, so it no
+// longer blocks the FIFO queue. No automatic retry; requires manual
+// intervention (fix the underlying data/printer issue, then reset the row).
+export async function markPrintQueueError(printQueueId: number): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("id", sql.Int, printQueueId)
+    .query(`UPDATE DashboardPrintQueue SET Status = 'Error' WHERE PrintQueueID = @id`);
+}
+
 // The manual "Cetak" icon's entry point — looks up the stop's own
 // SalesInvoiceID/JadwalID server-side rather than trusting a client-supplied
 // SalesInvoiceID, then enqueues exactly like the automatic path (IsManual=1
