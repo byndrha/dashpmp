@@ -186,17 +186,20 @@ function SortableStopRow({
         </Badge>
       )}
       {!hasDeparted ? (
-        detail.InvoiceToken != null && (
-          <button
-            type="button"
-            title="Cetak ulang SI"
-            onClick={() => onReprint(detail.JadwalDetailID)}
-            disabled={reprinting}
-            className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border disabled:cursor-default disabled:opacity-50"
-          >
-            <Printer className="size-3.5" />
-          </button>
-        )
+        // Always shown pre-departure, even before Selesai Muat has created
+        // this stop's SalesInvoice — enqueueManualReprintAction (Task 3)
+        // already rejects with a clear AppError ("SI ... belum terbit") in
+        // that case, surfaced below as a toast, so there's no need to hide
+        // the button and make an operator wonder where it went.
+        <button
+          type="button"
+          title="Cetak ulang SI"
+          onClick={() => onReprint(detail.JadwalDetailID)}
+          disabled={reprinting}
+          className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border disabled:cursor-default disabled:opacity-50"
+        >
+          <Printer className="size-3.5" />
+        </button>
       ) : detail.JamSelesai != null ? (
         <button
           type="button"
