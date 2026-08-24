@@ -127,18 +127,25 @@ export function PrintManagementView({ initialHistory }: { initialHistory: PrintQ
   const [, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  async function refetch() {
+  async function refetch(overrides?: {
+    dateFrom?: string;
+    dateTo?: string;
+    status?: PrintQueueHistoryRow["status"] | "all";
+  }) {
+    const effectiveDateFrom = overrides?.dateFrom ?? dateFrom;
+    const effectiveDateTo = overrides?.dateTo ?? dateTo;
+    const effectiveStatus = overrides?.status ?? statusFilter;
     const result = await getPrintQueueHistoryAction({
-      dateFrom,
-      dateTo,
-      status: statusFilter === "all" ? undefined : statusFilter,
+      dateFrom: effectiveDateFrom,
+      dateTo: effectiveDateTo,
+      status: effectiveStatus === "all" ? undefined : effectiveStatus,
     });
     if (result.success) setHistory(result.data);
     else toast.error(result.error);
   }
 
-  function handleFilterChange() {
-    startTransition(refetch);
+  function handleFilterChange(overrides?: Parameters<typeof refetch>[0]) {
+    startTransition(() => refetch(overrides));
   }
 
   function handleRetry(printQueueId: number) {
@@ -215,7 +222,7 @@ export function PrintManagementView({ initialHistory }: { initialHistory: PrintQ
             value={dateFrom}
             onChange={(e) => {
               setDateFrom(e.target.value);
-              handleFilterChange();
+              handleFilterChange({ dateFrom: e.target.value });
             }}
             className="h-8 rounded-lg border border-border bg-background px-2 text-sm"
           />
@@ -225,15 +232,16 @@ export function PrintManagementView({ initialHistory }: { initialHistory: PrintQ
             value={dateTo}
             onChange={(e) => {
               setDateTo(e.target.value);
-              handleFilterChange();
+              handleFilterChange({ dateTo: e.target.value });
             }}
             className="h-8 rounded-lg border border-border bg-background px-2 text-sm"
           />
           <Select
             value={statusFilter}
             onValueChange={(v) => {
-              setStatusFilter(v as PrintQueueHistoryRow["status"] | "all");
-              handleFilterChange();
+              const nextStatus = v as PrintQueueHistoryRow["status"] | "all";
+              setStatusFilter(nextStatus);
+              handleFilterChange({ status: nextStatus });
             }}
           >
             <SelectTrigger className="h-8 w-40">
