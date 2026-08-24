@@ -4,6 +4,7 @@ import { getBusinessDateISO } from "@/lib/business-date";
 import {
   startMuat,
   selesaiMuat,
+  assertJadwalReadyForMuat,
   JADWAL_KANTONG_10KG_EXPR,
   JADWAL_KANTONG_5KG_EXPR,
 } from "@/lib/queries/pengiriman-jadwal";
@@ -157,6 +158,7 @@ export async function getSelesaiMuatJadwalRiwayatForProduksi(): Promise<SelesaiM
 // ever imports from this produksi-domain module, matching every other
 // produksi-muatan export.
 export async function produksiStartMuat(jadwalId: number): Promise<void> {
+  await assertJadwalReadyForMuat(jadwalId);
   await startMuat(jadwalId);
 }
 
@@ -168,6 +170,7 @@ export async function produksiStartMuat(jadwalId: number): Promise<void> {
 // this keberangkatan. Thin re-export of the existing delivery-flow
 // selesaiMuat, same pattern as produksiStartMuat above.
 export async function produksiSelesaiMuatManual(jadwalId: number): Promise<void> {
+  await assertJadwalReadyForMuat(jadwalId);
   await selesaiMuat(jadwalId);
 }
 
@@ -199,6 +202,11 @@ export async function produksiSelesaiMuat(input: ProduksiSelesaiMuatInput): Prom
   if (input.alokasi.length === 0 && input.qty5KGDimuat <= 0) {
     throw new AppError("Pilih minimal satu pallet 10kg atau isi jumlah kantong 5kg yang dimuat.");
   }
+  // Checked BEFORE any pallet stock is touched below — selesaiMuat() at the
+  // end of this function enforces the same Driver/rute precondition, but by
+  // then the pallet-consumption transaction has already committed. See
+  // assertJadwalReadyForMuat's own comment.
+  await assertJadwalReadyForMuat(input.jadwalId);
 
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);

@@ -1732,6 +1732,41 @@ export async function startMuat(jadwalId: number): Promise<void> {
     );
 }
 
+// Early precondition check for produksi-app's Mulai Muat / Selesai Muat
+// entry points — mirrors the same Driver/rute checks selesaiMuat() enforces
+// right before creating DeliveryOrder/SalesInvoice documents, but run
+// BEFORE any pallet stock is touched. Without this, an operator could
+// allocate pallets in produksi-app for a Jadwal that's missing its Driver
+// or has an un-geocoded stop, only to have selesaiMuat() reject it AFTER
+// stock was already deducted (produksiSelesaiMuat calls it in a separate,
+// already-committed transaction) — leaving the Kartu Pengiriman stuck in
+// Draft with no DeliveryOrder, which in turn blocked driver-app's
+// Konfirmasi Penerima gate. Driver/rute can only be fixed from desktop
+// Validasi Rute (produksi-app has no UI for either), so the message points
+// there explicitly.
+export async function assertJadwalReadyForMuat(jadwalId: number): Promise<void> {
+  const pool = await getPool();
+  const header = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT SalesmanID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const headerRow = header.recordset[0] as { SalesmanID: string | null } | undefined;
+  if (!headerRow) throw new AppError("Keberangkatan tidak ditemukan.");
+  if (!headerRow.SalesmanID) {
+    throw new AppError(
+      "Kartu Pengiriman ini belum ada Driver-nya — minta staf mengisi Driver di Validasi Rute (desktop) dulu."
+    );
+  }
+  const stops = await getJadwalDetail(jadwalId);
+  if (stops.length === 0) throw new AppError("Tidak ada SO pada keberangkatan ini.");
+  const missingCoords = stops.some((s) => s.Latitude == null || s.Longitude == null);
+  if (missingCoords) {
+    throw new AppError(
+      "Rute belum tervalidasi — minta staf memastikan semua tujuan sudah punya lokasi tersimpan di Validasi Rute (desktop) dulu."
+    );
+  }
+}
+
 const DOC_SUFFIX = "003/001";
 const BRANCH_ID = "011";
 const DEPARTMENT_ID = "0110";
