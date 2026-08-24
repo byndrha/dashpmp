@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { ClipboardList, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { ProfilLogoutButton } from "@/components/driver-app/profil-logout-button";
@@ -22,6 +24,15 @@ export function ProfilView({ profile, driverName }: { profile: DriverProfileRow 
           )}
         </CardContent>
       </Card>
+      <Link href="/mkesindo/driver-app/pengajuan">
+        <Card className="transition-colors hover:bg-accent/50">
+          <CardContent className="flex items-center gap-3 px-4 py-3 text-sm">
+            <ClipboardList className="size-4.5 text-muted-foreground" />
+            <span className="flex-1 font-medium">Pengajuan Mitra</span>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </Link>
       <ProfilLogoutButton />
     </div>
   );

@@ -34,6 +34,13 @@ import { reportTerkendala, moveTerkendalaStop } from "@/lib/queries/driver-terke
 import type { JenisKendala } from "@/lib/kendala-options";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { getBusinessDateISO } from "@/lib/business-date";
+import {
+  createPengajuan,
+  getPengajuanList,
+  type PengajuanInput,
+  type PengajuanRow,
+} from "@/lib/queries/mitra-pengajuan";
+import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
 
 async function requireOwnSalesmanId(): Promise<string> {
   const session = await requireDriver();
@@ -279,5 +286,47 @@ export async function moveTerkendalaStopAction(
     const salesmanId = await requireOwnSalesmanId();
     await moveTerkendalaStop(jadwalDetailId, salesmanId, direction, remainingDetailIdsInOrder);
     revalidatePath("/mkesindo/driver-app");
+  });
+}
+
+// Driver's own "NOO khusus Driver" onboarding flow — reuses the exact same
+// createPengajuan/approval pipeline pemasaran-app's Marketing users go
+// through (DashboardMitraPengajuan, reviewed from the same admin queue at
+// /mkesindo/pemasaran). No new attribution logic needed: MarketingUserID is
+// stored as this driver's own akun.id (session.user.id, same convention as
+// every other akun.id stored there), and getCrossWilayahProposalOverrides()
+// (marketing-wilayah.ts) already credits whoever's akun.id is on an
+// approved Pengajuan when that akun has no Wilayah/Kecamatan coverage of
+// its own — true for every Driver, never true for Marketing — so an
+// approved Driver pengajuan is automatically "cross-wilayah" and the
+// resulting Mitra's performance counts for the Driver, not whichever
+// Marketing covers that area.
+export async function createPengajuanAction(input: PengajuanInput): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireDriver();
+    await createPengajuan(input, session.user.id);
+    revalidatePath("/mkesindo/driver-app/pengajuan");
+  });
+}
+
+// Scoped to the logged-in driver's own submissions — getPengajuanList()
+// itself returns every Pengajuan regardless of submitter (that's the admin
+// queue's job at /mkesindo/pemasaran), so the filter happens here rather
+// than exposing a second, unfiltered query function.
+export async function getOwnPengajuanListAction(): Promise<ActionResult<PengajuanRow[]>> {
+  return runAction(async () => {
+    const session = await requireDriver();
+    const all = await getPengajuanList();
+    return all.filter((r) => r.MarketingUserID === session.user.id);
+  });
+}
+
+// Thin driver-gated wrapper — same pattern as getPabrikLocationForDriverAction
+// above (the existing getPriceLevelOptionsAction in pemasaran-app's actions
+// is gated by requireMarketing() and unusable by a driver session).
+export async function getPriceLevelOptionsForDriverAction(): Promise<ActionResult<PriceLevelOption[]>> {
+  return runAction(async () => {
+    await requireDriver();
+    return getPriceLevelOptions();
   });
 }
