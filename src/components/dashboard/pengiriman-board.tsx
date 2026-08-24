@@ -571,13 +571,21 @@ function DraggableJadwalCard({
           className={cn(
             "rounded px-1 py-px text-[8px] font-medium",
             isDraft
-              ? "bg-muted-foreground/20 text-muted-foreground"
+              ? j.JamMulaiMuat == null
+                ? "bg-muted-foreground/20 text-muted-foreground"
+                : "bg-amber-500/15 text-amber-600"
               : j.JamKembaliAktual
                 ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
                 : "bg-primary/20 text-primary"
           )}
         >
-          {isDraft ? "Draf" : j.JamKembaliAktual ? "Selesai" : "Berangkat"}
+          {isDraft
+            ? j.JamMulaiMuat == null
+              ? "Mulai Muat"
+              : "Selesai Muat"
+            : j.JamKembaliAktual
+              ? "Selesai"
+              : "Berangkat"}
         </span>
       </div>
       <div className="flex flex-col items-center leading-none -mt-2.5">
