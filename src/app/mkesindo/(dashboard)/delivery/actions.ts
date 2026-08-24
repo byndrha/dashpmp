@@ -362,24 +362,28 @@ export async function createVehicleCheckAction(input: {
 
 export async function getPendingPrintQueueAction(): Promise<ActionResult<PendingPrintJob[]>> {
   return runAction(async () => {
+    await requireModuleAccess("delivery");
     return getPendingPrintQueue();
   });
 }
 
 export async function markPrintQueueDoneAction(printQueueId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
+    await requireModuleAccess("delivery");
     await markPrintQueueDone(printQueueId);
   });
 }
 
 export async function enqueueManualReprintAction(jadwalDetailId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
+    await requireModuleAccess("delivery");
     await enqueueManualReprint(jadwalDetailId);
   });
 }
 
 export async function getThermalReceiptDataAction(salesInvoiceId: string): Promise<ActionResult<ThermalReceiptData>> {
   return runAction(async () => {
+    await requireModuleAccess("delivery");
     return getThermalReceiptData(salesInvoiceId);
   });
 }
