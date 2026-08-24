@@ -48,6 +48,9 @@ function emptyRowForm(perusahaanId: number, nextUrutan: number): UpsertMetodePem
     konteks: [],
     wajibCatatan: false,
     catatan: null,
+    bankNama: null,
+    nomorRekening: null,
+    atasNama: null,
     urutan: nextUrutan,
     isActive: true,
   };
@@ -64,6 +67,9 @@ function rowToFormInput(row: MetodePembayaranRow): UpsertMetodePembayaranInput {
     konteks: row.konteks,
     wajibCatatan: row.wajibCatatan,
     catatan: row.catatan,
+    bankNama: row.bankNama,
+    nomorRekening: row.nomorRekening,
+    atasNama: row.atasNama,
     urutan: row.urutan,
     isActive: row.isActive,
   };
@@ -222,6 +228,36 @@ function MetodeForm({
           onChange={(e) => onChange({ ...form, catatan: e.target.value || null })}
         />
       </div>
+
+      {form.metode === "TRANSFER" && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mp-bank-nama">Nama Bank</Label>
+            <Input
+              id="mp-bank-nama"
+              value={form.bankNama ?? ""}
+              onChange={(e) => onChange({ ...form, bankNama: e.target.value || null })}
+              placeholder="mis. Mandiri"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mp-nomor-rekening">Nomor Rekening</Label>
+            <Input
+              id="mp-nomor-rekening"
+              value={form.nomorRekening ?? ""}
+              onChange={(e) => onChange({ ...form, nomorRekening: e.target.value || null })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mp-atas-nama">Atas Nama</Label>
+            <Input
+              id="mp-atas-nama"
+              value={form.atasNama ?? ""}
+              onChange={(e) => onChange({ ...form, atasNama: e.target.value || null })}
+            />
+          </div>
+        </div>
+      )}
 
       {editingRow && editingRow.jenis === "qris_static" && (
         <div className="flex flex-col gap-1.5">
