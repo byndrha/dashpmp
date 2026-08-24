@@ -7,6 +7,7 @@ import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/de
 import { estimateTravelMinutes, estimateTripMinutes, haversineKm, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
+import { enqueuePrintJob } from "@/lib/queries/print-queue";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
 
@@ -2143,6 +2144,12 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = @doId, SalesInvoiceID = @siId WHERE JadwalDetailID = @detailId`);
 
       invoiceTokens.push({ jadwalDetailId: detail.JadwalDetailID, invoiceToken: encodeInvoiceToken(salesInvoiceId) });
+
+      // Single shared enqueue point for BOTH produksi-app's and desktop's
+      // Selesai Muat — see Global Constraints in the thermal-print plan.
+      // transaction (not pool) so this insert commits/rolls back atomically
+      // with the SalesInvoice it belongs to.
+      await enqueuePrintJob(transaction, salesInvoiceId, jadwalId, false);
     }
 
     await transaction.commit();
