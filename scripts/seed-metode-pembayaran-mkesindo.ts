@@ -39,7 +39,16 @@ async function main() {
     // qris-dinamis starts inactive — MKEsindo has no Snap BI credentials yet
     // (upsertMetodePembayaran would reject isActive:true here anyway).
     const isActive = s.jenis !== "qris_dinamis";
-    await upsertMetodePembayaran({ perusahaanId, ...s, catatan: null, urutan: i, isActive });
+    await upsertMetodePembayaran({
+      perusahaanId,
+      ...s,
+      catatan: null,
+      urutan: i,
+      isActive,
+      bankNama: null,
+      nomorRekening: null,
+      atasNama: null,
+    });
     console.log(`seeded: ${s.kode}`);
   }
 

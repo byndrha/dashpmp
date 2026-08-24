@@ -15,6 +15,10 @@ export interface MetodePembayaranRow {
   wajibCatatan: boolean;
   catatan: string | null;
   qrisStatisImagePath: string | null;
+  // Only meaningful when metode === "TRANSFER" — null for TUNAI/QRIS rows.
+  bankNama: string | null;
+  nomorRekening: string | null;
+  atasNama: string | null;
   urutan: number;
   isActive: boolean;
 }
@@ -30,6 +34,9 @@ interface MetodePembayaranDbRow {
   wajib_catatan: boolean;
   catatan: string | null;
   qris_statis_image_path: string | null;
+  bank_nama: string | null;
+  nomor_rekening: string | null;
+  atas_nama: string | null;
   urutan: number;
   is_active: boolean;
 }
@@ -46,12 +53,15 @@ function mapRow(r: MetodePembayaranDbRow): MetodePembayaranRow {
     wajibCatatan: r.wajib_catatan,
     catatan: r.catatan,
     qrisStatisImagePath: r.qris_statis_image_path,
+    bankNama: r.bank_nama,
+    nomorRekening: r.nomor_rekening,
+    atasNama: r.atas_nama,
     urutan: r.urutan,
     isActive: r.is_active,
   };
 }
 
-const SELECT_COLUMNS = `id, perusahaan_id, kode, metode, jenis, coa_id, konteks, wajib_catatan, catatan, qris_statis_image_path, urutan, is_active`;
+const SELECT_COLUMNS = `id, perusahaan_id, kode, metode, jenis, coa_id, konteks, wajib_catatan, catatan, qris_statis_image_path, bank_nama, nomor_rekening, atas_nama, urutan, is_active`;
 
 export async function listMetodePembayaran(perusahaanId: number): Promise<MetodePembayaranRow[]> {
   const pool = getPgPool();
@@ -92,7 +102,8 @@ export async function getMetodePembayaranById(id: number): Promise<(MetodePembay
   const pool = getPgPool();
   const result = await pool.query<MetodePembayaranDbRow & { perusahaan_kode: string }>(
     `SELECT mp.id, mp.perusahaan_id, mp.kode, mp.metode, mp.jenis, mp.coa_id, mp.konteks, mp.wajib_catatan,
-            mp.catatan, mp.qris_statis_image_path, mp.urutan, mp.is_active, p.kode AS perusahaan_kode
+            mp.catatan, mp.qris_statis_image_path, mp.bank_nama, mp.nomor_rekening, mp.atas_nama,
+            mp.urutan, mp.is_active, p.kode AS perusahaan_kode
      FROM metode_pembayaran mp
      JOIN perusahaan p ON p.id = mp.perusahaan_id
      WHERE mp.id = $1`,
@@ -119,6 +130,9 @@ export interface UpsertMetodePembayaranInput {
   konteks: Konteks[];
   wajibCatatan: boolean;
   catatan: string | null;
+  bankNama: string | null;
+  nomorRekening: string | null;
+  atasNama: string | null;
   urutan: number;
   isActive: boolean;
 }
@@ -136,11 +150,13 @@ export async function upsertMetodePembayaran(input: UpsertMetodePembayaranInput)
     await pool.query(
       `UPDATE metode_pembayaran SET
          kode = $1, metode = $2, jenis = $3, coa_id = $4, konteks = $5,
-         wajib_catatan = $6, catatan = $7, urutan = $8, is_active = $9, updated_at = now()
-       WHERE id = $10 AND perusahaan_id = $11`,
+         wajib_catatan = $6, catatan = $7, bank_nama = $8, nomor_rekening = $9, atas_nama = $10,
+         urutan = $11, is_active = $12, updated_at = now()
+       WHERE id = $13 AND perusahaan_id = $14`,
       [
         input.kode, input.metode, input.jenis, input.coaId, input.konteks,
-        input.wajibCatatan, input.catatan, input.urutan, input.isActive, input.id, input.perusahaanId,
+        input.wajibCatatan, input.catatan, input.bankNama, input.nomorRekening, input.atasNama,
+        input.urutan, input.isActive, input.id, input.perusahaanId,
       ]
     );
     return input.id;
@@ -148,12 +164,13 @@ export async function upsertMetodePembayaran(input: UpsertMetodePembayaranInput)
 
   const result = await pool.query<{ id: number }>(
     `INSERT INTO metode_pembayaran
-       (perusahaan_id, kode, metode, jenis, coa_id, konteks, wajib_catatan, catatan, urutan, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (perusahaan_id, kode, metode, jenis, coa_id, konteks, wajib_catatan, catatan, bank_nama, nomor_rekening, atas_nama, urutan, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
     [
       input.perusahaanId, input.kode, input.metode, input.jenis, input.coaId, input.konteks,
-      input.wajibCatatan, input.catatan, input.urutan, input.isActive,
+      input.wajibCatatan, input.catatan, input.bankNama, input.nomorRekening, input.atasNama,
+      input.urutan, input.isActive,
     ]
   );
   return result.rows[0].id;
