@@ -58,7 +58,7 @@ export interface PrintQueueHistoryRow {
   armadaNama: string | null;
   vehicleNo: string | null;
   jadwalId: number;
-  jadwalDate: string; // Jadwal's TglPengiriman, ISO date
+  jamJadwal: Date; // DashboardPengirimanJadwal.JamJadwal — same column/type JadwalCard etc. already pass straight through to client components elsewhere in this codebase, no ISO-string conversion needed
   status: "Pending" | "Printing" | "Dicetak" | "Error" | "Dibatalkan";
   isManual: boolean;
   failCount: number;
@@ -74,7 +74,7 @@ export async function getPrintQueueHistory(filters: {
 }): Promise<PrintQueueHistoryRow[]>;
 ```
 
-Joins `DashboardPrintQueue pq` → `SalesInvoice si` (`pq.SalesInvoiceID = si.SalesInvoiceID`) → `BusinessPartner bp` (`si.BusinessPartnerID = bp.BusinessPartnerID`) for `voucherNo`/`mitraName`, and `pq.JadwalID` → `DashboardPengirimanJadwal jad` → `DashboardArmada a` for `armadaNama`/`vehicleNo`/`jadwalDate` (same join shape `getThermalReceiptData` already uses for armada/driver info, minus the driver join — not needed in the list view). `ORDER BY pq.CreatedAt DESC, pq.PrintQueueID DESC` (newest first — this is a history view, opposite of the poller's oldest-first drain order).
+Joins `DashboardPrintQueue pq` → `SalesInvoice si` (`pq.SalesInvoiceID = si.SalesInvoiceID`) → `BusinessPartner bp` (`si.BusinessPartnerID = bp.BusinessPartnerID`) for `voucherNo`/`mitraName`, and `pq.JadwalID` → `DashboardPengirimanJadwal jad` → `DashboardArmada a` (`JOIN DashboardArmada a ON a.ArmadaID = jad.ArmadaID`) → `ExpeditionDetail ed` (`LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0`) for `armadaNama` (`a.Nama`), `vehicleNo` (`ed.VehicleNo`), `jamJadwal` (`jad.JamJadwal`) — the exact join shape `getPengirimanBoard` already uses for the same armada-plate lookup (`pengiriman-jadwal.ts` lines ~349-361), not `getThermalReceiptData`'s DeliveryOrderID-based path (unnecessary here since `pq.JadwalID` is already known directly). `ORDER BY pq.CreatedAt DESC, pq.PrintQueueID DESC` (newest first — this is a history view, opposite of the poller's oldest-first drain order).
 
 ```typescript
 // Only transitions a row that is still 'Pending' — mirrors claimPrintQueueJob's
