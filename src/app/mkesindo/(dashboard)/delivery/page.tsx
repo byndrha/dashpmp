@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Printer } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getOpenDeliveries, getDriverOptions } from "@/lib/queries/delivery";
 import { getPengirimanBoard } from "@/lib/queries/pengiriman-jadwal";
@@ -7,6 +9,7 @@ import { getDriverProfiles } from "@/lib/queries/driver-profile";
 import { getExpeditionVehicleOptions } from "@/lib/queries/expedition";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { getBusinessDateISO } from "@/lib/business-date";
+import { Button } from "@/components/ui/button";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { OpenDeliveriesPanel } from "@/components/dashboard/open-deliveries-panel";
 import { PengirimanBoard } from "@/components/dashboard/pengiriman-board";
@@ -45,7 +48,12 @@ export default async function DeliveryPage({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-xl font-semibold">Pengiriman</h1>
-        <FilterBar wilayahList={wilayahList} showDateRange={false} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" render={<Link href="/mkesindo/delivery/cetak" />}>
+            <Printer className="size-3.5" /> Manajemen Cetak
+          </Button>
+          <FilterBar wilayahList={wilayahList} showDateRange={false} />
+        </div>
       </div>
 
       <PengirimanTabs
