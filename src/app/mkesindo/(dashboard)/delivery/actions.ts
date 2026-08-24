@@ -60,8 +60,18 @@ import {
   incrementPrintQueueFailCount,
   markPrintQueueError,
   revertPrintQueueJobToPending,
+  getPrintQueueHistory,
+  cancelPrintQueueJob,
+  reorderPendingPrintQueue,
+  retryPrintQueueJob,
   type PendingPrintJob,
+  type PrintQueueHistoryRow,
 } from "@/lib/queries/print-queue";
+import {
+  getPrintFormatSettings,
+  setPrintFormatSettings,
+  type PrintFormatSettings,
+} from "@/lib/queries/print-format-settings";
 import { getThermalReceiptData, type ThermalReceiptData } from "@/lib/queries/thermal-receipt";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
@@ -424,6 +434,53 @@ export async function revertPrintQueueJobToPendingAction(printQueueId: number): 
   return runAction(async () => {
     await requireModuleAccess("delivery");
     await revertPrintQueueJobToPending(printQueueId);
+  });
+}
+
+export async function getPrintQueueHistoryAction(filters: {
+  dateFrom: string;
+  dateTo: string;
+  status?: PrintQueueHistoryRow["status"];
+}): Promise<ActionResult<PrintQueueHistoryRow[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getPrintQueueHistory(filters);
+  });
+}
+
+export async function cancelPrintQueueJobAction(printQueueId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    const cancelled = await cancelPrintQueueJob(printQueueId);
+    if (!cancelled) throw new AppError("Job ini sudah tidak bisa dibatalkan (statusnya sudah berubah).");
+  });
+}
+
+export async function reorderPendingPrintQueueAction(orderedIds: number[]): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    await reorderPendingPrintQueue(orderedIds);
+  });
+}
+
+export async function retryPrintQueueJobAction(printQueueId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    await retryPrintQueueJob(printQueueId);
+  });
+}
+
+export async function getPrintFormatSettingsAction(): Promise<ActionResult<PrintFormatSettings>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getPrintFormatSettings();
+  });
+}
+
+export async function setPrintFormatSettingsAction(input: PrintFormatSettings): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    await setPrintFormatSettings(input);
   });
 }
 
