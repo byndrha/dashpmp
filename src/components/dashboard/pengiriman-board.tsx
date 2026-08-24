@@ -24,6 +24,7 @@ import { ArmadaManager, ArmadaFormDialog, STATUS_BADGE, rowToForm } from "@/comp
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { DriverManager } from "@/components/dashboard/driver-manager";
 import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
+import { PrintQueuePoller } from "@/components/dashboard/print-queue-poller";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime, formatKemasanQty } from "@/lib/format";
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime } from "@/lib/business-date";
@@ -1558,6 +1559,7 @@ export function PengirimanBoard({
             <CardDescription>{jadwal.length} keberangkatan terjadwal</CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <PrintQueuePoller />
             <ArmadaManager armada={armada} expeditionOptions={expeditionOptions} />
             <DriverManager drivers={driverProfiles} />
             <div className="flex items-center gap-1">
