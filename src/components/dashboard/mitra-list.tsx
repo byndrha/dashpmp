@@ -11,6 +11,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   Select,
   SelectContent,
+  SelectGroup,
+  SelectLabel,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -38,7 +40,11 @@ import {
   setMitraSuspendedAction,
   setMitraLocationAction,
   setMitraCompetitorAction,
+  setMitraPemilikAction,
 } from "@/app/mkesindo/(dashboard)/mitra/actions";
+import type { MarketingUserOption } from "@/lib/queries/marketing-wilayah";
+
+const PEMILIK_NONE = "__none__";
 
 const PAGE_SIZE = 12;
 
@@ -109,6 +115,9 @@ export function MitraFormDialog({
   onSubmit,
   pending,
   error,
+  canEditPemilik = false,
+  pemilikOptions = { marketing: [], driver: [] },
+  initialPemilik = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -118,11 +127,25 @@ export function MitraFormDialog({
   title: string;
   termOptions: TermOfPaymentOption[];
   priceLevels: PriceLevelOption[];
-  onSubmit: (input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) => void;
+  onSubmit: (
+    input: MitraInput,
+    location: MitraLocationValue | null,
+    kompetitor: string | null,
+    pemilikAkunId: string | null
+  ) => void;
   pending: boolean;
   error?: string | null;
+  // Only ever true for an edit dialog on a session allowed to change it
+  // (see MitraPage's canEditPemilik) — omitted entirely (falls back to
+  // false/empty) for the create dialog and for every other reuse of this
+  // component (mitra-edit-dialog.tsx, Transaksi's Mitra DO panel), none of
+  // which were asked to expose this field.
+  canEditPemilik?: boolean;
+  pemilikOptions?: { marketing: MarketingUserOption[]; driver: MarketingUserOption[] };
+  initialPemilik?: string | null;
 }) {
   const [gender, setGender] = useState(initial.gender ?? "Male");
+  const [pemilik, setPemilik] = useState(initialPemilik ?? PEMILIK_NONE);
   const [termOfPaymentId, setTermOfPaymentId] = useState(initial.termOfPaymentId ?? "");
   const [priceLevel, setPriceLevel] = useState(initial.priceLevel != null ? String(initial.priceLevel) : "");
   const [location, setLocation] = useState<MitraLocationValue | null>(initialLocation);
@@ -173,7 +196,8 @@ export function MitraFormDialog({
         capacity: formData.get("capacity") ? Number(formData.get("capacity")) : null,
       },
       location,
-      String(formData.get("kompetitor") ?? "").trim() || null
+      String(formData.get("kompetitor") ?? "").trim() || null,
+      pemilik === PEMILIK_NONE ? null : pemilik
     );
   }
 
@@ -184,6 +208,7 @@ export function MitraFormDialog({
         onOpenChange(next);
         if (next) {
           setGender(initial.gender ?? "Male");
+          setPemilik(initialPemilik ?? PEMILIK_NONE);
           setTermOfPaymentId(initial.termOfPaymentId ?? "");
           setPriceLevel(initial.priceLevel != null ? String(initial.priceLevel) : "");
           setLocation(initialLocation);
@@ -240,14 +265,48 @@ export function MitraFormDialog({
             <Label className="sr-only">Tipe Mitra</Label>
             <Select value={gender} onValueChange={(v) => setGender(v ?? "Male")}>
               <SelectTrigger className="w-full">
-                <SelectValue>{(v: string) => (v === "Female" ? "Outlet" : "Agen")}</SelectValue>
+                <SelectValue>{(v: string) => (v === "Female" ? "Outlet" : v === "Other" ? "RPA" : "Agen")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Male">Agen</SelectItem>
                 <SelectItem value="Female">Outlet</SelectItem>
+                <SelectItem value="Other">RPA</SelectItem>
               </SelectContent>
             </Select>
           </div>
+          {canEditPemilik && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="sr-only">Pemilik</Label>
+              <Select value={pemilik} onValueChange={(v) => setPemilik(v ?? PEMILIK_NONE)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pemilik (Marketing/Driver)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PEMILIK_NONE}>Ikuti Wilayah (tidak ditentukan)</SelectItem>
+                  {pemilikOptions.marketing.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Marketing</SelectLabel>
+                      {pemilikOptions.marketing.map((m) => (
+                        <SelectItem key={m.UserID} value={m.UserID}>
+                          {m.Nama}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {pemilikOptions.driver.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Driver</SelectLabel>
+                      {pemilikOptions.driver.map((d) => (
+                        <SelectItem key={d.UserID} value={d.UserID}>
+                          {d.Nama}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label className="sr-only">Harga</Label>
             <Select value={priceLevel} onValueChange={(v) => setPriceLevel(v ?? "")}>
@@ -345,10 +404,16 @@ export function MitraList({
   mitra,
   termOptions,
   priceLevels,
+  canEditPemilik = false,
+  pemilikOptions = { marketing: [], driver: [] },
+  currentPemilikMap = {},
 }: {
   mitra: MitraRow[];
   termOptions: TermOfPaymentOption[];
   priceLevels: PriceLevelOption[];
+  canEditPemilik?: boolean;
+  pemilikOptions?: { marketing: MarketingUserOption[]; driver: MarketingUserOption[] };
+  currentPemilikMap?: Record<string, string>;
 }) {
   const [search, setSearch] = useState("");
   const [tipe, setTipe] = useState("all");
@@ -439,7 +504,12 @@ export function MitraList({
     });
   }
 
-  function handleUpdate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
+  function handleUpdate(
+    input: MitraInput,
+    location: MitraLocationValue | null,
+    kompetitor: string | null,
+    pemilikAkunId: string | null
+  ) {
     if (!editing) return;
     setFormError(null);
     startTransition(async () => {
@@ -459,6 +529,17 @@ export function MitraList({
       if (!competitorResult.success) {
         setFormError(competitorResult.error);
         return;
+      }
+      // Only sent when this session can actually edit it (canEditPemilik) —
+      // for anyone else the field never rendered, pemilikAkunId always
+      // arrives as null, and re-sending null here would silently WIPE an
+      // existing override for a session that never touched the field.
+      if (canEditPemilik && pemilikAkunId !== (currentPemilikMap[editing.BusinessPartnerID] ?? null)) {
+        const pemilikResult = await setMitraPemilikAction(editing.BusinessPartnerID, pemilikAkunId);
+        if (!pemilikResult.success) {
+          setFormError(pemilikResult.error);
+          return;
+        }
       }
       setEditing(null);
     });
@@ -756,6 +837,9 @@ export function MitraList({
           termOptions={termOptions}
           priceLevels={priceLevels}
           onSubmit={handleUpdate}
+          canEditPemilik={canEditPemilik}
+          pemilikOptions={pemilikOptions}
+          initialPemilik={currentPemilikMap[editing.BusinessPartnerID] ?? null}
           pending={pending}
           error={formError}
         />

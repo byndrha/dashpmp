@@ -569,10 +569,14 @@ function DraggableJadwalCard({
         <span
           className={cn(
             "rounded px-1 py-px text-[8px] font-medium",
-            isDraft ? "bg-muted-foreground/20 text-muted-foreground" : "bg-primary/20 text-primary"
+            isDraft
+              ? "bg-muted-foreground/20 text-muted-foreground"
+              : j.JamKembaliAktual
+                ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                : "bg-primary/20 text-primary"
           )}
         >
-          {isDraft ? "Draf" : "Berangkat"}
+          {isDraft ? "Draf" : j.JamKembaliAktual ? "Selesai" : "Berangkat"}
         </span>
       </div>
       <div className="flex flex-col items-center leading-none -mt-2.5">
@@ -913,10 +917,20 @@ function ArmadaRowBoard({
   // Card width now scales with the summed per-stop delivery-time estimate
   // (see delivery-duration.ts) instead of a fixed hourWidth-derived size —
   // a Jadwal with more/bigger stops visibly takes longer on the timeline.
+  // Once a real Cek Datang exists (JamKembaliAktual), the card switches to
+  // its real elapsed width (JamJadwal -> JamKembaliAktual) instead of the
+  // pre-departure estimate — same real-over-estimate preference
+  // autoSegments already applies to the separate "Kembali ke Pabrik"
+  // marker below, just applied to the Jadwal's own card this time.
   // useCallback so the lane-layout useMemo below can depend on it directly
   // instead of missing-dep warnings from redefining it every render.
   const cardWidthFor = useCallback(
-    (j: JadwalCardData) => Math.max(MIN_CARD_WIDTH, (j.EstimasiDurasiMenit / 60) * hourWidth),
+    (j: JadwalCardData) => {
+      if (j.JamKembaliAktual) {
+        return Math.max(MIN_CARD_WIDTH, durationHours(j.JamJadwal, j.JamKembaliAktual) * hourWidth);
+      }
+      return Math.max(MIN_CARD_WIDTH, (j.EstimasiDurasiMenit / 60) * hourWidth);
+    },
     [hourWidth]
   );
 

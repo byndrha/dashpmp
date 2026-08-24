@@ -34,6 +34,20 @@ export async function getMarketingUsers(): Promise<MarketingUserOption[]> {
   return (result.rows as { id: number; nama: string }[]).map((r) => ({ UserID: String(r.id), Nama: r.nama }));
 }
 
+// Driver akun options for the Mitra "Pemilik" dropdown — same {UserID,
+// Nama} shape and the same underlying akun.id values as getMarketingUsers()
+// above (both end up stored uniformly in DashboardMarketingMitra's
+// MarketingUserID column, resolved the same way), just scoped via
+// peran.is_driver instead of a single fixed RoleID since Driver isn't one
+// hardcoded role the way Marketing is.
+export async function getDriverUserOptions(): Promise<MarketingUserOption[]> {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT a.id, a.nama FROM akun a JOIN peran p ON p.id = a.peran_id WHERE p.is_driver = true AND a.is_active = true ORDER BY a.nama`
+  );
+  return (result.rows as { id: number; nama: string }[]).map((r) => ({ UserID: String(r.id), Nama: r.nama }));
+}
+
 // DashboardMarketingWilayah (MSSQL) and akun (Postgres) are two different
 // database engines — MarketingUserID can't be resolved to a name via a SQL
 // JOIN across them, so the name lookup happens here in application code
@@ -237,6 +251,42 @@ export async function addMarketingMitra(input: {
   if (result.rowsAffected[0] === 0) {
     throw new AppError("Mitra ini sudah memiliki Marketing penanggung jawab prioritas.");
   }
+}
+
+// One-shot "set the Pemilik for this Mitra" used by the Mitra module's own
+// edit form — unlike addMarketingMitra above (which throws if a Prioritas
+// row already exists, meant for the Cakupan Wilayah admin flow of adding
+// one at a time), this upserts: a Mitra already carrying an override gets
+// it overwritten in place instead of erroring, and passing null clears it
+// entirely (falling back to whatever Wilayah/Kecamatan coverage or
+// cross-wilayah proposal would otherwise apply). ownerAkunId works for
+// both a Marketing and a Driver akun.id — this table has never
+// distinguished the two, see getDriverUserOptions's own comment.
+export async function setMitraPemilik(
+  businessPartnerId: string,
+  ownerAkunId: string | null,
+  createdByUserId: string
+): Promise<void> {
+  const pool = await getPool();
+  if (ownerAkunId == null) {
+    await pool
+      .request()
+      .input("businessPartnerId", sql.VarChar(16), businessPartnerId)
+      .query(`DELETE FROM DashboardMarketingMitra WHERE BusinessPartnerID = @businessPartnerId`);
+    return;
+  }
+  await pool
+    .request()
+    .input("marketingUserId", sql.VarChar(16), ownerAkunId)
+    .input("businessPartnerId", sql.VarChar(16), businessPartnerId)
+    .input("createdBy", sql.VarChar(16), createdByUserId).query(`
+      UPDATE DashboardMarketingMitra
+      SET MarketingUserID = @marketingUserId, CreatedByUserID = @createdBy, CreatedAt = GETDATE()
+      WHERE BusinessPartnerID = @businessPartnerId;
+      IF @@ROWCOUNT = 0
+        INSERT INTO DashboardMarketingMitra (MarketingUserID, BusinessPartnerID, CreatedByUserID)
+        VALUES (@marketingUserId, @businessPartnerId, @createdBy);
+    `);
 }
 
 export async function removeMarketingMitra(id: number): Promise<void> {

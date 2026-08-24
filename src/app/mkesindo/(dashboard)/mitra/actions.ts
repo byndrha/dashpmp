@@ -18,7 +18,29 @@ import {
 } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
+import {
+  getMarketingUsers,
+  getDriverUserOptions,
+  setMitraPemilik,
+  type MarketingUserOption,
+} from "@/lib/queries/marketing-wilayah";
+import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+
+// Same role gate as Cakupan Wilayah's own requireWilayahManager
+// (pemasaran/actions.ts) — Supervisor/Accounting/Manager/Super Admin —
+// kept as its own local copy rather than a shared export since the two
+// call sites were requested independently and shouldn't be forced to
+// change together.
+async function requireWilayahManager() {
+  const session = await auth();
+  const user = session?.user;
+  if (!user) throw new AppError("Unauthorized");
+  if (!user.isSuperAdmin && !WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId)) {
+    throw new AppError("Tidak punya izin mengubah Pemilik mitra.");
+  }
+  return user;
+}
 
 export async function createMitraAction(input: MitraInput): Promise<ActionResult<string>> {
   return runAction(async () => {
@@ -113,5 +135,31 @@ export async function getMitraEditOptionsAction(): Promise<
 
     const [termOptions, priceLevels] = await Promise.all([getTermOfPaymentOptions(), getPriceLevelOptions()]);
     return { termOptions, priceLevels };
+  });
+}
+
+// Gated the same as setMitraPemilikAction below — no point handing out the
+// Marketing/Driver picker list to a session that isn't allowed to act on it.
+export async function getMitraPemilikOptionsAction(): Promise<
+  ActionResult<{ marketing: MarketingUserOption[]; driver: MarketingUserOption[] }>
+> {
+  return runAction(async () => {
+    await requireWilayahManager();
+    const [marketing, driver] = await Promise.all([getMarketingUsers(), getDriverUserOptions()]);
+    return { marketing, driver };
+  });
+}
+
+// ownerAkunId is a Postgres akun.id (either a Marketing or a Driver
+// account) — null clears the override, reverting this Mitra to whatever
+// Wilayah/Kecamatan coverage or cross-wilayah proposal would otherwise
+// resolve it to.
+export async function setMitraPemilikAction(businessPartnerId: string, ownerAkunId: string | null): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const user = await requireWilayahManager();
+    await setMitraPemilik(businessPartnerId, ownerAkunId, user.id);
+    revalidatePath("/mkesindo/mitra");
+    revalidatePath("/mkesindo/pemasaran");
+    revalidatePath("/mkesindo/transaksi");
   });
 }
