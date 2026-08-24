@@ -172,6 +172,7 @@ function buildReceiptPreviewText(settings: PrintFormatSettings): string {
 export function PrintManagementView({
   initialHistory,
   initialSettings,
+  businessDate,
 }: {
   initialHistory: PrintQueueHistoryRow[];
   initialSettings: PrintFormatSettings;
@@ -180,8 +181,8 @@ export function PrintManagementView({
   const [history, setHistory] = useState(initialHistory);
   const [settings, setSettings] = useState(initialSettings);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [dateFrom, setDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateFrom, setDateFrom] = useState(businessDate);
+  const [dateTo, setDateTo] = useState(businessDate);
   const [statusFilter, setStatusFilter] = useState<PrintQueueHistoryRow["status"] | "all">("all");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [, startTransition] = useTransition();
