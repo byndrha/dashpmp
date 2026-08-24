@@ -52,6 +52,8 @@ import {
 } from "@/lib/queries/vehicle-check";
 import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
 import { getIstirahatForJadwal, type IstirahatSession } from "@/lib/queries/driver-istirahat";
+import { getPendingPrintQueue, markPrintQueueDone, enqueueManualReprint, type PendingPrintJob } from "@/lib/queries/print-queue";
+import { getThermalReceiptData, type ThermalReceiptData } from "@/lib/queries/thermal-receipt";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
@@ -355,5 +357,29 @@ export async function createVehicleCheckAction(input: {
     revalidatePath("/mkesindo/delivery");
     revalidatePath("/mkesindo/satpam-app");
     revalidatePath("/mkesindo/driver-app");
+  });
+}
+
+export async function getPendingPrintQueueAction(): Promise<ActionResult<PendingPrintJob[]>> {
+  return runAction(async () => {
+    return getPendingPrintQueue();
+  });
+}
+
+export async function markPrintQueueDoneAction(printQueueId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await markPrintQueueDone(printQueueId);
+  });
+}
+
+export async function enqueueManualReprintAction(jadwalDetailId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await enqueueManualReprint(jadwalDetailId);
+  });
+}
+
+export async function getThermalReceiptDataAction(salesInvoiceId: string): Promise<ActionResult<ThermalReceiptData>> {
+  return runAction(async () => {
+    return getThermalReceiptData(salesInvoiceId);
   });
 }
