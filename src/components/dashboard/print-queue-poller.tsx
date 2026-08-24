@@ -14,6 +14,7 @@ import {
   incrementPrintQueueFailCountAction,
   markPrintQueueErrorAction,
   revertPrintQueueJobToPendingAction,
+  getPrintFormatSettingsAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 
 // A job that fails this many times in a row is marked 'Error' (a terminal
@@ -94,6 +95,13 @@ export function PrintQueuePoller() {
         return;
       }
 
+      const settingsResult = await getPrintFormatSettingsAction();
+      if (!settingsResult.success) {
+        toast.error(`Gagal ambil pengaturan format cetak: ${settingsResult.error}`);
+        return;
+      }
+      const formatSettings = settingsResult.data;
+
       for (let i = 0; i < jobsResult.data.length; i++) {
         const job = jobsResult.data[i];
 
@@ -145,7 +153,7 @@ export function PrintQueuePoller() {
           continue;
         }
         try {
-          await conn.send(buildReceiptBytes(dataResult.data));
+          await conn.send(buildReceiptBytes(dataResult.data, formatSettings));
         } catch (err) {
           const action = await handleAttemptFailure(
             `Cetak gagal — periksa printer (kertas/koneksi). ${err instanceof Error ? err.message : ""}`

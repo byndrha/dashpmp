@@ -3,6 +3,7 @@
 import EscPosEncoder from "esc-pos-encoder";
 import { formatDate, formatTime, formatRupiah } from "@/lib/format";
 import type { ThermalReceiptData } from "@/lib/queries/thermal-receipt";
+import type { PrintFormatSettings } from "@/lib/queries/print-format-settings";
 
 // esc-pos-encoder's chained-builder shape (initialize/align/bold/line/qrcode/
 // cut) was confirmed against the actually-installed v3 package at runtime —
@@ -21,7 +22,7 @@ import type { ThermalReceiptData } from "@/lib/queries/thermal-receipt";
 // right-aligned amount and word-wrap boundary on real 58mm paper.
 const THERMAL_PAPER_COLUMNS_58MM = 32;
 
-export function buildReceiptBytes(data: ThermalReceiptData): Uint8Array {
+export function buildReceiptBytes(data: ThermalReceiptData, settings: PrintFormatSettings): Uint8Array {
   const encoder = new EscPosEncoder({ columns: THERMAL_PAPER_COLUMNS_58MM });
   encoder
     .initialize()
@@ -35,13 +36,12 @@ export function buildReceiptBytes(data: ThermalReceiptData): Uint8Array {
     .newline()
     .line(`Mitra: ${data.mitraName}`);
 
-  if (data.mitraAddress) encoder.line(data.mitraAddress);
+  if (data.mitraAddress && settings.showMitraAddress) encoder.line(data.mitraAddress);
 
-  encoder
-    .line(`Armada: ${data.armadaNama}${data.vehicleNo ? ` (${data.vehicleNo})` : ""}`)
-    .line(`Driver: ${data.driverName ?? "-"}`)
-    .newline()
-    .rule();
+  encoder.line(`Armada: ${data.armadaNama}${data.vehicleNo ? ` (${data.vehicleNo})` : ""}`);
+  if (settings.showDriverName) encoder.line(`Driver: ${data.driverName ?? "-"}`);
+
+  encoder.newline().rule();
 
   for (const line of data.lines) {
     encoder.line(`${line.name} x${line.qty}`).align("right").line(formatRupiah(line.amount)).align("left");
@@ -56,7 +56,7 @@ export function buildReceiptBytes(data: ThermalReceiptData): Uint8Array {
     .align("left")
     .newline();
 
-  if (data.bankTransfer) {
+  if (data.bankTransfer && settings.showBankTransfer) {
     encoder
       .line("Transfer ke:")
       .line(`${data.bankTransfer.bankNama} ${data.bankTransfer.nomorRekening}`)
@@ -64,15 +64,24 @@ export function buildReceiptBytes(data: ThermalReceiptData): Uint8Array {
       .newline();
   }
 
-  encoder
-    .align("center")
-    .line("Scan untuk lihat tagihan & bayar QRIS:")
-    .qrcode(data.invoiceUrl, { size: 6 })
-    .newline()
-    .line("SI Awal - nominal dapat berubah")
-    .line("sesuai kondisi pengiriman di lapangan")
-    .newline()
-    .cut();
+  if (settings.showQrCode) {
+    encoder
+      .align("center")
+      .line("Scan untuk lihat tagihan & bayar QRIS:")
+      .qrcode(data.invoiceUrl, { size: 6 })
+      .newline()
+      .align("left");
+  }
+
+  if (settings.showDisclaimer) {
+    encoder
+      .align("center")
+      .line("SI Awal - nominal dapat berubah")
+      .line("sesuai kondisi pengiriman di lapangan")
+      .newline();
+  }
+
+  encoder.cut();
 
   return encoder.encode();
 }
