@@ -29,7 +29,7 @@ import { getDriverProfiles, type DriverProfileRow } from "@/lib/queries/driver-p
 import { getPabrikLocation, type PabrikLocation } from "@/lib/queries/pabrik-location";
 import { recordMasukSpbu, updateFuelLog } from "@/lib/queries/driver-fuel";
 import { recordKendala } from "@/lib/queries/driver-kendala";
-import { getActiveIstirahat, startIstirahat, endIstirahat, type ActiveIstirahat } from "@/lib/queries/driver-istirahat";
+import { startIstirahat, endIstirahat } from "@/lib/queries/driver-istirahat";
 import { reportTerkendala, moveTerkendalaStop } from "@/lib/queries/driver-terkendala";
 import type { JenisKendala } from "@/lib/kendala-options";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
@@ -233,19 +233,6 @@ export async function reportKendalaAction(
     const salesmanId = await requireOwnSalesmanId();
     await assertOwnsJadwalDetail(jadwalDetailId, salesmanId);
     await recordKendala(jadwalId, jadwalDetailId, salesmanId, jenisKendala, hubungiTeknisi);
-  });
-}
-
-// Checked from the driver-app root layout on every load, not from a
-// specific Jadwal's stop-flow screen — a driver can only ever be on one
-// break at a time regardless of which route is active, so this is
-// deliberately NOT scoped via assertOwnsJadwal/assertOwnsJadwalDetail;
-// requireOwnSalesmanId() alone is the right gate, matching
-// getActiveIstirahat's own salesmanId-only signature.
-export async function getActiveIstirahatAction(): Promise<ActionResult<ActiveIstirahat | null>> {
-  return runAction(async () => {
-    const salesmanId = await requireOwnSalesmanId();
-    return getActiveIstirahat(salesmanId);
   });
 }
 
