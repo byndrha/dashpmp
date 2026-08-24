@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { connectViaBluetooth, connectViaUsb, reconnectPersisted, type ThermalPrinterConnection } from "./connection";
 
 export type PrinterStatus = "disconnected" | "connecting" | "connected";
@@ -35,8 +36,13 @@ export function usePrinterConnection() {
       const conn = await connectViaBluetooth();
       setConnection(conn);
       setStatus("connected");
-    } catch {
+    } catch (err) {
       setStatus("disconnected");
+      // A user-cancelled device picker throws too (NotFoundError) — that's
+      // not a failure worth a toast, just the user backing out.
+      if (err instanceof Error && err.name !== "NotFoundError") {
+        toast.error(`Gagal menyambungkan printer via Bluetooth: ${err.message}`);
+      }
     }
   }, []);
 
@@ -46,8 +52,11 @@ export function usePrinterConnection() {
       const conn = await connectViaUsb();
       setConnection(conn);
       setStatus("connected");
-    } catch {
+    } catch (err) {
       setStatus("disconnected");
+      if (err instanceof Error && err.name !== "NotFoundError") {
+        toast.error(`Gagal menyambungkan printer via USB: ${err.message}`);
+      }
     }
   }, []);
 

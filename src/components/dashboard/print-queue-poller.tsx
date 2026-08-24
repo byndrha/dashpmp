@@ -62,7 +62,13 @@ export function PrintQueuePoller() {
   // via the ref like the rest of this component already does) so both the
   // interval below and the "poll now" event listener call the exact same
   // drain logic — one code path, not two.
-  const drainQueue = useCallback(async () => {
+  // warnIfDisconnected: the automatic interval tick stays silent when no
+  // printer is connected yet (that's the normal state before staff opens
+  // "Hubungkan Printer" for the day) — but a manual reprint click deserves
+  // explicit feedback instead of silently doing nothing, since the user
+  // just watched "SI ditambahkan ke antrian cetak." and is expecting it to
+  // print right away.
+  const drainQueue = useCallback(async (warnIfDisconnected = false) => {
     // Guard against two overlapping drain cycles — from an interval tick,
     // a "poll now" event, or one of each firing close together: if a
     // previous drain (including its inter-print PRINT_GAP_MS waits) is
@@ -70,8 +76,6 @@ export function PrintQueuePoller() {
     // second, concurrent drain that could race the first one for the same
     // jobs.
     if (draining.current) return;
-    const conn = connectionRef.current;
-    if (!conn) return;
 
     // Set the flag synchronously, before the first await, so a second
     // trigger firing while getPendingPrintQueueAction() is still in
@@ -81,6 +85,14 @@ export function PrintQueuePoller() {
     try {
       const jobsResult = await getPendingPrintQueueAction();
       if (!jobsResult.success || jobsResult.data.length === 0) return;
+
+      const conn = connectionRef.current;
+      if (!conn) {
+        if (warnIfDisconnected) {
+          toast.error("Printer belum tersambung — hubungkan Bluetooth/USB dahulu untuk mencetak SI.");
+        }
+        return;
+      }
 
       for (let i = 0; i < jobsResult.data.length; i++) {
         const job = jobsResult.data[i];
@@ -170,11 +182,12 @@ export function PrintQueuePoller() {
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(drainQueue, POLL_INTERVAL_MS);
-    window.addEventListener(POLL_NOW_EVENT, drainQueue);
+    const interval = setInterval(() => drainQueue(), POLL_INTERVAL_MS);
+    const handlePollNow = () => drainQueue(true);
+    window.addEventListener(POLL_NOW_EVENT, handlePollNow);
     return () => {
       clearInterval(interval);
-      window.removeEventListener(POLL_NOW_EVENT, drainQueue);
+      window.removeEventListener(POLL_NOW_EVENT, handlePollNow);
     };
   }, [drainQueue]);
 
