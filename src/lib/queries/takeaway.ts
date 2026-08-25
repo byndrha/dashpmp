@@ -179,7 +179,13 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
       .input("dueDate", sql.DateTime, so.DueDate)
       .input("termOfPaymentId", sql.VarChar(16), so.TermOfPaymentID)
       .input("soId", sql.VarChar(16), salesOrderId)
-      .input("doId", sql.VarChar(16), deliveryOrderId)
+      // Wrapped in literal single quotes to match the ERP's own historical
+      // storage convention for SalesInvoice.DeliveryOrderID — see the
+      // identical fix/comment on createSalesInvoiceForStop in
+      // pengiriman-jadwal.ts for the live evidence behind this. Every read
+      // site already strips these quotes via REPLACE(DeliveryOrderID,
+      // '''', ''), so this doesn't break anything downstream.
+      .input("doId", sql.VarChar(16), `'${deliveryOrderId}'`)
       .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
       .input("branchId", sql.VarChar(16), BRANCH_ID)
       .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)

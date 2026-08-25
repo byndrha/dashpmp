@@ -1936,7 +1936,17 @@ export async function createSalesInvoiceForStop(
     .input("dueDate", sql.DateTime, so.DueDate)
     .input("termOfPaymentId", sql.VarChar(16), so.TermOfPaymentID)
     .input("soId", sql.VarChar(16), params.salesOrderId)
-    .input("doId", sql.VarChar(16), params.deliveryOrderId)
+    // Wrapped in literal single quotes to match the ERP's own historical
+    // storage convention for this column — confirmed live (2026-08-25) that
+    // every SalesInvoice.DeliveryOrderID ever written before this function
+    // existed used this exact quoted form, with zero exceptions, and that a
+    // plain (unquoted) value here makes the desktop ERP's own "has this DO
+    // been invoiced" check unable to find the invoice, leading staff to
+    // create a duplicate one manually. Every read site in this codebase
+    // already strips these quotes via REPLACE(DeliveryOrderID, '''', ''),
+    // so writing them here doesn't break anything downstream — it only
+    // restores the convention every reader already expected.
+    .input("doId", sql.VarChar(16), `'${params.deliveryOrderId}'`)
     .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
     .input("branchId", sql.VarChar(16), BRANCH_ID)
     .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
