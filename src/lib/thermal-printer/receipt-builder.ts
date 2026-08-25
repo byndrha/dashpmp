@@ -35,7 +35,7 @@ const HORIZONTAL_RULE = "-".repeat(THERMAL_PAPER_COLUMNS_58MM);
 // the other side is scaled proportionally from the source image's real
 // aspect ratio (see buildQrisImage below), so a non-square upload (a QR
 // code with a bank logo strip, for instance) never comes out stretched.
-const QRIS_IMAGE_TARGET_DOTS = 200;
+const QRIS_IMAGE_TARGET_DOTS = 300;
 
 // GS v 0 (the raster-image print command @point-of-sale/receipt-printer-
 // encoder's .image() emits) requires both dimensions to be a multiple of 8
