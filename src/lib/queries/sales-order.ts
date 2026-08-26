@@ -177,8 +177,15 @@ export interface CreateSalesOrderManualInput {
 // datetime, not a separately-entered due date — in this flow they're the
 // same moment by construction.
 export async function createSalesOrderManual(input: CreateSalesOrderManualInput): Promise<string> {
-  if (input.qtyKantong <= 0) throw new AppError("Qty pemesanan harus lebih dari 0.");
+  // Qty may be 0 — a pure-bonus/freebie order, the main SalesOrderDetail
+  // row below is simply skipped in that case (mirrors how the bonus row
+  // has always been skipped when bonusQty is 0) — but the order as a whole
+  // can't be entirely empty.
+  if (input.qtyKantong < 0) throw new AppError("Qty pemesanan tidak boleh negatif.");
   if (input.bonusQty < 0) throw new AppError("Bonus qty tidak boleh negatif.");
+  if (input.qtyKantong === 0 && input.bonusQty === 0) {
+    throw new AppError("Qty dan bonus tidak boleh kosong keduanya.");
+  }
 
   const pool = await getPool();
   const variant = KANTONG_VARIANTS[input.variant];
@@ -209,7 +216,6 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
   const addressInvoice = bp.Address?.slice(0, 128) ?? "";
 
   const salesOrderId = await nextSalesOrderId(pool);
-  const salesOrderDetailId = await nextSalesOrderDetailId(pool);
   const now = new Date();
   const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const voucherSeq = await nextVoucherSeq(pool, yearMonth);
@@ -242,23 +248,28 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
          '', '', '', '', '')
     `);
 
-  await pool
-    .request()
-    .input("id", sql.VarChar(16), salesOrderDetailId)
-    .input("soId", sql.VarChar(16), salesOrderId)
-    .input("itemId", sql.VarChar(150), variant.itemId)
-    .input("name", sql.VarChar(150), variant.name)
-    .input("qty", sql.Float, input.qtyKantong)
-    .input("unit", sql.VarChar(16), variant.unit)
-    .input("price", sql.Float, price)
-    .input("amount", sql.Float, amount).query(`
-      INSERT INTO SalesOrderDetail
-        (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp,
-         Ratio, Amount, FlagClosed)
-      VALUES
-        (@id, @soId, @itemId, @name, @qty, @unit, @price, 0, 0, 0,
-         1, @amount, '')
-    `);
+  // Skipped entirely when qtyKantong is 0 (a pure-bonus order) — mirrors
+  // the pre-existing bonusQty>0 guard below for the bonus row.
+  if (input.qtyKantong > 0) {
+    const salesOrderDetailId = await nextSalesOrderDetailId(pool);
+    await pool
+      .request()
+      .input("id", sql.VarChar(16), salesOrderDetailId)
+      .input("soId", sql.VarChar(16), salesOrderId)
+      .input("itemId", sql.VarChar(150), variant.itemId)
+      .input("name", sql.VarChar(150), variant.name)
+      .input("qty", sql.Float, input.qtyKantong)
+      .input("unit", sql.VarChar(16), variant.unit)
+      .input("price", sql.Float, price)
+      .input("amount", sql.Float, amount).query(`
+        INSERT INTO SalesOrderDetail
+          (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp,
+           Ratio, Amount, FlagClosed)
+        VALUES
+          (@id, @soId, @itemId, @name, @qty, @unit, @price, 0, 0, 0,
+           1, @amount, '')
+      `);
+  }
 
   if (input.bonusQty > 0) {
     const bonusVariant = BONUS_ITEM_VARIANTS[input.variant];

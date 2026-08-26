@@ -56,6 +56,21 @@ export function getBusinessDateISO(now: Date = new Date()): string {
   return getBusinessDate(now).toISOString().slice(0, 10);
 }
 
+// Current wall-clock time in WIB as "HH:mm", regardless of the caller's own
+// timezone (client device or server process) — same Intl-based approach as
+// getWibParts, just also reading minute. Used to default a time <input>'s
+// value, not for any business-date-rollover math (unlike everything else in
+// this file, a time input doesn't care which calendar day it is).
+export function getWibTimeHHmm(now: Date = new Date()): string {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: WIB_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return formatter.format(now);
+}
+
 // Calendar-safe (UTC math, no local-timezone drift) day shift on a plain
 // "YYYY-MM-DD" string.
 export function shiftDateISO(dateISO: string, deltaDays: number): string {

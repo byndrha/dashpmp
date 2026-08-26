@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getWibTimeHHmm } from "@/lib/business-date";
 import { MitraSelect } from "@/components/dashboard/mitra-select";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { formatRupiah } from "@/lib/format";
@@ -57,8 +58,13 @@ export function PemesananFormDialog({
   const [variant, setVariant] = useState<KantongVariant>("10kg");
   const [qty, setQty] = useState("");
   const [bonusQty, setBonusQty] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("08:00");
+  // Defaults to "now" (today's business date + current WIB time) purely as
+  // a convenience — explicit request, still fully editable. todayISO
+  // already follows the same 14:00 WIB cutoff every other "today" in this
+  // app does (getBusinessDateISO), so a pemesanan created right after the
+  // cutoff correctly defaults to tomorrow's date, not literally today.
+  const [date, setDate] = useState(todayISO);
+  const [time, setTime] = useState(() => getWibTimeHHmm());
   const [armadaId, setArmadaId] = useState<string>(UNSET);
   const [salesmanId, setSalesmanId] = useState<string>(UNSET);
   const [isTakeAway, setIsTakeAway] = useState(false);
@@ -88,8 +94,11 @@ export function PemesananFormDialog({
     !!mitra &&
     mitra.PriceLevel != null &&
     price != null &&
-    qtyNumber > 0 &&
+    qtyNumber >= 0 &&
     bonusQtyNumber >= 0 &&
+    // Qty may be 0 (a pure-bonus/freebie order), but the order can't be
+    // entirely empty — at least one of the two must be non-zero.
+    (qtyNumber > 0 || bonusQtyNumber > 0) &&
     !!date &&
     (isTakeAway || armadaId !== UNSET);
 
@@ -98,8 +107,8 @@ export function PemesananFormDialog({
     setVariant("10kg");
     setQty("");
     setBonusQty("");
-    setDate("");
-    setTime("08:00");
+    setDate(todayISO);
+    setTime(getWibTimeHHmm());
     setArmadaId(UNSET);
     setSalesmanId(UNSET);
     setIsTakeAway(false);
@@ -239,7 +248,7 @@ export function PemesananFormDialog({
                 <Input
                   id="qty"
                   type="number"
-                  min="1"
+                  min="0"
                   step="1"
                   placeholder="Qty (kantong)"
                   value={qty}
