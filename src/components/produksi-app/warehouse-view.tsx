@@ -9,15 +9,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
-import type { MesinRow } from "@/lib/queries/produksi-mesin";
 
 export function WarehouseView({
   posisi,
-  mesinList,
   onAfterTambah,
 }: {
   posisi: PalletPosisiRow[];
-  mesinList: MesinRow[];
   onAfterTambah: () => void;
 }) {
   const [detailPosisi, setDetailPosisi] = useState<PalletPosisiRow | null>(null);
@@ -195,7 +192,6 @@ export function WarehouseView({
         open={dialogPosisi != null}
         onOpenChange={(open) => !open && setDialogPosisi(null)}
         posisi={dialogPosisi}
-        mesinList={mesinList}
         onSaved={() => {
           setDialogPosisi(null);
           onAfterTambah();

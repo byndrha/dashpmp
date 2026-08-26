@@ -5,16 +5,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { createBatchAction, getRiwayatProduksiForPosisiAction } from "@/app/mkesindo/produksi/actions";
+import {
+  createBatchAction,
+  getRiwayatProduksiForPosisiAction,
+  getKualitasRiwayatAction,
+} from "@/app/mkesindo/produksi/actions";
 import type { RiwayatProduksiRowWithNama } from "@/app/mkesindo/produksi/actions";
-import { getBusinessDateISO } from "@/lib/business-date";
 import { SHIFT_LABEL } from "@/lib/produksi-shift";
-import { STATUS_MESIN_LABEL } from "@/lib/produksi-mesin-status";
-import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
-
-const SHIFT_OPTIONS = [1, 2, 3] as const;
+import type { KualitasRow } from "@/lib/queries/produksi-kualitas";
 
 export function RiwayatPosisiList({ posisiId, open }: { posisiId: number; open: boolean }) {
   const [riwayat, setRiwayat] = useState<{ posisiId: number; rows: RiwayatProduksiRowWithNama[] } | null>(null);
@@ -67,30 +67,39 @@ export function TambahProduksiDialog({
   open,
   onOpenChange,
   posisi,
-  mesinList,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   posisi: PalletPosisiRow | null;
-  mesinList: MesinRow[];
   onSaved: () => void;
 }) {
-  const [tanggalLabel, setTanggalLabel] = useState(() => getBusinessDateISO());
-  const [shift, setShift] = useState<string>("1");
-  const [mesinId, setMesinId] = useState<string>("");
-  const [jamPanen, setJamPanen] = useState("");
+  // Tanggal/Jam/Shift/Mesin are no longer typed in here — explicit request:
+  // picking a Pemeriksaan Kualitas record below carries all four along with
+  // it (see CreateBatchInput's own comment), so a stock entry always traces
+  // back to exactly when/who/which-machine it was produced under.
+  const [kualitasList, setKualitasList] = useState<KualitasRow[] | null>(null);
+  const [kualitasId, setKualitasId] = useState<string>("");
   const [qty10, setQty10] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const sisaKapasitas = posisi ? KAPASITAS_PALLET_10KG - posisi.TotalSisaQty10KG : KAPASITAS_PALLET_10KG;
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getKualitasRiwayatAction().then((result) => {
+      if (cancelled) return;
+      if (result.success) setKualitasList(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   function reset() {
-    setTanggalLabel(getBusinessDateISO());
-    setShift("1");
-    setMesinId("");
-    setJamPanen("");
+    setKualitasId("");
     setQty10("");
     setError(null);
   }
@@ -98,12 +107,8 @@ export function TambahProduksiDialog({
   function handleSubmit() {
     if (!posisi) return;
     setError(null);
-    if (!mesinId) {
-      setError("Pilih mesin yang dipakai.");
-      return;
-    }
-    if (!jamPanen) {
-      setError("Isi jam panen.");
+    if (!kualitasId) {
+      setError("Pilih Pemeriksaan Kualitas terkait.");
       return;
     }
     const qty10Num = Number(qty10) || 0;
@@ -117,11 +122,8 @@ export function TambahProduksiDialog({
     }
     startTransition(async () => {
       const result = await createBatchAction({
-        tanggalLabel,
-        shift: Number(shift) as 1 | 2 | 3,
-        mesinId: Number(mesinId),
+        kualitasId: Number(kualitasId),
         posisiId: posisi.PosisiID,
-        jamPanen,
         qty10KG: qty10Num,
       });
       if (!result.success) {
@@ -154,72 +156,53 @@ export function TambahProduksiDialog({
           </DialogHeader>
 
 
-          <div className="grid grid-cols-[1fr_98px] gap-0">
-            {/* Baris 1 - Tanggal */}
-            <div>
-              <Input
-                type="date"
-                value={tanggalLabel}
-                onChange={(e) => setTanggalLabel(e.target.value)}
-              />
-            </div>
-
-            {/* Baris 1 - Jam Panen */}
-            <div>
-              <Input
-                type="time"
-                value={jamPanen}
-                onChange={(e) => setJamPanen(e.target.value)}
-              />
-            </div>
-
-            {/* Baris 2 - Shift */}
-            <div className="col-span-2 grid grid-cols-3">
-              {SHIFT_OPTIONS.map((s) => (
-                <Button
-                  key={s}
-                  type="button"
-                  variant={shift === String(s) ? "default" : "outline"}
-                  onClick={() => setShift(String(s))}
-                  className="rounded-none"
-                >
-                  {SHIFT_LABEL[s]}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="grid grid-cols-3 gap-2">
-              {mesinList.map((m) => {
-                const disabled = m.Status !== "AKTIF";
-                const active = mesinId === String(m.MesinID);
-                return (
-                  <button
-                    key={m.MesinID}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => setMesinId(String(m.MesinID))}
-                    className={cn(
-                      "flex flex-col items-start gap-0.5 rounded-lg border p-2 text-left text-xs transition-colors",
-                      disabled ? "cursor-not-allowed border-border bg-muted/40 opacity-50" : "border-border hover:bg-muted/50",
-                      active && !disabled && "border-primary bg-primary/10"
-                    )}
-                  >
-                    <span className="font-semibold">{m.Nama}</span>
-                    <span
+          {/* Pemeriksaan Kualitas terkait — replaces the old manual
+              Tanggal/Jam/Shift/Mesin inputs (explicit request): picking one
+              here carries all four along with it. */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Pemeriksaan Kualitas Terkait</p>
+            {kualitasList === null ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">Memuat riwayat...</p>
+            ) : kualitasList.length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                Belum ada Pemeriksaan Kualitas — catat dulu di tab Kualitas.
+              </p>
+            ) : (
+              <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+                {kualitasList.map((k) => {
+                  const active = kualitasId === String(k.KualitasID);
+                  const allPass = k.CekKejernihan && k.CekUkuranBentuk && k.CekKontaminasi && k.CekKemasan;
+                  return (
+                    <button
+                      key={k.KualitasID}
+                      type="button"
+                      onClick={() => setKualitasId(String(k.KualitasID))}
                       className={cn(
-                        "text-[10px] font-medium",
-                        m.Status === "AKTIF" ? "text-emerald-600" : m.Status === "MAINTENANCE" ? "text-amber-600" : "text-destructive"
+                        "flex items-center justify-between gap-2 rounded-lg border p-2 text-left text-xs transition-colors",
+                        "border-border hover:bg-muted/50",
+                        active && "border-primary bg-primary/10"
                       )}
                     >
-                      {STATUS_MESIN_LABEL[m.Status]}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">{m.KapasitasProduksiPerHari} kantong/hari</span>
-                  </button>
-                );
-              })}
-            </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{k.MesinNama}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {new Date(k.TanggalLabel).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+                          {" • "}
+                          {k.Waktu}
+                          {" • "}
+                          {SHIFT_LABEL[k.Shift]}
+                        </p>
+                      </div>
+                      {!allPass && (
+                        <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+                          Ada temuan
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">

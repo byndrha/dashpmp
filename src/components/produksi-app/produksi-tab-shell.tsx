@@ -230,7 +230,7 @@ export function ProduksiTabShell({
         )}
         {visited.has("warehouse") && warehouse && mesin && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "warehouse" && "hidden")}>
-            <WarehouseView posisi={warehouse} mesinList={mesin} onAfterTambah={refreshWarehouse} />
+            <WarehouseView posisi={warehouse} onAfterTambah={refreshWarehouse} />
           </div>
         )}
         {visited.has("kualitas") && kualitas && mesin && (

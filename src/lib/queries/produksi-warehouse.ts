@@ -136,12 +136,17 @@ export async function getBatchAktifForAlokasi(): Promise<BatchAktifRow[]> {
 }
 
 export interface CreateBatchInput {
-  mesinId: number;
+  // Replaces the old mesinId/tanggalLabel/shift/jamPanen fields — Tambah
+  // Produksi no longer asks for these directly (explicit request): the
+  // selected Kualitas record's own MesinID/TanggalLabel/Shift/Waktu are
+  // copied onto the batch row instead, so a stock entry always traces back
+  // to exactly when/who/which-machine its production quality check
+  // happened. Every existing consumer of DashboardProduksiBatch's
+  // TanggalLabel/Shift/MesinID/JamPanen columns keeps working unchanged —
+  // only how they're populated at insert time changed.
+  kualitasId: number;
   posisiId: number;
   qty10KG: number;
-  tanggalLabel: string;
-  shift: 1 | 2 | 3;
-  jamPanen: string;
   dicatatOlehAkunId: number;
 }
 
@@ -168,22 +173,34 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
       .input("posisiId", sql.Int, input.posisiId)
       .query(`SELECT PosisiID FROM DashboardProduksiPalletPosisi WITH (UPDLOCK, HOLDLOCK) WHERE PosisiID = @posisiId`);
 
+    // The Kualitas record backs MesinID/TanggalLabel/Shift/JamPanen for
+    // this batch — a plain read (no lock needed, Kualitas rows aren't
+    // concurrently mutated in a way that matters here).
+    const kualitasResult = await new sql.Request(transaction)
+      .input("kualitasId", sql.Int, input.kualitasId)
+      .query(`SELECT MesinID, TanggalLabel, Shift, Waktu FROM DashboardProduksiKualitas WHERE KualitasID = @kualitasId`);
+    const kualitas = kualitasResult.recordset[0] as
+      | { MesinID: number; TanggalLabel: Date; Shift: number; Waktu: string }
+      | undefined;
+    if (!kualitas) throw new AppError("Pemeriksaan Kualitas yang dipilih tidak ditemukan.");
+
     // Insert speculatively — aman karena satu transaksi dengan pengecekan
     // kapasitas di bawah: kalau kapasitas terlampaui, rollback membuang
     // baris ini juga, jadi tidak ada batch "orphan" yang pernah terlihat di
     // luar fungsi ini.
     const insertResult = await new sql.Request(transaction)
-      .input("mesinId", sql.Int, input.mesinId)
+      .input("mesinId", sql.Int, kualitas.MesinID)
       .input("posisiId", sql.Int, input.posisiId)
       .input("qty10", sql.Int, input.qty10KG)
       .input("akunId", sql.Int, input.dicatatOlehAkunId)
-      .input("tanggalLabel", sql.Date, input.tanggalLabel)
-      .input("shift", sql.TinyInt, input.shift)
-      .input("jamPanen", sql.VarChar(5), input.jamPanen)
+      .input("tanggalLabel", sql.Date, kualitas.TanggalLabel)
+      .input("shift", sql.TinyInt, kualitas.Shift)
+      .input("jamPanen", sql.VarChar(5), kualitas.Waktu)
+      .input("kualitasId", sql.Int, input.kualitasId)
       .query(`
-        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, SisaQty10KG, DicatatOlehAkunID, TanggalLabel, Shift, JamPanen)
+        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, SisaQty10KG, DicatatOlehAkunID, TanggalLabel, Shift, JamPanen, KualitasID)
         OUTPUT INSERTED.BatchID
-        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty10, @akunId, @tanggalLabel, @shift, @jamPanen)
+        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty10, @akunId, @tanggalLabel, @shift, @jamPanen, @kualitasId)
       `);
     const batchId = insertResult.recordset[0].BatchID as number;
 

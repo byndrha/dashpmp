@@ -99,8 +99,8 @@ export async function createBatchAction(
 ): Promise<ActionResult<number>> {
   return runAction(async () => {
     const session = await requireProduksiView();
-    if (!input.jamPanen) {
-      throw new AppError("Isi jam panen.");
+    if (!input.kualitasId) {
+      throw new AppError("Pilih Pemeriksaan Kualitas terkait.");
     }
     if (input.qty10KG <= 0) {
       throw new AppError("Isi jumlah kantong 10kg.");
