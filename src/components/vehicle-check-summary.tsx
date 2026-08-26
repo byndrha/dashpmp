@@ -2,6 +2,7 @@
 
 import { Gauge, Fuel, Clock, Package } from "lucide-react";
 import { formatTime } from "@/lib/format";
+import { ImageLightboxTrigger } from "@/components/ui/image-lightbox";
 import {
   JENIS_FOTO_LABEL,
   FUEL_BAR_MAX,
@@ -43,8 +44,12 @@ export function CheckSummary({ check }: { check: VehicleCheckRow }) {
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
         {check.photos.map((p) => (
-          // eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset
-          <img key={p.jenisFoto} src={p.filePath} alt={JENIS_FOTO_LABEL[p.jenisFoto]} className="h-14 w-full rounded object-cover" />
+          <ImageLightboxTrigger
+            key={p.jenisFoto}
+            src={p.filePath}
+            alt={JENIS_FOTO_LABEL[p.jenisFoto]}
+            className="h-14 w-full overflow-hidden rounded"
+          />
         ))}
       </div>
       {check.remark && (
