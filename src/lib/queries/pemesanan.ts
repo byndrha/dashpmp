@@ -216,11 +216,10 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
   // pre-aggregated GROUP BY derived tables — was confirmed live to collapse
   // SQL Server's plan for the whole query to 245s+/timeout the moment a
   // column from those joins is actually selected, most likely from a bad
-  // plan interaction with the OUTER APPLYs already above. Looking it up in a
-  // completely separate query/round-trip, restricted to only the SO/DO ids
-  // that can possibly have an invoice (Terbit orders always have one; Draft/
-  // Belum Dijadwalkan never do — see SalesOrderListRow.InvoiceToken), keeps
-  // that join out of this query's plan entirely.
+  // plan interaction with the OUTER APPLYs already above. Looking it up in
+  // two completely separate query/round-trips instead (loadAllInvoiceIdsByKey
+  // below) keeps that join out of this query's plan entirely — see
+  // SalesOrderListRow.InvoiceToken for which Status values can have one.
   const [soMap, doMap] = await Promise.all([
     loadAllInvoiceIdsByKey(pool, "SalesOrderID"),
     loadAllInvoiceIdsByKey(pool, "REPLACE(DeliveryOrderID, '''', '')"),
