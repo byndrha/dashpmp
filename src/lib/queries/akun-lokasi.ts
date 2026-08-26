@@ -60,6 +60,46 @@ export async function getLatestMarketingPositions(): Promise<MarketingPosition[]
   }));
 }
 
+export interface MarketingPositionTrail {
+  akunId: number;
+  nama: string;
+  // Ordered oldest -> newest, ready to draw directly as a Polyline path.
+  points: { latitude: number; longitude: number; recordedAt: string }[];
+}
+
+// Every ping in the last `hoursBack` hours, grouped per Marketing account —
+// backs the position-history trail line on the Pemasaran map (distinct from
+// getLatestMarketingPositions, which only returns the single latest point
+// per account for the plain pin). A plain ORDER BY (not DISTINCT ON) since
+// every row within the window is wanted here, not just the latest.
+export async function getMarketingPositionHistory(hoursBack: number): Promise<MarketingPositionTrail[]> {
+  const pool = getPgPool();
+  const result = await pool.query<{
+    akun_id: number;
+    nama: string;
+    latitude: number;
+    longitude: number;
+    recorded_at: Date;
+  }>(
+    `SELECT a.id AS akun_id, a.nama, al.latitude, al.longitude, al.recorded_at
+     FROM akun a
+     JOIN akun_lokasi al ON al.akun_id = a.id
+     WHERE a.peran_id = $1 AND al.recorded_at >= now() - ($2 || ' hours')::interval
+     ORDER BY a.id, al.recorded_at ASC`,
+    [MARKETING_ROLE_ID, hoursBack]
+  );
+  const trails = new Map<number, MarketingPositionTrail>();
+  for (const r of result.rows) {
+    let trail = trails.get(r.akun_id);
+    if (!trail) {
+      trail = { akunId: r.akun_id, nama: r.nama, points: [] };
+      trails.set(r.akun_id, trail);
+    }
+    trail.points.push({ latitude: r.latitude, longitude: r.longitude, recordedAt: r.recorded_at.toISOString() });
+  }
+  return [...trails.values()];
+}
+
 export interface DriverPosition {
   latitude: number;
   longitude: number;

@@ -10,7 +10,7 @@ import {
 } from "@/lib/queries/marketing-wilayah";
 import { getMarketingPerformance } from "@/lib/queries/marketing-performance";
 import { getPemasaranWilayahDelivery } from "@/lib/queries/pemasaran-wilayah-delivery";
-import { getLatestMarketingPositions } from "@/lib/queries/akun-lokasi";
+import { getLatestMarketingPositions, getMarketingPositionHistory } from "@/lib/queries/akun-lokasi";
 import { WILAYAH_MANAGER_ROLE_IDS, STAFF_ROLE_ID } from "@/lib/roles";
 import { PemasaranSection } from "@/components/dashboard/pemasaran-section";
 import { MarketingWilayahPanel } from "@/components/dashboard/marketing-wilayah-panel";
@@ -58,6 +58,7 @@ export default async function PemasaranPage() {
     performance,
     wilayahDelivery,
     marketingPositions,
+    marketingPositionTrails,
     trendBundle,
   ] = await Promise.all([
       getPengajuanList(),
@@ -78,6 +79,10 @@ export default async function PemasaranPage() {
       // Live-position map is part of the same canManageWilayah-gated section
       // as MarketingWilayahPanel — Marketing themselves never see it.
       canManageWilayah ? getLatestMarketingPositions() : Promise.resolve([]),
+      // 36 hours (explicit request) of position history per Marketing, for
+      // the map's per-person trail line — same canManageWilayah gate as the
+      // plain-pin positions above.
+      canManageWilayah ? getMarketingPositionHistory(36) : Promise.resolve([]),
       loadTrendBundle(canViewKinerjaMarketing, session.user.id, isPlainMarketing),
     ]);
 
@@ -119,7 +124,7 @@ export default async function PemasaranPage() {
         )}
       </div>
 
-      {canManageWilayah && <MarketingLocationMap positions={marketingPositions} />}
+      {canManageWilayah && <MarketingLocationMap positions={marketingPositions} trails={marketingPositionTrails} />}
 
       {canViewKinerjaMarketing && performanceForSession && (
         <MarketingPerformancePanel
