@@ -7,8 +7,13 @@ import { getDriverOptions } from "@/lib/queries/delivery";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
+import { PemesananDocFilter } from "@/components/dashboard/pemesanan-doc-filter";
 import { PemesananFormDialog } from "@/components/dashboard/pemesanan-form-dialog";
 import { PemesananList } from "@/components/dashboard/pemesanan-list";
+
+function docFilterValue(value: string | undefined): "yes" | "no" | undefined {
+  return value === "yes" || value === "no" ? value : undefined;
+}
 
 export default async function PemesananPage({
   searchParams,
@@ -21,7 +26,14 @@ export default async function PemesananPage({
   const todayISO = getBusinessDateISO();
 
   const [rows, mitraList, armadaList, drivers, priceLevels10kg, priceLevels5kg, wilayahList] = await Promise.all([
-    getSalesOrderList({ from: filter.startDate, to: filter.endDate, wilayah: filter.wilayah }),
+    getSalesOrderList({
+      from: filter.startDate,
+      to: filter.endDate,
+      wilayah: filter.wilayah,
+      hasDO: docFilterValue(params.hasDO),
+      hasSoInvoice: docFilterValue(params.hasSoInvoice),
+      hasDoInvoice: docFilterValue(params.hasDoInvoice),
+    }),
     getMitraList(),
     getArmadaList(),
     getDriverOptions(),
@@ -36,6 +48,8 @@ export default async function PemesananPage({
         <h1 className="font-display text-xl font-semibold">Pemesanan</h1>
         <FilterBar wilayahList={wilayahList} />
       </div>
+
+      <PemesananDocFilter />
 
       <div className="flex justify-end">
         <PemesananFormDialog

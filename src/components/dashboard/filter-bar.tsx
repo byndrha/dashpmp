@@ -40,10 +40,19 @@ export function FilterBar({
 
   function applyFilter() {
     if (sameDate) return;
-    const params = new URLSearchParams();
+    // Starts from the CURRENT params (not a blank slate) so a page that
+    // also has its own independent filter controls alongside this shared
+    // bar (e.g. /mkesindo/pemesanan's document-status dropdowns) doesn't
+    // get them wiped out just because this bar's own "Terapkan" was
+    // clicked — this bar only ever sets/clears the 3 keys it actually
+    // manages below.
+    const params = new URLSearchParams(searchParams.toString());
     if (from) params.set("from", from);
+    else params.delete("from");
     if (to) params.set("to", to);
+    else params.delete("to");
     if (wilayah !== "all") params.set("wilayah", wilayah);
+    else params.delete("wilayah");
     router.push(`${pathname}?${params.toString()}`);
   }
 

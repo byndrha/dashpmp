@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, CalendarClock, FileText } from "lucide-react";
+import { Pencil, Trash2, CalendarClock, FileText, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatRupiah, formatKemasanQty } from "@/lib/format";
+import { formatDate, formatTime, formatRupiah, formatKemasanQty } from "@/lib/format";
 import type { SalesOrderListRow, SalesOrderStatus } from "@/lib/queries/pemesanan";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
@@ -15,6 +15,7 @@ import {
   UbahTanggalPemesananDialog,
   type UbahTanggalPemesananTarget,
 } from "@/components/dashboard/ubah-tanggal-pemesanan-dialog";
+import { SalesReturnDetailDialog } from "@/components/dashboard/sales-return-detail-dialog";
 import { deletePemesananAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 
 const STATUS_VARIANT: Record<SalesOrderStatus, "outline" | "secondary" | "default"> = {
@@ -32,11 +33,13 @@ function PemesananRow({
   row,
   onEdit,
   onEditTransDate,
+  onOpenSr,
   onDeleted,
 }: {
   row: SalesOrderListRow;
   onEdit: () => void;
   onEditTransDate: () => void;
+  onOpenSr: () => void;
   onDeleted: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -76,6 +79,18 @@ function PemesananRow({
             </>
           )}
         </p>
+        {/* Shipping detail (kapan/siapa/armada) — only ever populated for
+            SOs scheduled through this dashboard's own Jadwal flow; an SO
+            whose DO was entered directly in the desktop ERP shows "-" for
+            all three, per explicit product decision (no dashboard record
+            exists to show instead). */}
+        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+          <span>Kirim: {row.ShippedAt ? formatDate(row.ShippedAt) + " " + formatTime(row.ShippedAt) : "-"}</span>
+          <span>&middot;</span>
+          <span>Driver: {row.DriverName ?? "-"}</span>
+          <span>&middot;</span>
+          <span>Armada: {row.ArmadaName ?? "-"}</span>
+        </p>
       </div>
       <div className="shrink-0 text-right">
         <p className="font-medium tabular-nums">{formatRupiah(row.Amount)}</p>
@@ -91,6 +106,11 @@ function PemesananRow({
             render={<a href={`/mkesindo/invoice/${row.InvoiceToken}`} target="_blank" rel="noopener noreferrer" />}
           >
             <FileText className="size-3.5" />
+          </Button>
+        )}
+        {row.SalesReturnId && (
+          <Button variant="ghost" size="icon" className="size-7" title="Lihat SR" onClick={onOpenSr}>
+            <Undo2 className="size-3.5" />
           </Button>
         )}
         {canModify ? (
@@ -127,6 +147,7 @@ export function PemesananList({
   const router = useRouter();
   const [editingTarget, setEditingTarget] = useState<UbahPemesananTarget | null>(null);
   const [editingTransDateTarget, setEditingTransDateTarget] = useState<UbahTanggalPemesananTarget | null>(null);
+  const [openSalesReturnId, setOpenSalesReturnId] = useState<string | null>(null);
 
   return (
     <>
@@ -153,6 +174,7 @@ export function PemesananList({
                 transDate: r.TransDate,
               })
             }
+            onOpenSr={() => setOpenSalesReturnId(r.SalesReturnId)}
             onDeleted={() => router.refresh()}
           />
         ))}
@@ -170,6 +192,10 @@ export function PemesananList({
       <UbahTanggalPemesananDialog
         target={editingTransDateTarget}
         onOpenChange={(open) => !open && setEditingTransDateTarget(null)}
+      />
+      <SalesReturnDetailDialog
+        salesReturnId={openSalesReturnId}
+        onOpenChange={(open) => !open && setOpenSalesReturnId(null)}
       />
     </>
   );

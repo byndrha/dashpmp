@@ -103,6 +103,13 @@ export interface SalesOrderListRow {
   Qty5KG: number;
   Amount: number;
   Status: SalesOrderStatus;
+  // Whether a real DeliveryOrder row exists for this SO — independent of
+  // Status, which can read 'Terbit' purely from a linked Jadwal's own
+  // Status (see the OUTER APPLY below) even in the narrow window that
+  // Jadwal flip and this SO's own DO row are both written in the same
+  // selesaiMuat transaction. In practice they coincide; this field is the
+  // direct signal for the "SO -> DO" filter rather than reusing Status.
+  HasDO: boolean;
   // null until an SI has actually been issued for this SalesOrderID (via
   // either its SalesOrderID or its linked DeliveryOrderID). Belum
   // Dijadwalkan is never non-null (live-confirmed: 0/64 in a 2026-08
@@ -116,12 +123,44 @@ export interface SalesOrderListRow {
   // earlier, now-Terbit Jadwal — so Status and InvoiceToken are resolved
   // independently and are not implied by each other.
   InvoiceToken: string | null;
+  // Matched via SalesOrderID specifically — kept separate from
+  // HasDoInvoice so a mismatch between the two (an SI exists for one but
+  // not the other) is visible to the "SO -> SI" / "DO -> SI" filters, the
+  // same pattern of divergence the duplicate-SI investigation this
+  // session was built to catch.
+  HasSoInvoice: boolean;
+  // Matched via DeliveryOrderID specifically — always false when HasDO is
+  // false (there's no DeliveryOrderID to match against).
+  HasDoInvoice: boolean;
+  // Internal SalesReturnID (not a public token — "Lihat SR" is an
+  // authenticated dialog, not a shared link like invoice) for the most
+  // recent SalesReturn matched by this SO's DeliveryOrderID. Always null
+  // when HasDO is false: SalesReturn.SalesOrderID is live-confirmed to be
+  // NULL on every recently-created row (both dashboard- and desktop-ERP-
+  // originated) — a return can only be recorded against an already-issued
+  // DeliveryOrderID (confirmDeliveryDelivery/stop-delivery confirmation
+  // runs strictly after DO creation), so DeliveryOrderID is the only
+  // reliable match key, not SalesOrderID.
+  SalesReturnId: string | null;
+  // The Jadwal's own JamAktualBerangkat (actual departure) — null unless
+  // this SO went through the dashboard's own Jadwal/Papan Pengiriman flow.
+  // Deliberately NOT falling back to the DeliveryOrder's own TransDate for
+  // a Jadwal-less DO (e.g. one entered directly in the desktop ERP): shown
+  // as "-" in that case instead, per explicit product decision.
+  ShippedAt: string | Date | null;
+  // Same Jadwal-only convention as ShippedAt — null if this SO was never
+  // scheduled through the dashboard.
+  DriverName: string | null;
+  ArmadaName: string | null;
 }
 
 export interface SalesOrderListFilter {
   from: string;
   to: string;
   wilayah?: string;
+  hasDO?: "yes" | "no";
+  hasSoInvoice?: "yes" | "no";
+  hasDoInvoice?: "yes" | "no";
 }
 
 // Aggregates MAX(SalesInvoiceID) by a match key across ALL of SalesInvoice
@@ -149,32 +188,57 @@ async function loadAllInvoiceIdsByKey(pool: sql.ConnectionPool, keyExpr: string)
   return map;
 }
 
-// Every /mkesindo/pemesanan page load pays loadAllInvoiceIdsByKey's ~10s
-// combined cost (both keys), even though a newly-issued invoice showing up
-// a little late is harmless here (it's just which rows get a "Lihat SI"
-// button) — so the two Maps are cached process-wide for a short TTL instead
-// of re-querying on every request. In-flight promise (not just the
-// resolved Maps) is what's cached, so concurrent requests during a refresh
-// share one query pair instead of each starting their own (a "thundering
-// herd" on this app's single long-lived Node process — see Coolify
-// deployment note in [[mkesindo-route-restructuring]] — not a distributed
-// cache, deliberately: this process is the only reader/writer of it).
-const INVOICE_ID_CACHE_TTL_MS = 45_000;
-let invoiceIdCache: { promise: Promise<[Map<string, string>, Map<string, string>]>; loadedAt: number } | null = null;
+// Same shape as loadAllInvoiceIdsByKey (see its comment for why this is an
+// unfiltered aggregate, not an id-restricted one) but against SalesReturn,
+// keyed only by DeliveryOrderID — SalesReturn.SalesOrderID is
+// live-confirmed NULL on every observed row, dashboard- and desktop-ERP-
+// originated alike, and DeliveryOrderID is never quote-wrapped there (only
+// SalesInvoice.DeliveryOrderID has that convention), so no REPLACE() is
+// needed here.
+async function loadAllReturnIdsByDeliveryOrderId(pool: sql.ConnectionPool): Promise<Map<string, string>> {
+  const result = await pool.request().query(`
+    SELECT DeliveryOrderID AS MatchKey, MAX(SalesReturnID) AS SalesReturnID
+    FROM SalesReturn
+    WHERE IsDeleted = 0 AND DeliveryOrderID IS NOT NULL AND DeliveryOrderID <> ''
+    GROUP BY DeliveryOrderID
+  `);
+  const map = new Map<string, string>();
+  for (const row of result.recordset as { MatchKey: string; SalesReturnID: string }[]) {
+    map.set(row.MatchKey, row.SalesReturnID);
+  }
+  return map;
+}
 
-function getInvoiceIdMaps(pool: sql.ConnectionPool): Promise<[Map<string, string>, Map<string, string>]> {
-  if (invoiceIdCache && Date.now() - invoiceIdCache.loadedAt < INVOICE_ID_CACHE_TTL_MS) {
-    return invoiceIdCache.promise;
+// Every /mkesindo/pemesanan page load pays these three lookups' combined
+// cost, even though a newly-issued invoice/return showing up a little late
+// is harmless here (it's just which rows get a button) — so the Maps are
+// cached process-wide for a short TTL instead of re-querying on every
+// request. In-flight promise (not just the resolved Maps) is what's
+// cached, so concurrent requests during a refresh share one query set
+// instead of each starting their own (a "thundering herd" on this app's
+// single long-lived Node process — see Coolify deployment note in
+// [[mkesindo-route-restructuring]] — not a distributed cache, deliberately:
+// this process is the only reader/writer of it).
+const DOCUMENT_ID_CACHE_TTL_MS = 45_000;
+let documentIdCache: {
+  promise: Promise<[Map<string, string>, Map<string, string>, Map<string, string>]>;
+  loadedAt: number;
+} | null = null;
+
+function getDocumentIdMaps(pool: sql.ConnectionPool): Promise<[Map<string, string>, Map<string, string>, Map<string, string>]> {
+  if (documentIdCache && Date.now() - documentIdCache.loadedAt < DOCUMENT_ID_CACHE_TTL_MS) {
+    return documentIdCache.promise;
   }
   const promise = Promise.all([
     loadAllInvoiceIdsByKey(pool, "SalesOrderID"),
     loadAllInvoiceIdsByKey(pool, "REPLACE(DeliveryOrderID, '''', '')"),
+    loadAllReturnIdsByDeliveryOrderId(pool),
   ]);
-  invoiceIdCache = { promise, loadedAt: Date.now() };
+  documentIdCache = { promise, loadedAt: Date.now() };
   // A failed load must not poison the cache for the next 45s — clear it so
   // the next call retries instead of rethrowing the same stale error.
   promise.catch(() => {
-    if (invoiceIdCache?.promise === promise) invoiceIdCache = null;
+    if (documentIdCache?.promise === promise) documentIdCache = null;
   });
   return promise;
 }
@@ -211,7 +275,10 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
           WHEN do_.DeliveryOrderID IS NOT NULL THEN 'Terbit'
           ELSE 'Belum Dijadwalkan'
         END AS Status,
-        do_.DeliveryOrderID
+        do_.DeliveryOrderID,
+        j.JamAktualBerangkat AS ShippedAt,
+        sm.Name AS DriverName,
+        arm.Nama AS ArmadaName
     FROM SalesOrder so
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     LEFT JOIN (
@@ -222,12 +289,14 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
       GROUP BY SalesOrderID
     ) sod ON sod.SalesOrderID = so.SalesOrderID
     OUTER APPLY (
-      SELECT TOP 1 jh.Status
+      SELECT TOP 1 jh.Status, jh.JamAktualBerangkat, jh.SalesmanID, jh.ArmadaID
       FROM DashboardPengirimanJadwalDetail jd
       JOIN DashboardPengirimanJadwal jh ON jh.JadwalID = jd.JadwalID AND jh.IsDeleted = 0
       WHERE jd.SalesOrderID = so.SalesOrderID AND jd.IsDeleted = 0
       ORDER BY jd.JadwalDetailID DESC
     ) j
+    LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
+    LEFT JOIN DashboardArmada arm ON arm.ArmadaID = j.ArmadaID
     OUTER APPLY (
       SELECT TOP 1 do2.DeliveryOrderID
       FROM DeliveryOrder do2
@@ -239,24 +308,48 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     ORDER BY so.TransDate DESC
   `);
 
-  const rows = result.recordset as (Omit<SalesOrderListRow, "InvoiceToken"> & { DeliveryOrderID: string | null })[];
+  const rows = result.recordset as (Omit<
+    SalesOrderListRow,
+    "HasDO" | "InvoiceToken" | "HasSoInvoice" | "HasDoInvoice" | "SalesReturnId"
+  > & { DeliveryOrderID: string | null })[];
 
-  // SalesInvoice has 200K+ rows and no index on SalesOrderID/DeliveryOrderID
-  // (only PK and TransDate). Joining it into the query above — even via
-  // pre-aggregated GROUP BY derived tables — was confirmed live to collapse
-  // SQL Server's plan for the whole query to 245s+/timeout the moment a
-  // column from those joins is actually selected, most likely from a bad
-  // plan interaction with the OUTER APPLYs already above. Looking it up in
-  // two completely separate, cached query/round-trips instead
-  // (getInvoiceIdMaps above) keeps that join out of this query's plan
-  // entirely — see SalesOrderListRow.InvoiceToken for which Status values
-  // can have one.
-  const [soMap, doMap] = await getInvoiceIdMaps(pool);
+  // SalesInvoice/SalesReturn have 200K+/9K+ rows and no index on
+  // SalesOrderID/DeliveryOrderID (only PK and TransDate). Joining either
+  // into the query above — even via pre-aggregated GROUP BY derived tables
+  // — was confirmed live to collapse SQL Server's plan for the whole query
+  // to 245s+/timeout the moment a column from those joins is actually
+  // selected, most likely from a bad plan interaction with the OUTER
+  // APPLYs already above. Looking them up in completely separate, cached
+  // query/round-trips instead (getDocumentIdMaps above) keeps those joins
+  // out of this query's plan entirely — see SalesOrderListRow.InvoiceToken
+  // for which Status values can have one.
+  const [soInvoiceMap, doInvoiceMap, doReturnMap] = await getDocumentIdMaps(pool);
 
-  return rows.map((r) => {
+  const mapped = rows.map((r) => {
     const { DeliveryOrderID, ...rest } = r;
-    const invoiceSalesInvoiceId = soMap.get(r.SalesOrderID) ?? (DeliveryOrderID ? doMap.get(DeliveryOrderID) : undefined);
-    return { ...rest, InvoiceToken: invoiceSalesInvoiceId ? encodeInvoiceToken(invoiceSalesInvoiceId) : null };
+    const hasDO = DeliveryOrderID != null;
+    const soInvoiceId = soInvoiceMap.get(r.SalesOrderID);
+    const doInvoiceId = hasDO ? doInvoiceMap.get(DeliveryOrderID) : undefined;
+    const invoiceSalesInvoiceId = soInvoiceId ?? doInvoiceId;
+    const salesReturnId = hasDO ? (doReturnMap.get(DeliveryOrderID) ?? null) : null;
+    return {
+      ...rest,
+      HasDO: hasDO,
+      InvoiceToken: invoiceSalesInvoiceId ? encodeInvoiceToken(invoiceSalesInvoiceId) : null,
+      HasSoInvoice: soInvoiceId != null,
+      HasDoInvoice: doInvoiceId != null,
+      SalesReturnId: salesReturnId,
+    };
+  });
+
+  return mapped.filter((r) => {
+    if (filter.hasDO === "yes" && !r.HasDO) return false;
+    if (filter.hasDO === "no" && r.HasDO) return false;
+    if (filter.hasSoInvoice === "yes" && !r.HasSoInvoice) return false;
+    if (filter.hasSoInvoice === "no" && r.HasSoInvoice) return false;
+    if (filter.hasDoInvoice === "yes" && !r.HasDoInvoice) return false;
+    if (filter.hasDoInvoice === "no" && r.HasDoInvoice) return false;
+    return true;
   });
 }
 
@@ -372,4 +465,46 @@ export async function deletePemesanan(salesOrderId: string): Promise<void> {
     await removeSalesOrderFromJadwal(current.jadwalId, salesOrderId);
   }
   await softDeleteSalesOrder(salesOrderId);
+}
+
+export interface SalesReturnDetailLine {
+  Name: string;
+  Qty: number;
+  Unit: string;
+  Price: number;
+  Amount: number;
+}
+
+export interface SalesReturnDetail {
+  SalesReturnID: string;
+  VoucherNo: string;
+  TransDate: string | Date;
+  CustomerName: string;
+  Amount: number;
+  Lines: SalesReturnDetailLine[];
+}
+
+// Backs the "Lihat SR" dialog on /mkesindo/pemesanan — an internal,
+// authenticated view (unlike SI's /mkesindo/invoice/[token] public page),
+// so this takes the raw internal SalesReturnID directly rather than a
+// signed/public token.
+export async function getSalesReturnDetail(salesReturnId: string): Promise<SalesReturnDetail | null> {
+  const pool = await getPool();
+  const headerResult = await pool
+    .request()
+    .input("id", sql.VarChar(16), salesReturnId).query(`
+      SELECT sr.SalesReturnID, sr.VoucherNo, sr.TransDate, sr.Amount, ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName
+      FROM SalesReturn sr
+      LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = sr.BusinessPartnerID
+      WHERE sr.SalesReturnID = @id AND sr.IsDeleted = 0
+    `);
+  const header = headerResult.recordset[0] as Omit<SalesReturnDetail, "Lines"> | undefined;
+  if (!header) return null;
+
+  const linesResult = await pool
+    .request()
+    .input("id", sql.VarChar(16), salesReturnId)
+    .query(`SELECT Name, Qty, Unit, Price, Amount FROM SalesReturnDetail WHERE SalesReturnID = @id`);
+
+  return { ...header, Lines: linesResult.recordset as SalesReturnDetailLine[] };
 }

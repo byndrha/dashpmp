@@ -6,6 +6,12 @@ export interface DashboardSearchParams {
   to?: string;
   wilayah?: string;
   cfDate?: string;
+  // /mkesindo/pemesanan's document-completeness filters (PemesananDocFilter)
+  // — "yes" | "no", absent means no filter on that dimension. Kept on this
+  // shared bag rather than a page-specific type, same as cfDate above.
+  hasDO?: string;
+  hasSoInvoice?: string;
+  hasDoInvoice?: string;
 }
 
 export function resolveFilter(searchParams: DashboardSearchParams): DateRangeFilter {

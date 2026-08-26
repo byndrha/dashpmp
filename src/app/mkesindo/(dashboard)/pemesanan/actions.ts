@@ -6,9 +6,11 @@ import {
   reschedulePemesanan,
   deletePemesanan,
   updateSalesOrderTransDate,
+  getSalesReturnDetail,
   type CreatePemesananInput,
   type CreatePemesananResult,
   type ReschedulePemesananInput,
+  type SalesReturnDetail,
 } from "@/lib/queries/pemesanan";
 import { getCurrentAssignment, type CurrentAssignment } from "@/lib/queries/pengiriman-jadwal";
 import { createTakeAwayPemesanan, type CreateTakeAwayInput, type CreateTakeAwayResult } from "@/lib/queries/takeaway";
@@ -89,4 +91,10 @@ export async function updateSalesOrderQtyAction(
     revalidatePath("/mkesindo/pemesanan");
     revalidatePath("/mkesindo/delivery");
   });
+}
+
+// Read-only — no revalidatePath needed, fetched on demand when "Lihat SR"
+// opens, same shape as getCurrentAssignmentAction above.
+export async function getSalesReturnDetailAction(salesReturnId: string): Promise<SalesReturnDetail | null> {
+  return getSalesReturnDetail(salesReturnId);
 }
