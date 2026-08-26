@@ -87,7 +87,13 @@ export default async function PemasaranPage() {
   const kpiRows = isPlainMarketing ? allKpiRows.filter((r) => r.UserID === session.user.id) : allKpiRows;
   const performanceForSession =
     isPlainMarketing && performance
-      ? { ...performance, cells: performance.cells.filter((c) => c.MarketingUserID === session.user.id) }
+      ? {
+          ...performance,
+          cells: performance.cells.filter((c) => c.MarketingUserID === session.user.id),
+          visitLogFilledByMarketing: Object.fromEntries(
+            Object.entries(performance.visitLogFilledByMarketing).filter(([userId]) => userId === session.user.id)
+          ),
+        }
       : performance;
   const mitraAssignmentsForSession = isPlainMarketing
     ? mitraAssignments.filter((a) => a.MarketingUserID === session.user.id)

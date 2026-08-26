@@ -41,6 +41,7 @@ interface AggregatedRow {
   DailyQty: number[];
   TotalQty: number;
   PctAchievement: number | null;
+  hasLogByDay: boolean[];
 }
 
 function formatQty(value: number): string {
@@ -72,21 +73,33 @@ function DayCell({
   positiveDelta,
   negativeDelta,
   isPast,
+  hasLog,
 }: {
   dateISO: string;
   qty: number;
   positiveDelta: number;
   negativeDelta: number;
   isPast: boolean;
+  // True when this Marketing filled in at least one mitra's visit log
+  // (Log Kunjungan, per-mitra popover below) on this date — a real,
+  // non-blank HasilKunjungan, not just an empty saved row (see
+  // getMarketingPerformance's visitLogFilledByMarketing comment).
+  hasLog: boolean;
 }) {
   const hasDelta = isPast && (positiveDelta > 0 || negativeDelta < 0);
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r text-[10px] tabular-nums",
+        "relative flex shrink-0 flex-col items-center justify-center gap-0.5 border-r text-[10px] tabular-nums",
         DAY_COL_CLASS
       )}
     >
+      {hasLog && (
+        <span
+          title="Log kunjungan sudah diisi"
+          className="absolute top-1 right-1 size-1.5 rounded-full bg-green-500"
+        />
+      )}
       <span className="text-[9px] text-muted-foreground/60">{formatDayMonth(dateISO)}</span>
       <span className="font-semibold">{isPast ? formatQty(qty) : "-"}</span>
       {hasDelta ? (
@@ -447,6 +460,7 @@ function MarketingCard({
               positiveDelta={i > 0 ? dailyDelta.positive[i] : 0}
               negativeDelta={i > 0 ? dailyDelta.negative[i] : 0}
               isPast={dateISO <= todayISO}
+              hasLog={row.hasLogByDay[i] ?? false}
             />
           ))}
         </div>
@@ -592,7 +606,7 @@ export function MarketingPerformancePanel({
   mitraAssignments: MarketingMitraAssignment[];
   initialTrendBundle: MarketingTrendBundle | null;
 }) {
-  const { cells, periodDays, rangeStartISO, todayISO, mitraDailyQty, allMitraByMarketing } = data;
+  const { cells, periodDays, rangeStartISO, todayISO, mitraDailyQty, allMitraByMarketing, visitLogFilledByMarketing } = data;
   const [wilayahFilter, setWilayahFilter] = useState(ALL);
   const [kecamatanFilter, setKecamatanFilter] = useState(ALL);
   const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
@@ -701,10 +715,11 @@ export function MarketingPerformancePanel({
           DailyQty: entry.DailyQty,
           TotalQty: totalQty,
           PctAchievement: targetPeriode ? (totalQty / targetPeriode) * 100 : null,
+          hasLogByDay: visitLogFilledByMarketing[entry.MarketingUserID] ?? new Array(periodDays).fill(false),
         };
       })
       .sort((a, b) => b.TotalQty - a.TotalQty);
-  }, [filteredCells, periodDays]);
+  }, [filteredCells, periodDays, visitLogFilledByMarketing]);
 
   const totalPerDate = useMemo(() => {
     const totals = new Array(periodDays).fill(0);

@@ -59,6 +59,10 @@ export interface MarketingPerformanceData {
   // collapse — sorted by highest Capacity first at the call site, same as
   // mitraPrioritas.
   allMitraByMarketing: Record<string, MarketingScopeAllMitra[]>;
+  // Per-day "did this Marketing fill in at least one mitra's visit log that
+  // date" — backs the green-dot indicator on their aggregate row in Kinerja
+  // Marketing. Same periodDays-length array shape as DailyQty.
+  visitLogFilledByMarketing: Record<string, boolean[]>;
 }
 
 // Kantong here counts a 5KG bag as half a kantong — same KANTONG_QTY_EXPR
@@ -114,7 +118,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   // priority override (resolveResponsibleMarketing) can be pulled into its
   // overriding Marketing's bucket individually, without dragging the rest of
   // its Wilayah/Kecamatan along with it.
-  const [dailyResult, mitraResult] = await Promise.all([
+  const [dailyResult, mitraResult, visitLogResult] = await Promise.all([
     pool
       .request()
       .input("rangeStart", sql.Date, rangeStart)
@@ -145,6 +149,19 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       FROM BusinessPartner
       WHERE ISNULL(IsDeleted, 0) = 0
     `),
+    // "Filled" means a real, non-blank HasilKunjungan — saveMarketingVisitLog
+    // upserts a row even when the textarea was left empty (trimmed to null),
+    // so a row's mere existence isn't enough; see its own comment.
+    pool
+      .request()
+      .input("rangeStart", sql.Date, rangeStart)
+      .input("rangeEnd", sql.Date, rangeEnd)
+      .query(`
+        SELECT DISTINCT BusinessPartnerID, LogDate
+        FROM DashboardMarketingVisitLog
+        WHERE LogDate >= @rangeStart AND LogDate < @rangeEnd
+          AND HasilKunjungan IS NOT NULL AND LTRIM(RTRIM(HasilKunjungan)) <> ''
+      `),
   ]);
 
   const marketingByName = new Map(marketingUsers.map((u) => [u.Nama, u]));
@@ -230,6 +247,22 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     if (mitraDailyQty[r.BusinessPartnerID]) mitraDailyQty[r.BusinessPartnerID][dayIndex] += r.QtyKantong;
   }
 
+  // Same resolvedMarketingByMitra map the daily-qty pass above already
+  // built — one extra in-memory bucketing pass over a small result set
+  // (distinct BusinessPartnerID+LogDate pairs only), not a second
+  // per-mitra resolution.
+  const visitLogFilledByMarketing: Record<string, boolean[]> = {};
+  for (const userId of new Set(resolvedMarketingByMitra.values())) {
+    visitLogFilledByMarketing[userId] = new Array(periodDays).fill(false);
+  }
+  for (const r of visitLogResult.recordset as { BusinessPartnerID: string; LogDate: string }[]) {
+    const marketingUserId = resolvedMarketingByMitra.get(r.BusinessPartnerID);
+    if (!marketingUserId) continue;
+    const dayIndex = Math.round((new Date(r.LogDate).getTime() - rangeStart.getTime()) / 86400000);
+    if (dayIndex < 0 || dayIndex >= periodDays) continue;
+    visitLogFilledByMarketing[marketingUserId][dayIndex] = true;
+  }
+
   return {
     periodDays,
     rangeStartISO: rangeStart.toISOString().slice(0, 10),
@@ -237,5 +270,6 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     cells: [...cells.values()],
     mitraDailyQty,
     allMitraByMarketing: Object.fromEntries(allMitraByMarketing),
+    visitLogFilledByMarketing,
   };
 }
