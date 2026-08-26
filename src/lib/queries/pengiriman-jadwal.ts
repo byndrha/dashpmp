@@ -8,7 +8,7 @@ import { estimateTravelMinutes, estimateTripMinutes, haversineKm, type LatLng } 
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { enqueuePrintJob } from "@/lib/queries/print-queue";
-import { getBusinessDateISO, getNaiveWibTransDate } from "@/lib/business-date";
+import { getBusinessDateISO, getNaiveWibTransDate, naiveWibToUtcInstant, utcInstantToWibDisplay } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
@@ -926,9 +926,17 @@ async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrd
     SELECT MAX(TransDate) AS MaxTransDate FROM SalesOrder WHERE SalesOrderID IN (${placeholders.join(",")})
   `);
   const maxTransDate = (result.recordset[0]?.MaxTransDate as Date | null) ?? null;
-  if (maxTransDate && jamJadwal < maxTransDate) {
+  if (!maxTransDate) return;
+  // maxTransDate (SalesOrder.TransDate) is a "naive WIB" value (see
+  // getNaiveWibTransDate's comment) while jamJadwal is a genuine true-UTC
+  // instant (see combineDateAndTime's comment on this whole convention
+  // split, confirmed live 2026-08-27) — compare them on the same true-UTC
+  // scale, and display jamJadwal back in WIB terms so the error message
+  // doesn't show its raw (misleadingly 7-hours-off) UTC components.
+  const maxTransDateUtc = naiveWibToUtcInstant(maxTransDate);
+  if (jamJadwal < maxTransDateUtc) {
     throw new AppError(
-      `Waktu pengiriman (${formatDate(jamJadwal)} ${formatTime(jamJadwal)}) tidak boleh sebelum waktu pemesanan SO terkait (${formatDate(maxTransDate)} ${formatTime(maxTransDate)}).`
+      `Waktu pengiriman (${formatDate(utcInstantToWibDisplay(jamJadwal))} ${formatTime(utcInstantToWibDisplay(jamJadwal))}) tidak boleh sebelum waktu pemesanan SO terkait (${formatDate(maxTransDate)} ${formatTime(maxTransDate)}).`
     );
   }
 }
@@ -945,12 +953,17 @@ async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrd
 // jamJadwal — fixing the stale order time instead of working around it.
 async function overwriteOrderTimeIfAfter(pool: sql.ConnectionPool, salesOrderIds: string[], jamJadwal: Date): Promise<void> {
   if (salesOrderIds.length === 0) return;
+  // jamJadwal is true-UTC while TransDate is naive-WIB (see
+  // assertJamJadwalNotBeforeOrders's comment) — convert before writing/
+  // comparing, or this silently reintroduces the same 7-hour mismatch into
+  // TransDate that getNaiveWibTransDate was written to fix.
+  const naiveWibJamJadwal = utcInstantToWibDisplay(jamJadwal);
   const request = pool.request();
   const placeholders = salesOrderIds.map((id, i) => {
     request.input(`so${i}`, sql.VarChar(16), id);
     return `@so${i}`;
   });
-  request.input("jamJadwal", sql.DateTime, jamJadwal);
+  request.input("jamJadwal", sql.DateTime, naiveWibJamJadwal);
   await request.query(`
     UPDATE SalesOrder SET TransDate = @jamJadwal, ModifiedDate = GETDATE()
     WHERE SalesOrderID IN (${placeholders.join(",")}) AND TransDate > @jamJadwal

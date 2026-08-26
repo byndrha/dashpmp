@@ -112,6 +112,30 @@ export function getNaiveWibTransDate(now: Date = new Date()): Date {
   );
 }
 
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000; // WIB has no DST — a fixed UTC+7.
+
+// Converts a "naive WIB" Date (raw UTC-component values ARE the WIB
+// wall-clock value — see combineDateAndTime's comment on this whole
+// convention split) into the true-UTC instant it actually represents.
+// Needed wherever a naive-WIB value (SalesOrder/DeliveryOrder/SalesInvoice/
+// SalesReturn.TransDate) is compared against a true-UTC value
+// (DashboardPengirimanJadwal.JamJadwal) — confirmed live 2026-08-27 these
+// two column families use DIFFERENT conventions, so comparing their raw
+// Date values directly is off by 7 hours (see assertJamJadwalNotBeforeOrders
+// in pengiriman-jadwal.ts).
+export function naiveWibToUtcInstant(naiveWib: Date): Date {
+  return new Date(naiveWib.getTime() - WIB_OFFSET_MS);
+}
+
+// Inverse of naiveWibToUtcInstant: shifts a true-UTC instant so its raw
+// UTC-component values equal the WIB wall-clock time — lets a true-UTC
+// value (e.g. JamJadwal) be displayed via formatDate/formatTime, which
+// (like every other "naive WIB" display in this app) read a Date's raw UTC
+// components directly rather than doing real timezone conversion.
+export function utcInstantToWibDisplay(trueUtc: Date): Date {
+  return new Date(trueUtc.getTime() + WIB_OFFSET_MS);
+}
+
 // Calendar-safe (UTC math, no local-timezone drift) day shift on a plain
 // "YYYY-MM-DD" string.
 export function shiftDateISO(dateISO: string, deltaDays: number): string {
@@ -121,13 +145,38 @@ export function shiftDateISO(dateISO: string, deltaDays: number): string {
     .slice(0, 10);
 }
 
+// Combines a "YYYY-MM-DD" date string and an "HH:mm" (or "HH:mm:ss") time
+// string into a Date whose raw UTC-component values directly equal the
+// typed values — i.e. NOT what `new Date(\`${date}T${time}:00\`)` does.
+// That string form has no timezone suffix, so JS parses it as LOCAL time of
+// whatever environment runs the code: in a browser set to WIB (true for
+// virtually every real user of this dashboard), typing "27/08/2026 02:00"
+// silently becomes an internal instant of "2026-08-26T19:00:00Z" — 7 hours
+// earlier than what was typed. Use this ONLY for values that follow the
+// "naive WIB" convention — confirmed live 2026-08-27 to be exactly
+// SalesOrder/DeliveryOrder/SalesInvoice/SalesReturn.TransDate (via
+// getNaiveWibTransDate) and nothing else: DashboardPengirimanJadwal.JamJadwal
+// was confirmed the SAME day to be a genuinely correct true-UTC instant
+// instead (its stored values sit within minutes/~1h of CreatedDate's own
+// true-UTC clock, not offset by WIB's +7h) — for JamJadwal, the OLD
+// `new Date(\`${date}T${time}:00\`)` browser-local-timezone parse is what's
+// actually correct (see resolveBusinessDateTime below, which intentionally
+// does NOT use this helper).
+export function combineDateAndTime(dateISO: string, timeHHMM: string): Date {
+  const [year, month, day] = dateISO.split("-").map(Number);
+  const [hour, minute] = timeHHMM.split(":").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+}
+
 // Resolves a business date (the 14:00 WIB rollover label — see getBusinessDate)
 // plus a literal HH:MM wall-clock time into the actual calendar-date Date it
 // falls on. Business date "28 Juli" spans 27 Juli 14:00 through 28 Juli
 // 13:59, so a hour >= ROLLOVER_HOUR under that label means the day BEFORE
 // it, not the label's own date. Used by the Papan Pengiriman timeline
-// (pengiriman-board.tsx / route-validation-dialog.tsx), whose businessDate
-// prop is this same rollover-based label, not a plain calendar date.
+// (pengiriman-board.tsx / route-validation-dialog.tsx) to build JamJadwal —
+// a true-UTC value (see combineDateAndTime's comment) — so this
+// deliberately parses via the browser's own local (WIB) timezone rather
+// than combineDateAndTime's naive-WIB passthrough.
 export function resolveBusinessDateTime(businessDate: string, timeHHMM: string): Date {
   const hour = Number(timeHHMM.slice(0, 2));
   const calendarDate = hour >= ROLLOVER_HOUR ? shiftDateISO(businessDate, -1) : businessDate;

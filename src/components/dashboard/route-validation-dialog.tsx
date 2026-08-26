@@ -432,9 +432,7 @@ export function RouteValidationDialog({
     // the old time-only sync, this keeps the real calendar date too (see
     // the `date` state's own comment).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDate(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    );
+    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
     setTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
     setDriverId(jadwal.SalesmanID ?? "");
   }, [jadwal]);

@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { updateSalesOrderTransDateAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
+import { combineDateAndTime } from "@/lib/business-date";
 
 export interface UbahTanggalPemesananTarget {
   salesOrderId: string;
@@ -54,9 +55,14 @@ export function UbahTanggalPemesananDialog({
     const d = new Date(target.transDate);
     // Syncs the editable date/time fields to the newly-opened target — not
     // derivable from render since these are user-editable picker fields.
+    // UTC getters, not local: target.transDate is a "naive WIB" value (see
+    // getNaiveWibTransDate) whose raw UTC-component values ARE the WIB
+    // value directly — local getters would re-interpret it through the
+    // browser's own OS timezone (WIB for virtually every real user here),
+    // shifting the displayed date/time by a further 7 hours.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
-    setTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+    setDate(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`);
+    setTime(`${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`);
     setError(null);
   }, [target]);
 
@@ -67,7 +73,7 @@ export function UbahTanggalPemesananDialog({
     const targetId = target.salesOrderId;
     setError(null);
     startTransition(async () => {
-      const result = await updateSalesOrderTransDateAction(targetId, new Date(`${date}T${time}:00`));
+      const result = await updateSalesOrderTransDateAction(targetId, combineDateAndTime(date, time));
       if (targetIdRef.current !== targetId) return;
       if (!result.success) {
         setError(result.error);
