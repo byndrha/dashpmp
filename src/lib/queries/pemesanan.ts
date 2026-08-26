@@ -149,6 +149,36 @@ async function loadAllInvoiceIdsByKey(pool: sql.ConnectionPool, keyExpr: string)
   return map;
 }
 
+// Every /mkesindo/pemesanan page load pays loadAllInvoiceIdsByKey's ~10s
+// combined cost (both keys), even though a newly-issued invoice showing up
+// a little late is harmless here (it's just which rows get a "Lihat SI"
+// button) — so the two Maps are cached process-wide for a short TTL instead
+// of re-querying on every request. In-flight promise (not just the
+// resolved Maps) is what's cached, so concurrent requests during a refresh
+// share one query pair instead of each starting their own (a "thundering
+// herd" on this app's single long-lived Node process — see Coolify
+// deployment note in [[mkesindo-route-restructuring]] — not a distributed
+// cache, deliberately: this process is the only reader/writer of it).
+const INVOICE_ID_CACHE_TTL_MS = 45_000;
+let invoiceIdCache: { promise: Promise<[Map<string, string>, Map<string, string>]>; loadedAt: number } | null = null;
+
+function getInvoiceIdMaps(pool: sql.ConnectionPool): Promise<[Map<string, string>, Map<string, string>]> {
+  if (invoiceIdCache && Date.now() - invoiceIdCache.loadedAt < INVOICE_ID_CACHE_TTL_MS) {
+    return invoiceIdCache.promise;
+  }
+  const promise = Promise.all([
+    loadAllInvoiceIdsByKey(pool, "SalesOrderID"),
+    loadAllInvoiceIdsByKey(pool, "REPLACE(DeliveryOrderID, '''', '')"),
+  ]);
+  invoiceIdCache = { promise, loadedAt: Date.now() };
+  // A failed load must not poison the cache for the next 45s — clear it so
+  // the next call retries instead of rethrowing the same stale error.
+  promise.catch(() => {
+    if (invoiceIdCache?.promise === promise) invoiceIdCache = null;
+  });
+  return promise;
+}
+
 // Lists Sales Orders from every source (Pemesanan module, Pengajuan-approval
 // auto-creation, manual desktop-ERP entry) with a resolved scheduling
 // status — a linked, non-deleted DashboardPengirimanJadwal's own Status
@@ -217,13 +247,11 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
   // SQL Server's plan for the whole query to 245s+/timeout the moment a
   // column from those joins is actually selected, most likely from a bad
   // plan interaction with the OUTER APPLYs already above. Looking it up in
-  // two completely separate query/round-trips instead (loadAllInvoiceIdsByKey
-  // below) keeps that join out of this query's plan entirely — see
-  // SalesOrderListRow.InvoiceToken for which Status values can have one.
-  const [soMap, doMap] = await Promise.all([
-    loadAllInvoiceIdsByKey(pool, "SalesOrderID"),
-    loadAllInvoiceIdsByKey(pool, "REPLACE(DeliveryOrderID, '''', '')"),
-  ]);
+  // two completely separate, cached query/round-trips instead
+  // (getInvoiceIdMaps above) keeps that join out of this query's plan
+  // entirely — see SalesOrderListRow.InvoiceToken for which Status values
+  // can have one.
+  const [soMap, doMap] = await getInvoiceIdMaps(pool);
 
   return rows.map((r) => {
     const { DeliveryOrderID, ...rest } = r;
