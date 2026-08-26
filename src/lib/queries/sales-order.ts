@@ -159,7 +159,11 @@ export interface CreateSalesOrderManualInput {
   deliveryDateTime: Date;
   // '0127' for TakeAway (see PARTNER_TYPE_CASE in aging.ts and
   // lib/queries/takeaway.ts) — omitted (stored as '') for the normal
-  // scheduled-delivery flow, matching every existing SO row's SalesmanID.
+  // scheduled-delivery flow, since the driver usually isn't picked until
+  // the Jadwal step right after this SO is created. Not the final value in
+  // that case: syncSalesOrderSalesman (pengiriman-jadwal.ts) fills it in
+  // moments later once a driver is set on the Jadwal — see its comment for
+  // why (desktop ERP reads Salesman off SalesOrder, not DeliveryOrder).
   salesmanId?: string;
 }
 
