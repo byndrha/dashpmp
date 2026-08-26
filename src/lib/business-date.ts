@@ -71,6 +71,47 @@ export function getWibTimeHHmm(now: Date = new Date()): string {
   return formatter.format(now);
 }
 
+// The value every SO/DO/SI/SR this dashboard creates should store as
+// TransDate — the WIB business-date (14:00 rollover, see getBusinessDate:
+// a transaction entered at 22:00 WIB is dated the NEXT calendar day) paired
+// with the real WIB wall-clock time-of-day (full precision, not rolled).
+// Explicit request (2026-08-27): before this, every such write used
+// GETDATE() directly, which is this server's own true-UTC clock — for the
+// 7 hours/day between 17:00-23:59 UTC (00:00-06:59 WIB) that stored a
+// calendar date ONE DAY EARLIER than the WIB business-date convention every
+// desktop-ERP-authored TransDate already follows, live-confirmed against
+// ~12,000 existing dashboard-authored rows carrying that same mismatch.
+// This fixes new writes only — the ~12,000 already-affected historical
+// rows are deliberately left as-is (explicit decision, not an oversight:
+// some may already be reconciled in accounting reports run against the
+// old, wrong dates).
+//
+// Built via Date.UTC(...) component construction, never string-parsed —
+// same reasoning as monthBoundary's own comment: a Date built any other way
+// risks the host process's own OS timezone silently shifting what actually
+// reaches SQL Server as a DATETIME parameter.
+export function getNaiveWibTransDate(now: Date = new Date()): Date {
+  const businessDate = getBusinessDate(now);
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: WIB_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(now).map((p) => [p.type, p.value]));
+  return new Date(
+    Date.UTC(
+      businessDate.getUTCFullYear(),
+      businessDate.getUTCMonth(),
+      businessDate.getUTCDate(),
+      Number(parts.hour) % 24,
+      Number(parts.minute),
+      Number(parts.second)
+    )
+  );
+}
+
 // Calendar-safe (UTC math, no local-timezone drift) day shift on a plain
 // "YYYY-MM-DD" string.
 export function shiftDateISO(dateISO: string, deltaDays: number): string {

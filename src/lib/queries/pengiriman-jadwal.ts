@@ -8,7 +8,7 @@ import { estimateTravelMinutes, estimateTripMinutes, haversineKm, type LatLng } 
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { enqueuePrintJob } from "@/lib/queries/print-queue";
-import { getBusinessDateISO } from "@/lib/business-date";
+import { getBusinessDateISO, getNaiveWibTransDate } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
@@ -2039,6 +2039,7 @@ export async function createSalesInvoiceForStop(
     // NOT be sufficient on its own to make the desktop ERP detect these
     // invoices — this is the second, independently-tested fix for that
     // same underlying symptom.
+    .input("transDate", sql.DateTime, getNaiveWibTransDate())
     .input("salesmanId", sql.VarChar(16), params.salesmanId).query(`
       INSERT INTO SalesInvoice
         (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -2048,7 +2049,7 @@ export async function createSalesInvoiceForStop(
          SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
          DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
       VALUES
-        (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
+        (@id, @voucherNo, '', '', @transDate, @dueDate, '', @termOfPaymentId,
          @soId, @doId, '', @bpId, @branchId, @departmentId,
          @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
          0, 0, GETDATE(), 1, '', 0, 1,
@@ -2294,6 +2295,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         .input("vehicleNo", sql.VarChar(50), doVehicleNo)
         .input("expeditionId", sql.VarChar(16), doExpeditionId)
         .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID)
+        .input("transDate", sql.DateTime, getNaiveWibTransDate())
         .input("dueDate", sql.DateTime, so.DueDate).query(`
           INSERT INTO DeliveryOrder
             (DeliveryOrderID, VoucherNo, TransDate, BranchID, DepartmentID, BusinessPartnerID, Notes, SalesOrderID,
@@ -2301,7 +2303,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
              BusinessPartnerLocationID, IsInvoiced, CurrencyID, Rate, StatusForm, SalesmanID, OverLimit,
              ReferenceNo, DueDate, ProjectID, AddressDeliveryID, IsDOReturn)
           VALUES
-            (@id, @voucherNo, GETDATE(), @branchId, @departmentId, @bpId, '', @soId,
+            (@id, @voucherNo, @transDate, @branchId, @departmentId, @bpId, '', @soId,
              0, @expeditionId, @vehicleNo, '', 0, GETDATE(), '', NULL,
              NULL, 0, '', 1, 1, @salesmanId, 0,
              '', @dueDate, '', '', NULL)
@@ -2786,13 +2788,14 @@ export async function confirmStopDelivery(
         .input("branchId", sql.VarChar(16), BRANCH_ID)
         .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
         .input("amount", sql.Decimal(23, 4), returAmount)
+        .input("transDate", sql.DateTime, getNaiveWibTransDate())
         .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID).query(`
           INSERT INTO SalesReturn
             (SalesReturnID, VoucherNo, TransDate, SalesOrderID, DeliveryOrderID, BusinessPartnerID, BranchID,
              DepartmentID, Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, Paid, Deposit, IsClosed,
              IsDeleted, ModifiedDate, SalesmanID, Rate, IsInvoiced)
           VALUES
-            (@id, @voucherNo, GETDATE(), @soId, @doId, @bpId, @branchId,
+            (@id, @voucherNo, @transDate, @soId, @doId, @bpId, @branchId,
              @departmentId, @amount, 0, 0, 0, 0, 0, @amount, 0, 0, 0,
              0, GETDATE(), @salesmanId, 1, 1)
         `);
@@ -2891,6 +2894,7 @@ export async function confirmStopDelivery(
         .input("branchId", sql.VarChar(16), BRANCH_ID)
         .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
         .input("amount", sql.Decimal(23, 4), totalAmount)
+        .input("transDate", sql.DateTime, getNaiveWibTransDate())
         .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID).query(`
           INSERT INTO SalesInvoice
             (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -2900,7 +2904,7 @@ export async function confirmStopDelivery(
              SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
              DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
           VALUES
-            (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
+            (@id, @voucherNo, '', '', @transDate, @dueDate, '', @termOfPaymentId,
              @soId, @doId, '', @bpId, @branchId, @departmentId,
              @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
              0, 0, GETDATE(), 1, '', 1, 1,

@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { createSalesOrderManual, softDeleteSalesOrder, type KantongVariant } from "@/lib/queries/sales-order";
 import { AppError } from "@/lib/action-result";
+import { getNaiveWibTransDate } from "@/lib/business-date";
 
 // '0127' ("Ambil Sendiri") — same code PARTNER_TYPE_CASE (aging.ts) already
 // treats as the TakeAway classification, confirmed against real historical
@@ -133,6 +134,7 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
       .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
       .input("soId", sql.VarChar(16), salesOrderId)
       .input("salesmanId", sql.VarChar(16), TAKEAWAY_SALESMAN_ID)
+      .input("transDate", sql.DateTime, getNaiveWibTransDate())
       .input("dueDate", sql.DateTime, so.DueDate).query(`
         INSERT INTO DeliveryOrder
           (DeliveryOrderID, VoucherNo, TransDate, BranchID, DepartmentID, BusinessPartnerID, Notes, SalesOrderID,
@@ -140,7 +142,7 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
            BusinessPartnerLocationID, IsInvoiced, CurrencyID, Rate, StatusForm, SalesmanID, OverLimit,
            ReferenceNo, DueDate, ProjectID, AddressDeliveryID, IsDOReturn)
         VALUES
-          (@id, @voucherNo, GETDATE(), @branchId, @departmentId, @bpId, '', @soId,
+          (@id, @voucherNo, @transDate, @branchId, @departmentId, @bpId, '', @soId,
            0, '', '', '', 0, GETDATE(), '', NULL,
            NULL, 0, '', 1, 1, @salesmanId, 0,
            '', @dueDate, '', '', NULL)
@@ -195,6 +197,7 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
       // fix/comment on createSalesInvoiceForStop in pengiriman-jadwal.ts
       // for the live-diff evidence behind changing it to 0 (false), matching
       // 98.6% of real desktop-ERP-created invoices regardless of paid status.
+      .input("transDate", sql.DateTime, getNaiveWibTransDate())
       .input("salesmanId", sql.VarChar(16), TAKEAWAY_SALESMAN_ID).query(`
         INSERT INTO SalesInvoice
           (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -204,7 +207,7 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
            SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
            DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
         VALUES
-          (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
+          (@id, @voucherNo, '', '', @transDate, @dueDate, '', @termOfPaymentId,
            @soId, @doId, '', @bpId, @branchId, @departmentId,
            @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
            0, 0, GETDATE(), 1, '', 0, 1,

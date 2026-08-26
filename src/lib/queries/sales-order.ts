@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { getPriceLevelOptions } from "@/lib/queries/mitra";
 import { AppError } from "@/lib/action-result";
+import { getNaiveWibTransDate } from "@/lib/business-date";
 
 // The only product a Pengajuan-approval Sales Order ever lines up — "Es Tube
 // Jual" (ItemID "019") is the same item getPriceLevelOptions() reads its
@@ -85,6 +86,7 @@ export async function createSalesOrderFromPengajuan(input: CreateSalesOrderInput
     .request()
     .input("id", sql.VarChar(16), salesOrderId)
     .input("voucherNo", sql.VarChar(128), voucherNo)
+    .input("transDate", sql.DateTime, getNaiveWibTransDate())
     .input("dueDate", sql.DateTime, input.dueDate)
     .input("branchId", sql.VarChar(16), SO_BRANCH_ID)
     .input("departmentId", sql.VarChar(16), SO_DEPARTMENT_ID)
@@ -100,7 +102,7 @@ export async function createSalesOrderFromPengajuan(input: CreateSalesOrderInput
          StatusForm, SalesmanID, ServiceTaxValue, ServiceTax, Visitor, PromotionID, Number, DiscRpBefore,
          ProjectID, BillOfQuantityID, NotesDelivery, DeliveryMemo, Status)
       VALUES
-        (@id, @voucherNo, '', GETDATE(), @dueDate, @branchId, @departmentId, @bpId,
+        (@id, @voucherNo, '', @transDate, @dueDate, @branchId, @departmentId, @bpId,
          @termOfPaymentId, @addressInvoice, '', '', '', 0, '',
          @amount, 0, 0, 0, 0, 0, @netto, 0, 0, GETDATE(), 1,
          1, '', 0, 0, 0, '', 1, 0,
@@ -225,6 +227,7 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
     .request()
     .input("id", sql.VarChar(16), salesOrderId)
     .input("voucherNo", sql.VarChar(128), voucherNo)
+    .input("transDate", sql.DateTime, getNaiveWibTransDate())
     .input("dueDate", sql.DateTime, input.deliveryDateTime)
     .input("branchId", sql.VarChar(16), SO_BRANCH_ID)
     .input("departmentId", sql.VarChar(16), SO_DEPARTMENT_ID)
@@ -241,7 +244,7 @@ export async function createSalesOrderManual(input: CreateSalesOrderManualInput)
          StatusForm, SalesmanID, ServiceTaxValue, ServiceTax, Visitor, PromotionID, Number, DiscRpBefore,
          ProjectID, BillOfQuantityID, NotesDelivery, DeliveryMemo, Status)
       VALUES
-        (@id, @voucherNo, '', GETDATE(), @dueDate, @branchId, @departmentId, @bpId,
+        (@id, @voucherNo, '', @transDate, @dueDate, @branchId, @departmentId, @bpId,
          @termOfPaymentId, @addressInvoice, '', '', '', 0, '',
          @amount, 0, 0, 0, 0, 0, @netto, 0, 0, GETDATE(), 1,
          1, @salesmanId, 0, 0, 0, '', 1, 0,
