@@ -36,6 +36,7 @@ import type {
   AvailableSalesOrder,
   ExternalDelivery,
   ArmadaConflictInfo,
+  TakeawayOrder,
 } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { ArmadaActivity, ArmadaActivityType } from "@/lib/armada-activity-types";
@@ -742,6 +743,55 @@ function ExternalDoCard({
   );
 }
 
+// A Takeaway (Ambil Sendiri) DeliveryOrder — no Armada, no Jadwal, so it
+// can't live inside any ArmadaRowBoard. Rendered as its own row above the
+// armada rows instead (see TakeawayRowBoard).
+function TakeawayCard({ order, hourWidth, top }: { order: TakeawayOrder; hourWidth: number; top: number }) {
+  return (
+    <div
+      title={`${order.VoucherNo} — ${order.CustomerName} (${order.TotalKantong} kantong) — Takeaway`}
+      className="absolute flex flex-col justify-center overflow-hidden rounded-md border border-primary/30 bg-primary/10 px-1.5 py-1 text-left text-[9px] text-primary"
+      style={{ left: hourFraction(order.TransDate) * hourWidth, top, width: EXTERNAL_DO_WIDTH, height: CARD_HEIGHT }}
+    >
+      <span className="truncate font-semibold">{order.CustomerName}</span>
+      <span className="truncate tabular-nums opacity-80">
+        {formatTime(order.TransDate)} &middot; {order.TotalKantong} kantong
+      </span>
+      <span className="truncate opacity-70">Takeaway</span>
+    </div>
+  );
+}
+
+function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrder[]; hourWidth: number; dayWidth: number }) {
+  const blocks = useMemo(
+    () => orders.map((o) => ({ key: o.DeliveryOrderID, left: hourFraction(o.TransDate) * hourWidth, width: EXTERNAL_DO_WIDTH })),
+    [orders, hourWidth]
+  );
+  const { laneOf, laneCount } = useMemo(() => assignLanes(blocks), [blocks]);
+  const rowHeight = ROW_TOP_PADDING + Math.max(1, laneCount) * (CARD_HEIGHT + CARD_GAP);
+
+  if (orders.length === 0) return null;
+
+  return (
+    <div className="flex items-stretch">
+      <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center bg-card py-1 pr-3 text-xs font-medium">Takeaway</div>
+      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
+        {Array.from({ length: 24 }, (_, h) => (
+          <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
+        ))}
+        {orders.map((o) => (
+          <TakeawayCard
+            key={o.DeliveryOrderID}
+            order={o}
+            hourWidth={hourWidth}
+            top={ROW_TOP_PADDING + (laneOf.get(o.DeliveryOrderID) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Mirrors whichever driver is on whatever's happening in the Armada row
 // directly above it, at the same horizontal position — not an independent
 // schedule, just a second read of the same Jadwal-derived segments with
@@ -1341,6 +1391,7 @@ export function PengirimanBoard({
   armada,
   jadwal,
   externalDeliveries,
+  takeawayOrders,
   activities,
   driverProfiles,
   drivers,
@@ -1352,6 +1403,7 @@ export function PengirimanBoard({
   armada: ArmadaRow[];
   jadwal: JadwalCardData[];
   externalDeliveries: ExternalDelivery[];
+  takeawayOrders: TakeawayOrder[];
   activities: ArmadaActivity[];
   driverProfiles: DriverProfileRow[];
   drivers: DriverOption[];
@@ -1677,6 +1729,7 @@ export function PengirimanBoard({
                     the tight spacing WITHIN one armada's block (timeline to
                     its own driver row, just a dashed border-t) is untouched. */}
                 <div className="flex flex-col divide-y gap-y-3">
+                  <TakeawayRowBoard orders={takeawayOrders} hourWidth={hourWidth} dayWidth={dayWidth} />
                   {sortedArmada.map((a) => (
                     <ArmadaRowBoard
                       key={a.ArmadaID}

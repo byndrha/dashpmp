@@ -114,11 +114,23 @@ export interface ExternalDelivery {
   TotalKantong: number;
 }
 
+// A Takeaway (Ambil Sendiri) DeliveryOrder — no Armada, no Jadwal, picked up
+// directly by the customer. Shown as its own timeline row above the armada
+// rows so it isn't invisible on the board just because it never went
+// through the Jadwal/Berangkat flow.
+export interface TakeawayOrder {
+  DeliveryOrderID: string;
+  VoucherNo: string;
+  CustomerName: string;
+  TransDate: string | Date;
+  TotalKantong: number;
+}
+
 export async function getPengirimanBoard(
   businessDate: string
-): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[]; externalDeliveries: ExternalDelivery[] }> {
+): Promise<{ armada: ArmadaRow[]; jadwal: JadwalCard[]; externalDeliveries: ExternalDelivery[]; takeawayOrders: TakeawayOrder[] }> {
   const pool = await getPool();
-  const [armada, jadwalResult, externalResult, pabrik] = await Promise.all([
+  const [armada, jadwalResult, externalResult, takeawayResult, pabrik] = await Promise.all([
     getArmadaList(),
     pool
       .request()
@@ -258,6 +270,31 @@ export async function getPengirimanBoard(
           )
         ORDER BY do_.TransDate
       `),
+    pool
+      .request()
+      .input("businessDate", sql.Date, businessDate).query(`
+        SELECT
+            do_.DeliveryOrderID,
+            do_.VoucherNo,
+            ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName,
+            do_.TransDate,
+            ISNULL(SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Qty / 2.0 ELSE dod.Qty END), 0) AS TotalKantong
+        FROM DeliveryOrder do_
+        LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
+        LEFT JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        WHERE do_.IsDeleted = 0
+          AND do_.SalesmanID = '0127'
+          -- TransDate here is written by this dashboard's own code
+          -- (takeaway.ts's GETDATE()), so it's true UTC — same
+          -- true-UTC + 14:00-WIB-rollover window as this function's own
+          -- Jadwal query above, NOT the plain-WIB-calendar-date match the
+          -- externalDeliveries query above uses (that one is specifically
+          -- for naive-WIB desktop-ERP-authored timestamps).
+          AND do_.TransDate >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+          AND do_.TransDate < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+        GROUP BY do_.DeliveryOrderID, do_.VoucherNo, bp.Name, do_.TransDate
+        ORDER BY do_.TransDate
+      `),
     getPabrikLocation(),
   ]);
 
@@ -273,7 +310,7 @@ export async function getPengirimanBoard(
     LokasiTerjauh: farthestByJadwalId.get(jr.JadwalID) ?? null,
   }));
 
-  return { armada, jadwal, externalDeliveries: externalResult.recordset };
+  return { armada, jadwal, externalDeliveries: externalResult.recordset, takeawayOrders: takeawayResult.recordset };
 }
 
 // Card status shown on the driver's own Tugas list — a 4th value not

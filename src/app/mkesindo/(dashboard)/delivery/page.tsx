@@ -64,6 +64,7 @@ export default async function DeliveryPage({
             armada={board.armada}
             jadwal={board.jadwal}
             externalDeliveries={board.externalDeliveries}
+            takeawayOrders={board.takeawayOrders}
             activities={activities}
             driverProfiles={driverProfiles}
             drivers={drivers}
