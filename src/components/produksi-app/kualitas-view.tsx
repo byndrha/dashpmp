@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LiveCameraCaptureField } from "@/components/dashboard/live-camera-capture-field";
 import { cn } from "@/lib/utils";
-import { getBusinessDateISO } from "@/lib/business-date";
+import { getBusinessDateISO, getWibTimeHHmm } from "@/lib/business-date";
 import { SHIFT_LABEL } from "@/lib/produksi-shift";
 import { STATUS_MESIN_LABEL } from "@/lib/produksi-mesin-status";
 import { createKualitasAction, getKualitasRiwayatAction } from "@/app/mkesindo/produksi/actions";
@@ -17,16 +17,18 @@ import type { MesinRow } from "@/lib/queries/produksi-mesin";
 
 const SHIFT_OPTIONS = [1, 2, 3] as const;
 
-// The 4-item pass/fail checklist agreed for this form's first version —
-// Kejernihan Es, Ukuran/Bentuk Sesuai, Bebas Kontaminasi/Benda Asing,
-// Kemasan Rapi. Each defaults to "Lolos" (true) rather than forcing every
-// entry to explicitly confirm all four every time — an operator only needs
-// to touch the items that actually failed.
+// Pass/fail checklist this form collects — was 4 items (Kejernihan Es,
+// Ukuran/Bentuk Sesuai, Bebas Kontaminasi/Benda Asing, Kemasan Rapi);
+// Kontaminasi and Kemasan were dropped from the form per explicit request
+// (kept on KualitasRow/the DB as always-true going forward — see
+// createKualitasAction — so historical entries that genuinely failed one of
+// those two stay meaningful, and every other query/consumer of those
+// columns keeps working unchanged). Each item defaults to "Lolos" (true)
+// rather than forcing every entry to explicitly confirm both every time —
+// an operator only needs to touch the items that actually failed.
 const CHECKLIST_ITEMS = [
   { key: "cekKejernihan", label: "Kejernihan Es" },
   { key: "cekUkuranBentuk", label: "Ukuran/Bentuk Sesuai" },
-  { key: "cekKontaminasi", label: "Bebas Kontaminasi/Benda Asing" },
-  { key: "cekKemasan", label: "Kemasan Rapi" },
 ] as const;
 
 type ChecklistKey = (typeof CHECKLIST_ITEMS)[number]["key"];
@@ -35,8 +37,6 @@ type ChecklistState = Record<ChecklistKey, boolean>;
 const DEFAULT_CHECKLIST: ChecklistState = {
   cekKejernihan: true,
   cekUkuranBentuk: true,
-  cekKontaminasi: true,
-  cekKemasan: true,
 };
 
 async function uploadFotoKualitas(file: File): Promise<string> {
@@ -60,11 +60,12 @@ function TambahKualitasDialog({
   onSaved: () => void;
 }) {
   const [tanggalLabel, setTanggalLabel] = useState(() => getBusinessDateISO());
-  const [waktu, setWaktu] = useState("");
+  // Defaults to the current WIB time — pure convenience, still editable.
+  const [waktu, setWaktu] = useState(() => getWibTimeHHmm());
   const [shift, setShift] = useState<string>("1");
   const [mesinId, setMesinId] = useState<string>("");
   const [checklist, setChecklist] = useState<ChecklistState>(DEFAULT_CHECKLIST);
-  const [suhuEs, setSuhuEs] = useState("");
+  const [diameterDalam, setDiameterDalam] = useState("");
   const [beratSampel, setBeratSampel] = useState("");
   const [catatan, setCatatan] = useState("");
   const [fotoPath, setFotoPath] = useState<string | null>(null);
@@ -74,11 +75,11 @@ function TambahKualitasDialog({
 
   function reset() {
     setTanggalLabel(getBusinessDateISO());
-    setWaktu("");
+    setWaktu(getWibTimeHHmm());
     setShift("1");
     setMesinId("");
     setChecklist(DEFAULT_CHECKLIST);
-    setSuhuEs("");
+    setDiameterDalam("");
     setBeratSampel("");
     setCatatan("");
     setFotoPath(null);
@@ -116,9 +117,11 @@ function TambahKualitasDialog({
         mesinId: Number(mesinId),
         cekKejernihan: checklist.cekKejernihan,
         cekUkuranBentuk: checklist.cekUkuranBentuk,
-        cekKontaminasi: checklist.cekKontaminasi,
-        cekKemasan: checklist.cekKemasan,
-        suhuEs: suhuEs.trim() ? Number(suhuEs) : null,
+        // Dropped from the form (see CHECKLIST_ITEMS's own comment) — always
+        // true going forward, historical entries keep their real value.
+        cekKontaminasi: true,
+        cekKemasan: true,
+        diameterDalam: diameterDalam.trim() ? Number(diameterDalam) : null,
         beratSampel: beratSampel.trim() ? Number(beratSampel) : null,
         catatan: catatan.trim() || null,
         fotoPath,
@@ -145,12 +148,20 @@ function TambahKualitasDialog({
           <DialogTitle>Tambah Pemeriksaan Kualitas</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-[1fr_98px] gap-0">
-            <div>
-              <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} />
+          {/* Tanggal narrower (100px, was the flexible 1fr column) / Jam
+              wider (now 1fr, was a fixed 98px) — explicit request, swapped
+              from the original layout. gap-y-3 (row gap only, gap-x stays 0
+              so Tanggal/Jam sit flush against each other) separates this
+              row from the Shift buttons below it, also per explicit
+              request. */}
+          <div className="grid grid-cols-[100px_1fr] gap-x-0 gap-y-3">
+            <div className="relative">
+              <Calendar className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} className="pl-8" />
             </div>
-            <div>
-              <Input type="time" value={waktu} onChange={(e) => setWaktu(e.target.value)} />
+            <div className="relative">
+              <Clock className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input type="time" value={waktu} onChange={(e) => setWaktu(e.target.value)} className="pl-8" />
             </div>
             <div className="col-span-2 grid grid-cols-3">
               {SHIFT_OPTIONS.map((s) => (
@@ -226,8 +237,14 @@ function TambahKualitasDialog({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Suhu Es (°C)</label>
-              <Input type="number" step="0.1" value={suhuEs} onChange={(e) => setSuhuEs(e.target.value)} className="mt-1" />
+              <label className="text-xs font-medium text-muted-foreground">Ukuran Diameter Dalam (cm)</label>
+              <Input
+                type="number"
+                step="0.1"
+                value={diameterDalam}
+                onChange={(e) => setDiameterDalam(e.target.value)}
+                className="mt-1"
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Berat Sampel (gram)</label>
@@ -311,10 +328,10 @@ function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
           </span>
         ))}
       </div>
-      {(kualitas.SuhuEs != null || kualitas.BeratSampel != null) && (
+      {(kualitas.DiameterDalamCm != null || kualitas.BeratSampel != null) && (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          {kualitas.SuhuEs != null && `Suhu: ${kualitas.SuhuEs}°C`}
-          {kualitas.SuhuEs != null && kualitas.BeratSampel != null && " • "}
+          {kualitas.DiameterDalamCm != null && `Diameter dalam: ${kualitas.DiameterDalamCm}cm`}
+          {kualitas.DiameterDalamCm != null && kualitas.BeratSampel != null && " • "}
           {kualitas.BeratSampel != null && `Berat sampel: ${kualitas.BeratSampel}g`}
         </p>
       )}
