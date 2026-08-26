@@ -1568,8 +1568,10 @@ export async function addSalesOrdersToJadwal(jadwalId: number, salesOrderIds: st
   const header = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
-    .query(`SELECT ArmadaID, Status, JamJadwal FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
-  const headerRow = header.recordset[0] as { ArmadaID: number; Status: JadwalStatus; JamJadwal: Date } | undefined;
+    .query(`SELECT ArmadaID, Status, JamJadwal, SalesmanID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const headerRow = header.recordset[0] as
+    | { ArmadaID: number; Status: JadwalStatus; JamJadwal: Date; SalesmanID: string | null }
+    | undefined;
   if (!headerRow) throw new AppError("Keberangkatan tidak ditemukan.");
   if (headerRow.Status !== "Draft") throw new AppError("Keberangkatan ini sudah berangkat, tidak bisa menambah SO.");
   await assertJamJadwalNotBeforeOrders(pool, salesOrderIds, headerRow.JamJadwal);
@@ -1595,6 +1597,13 @@ export async function addSalesOrdersToJadwal(jadwalId: number, salesOrderIds: st
         VALUES (@jadwalId, @soId, NULL, @urutan, 0)
       `);
   }
+
+  // This Jadwal may already have a driver (set by an earlier
+  // updateJadwalDriverTime call) before these SOs joined it — without this,
+  // the newly-added SOs would keep a blank SalesmanID even though this
+  // Jadwal's own DO/SI will later use the right one, same bug class as
+  // updateJadwalDriverTime's own fix (see syncSalesOrderSalesman).
+  await syncSalesOrderSalesman(pool, salesOrderIds, headerRow.SalesmanID);
 }
 
 // Persists a manual drag-and-drop stop reorder — dashboard-only bookkeeping,
@@ -1625,6 +1634,35 @@ export async function updateJadwalUrutan(jadwalId: number, orderedDetailIds: num
 // that one instead (see mergeJadwalInto) and the OTHER id comes back.
 // Callers that chain more calls onto jadwalId afterwards (handleBerangkat)
 // must use the returned id, not the one they passed in.
+// Keeps SalesOrder.SalesmanID in sync with the Jadwal that schedules it —
+// live-confirmed bug (MKE/SO/003911 and 84 other rows, 2026-08-26): the
+// desktop ERP reads Salesman off SalesOrder itself, not off the linked
+// DeliveryOrder (which DOES already get SalesmanID correctly, from
+// headerRow.SalesmanID at Selesai Muat), so a blank SalesOrder.SalesmanID
+// makes the ERP show no Salesman even though the dashboard's own Jadwal and
+// resulting DO both have the right driver. Always overwrites (not just when
+// blank) so a later driver reassignment on the same Draft Jadwal — allowed
+// by this function's own Status!=='Terbit' guard — updates the SO too,
+// matching what happens at Selesai Muat for the DO. No-ops on an empty id
+// list or a null/blank salesmanId (nothing to propagate).
+async function syncSalesOrderSalesman(
+  pool: sql.ConnectionPool,
+  salesOrderIds: string[],
+  salesmanId: string | null
+): Promise<void> {
+  if (salesOrderIds.length === 0 || !salesmanId) return;
+  const request = pool.request();
+  const placeholders = salesOrderIds.map((id, i) => {
+    request.input(`so${i}`, sql.VarChar(16), id);
+    return `@so${i}`;
+  });
+  request.input("salesmanId", sql.VarChar(16), salesmanId);
+  await request.query(`
+    UPDATE SalesOrder SET SalesmanID = @salesmanId, ModifiedDate = GETDATE()
+    WHERE SalesOrderID IN (${placeholders.join(",")})
+  `);
+}
+
 export async function updateJadwalDriverTime(
   jadwalId: number,
   input: { jamJadwal: Date; salesmanId: string | null },
@@ -1689,6 +1727,7 @@ export async function updateJadwalDriverTime(
     .input("jamJadwal", sql.DateTime, input.jamJadwal)
     .input("salesmanId", sql.VarChar(16), input.salesmanId)
     .query(`UPDATE DashboardPengirimanJadwal SET JamJadwal = @jamJadwal, SalesmanID = @salesmanId, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId`);
+  await syncSalesOrderSalesman(pool, bundledSalesOrderIds, input.salesmanId);
 
   return jadwalId;
 }
