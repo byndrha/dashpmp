@@ -178,16 +178,7 @@ function SortableStopRow({
           Terkendala
         </Badge>
       )}
-      {detail.InvoiceToken != null ? (
-        <button
-          type="button"
-          title="Lihat SI"
-          onClick={() => onOpenSi(detail)}
-          className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border"
-        >
-          <Printer className="size-3.5" />
-        </button>
-      ) : hasDeparted && detail.JamSelesai != null ? (
+      {hasDeparted && detail.JamSelesai != null ? (
         <button
           type="button"
           title="Lihat bukti pengiriman"
@@ -195,6 +186,15 @@ function SortableStopRow({
           className="shrink-0 rounded border border-transparent p-1 text-green-600 transition-colors hover:border-border hover:bg-green-600/10"
         >
           <CheckCircle2 className="size-4" />
+        </button>
+      ) : detail.InvoiceToken != null ? (
+        <button
+          type="button"
+          title="Lihat SI"
+          onClick={() => onOpenSi(detail)}
+          className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border"
+        >
+          <Printer className="size-3.5" />
         </button>
       ) : (
         <span className="size-6 shrink-0" />

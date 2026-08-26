@@ -103,8 +103,18 @@ export interface SalesOrderListRow {
   Qty5KG: number;
   Amount: number;
   Status: SalesOrderStatus;
-  // null until an SI has actually been issued for this order (Terbit
-  // orders always have one; Draft/Belum Dijadwalkan never do).
+  // null until an SI has actually been issued for this SalesOrderID (via
+  // either its SalesOrderID or its linked DeliveryOrderID). Belum
+  // Dijadwalkan is never non-null (live-confirmed: 0/64 in a 2026-08
+  // spot-check) since nothing has been created for it yet. Terbit is
+  // non-null except a rare few (~5/1406) — legacy/edge-case DOs invoiced
+  // outside this dashboard's own flow. Draft is often non-null too
+  // (~2511/2559 live) even though Draft's own trip hasn't been invoiced:
+  // Status here reflects this SO's MOST RECENT Jadwal link (see the
+  // OUTER APPLY above, ORDER BY JadwalDetailID DESC), which can be a
+  // newer Draft re-schedule of an SO that was already invoiced through an
+  // earlier, now-Terbit Jadwal — so Status and InvoiceToken are resolved
+  // independently and are not implied by each other.
   InvoiceToken: string | null;
 }
 
