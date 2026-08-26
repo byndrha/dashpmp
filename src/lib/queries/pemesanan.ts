@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { createSalesOrderManual, softDeleteSalesOrder, type KantongVariant } from "@/lib/queries/sales-order";
+import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import {
   createJadwalDraft,
   deleteJadwalDraft,
@@ -102,12 +103,40 @@ export interface SalesOrderListRow {
   Qty5KG: number;
   Amount: number;
   Status: SalesOrderStatus;
+  // null until an SI has actually been issued for this order (Terbit
+  // orders always have one; Draft/Belum Dijadwalkan never do).
+  InvoiceToken: string | null;
 }
 
 export interface SalesOrderListFilter {
   from: string;
   to: string;
   wilayah?: string;
+}
+
+// Aggregates MAX(SalesInvoiceID) by a match key across ALL of SalesInvoice
+// (200K+ rows), unfiltered by any caller-supplied id set. This looks
+// wasteful but is the fast path: filtering via `WHERE <keyExpr> IN (...)`
+// with a large id list was tried and confirmed live to make SQL Server pick
+// a nested-loop plan (probing the IN list against a table scan once per
+// value) that times out well past 40s for 1000+ ids — especially for the
+// DeliveryOrderID key, which needs a non-sargable REPLACE() to strip the
+// stored quote-wrapping. A single unfiltered hash-aggregate over the whole
+// table is a one-pass scan and was confirmed live to take under 3s either
+// way (~660ms by SalesOrderID, ~2.4s by the REPLACE'd DeliveryOrderID) —
+// the caller filters the resulting Map down to the ids it actually needs.
+async function loadAllInvoiceIdsByKey(pool: sql.ConnectionPool, keyExpr: string): Promise<Map<string, string>> {
+  const result = await pool.request().query(`
+    SELECT ${keyExpr} AS MatchKey, MAX(SalesInvoiceID) AS SalesInvoiceID
+    FROM SalesInvoice
+    WHERE IsDeleted = 0 AND ${keyExpr} IS NOT NULL
+    GROUP BY ${keyExpr}
+  `);
+  const map = new Map<string, string>();
+  for (const row of result.recordset as { MatchKey: string; SalesInvoiceID: string }[]) {
+    map.set(row.MatchKey, row.SalesInvoiceID);
+  }
+  return map;
 }
 
 // Lists Sales Orders from every source (Pemesanan module, Pengajuan-approval
@@ -141,7 +170,8 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
           WHEN j.Status IS NOT NULL THEN j.Status
           WHEN do_.DeliveryOrderID IS NOT NULL THEN 'Terbit'
           ELSE 'Belum Dijadwalkan'
-        END AS Status
+        END AS Status,
+        do_.DeliveryOrderID
     FROM SalesOrder so
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     LEFT JOIN (
@@ -168,7 +198,29 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
       ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
     ORDER BY so.TransDate DESC
   `);
-  return result.recordset;
+
+  const rows = result.recordset as (Omit<SalesOrderListRow, "InvoiceToken"> & { DeliveryOrderID: string | null })[];
+
+  // SalesInvoice has 200K+ rows and no index on SalesOrderID/DeliveryOrderID
+  // (only PK and TransDate). Joining it into the query above — even via
+  // pre-aggregated GROUP BY derived tables — was confirmed live to collapse
+  // SQL Server's plan for the whole query to 245s+/timeout the moment a
+  // column from those joins is actually selected, most likely from a bad
+  // plan interaction with the OUTER APPLYs already above. Looking it up in a
+  // completely separate query/round-trip, restricted to only the SO/DO ids
+  // that can possibly have an invoice (Terbit orders always have one; Draft/
+  // Belum Dijadwalkan never do — see SalesOrderListRow.InvoiceToken), keeps
+  // that join out of this query's plan entirely.
+  const [soMap, doMap] = await Promise.all([
+    loadAllInvoiceIdsByKey(pool, "SalesOrderID"),
+    loadAllInvoiceIdsByKey(pool, "REPLACE(DeliveryOrderID, '''', '')"),
+  ]);
+
+  return rows.map((r) => {
+    const { DeliveryOrderID, ...rest } = r;
+    const invoiceSalesInvoiceId = soMap.get(r.SalesOrderID) ?? (DeliveryOrderID ? doMap.get(DeliveryOrderID) : undefined);
+    return { ...rest, InvoiceToken: invoiceSalesInvoiceId ? encodeInvoiceToken(invoiceSalesInvoiceId) : null };
+  });
 }
 
 export interface ReschedulePemesananInput {

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, CalendarClock } from "lucide-react";
+import { Pencil, Trash2, CalendarClock, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,25 +81,36 @@ function PemesananRow({
         <p className="font-medium tabular-nums">{formatRupiah(row.Amount)}</p>
         <p className="text-xs tabular-nums text-muted-foreground">{formatKemasanQty(row.Qty10KG, row.Qty5KG)}</p>
       </div>
-      {canModify ? (
-        <div className="flex shrink-0 items-center gap-1">
-          <Button variant="ghost" size="icon" className="size-7" onClick={onEdit}>
-            <Pencil className="size-3.5" />
+      <div className="flex shrink-0 items-center gap-1">
+        {row.InvoiceToken && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title="Lihat SI"
+            render={<a href={`/mkesindo/invoice/${row.InvoiceToken}`} target="_blank" rel="noopener noreferrer" />}
+          >
+            <FileText className="size-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="size-7" disabled={pending} onClick={handleDelete}>
-            <Trash2 className="size-3.5 text-destructive" />
-          </Button>
-        </div>
-      ) : (
-        // Scheduling (Ubah Pemesanan) and delete are gone once Terbit — this
-        // is the one thing staff can still fix on a shipped order: a wrong
-        // TransDate (see UbahTanggalPemesananDialog's own comment).
-        <div className="flex shrink-0 items-center gap-1">
+        )}
+        {canModify ? (
+          <>
+            <Button variant="ghost" size="icon" className="size-7" onClick={onEdit}>
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="size-7" disabled={pending} onClick={handleDelete}>
+              <Trash2 className="size-3.5 text-destructive" />
+            </Button>
+          </>
+        ) : (
+          // Scheduling (Ubah Pemesanan) and delete are gone once Terbit —
+          // this is the one thing staff can still fix on a shipped order: a
+          // wrong TransDate (see UbahTanggalPemesananDialog's own comment).
           <Button variant="ghost" size="icon" className="size-7" onClick={onEditTransDate} title="Ubah tanggal pemesanan">
             <CalendarClock className="size-3.5" />
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
