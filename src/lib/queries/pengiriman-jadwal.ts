@@ -1951,6 +1951,18 @@ export async function createSalesInvoiceForStop(
     .input("branchId", sql.VarChar(16), BRANCH_ID)
     .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
     .input("amount", sql.Decimal(23, 4), totalAmount)
+    // IsAccountReceiveable (5th value on the "0, 0, GETDATE(), 1, '', 0, 1"
+    // VALUES line below — IsClosed, IsDeleted, ModifiedDate, Rate,
+    // CurrencyID, IsAccountReceiveable, StatusForm) was hardcoded to 1
+    // (true) — a live column-by-column diff (2026-08-26) against real
+    // desktop-ERP-created invoices found 98.6% of them (3869 of 3922
+    // sampled, including freshly-created still-UNPAID ones, ruling out
+    // "paid flips it" as an alternative explanation) use 0 (false) here
+    // regardless of paid status. The quote-wrapped DeliveryOrderID fix
+    // above was confirmed, by two live real-world tests the same day, to
+    // NOT be sufficient on its own to make the desktop ERP detect these
+    // invoices — this is the second, independently-tested fix for that
+    // same underlying symptom.
     .input("salesmanId", sql.VarChar(16), params.salesmanId).query(`
       INSERT INTO SalesInvoice
         (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -1963,7 +1975,7 @@ export async function createSalesInvoiceForStop(
         (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
          @soId, @doId, '', @bpId, @branchId, @departmentId,
          @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
-         0, 0, GETDATE(), 1, '', 1, 1,
+         0, 0, GETDATE(), 1, '', 0, 1,
          @salesmanId, 0, 0, 0, 0, '', 0,
          0, '', 0, '')
     `);

@@ -190,6 +190,11 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
       .input("branchId", sql.VarChar(16), BRANCH_ID)
       .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
       .input("amount", sql.Decimal(23, 4), totalAmount)
+      // IsAccountReceiveable (5th value on the "0, 0, GETDATE(), 1, '', 0, 1"
+      // VALUES line below) was hardcoded to 1 (true) — see the identical
+      // fix/comment on createSalesInvoiceForStop in pengiriman-jadwal.ts
+      // for the live-diff evidence behind changing it to 0 (false), matching
+      // 98.6% of real desktop-ERP-created invoices regardless of paid status.
       .input("salesmanId", sql.VarChar(16), TAKEAWAY_SALESMAN_ID).query(`
         INSERT INTO SalesInvoice
           (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -202,7 +207,7 @@ export async function createTakeAwayPemesanan(input: CreateTakeAwayInput): Promi
           (@id, @voucherNo, '', '', GETDATE(), @dueDate, '', @termOfPaymentId,
            @soId, @doId, '', @bpId, @branchId, @departmentId,
            @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
-           0, 0, GETDATE(), 1, '', 1, 1,
+           0, 0, GETDATE(), 1, '', 0, 1,
            @salesmanId, 0, 0, 0, 0, '', 0,
            0, '', 0, '')
       `);
