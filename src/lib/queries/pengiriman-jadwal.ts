@@ -1980,6 +1980,24 @@ export async function createSalesInvoiceForStop(
          0, '', 0, '')
     `);
 
+  // The desktop ERP's own "has this DeliveryOrder been invoiced" check
+  // reads these two flags directly rather than reverse-matching
+  // SalesInvoice.DeliveryOrderID — confirmed live (2026-08-26) by comparing
+  // a month-old, proven-detected-in-ERP SO/DO/SI chain against two
+  // same-day broken chains (one where dashpmp created the SO+DO+SI fresh,
+  // one where staff created the SO+DO manually in ERP and dashpmp only
+  // added the SI): both broken chains had IsInvoiced=0 on their SO and DO
+  // even after this function ran, while the working reference had 1 on
+  // both. This function never flipped them — createTakeAwayPemesanan
+  // (takeaway.ts) already does this correctly for its own chain, and this
+  // mirrors that exact pattern.
+  await new sql.Request(transaction)
+    .input("soId", sql.VarChar(16), params.salesOrderId)
+    .query(`UPDATE SalesOrder SET IsInvoiced = 1, ModifiedDate = GETDATE() WHERE SalesOrderID = @soId`);
+  await new sql.Request(transaction)
+    .input("doId", sql.VarChar(16), params.deliveryOrderId)
+    .query(`UPDATE DeliveryOrder SET IsInvoiced = 1, ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
+
   for (const sod of soDetails) {
     const siDetailId = await nextSalesInvoiceDetailId(transaction);
     await new sql.Request(transaction)
