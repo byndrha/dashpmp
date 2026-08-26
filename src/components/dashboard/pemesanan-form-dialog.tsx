@@ -297,8 +297,8 @@ export function PemesananFormDialog({
               <span>
                 <span className="font-medium">TakeAway (Ambil Sendiri)</span>
                 <span className="block text-xs text-muted-foreground">
-                  Mitra ambil sendiri di pabrik — SO, DO, dan Invoice langsung terbit tanpa armada/driver, lalu PDF
-                  Surat Jalan langsung dibuka untuk dicetak.
+                  Mitra ambil sendiri di pabrik — SO, DO, dan Invoice langsung terbit tanpa armada/driver, lalu SI
+                  langsung masuk ke antrian cetak thermal.
                 </span>
               </span>
             </label>
