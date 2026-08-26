@@ -31,7 +31,12 @@ const data = IBM_Plex_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
   return {
-    title: settings.title,
+    // `default` is the bare title (any page/layout that doesn't set its
+    // own `title`, e.g. this root itself) — unchanged behavior. `template`
+    // lets any descendant page/layout set just its own short title (e.g.
+    // "Pemasaran") and have it composed as "Pemasaran | <settings.title>"
+    // in the browser tab, without needing to know or repeat the site name.
+    title: { default: settings.title, template: `%s | ${settings.title}` },
     description: settings.description ?? undefined,
     icons: { icon: settings.faviconPath || "/brand/default-favicon.png" },
     openGraph: {

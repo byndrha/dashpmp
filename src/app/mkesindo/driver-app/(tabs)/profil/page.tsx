@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requireDriver } from "@/lib/require-access";
 import { getDriverProfiles } from "@/lib/queries/driver-profile";
 import { DriverTabShell } from "@/components/driver-app/driver-tab-shell";
+
+export const metadata: Metadata = { title: "Profil" };
 
 export default async function DriverProfilPage() {
   const session = await requireDriver();

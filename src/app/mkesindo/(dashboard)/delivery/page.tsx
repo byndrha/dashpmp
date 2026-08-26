@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Printer } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
@@ -15,6 +16,8 @@ import { OpenDeliveriesPanel } from "@/components/dashboard/open-deliveries-pane
 import { PengirimanBoard } from "@/components/dashboard/pengiriman-board";
 import { PengirimanTabs } from "@/components/dashboard/pengiriman-tabs";
 import { KendalaReportPanel } from "@/components/dashboard/kendala-report-panel";
+
+export const metadata: Metadata = { title: "Pengiriman" };
 
 export default async function DeliveryPage({
   searchParams,

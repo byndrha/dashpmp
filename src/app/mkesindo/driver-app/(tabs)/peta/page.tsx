@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { requireDriver } from "@/lib/require-access";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { getDriverJadwalList, getDriverJadwalStops } from "@/lib/queries/pengiriman-jadwal";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { DriverTabShell } from "@/components/driver-app/driver-tab-shell";
+
+export const metadata: Metadata = { title: "Peta" };
 
 export default async function DriverPetaPage() {
   const session = await requireDriver();

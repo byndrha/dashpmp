@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { requireProduksi } from "@/lib/require-access";
 import { getKualitasRiwayat } from "@/lib/queries/produksi-kualitas";
 import { getMesinList } from "@/lib/queries/produksi-mesin";
 import { getUserById } from "@/lib/queries/akun";
 import { ProduksiTabShell } from "@/components/produksi-app/produksi-tab-shell";
+
+export const metadata: Metadata = { title: "Kualitas" };
 
 export default async function ProduksiAppKualitasPage() {
   const session = await requireProduksi();

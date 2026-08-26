@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireSatpam } from "@/lib/require-access";
 import { getJadwalDetail } from "@/lib/queries/pengiriman-jadwal";
 import { getPool, sql } from "@/lib/db";
 import { LiveInspeksiClient } from "@/components/satpam-app/live-inspeksi-client";
 import type { VehicleCheckTipe } from "@/lib/vehicle-check-types";
+
+export const metadata: Metadata = { title: "Inspeksi" };
 
 export default async function LiveInspeksiPage({
   params,

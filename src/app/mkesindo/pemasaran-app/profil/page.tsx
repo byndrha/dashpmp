@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Settings, KeyRound } from "lucide-react";
 import { requireMarketing } from "@/lib/require-access";
 import { getUserById } from "@/lib/queries/akun";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignOutButton } from "@/components/pemasaran-app/sign-out-button";
+
+export const metadata: Metadata = { title: "Profil" };
 
 export default async function ProfilPage() {
   const session = await requireMarketing();

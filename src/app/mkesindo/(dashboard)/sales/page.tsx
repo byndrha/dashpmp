@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getSalesTrend, getSalesTrendMonthly } from "@/lib/queries/sales";
 import { getSalesOverview } from "@/lib/queries/sales-overview";
@@ -11,6 +12,8 @@ import { RevenueTargetPanel } from "@/components/dashboard/revenue-target-panel"
 import { SalesTrendChart } from "@/components/charts/sales-trend-chart";
 import { SalesTrendChartMonthly } from "@/components/charts/sales-trend-chart-monthly";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+
+export const metadata: Metadata = { title: "Penjualan" };
 
 export default async function SalesPage({
   searchParams,

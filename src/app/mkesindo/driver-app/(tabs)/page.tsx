@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { requireDriver } from "@/lib/require-access";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { getDriverJadwalList } from "@/lib/queries/pengiriman-jadwal";
 import { DriverTabShell } from "@/components/driver-app/driver-tab-shell";
+
+export const metadata: Metadata = { title: "Tugas" };
 
 export default async function DriverTugasPage() {
   const session = await requireDriver();

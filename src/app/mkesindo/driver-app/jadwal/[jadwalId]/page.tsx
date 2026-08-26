@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireDriver } from "@/lib/require-access";
 import { getDriverJadwalStops, getJadwalHeader, assertOwnsJadwal } from "@/lib/queries/pengiriman-jadwal";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { StopFlow } from "@/components/driver-app/stop-flow";
+
+export const metadata: Metadata = { title: "Detail Jadwal" };
 
 export default async function DriverJadwalPage({ params }: { params: Promise<{ jadwalId: string }> }) {
   const { jadwalId } = await params;

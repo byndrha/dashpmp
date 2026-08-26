@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PackageSearch } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PMPUTRA_MODULES } from "@/lib/pmputra-modules";
+
+export async function generateMetadata({ params }: { params: Promise<{ modul: string }> }): Promise<Metadata> {
+  const { modul } = await params;
+  return { title: PMPUTRA_MODULES[modul] ?? "Modul" };
+}
 
 export default async function PmputraModulePage({ params }: { params: Promise<{ modul: string }> }) {
   const { modul } = await params;

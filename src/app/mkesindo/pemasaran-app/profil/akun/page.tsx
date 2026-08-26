@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { requireMarketing } from "@/lib/require-access";
 import { getUserById } from "@/lib/queries/akun";
 import { notFound } from "next/navigation";
 import { PengaturanAkunForm } from "@/components/pemasaran-app/pengaturan-akun-form";
+
+export const metadata: Metadata = { title: "Pengaturan Akun" };
 
 export default async function PengaturanAkunPage() {
   const session = await requireMarketing();

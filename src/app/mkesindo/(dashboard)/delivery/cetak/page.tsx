@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getPrintQueueHistory } from "@/lib/queries/print-queue";
 import { getPrintFormatSettings } from "@/lib/queries/print-format-settings";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { PrintManagementView } from "@/components/dashboard/print-management-view";
+
+export const metadata: Metadata = { title: "Manajemen Cetak" };
 
 export default async function PrintManagementPage() {
   await requireModuleAccess("delivery");

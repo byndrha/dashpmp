@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requirePmpersada, canAccessAllPT } from "@/lib/require-access";
 import { getBakListAction, getRekMapAction, getKonfigurasiAction, getRiwayatBatchAction, getAuditLogAction } from "@/app/pmpersada/(dashboard)/produksi/actions";
 import { ProduksiDashboardClient } from "@/components/produksi-pmpersada/produksi-dashboard-client";
+
+export const metadata: Metadata = { title: "Produksi" };
 
 export default async function PmpersadaProduksiPage() {
   const session = await requirePmpersada();

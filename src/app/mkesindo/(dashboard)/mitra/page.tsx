@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getMitraList, getTermOfPaymentOptions, getPriceLevelOptions } from "@/lib/queries/mitra";
@@ -6,6 +7,8 @@ import { getMarketingUsers, getDriverUserOptions, getMarketingMitraAssignments }
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { MitraList } from "@/components/dashboard/mitra-list";
 import { MitraLocationsPanel } from "@/components/dashboard/mitra-locations-panel";
+
+export const metadata: Metadata = { title: "Mitra" };
 
 export default async function MitraPage() {
   await requireModuleAccess("mitra");

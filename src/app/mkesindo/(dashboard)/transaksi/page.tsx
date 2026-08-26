@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getSalesOrderCards } from "@/lib/queries/sales-cards";
 import { getMitraDOMonthly } from "@/lib/queries/mitra-do";
@@ -7,6 +8,8 @@ import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { TransaksiPanels } from "@/components/dashboard/transaksi-panels";
+
+export const metadata: Metadata = { title: "Transaksi" };
 
 export default async function TransaksiPage({
   searchParams,

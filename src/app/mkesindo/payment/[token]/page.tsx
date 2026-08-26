@@ -3,9 +3,11 @@ import Link from "next/link";
 import { getPaymentByToken } from "@/lib/queries/payment-public";
 import { formatDate, formatRupiah } from "@/lib/format";
 
-// Public, unguessable-token page — same posture as /invoice/[token].
+// Public, unguessable-token page — same posture as /invoice/[token],
+// including the `absolute` title bypassing the site-wide template (see its
+// comment for why).
 export const metadata: Metadata = {
-  title: "Dokumen Pembayaran",
+  title: { absolute: "Dokumen Pembayaran" },
   robots: { index: false, follow: false },
 };
 

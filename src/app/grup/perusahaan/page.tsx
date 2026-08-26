@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireGrupAccess } from "@/lib/require-access";
 import { listPerusahaan } from "@/lib/queries/perusahaan";
 import { listPerusahaanDirektori } from "@/lib/queries/akun";
@@ -5,6 +6,8 @@ import { listAllKoneksi } from "@/lib/queries/perusahaan-koneksi";
 import { listAllGDriveKoneksi } from "@/lib/queries/perusahaan-gdrive";
 import { getChartOfAccountOptions } from "@/lib/queries/chart-of-account";
 import { PerusahaanList } from "@/components/dashboard/perusahaan-list";
+
+export const metadata: Metadata = { title: "Perusahaan" };
 
 export default async function PerusahaanPage() {
   await requireGrupAccess();

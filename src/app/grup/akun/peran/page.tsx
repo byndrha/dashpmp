@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireGrupAccess } from "@/lib/require-access";
 import { listAllPeran, getAllPeranIzin, listPerusahaanDirektori } from "@/lib/queries/akun";
 import { PeranEditor } from "@/components/dashboard/peran-editor";
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = { title: "Peran & Otoritas" };
 
 export default async function PeranPage() {
   await requireGrupAccess();

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireProduksiView } from "@/lib/require-access";
 import { getWarehouseMap, getRiwayatProduksi } from "@/lib/queries/produksi-warehouse";
 import { getMesinList } from "@/lib/queries/produksi-mesin";
@@ -6,6 +7,8 @@ import { ProduksiHeader } from "@/components/produksi/produksi-header";
 import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-desktop";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
 import { RiwayatProduksi } from "@/components/produksi/riwayat-produksi";
+
+export const metadata: Metadata = { title: "Produksi" };
 
 export default async function ProduksiPage() {
   const session = await requireProduksiView();

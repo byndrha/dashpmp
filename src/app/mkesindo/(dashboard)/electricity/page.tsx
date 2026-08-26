@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Zap, Percent, Hash } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getElectricityCosts } from "@/lib/queries/electricity";
@@ -14,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, formatPercent, formatRupiah } from "@/lib/format";
+
+export const metadata: Metadata = { title: "Biaya Listrik" };
 
 export default async function ElectricityPage({
   searchParams,

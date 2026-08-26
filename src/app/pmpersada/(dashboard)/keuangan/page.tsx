@@ -1,4 +1,5 @@
 // src/app/pmpersada/keuangan/page.tsx
+import type { Metadata } from "next";
 import { Wallet, TrendingUp, Landmark, PiggyBank } from "lucide-react";
 import { getPnLPmpersada, getBEPPmpersada } from "@/lib/queries/pnl-pmpersada";
 import {
@@ -32,6 +33,8 @@ import {
   getHPPBersihPmpersadaAction,
   setCostBehaviorPmpersadaAction,
 } from "@/app/pmpersada/(dashboard)/keuangan/actions";
+
+export const metadata: Metadata = { title: "Keuangan" };
 
 export default async function PmpersadaKeuanganPage({
   searchParams,

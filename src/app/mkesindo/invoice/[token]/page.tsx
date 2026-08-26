@@ -8,9 +8,11 @@ import { QrPaymentPanel } from "@/components/dashboard/qr-payment-panel";
 
 // Public, unguessable-token page — no reason for a search engine to index
 // it, and the generic title avoids leaking the internal dashboard's name
-// on an otherwise customer-facing tab.
+// on an otherwise customer-facing tab. `absolute` (not a plain string)
+// deliberately bypasses the root layout's "%s | <site title>" template —
+// this page's whole point is to NOT show that name.
 export const metadata: Metadata = {
-  title: "Tagihan",
+  title: { absolute: "Tagihan" },
   robots: { index: false, follow: false },
 };
 

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getPengajuanList, getMarketingKPI, APPROVER_ROLE_IDS, MARKETING_ROLE_ID } from "@/lib/queries/mitra-pengajuan";
 import { getPriceLevelOptions } from "@/lib/queries/mitra";
@@ -31,6 +32,8 @@ async function loadTrendBundle(canView: boolean, sessionUserId: string, isPlainM
     showCombined: false,
   };
 }
+
+export const metadata: Metadata = { title: "Pemasaran" };
 
 export default async function PemasaranPage() {
   const session = await requireModuleAccess("pemasaran");

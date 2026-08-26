@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { getSalesOrderList } from "@/lib/queries/pemesanan";
@@ -14,6 +15,8 @@ import { PemesananList } from "@/components/dashboard/pemesanan-list";
 function docFilterValue(value: string | undefined): "yes" | "no" | undefined {
   return value === "yes" || value === "no" ? value : undefined;
 }
+
+export const metadata: Metadata = { title: "Pemesanan" };
 
 export default async function PemesananPage({
   searchParams,

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Building2, Wallet, Receipt, ShoppingCart } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -5,6 +6,8 @@ import { getSalesForDay } from "@/lib/queries/sales-overview";
 import { getPiutangStatusOverview } from "@/lib/queries/aging";
 import { getBusinessDate } from "@/lib/business-date";
 import { formatRupiah } from "@/lib/format";
+
+export const metadata: Metadata = { title: "Ringkasan Perusahaan" };
 
 export default async function GrupPage() {
   // Reuses the same lightweight KPI queries Beranda already computes —

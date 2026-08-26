@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Wallet, TrendingUp, Landmark, PiggyBank } from "lucide-react";
 import { getPnL, getBEP } from "@/lib/queries/pnl";
 import { getCOADetail } from "@/lib/queries/keuangan-detail";
@@ -26,6 +27,8 @@ import { CashFlowHarianHistoryPanel } from "@/components/dashboard/cash-flow-har
 import { HPPBersihPanel } from "@/components/dashboard/hpp-bersih-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercent, formatDate } from "@/lib/format";
+
+export const metadata: Metadata = { title: "Keuangan" };
 
 export default async function PnLPage({
   searchParams,

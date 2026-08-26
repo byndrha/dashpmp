@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requirePmpersadaProduksi } from "@/lib/require-access";
 import { getBakList, getRekMap } from "@/lib/queries/produksi-bak-pmpersada";
 import { ProduksiAppTabShell } from "@/components/produksi-pmpersada-app/produksi-app-tab-shell";
+
+export const metadata: Metadata = { title: "Denah" };
 
 export default async function ProduksiAppDenahPage() {
   const session = await requirePmpersadaProduksi();

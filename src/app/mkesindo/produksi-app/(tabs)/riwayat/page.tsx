@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { requireProduksi } from "@/lib/require-access";
 import { getDraftJadwalRiwayatForProduksi } from "@/lib/queries/produksi-muatan";
 import { getUserById } from "@/lib/queries/akun";
 import { ProduksiTabShell } from "@/components/produksi-app/produksi-tab-shell";
+
+export const metadata: Metadata = { title: "Riwayat" };
 
 export default async function ProduksiAppRiwayatPage() {
   const session = await requireProduksi();

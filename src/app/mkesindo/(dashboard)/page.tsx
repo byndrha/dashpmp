@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Wallet, Receipt, Package, LineChart, Zap, ShoppingCart, ArrowRight, Truck } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
@@ -23,6 +24,8 @@ const MODULE_LINKS = [
   { href: "/mkesindo/electricity", label: "Biaya Listrik", desc: "Biaya listrik vs pendapatan", icon: Zap },
   { href: "/mkesindo/delivery", label: "Pengiriman", desc: "Delivery order terbuka", icon: Truck },
 ];
+
+export const metadata: Metadata = { title: "Beranda" };
 
 export default async function BerandaPage() {
   const session = await requireModuleAccess("beranda");

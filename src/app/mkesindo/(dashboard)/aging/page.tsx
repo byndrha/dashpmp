@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Receipt, AlertTriangle, Flame, Wallet, HandCoins, Percent } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getAgingReceivables } from "@/lib/queries/aging";
@@ -17,6 +18,8 @@ import { CollectionPriorityTable } from "@/components/dashboard/collection-prior
 import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
 import { formatRupiah, formatPercentPoints } from "@/lib/format";
 import type { PiutangStatus } from "@/lib/queries/aging";
+
+export const metadata: Metadata = { title: "Piutang" };
 
 export default async function AgingPage({
   searchParams,

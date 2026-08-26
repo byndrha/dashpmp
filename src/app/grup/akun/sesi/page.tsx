@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requireGrupAccess } from "@/lib/require-access";
 import { listActiveSesi } from "@/lib/queries/akun";
 import { AkunSesiList } from "@/components/dashboard/akun-sesi-list";
+
+export const metadata: Metadata = { title: "Sesi Login Aktif" };
 
 export default async function AkunSesiPage() {
   await requireGrupAccess();
