@@ -508,3 +508,55 @@ export async function getSalesReturnDetail(salesReturnId: string): Promise<Sales
 
   return { ...header, Lines: linesResult.recordset as SalesReturnDetailLine[] };
 }
+
+export interface SalesReturnListRow {
+  SalesReturnID: string;
+  VoucherNo: string;
+  TransDate: string | Date;
+  CustomerName: string;
+  Wilayah: string;
+  Amount: number;
+  // The DO this return was recorded against — SalesReturn.DeliveryOrderID
+  // is reliable (unlike SalesOrderID, live-confirmed NULL on every
+  // observed row — see getSalesOrderList's own comment), so the join goes
+  // through DeliveryOrder, not SalesOrder, for traceability context.
+  DeliveryOrderVoucherNo: string | null;
+}
+
+export interface SalesReturnListFilter {
+  from: string;
+  to: string;
+  wilayah?: string;
+}
+
+// Backs the "Pesanan Kembali" tab on /mkesindo/pemesanan — every MKE/SR/
+// transaction in range, dashboard- and desktop-ERP-originated alike (both
+// write to the same SalesReturn table). Same date-bounded convention as
+// getSalesOrderList — SalesReturn is a much smaller table (~9.6K rows) with
+// no equivalent large-table join to worry about, so this is a plain
+// filtered query, not the unfiltered-aggregate-then-filter-in-JS pattern
+// that table required.
+export async function getSalesReturnList(filter: SalesReturnListFilter): Promise<SalesReturnListRow[]> {
+  const pool = await getPool();
+  const request = pool.request().input("from", sql.Date, filter.from).input("to", sql.Date, filter.to);
+  if (filter.wilayah) request.input("wilayah", sql.VarChar(128), filter.wilayah);
+
+  const result = await request.query(`
+    SELECT
+        sr.SalesReturnID,
+        sr.VoucherNo,
+        sr.TransDate,
+        ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName,
+        ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
+        sr.Amount,
+        do_.VoucherNo AS DeliveryOrderVoucherNo
+    FROM SalesReturn sr
+    LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = sr.BusinessPartnerID
+    LEFT JOIN DeliveryOrder do_ ON do_.DeliveryOrderID = sr.DeliveryOrderID
+    WHERE sr.IsDeleted = 0
+      AND sr.TransDate >= @from AND sr.TransDate < @to
+      ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
+    ORDER BY sr.TransDate DESC
+  `);
+  return result.recordset as SalesReturnListRow[];
+}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getBusinessDateISO } from "@/lib/business-date";
-import { getSalesOrderList, type SalesOrderListFilter } from "@/lib/queries/pemesanan";
+import { getSalesOrderList, getSalesReturnList, type SalesOrderListFilter, type SalesReturnListFilter } from "@/lib/queries/pemesanan";
 import { getMitraList, getPriceLevelOptions } from "@/lib/queries/mitra";
 import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 import { getDriverOptions, type DriverOption } from "@/lib/queries/delivery";
@@ -12,6 +12,8 @@ import { FilterBar } from "@/components/dashboard/filter-bar";
 import { PemesananDocFilter } from "@/components/dashboard/pemesanan-doc-filter";
 import { PemesananFormDialog } from "@/components/dashboard/pemesanan-form-dialog";
 import { PemesananList } from "@/components/dashboard/pemesanan-list";
+import { PesananKembaliList } from "@/components/dashboard/pesanan-kembali-list";
+import { PemesananTabs } from "@/components/dashboard/pemesanan-tabs";
 
 function docFilterValue(value: string | undefined): "yes" | "no" | undefined {
   return value === "yes" || value === "no" ? value : undefined;
@@ -36,6 +38,15 @@ async function PemesananListSection({
 }) {
   const rows = await getSalesOrderList(filter);
   return <PemesananList rows={rows} armadaList={armadaList} drivers={drivers} />;
+}
+
+// "Pesanan Kembali" tab's own Suspense-streamed content — SalesReturn is a
+// much smaller table than SalesInvoice (see getSalesReturnList's own
+// comment), but this still gets its own boundary so a slow "Pesanan" tab
+// load never blocks this one, and vice versa.
+async function PesananKembaliSection({ filter }: { filter: SalesReturnListFilter }) {
+  const rows = await getSalesReturnList(filter);
+  return <PesananKembaliList rows={rows} />;
 }
 
 // Same visual language as piutang-payments-panel.tsx's isPending bar
@@ -74,6 +85,11 @@ export default async function PemesananPage({
     hasSoInvoice: docFilterValue(params.hasSoInvoice),
     hasDoInvoice: docFilterValue(params.hasDoInvoice),
   };
+  const srListFilter: SalesReturnListFilter = {
+    from: filter.startDate,
+    to: filter.endDate,
+    wilayah: filter.wilayah,
+  };
 
   const [mitraList, armadaList, drivers, priceLevels10kg, priceLevels5kg, wilayahList] = await Promise.all([
     getMitraList(),
@@ -91,22 +107,33 @@ export default async function PemesananPage({
         <FilterBar wilayahList={wilayahList} />
       </div>
 
-      <PemesananDocFilter />
+      <PemesananTabs
+        pesananPanel={
+          <div className="flex flex-col gap-4">
+            <PemesananDocFilter />
 
-      <div className="flex justify-end">
-        <PemesananFormDialog
-          mitraList={mitraList}
-          armadaList={armadaList}
-          drivers={drivers}
-          priceLevels10kg={priceLevels10kg}
-          priceLevels5kg={priceLevels5kg}
-          todayISO={todayISO}
-        />
-      </div>
+            <div className="flex justify-end">
+              <PemesananFormDialog
+                mitraList={mitraList}
+                armadaList={armadaList}
+                drivers={drivers}
+                priceLevels10kg={priceLevels10kg}
+                priceLevels5kg={priceLevels5kg}
+                todayISO={todayISO}
+              />
+            </div>
 
-      <Suspense fallback={<PemesananListLoadingBar />}>
-        <PemesananListSection filter={soListFilter} armadaList={armadaList} drivers={drivers} />
-      </Suspense>
+            <Suspense fallback={<PemesananListLoadingBar />}>
+              <PemesananListSection filter={soListFilter} armadaList={armadaList} drivers={drivers} />
+            </Suspense>
+          </div>
+        }
+        kembaliPanel={
+          <Suspense fallback={<PemesananListLoadingBar />}>
+            <PesananKembaliSection filter={srListFilter} />
+          </Suspense>
+        }
+      />
     </div>
   );
 }
