@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +30,7 @@ import type { KantongVariant } from "@/lib/queries/sales-order";
 import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import { createPemesananAction, createTakeAwayPemesananAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 import { checkArmadaConflictAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
+import { triggerPrintQueuePollNow } from "@/components/dashboard/print-queue-poller";
 
 // Sentinel for "not chosen yet" — Select items can't use an empty string as
 // a value (established convention, see the "all" sentinel in
@@ -146,10 +148,8 @@ export function PemesananFormDialog({
           setError(result.error);
           return;
         }
-        // "langsung Cetak PDF" — opens the freshly-issued DO's print
-        // endpoint right away, inside this same click's user-gesture
-        // window so the browser doesn't treat it as an unrequested popup.
-        window.open(`/api/mkesindo/print/delivery-order/${result.data.deliveryOrderId}`, "_blank");
+        toast.success("SI ditambahkan ke antrian cetak.");
+        triggerPrintQueuePollNow();
         handleOpenChange(false);
       });
       return;

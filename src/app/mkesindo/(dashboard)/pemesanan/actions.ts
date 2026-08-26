@@ -18,6 +18,8 @@ import {
   type EditableSalesOrderQty,
   type KantongVariant,
 } from "@/lib/queries/sales-order";
+import { enqueuePrintJob } from "@/lib/queries/print-queue";
+import { getPool } from "@/lib/db";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
 export async function createPemesananAction(input: CreatePemesananInput): Promise<ActionResult<CreatePemesananResult>> {
@@ -40,6 +42,8 @@ export async function deletePemesananAction(salesOrderId: string): Promise<Actio
 export async function createTakeAwayPemesananAction(input: CreateTakeAwayInput): Promise<ActionResult<CreateTakeAwayResult>> {
   return runAction(async () => {
     const result = await createTakeAwayPemesanan(input);
+    const pool = await getPool();
+    await enqueuePrintJob(pool, result.salesInvoiceId, null, false);
     revalidatePath("/mkesindo/pemesanan");
     revalidatePath("/mkesindo/delivery");
     return result;

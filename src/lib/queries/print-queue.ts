@@ -13,7 +13,7 @@ type PoolOrTransaction = sql.ConnectionPool | sql.Transaction;
 export async function enqueuePrintJob(
   pool: PoolOrTransaction,
   salesInvoiceId: string,
-  jadwalId: number,
+  jadwalId: number | null,
   isManual: boolean
 ): Promise<void> {
   await pool
@@ -29,7 +29,7 @@ export async function enqueuePrintJob(
 export interface PendingPrintJob {
   printQueueId: number;
   salesInvoiceId: string;
-  jadwalId: number;
+  jadwalId: number | null;
 }
 
 export interface PrintQueueHistoryRow {
@@ -39,7 +39,7 @@ export interface PrintQueueHistoryRow {
   mitraName: string | null;
   armadaNama: string | null;
   vehicleNo: string | null;
-  jadwalId: number;
+  jadwalId: number | null;
   jamJadwal: Date | null;
   status: "Pending" | "Printing" | "Dicetak" | "Error" | "Dibatalkan";
   isManual: boolean;
@@ -63,7 +63,7 @@ export async function getPendingPrintQueue(): Promise<PendingPrintJob[]> {
     WHERE Status = 'Pending'
     ORDER BY COALESCE(SortOrder, PrintQueueID)
   `);
-  return (result.recordset as { PrintQueueID: number; SalesInvoiceID: string; JadwalID: number }[]).map((r) => ({
+  return (result.recordset as { PrintQueueID: number; SalesInvoiceID: string; JadwalID: number | null }[]).map((r) => ({
     printQueueId: r.PrintQueueID,
     salesInvoiceId: r.SalesInvoiceID,
     jadwalId: r.JadwalID,
@@ -226,7 +226,7 @@ export async function getPrintQueueHistory(filters: {
       MitraName: string | null;
       ArmadaNama: string | null;
       VehicleNo: string | null;
-      JadwalID: number;
+      JadwalID: number | null;
       JamJadwal: Date | null;
       Status: PrintQueueHistoryRow["status"];
       IsManual: boolean;
@@ -296,7 +296,7 @@ export async function retryPrintQueueJob(printQueueId: number): Promise<void> {
     .request()
     .input("id", sql.Int, printQueueId)
     .query(`SELECT SalesInvoiceID, JadwalID FROM DashboardPrintQueue WHERE PrintQueueID = @id`);
-  const row = result.recordset[0] as { SalesInvoiceID: string; JadwalID: number } | undefined;
+  const row = result.recordset[0] as { SalesInvoiceID: string; JadwalID: number | null } | undefined;
   if (!row) throw new AppError("Job cetak ini tidak ditemukan.");
   await enqueuePrintJob(pool, row.SalesInvoiceID, row.JadwalID, true);
 }
