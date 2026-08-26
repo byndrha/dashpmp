@@ -49,7 +49,9 @@ function InspectionCard({ card }: { card: SatpamInspectionCard }) {
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between border-t pt-2">
-          <span className="text-sm text-muted-foreground">{formatKemasanQty(card.qty10KG, card.qty5KG)}</span>
+          <span className="text-sm text-muted-foreground">
+            {card.tipe === "DATANG" ? formatKemasanQty(card.qtyRetur10KG, card.qtyRetur5KG) : formatKemasanQty(card.qty10KG, card.qty5KG)}
+          </span>
           {ready ? (
             <Button
               size="sm"

@@ -19,6 +19,13 @@ export interface SatpamInspectionCard {
   jamEstimasiKedatangan: string | null;
   qty10KG: number;
   qty5KG: number;
+  // Only meaningful/non-zero for tipe === "DATANG" — aggregated from
+  // DashboardPengirimanStopDeliveryItem.QtyRetur across every stop on this
+  // Jadwal (the quantity that came back on the armada, not what it left
+  // with). BERANGKAT cards always get 0 here (nothing has been delivered
+  // yet to have a retur).
+  qtyRetur10KG: number;
+  qtyRetur5KG: number;
   status: "Draft" | "Terbit";
   tipe: "BERANGKAT" | "DATANG";
   // Always false in the array this function returns (see the filter at the
@@ -39,6 +46,8 @@ interface RawInspectionRow {
   Status: "Draft" | "Terbit";
   Qty10KG: number;
   Qty5KG: number;
+  QtyRetur10KG: number;
+  QtyRetur5KG: number;
   BerangkatCheckID: number | null;
   DatangCheckID: number | null;
 }
@@ -67,6 +76,22 @@ const INSPECTION_ROW_SELECT = `
       JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
       WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
     ) AS Qty5KG,
+    (
+      SELECT ISNULL(SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN 0 ELSE sdi.QtyRetur END), 0)
+      FROM DashboardPengirimanStopDeliveryItem sdi
+      JOIN DashboardPengirimanStopDelivery sd ON sd.StopDeliveryID = sdi.StopDeliveryID
+      JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalDetailID = sd.JadwalDetailID
+      JOIN SalesOrderDetail sod ON sod.SalesOrderDetailID = sdi.SalesOrderDetailID
+      WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+    ) AS QtyRetur10KG,
+    (
+      SELECT ISNULL(SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sdi.QtyRetur ELSE 0 END), 0)
+      FROM DashboardPengirimanStopDeliveryItem sdi
+      JOIN DashboardPengirimanStopDelivery sd ON sd.StopDeliveryID = sdi.StopDeliveryID
+      JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalDetailID = sd.JadwalDetailID
+      JOIN SalesOrderDetail sod ON sod.SalesOrderDetailID = sdi.SalesOrderDetailID
+      WHERE jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+    ) AS QtyRetur5KG,
     vcb.VehicleCheckID AS BerangkatCheckID,
     vcd.VehicleCheckID AS DatangCheckID
   FROM DashboardPengirimanJadwal j
@@ -81,7 +106,9 @@ function toCard(
   r: RawInspectionRow,
   tipe: "BERANGKAT" | "DATANG",
   hasCheck: boolean,
-  jamEstimasiKedatangan: string | null
+  jamEstimasiKedatangan: string | null,
+  qtyRetur10KG: number,
+  qtyRetur5KG: number
 ): SatpamInspectionCard {
   return {
     jadwalId: r.JadwalID,
@@ -95,6 +122,8 @@ function toCard(
     status: r.Status,
     tipe,
     hasCheck,
+    qtyRetur10KG,
+    qtyRetur5KG,
   };
 }
 
@@ -139,7 +168,7 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
 
   const cards: SatpamInspectionCard[] = [];
   for (const r of berangkatResult.recordset as RawInspectionRow[]) {
-    cards.push(toCard(r, "BERANGKAT", r.BerangkatCheckID != null, null));
+    cards.push(toCard(r, "BERANGKAT", r.BerangkatCheckID != null, null, 0, 0));
   }
   for (const r of datangResult.recordset as RawInspectionRow[]) {
     const jamEstimasiKedatangan =
@@ -150,7 +179,7 @@ export async function getSatpamInspectionList(businessDate: string): Promise<Sat
     // — hasCheck is always false here, kept explicit (not hardcoded) so the
     // shape matches toCard's signature and the final filter below stays a
     // no-op safety net rather than load-bearing for this half.
-    cards.push(toCard(r, "DATANG", r.DatangCheckID != null, jamEstimasiKedatangan));
+    cards.push(toCard(r, "DATANG", r.DatangCheckID != null, jamEstimasiKedatangan, r.QtyRetur10KG, r.QtyRetur5KG));
   }
 
   return cards.filter((c) => !c.hasCheck);
