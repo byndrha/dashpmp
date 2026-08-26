@@ -66,7 +66,12 @@ export function KendalaDialog({
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Pilih jenis kendala" />
             </SelectTrigger>
-            <SelectContent>
+            {/* No open/close animation on this dropdown — explicit request.
+                !important since data-open:/data-closed: are the same
+                specificity as the shared component's own animate-in/
+                animate-out rules and would otherwise lose depending on
+                Tailwind's generated class order. */}
+            <SelectContent className="data-open:!animate-none data-closed:!animate-none">
               {JENIS_KENDALA_OPTIONS.map((opt) => (
                 <SelectItem key={opt} value={opt}>
                   {opt}
