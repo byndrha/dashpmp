@@ -73,6 +73,7 @@ import {
   type PrintFormatSettings,
 } from "@/lib/queries/print-format-settings";
 import { getThermalReceiptData, type ThermalReceiptData } from "@/lib/queries/thermal-receipt";
+import { getInvoiceByToken, type PublicInvoice } from "@/lib/queries/invoice-public";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
@@ -488,6 +489,13 @@ export async function enqueueManualReprintAction(jadwalDetailId: number): Promis
   return runAction(async () => {
     await requireModuleAccess("delivery");
     await enqueueManualReprint(jadwalDetailId);
+  });
+}
+
+export async function getSalesInvoiceForViewAction(invoiceToken: string): Promise<ActionResult<PublicInvoice | null>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getInvoiceByToken(invoiceToken);
   });
 }
 

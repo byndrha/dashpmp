@@ -39,7 +39,7 @@ import type { FuelType } from "@/lib/armada-fuel";
 import { VehicleCheckDialog } from "@/components/dashboard/vehicle-check-dialog";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { StopDeliveryProofDialog } from "@/components/dashboard/stop-delivery-proof-dialog";
-import { triggerPrintQueuePollNow } from "@/components/dashboard/print-queue-poller";
+import { StopSalesInvoiceDialog } from "@/components/dashboard/stop-sales-invoice-dialog";
 import type {
   VehicleCheckRow,
   VehicleCheckTipe,
@@ -64,7 +64,6 @@ import {
   getPriceLevelOptionsAction,
   getDriverPositionAction,
   getIstirahatForJadwalAction,
-  enqueueManualReprintAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
@@ -98,8 +97,7 @@ function SortableStopRow({
   index,
   onEdit,
   disabled,
-  onReprint,
-  reprinting,
+  onOpenSi,
   onRemove,
   hasDeparted,
   onOpenProof,
@@ -108,17 +106,11 @@ function SortableStopRow({
   index: number;
   onEdit: (detail: DriverStopRow) => void;
   disabled: boolean;
-  onReprint: (jadwalDetailId: number) => void;
-  // True while THIS row's own reprint request is in flight — disables the
-  // icon so a fast repeat-click can't fire enqueueManualReprintAction
-  // multiple times for the same stop (each call is an unconditional INSERT
-  // with no dedup, so duplicates would each get physically reprinted by the
-  // print-queue poller).
-  reprinting: boolean;
+  onOpenSi: (detail: DriverStopRow) => void;
   // Only usable while the Jadwal is still Draft (matches
   // removeSalesOrderFromJadwal's own guard) — omitted/hidden once Terbit.
   onRemove?: (detail: DriverStopRow) => void;
-  // Once the armada is Berangkat, the manual-reprint icon no longer makes
+  // Once the armada is Berangkat, the "Lihat SI" icon no longer makes
   // sense here (per-stop invoices are already settled by then) — it's
   // replaced per-row by a checkmark the moment that stop's own delivery
   // completes (detail.JamSelesai), opening the proof-of-delivery popup.
@@ -186,22 +178,16 @@ function SortableStopRow({
           Terkendala
         </Badge>
       )}
-      {!hasDeparted ? (
-        // Always shown pre-departure, even before Selesai Muat has created
-        // this stop's SalesInvoice — enqueueManualReprintAction (Task 3)
-        // already rejects with a clear AppError ("SI ... belum terbit") in
-        // that case, surfaced below as a toast, so there's no need to hide
-        // the button and make an operator wonder where it went.
+      {detail.InvoiceToken != null ? (
         <button
           type="button"
-          title="Cetak ulang SI"
-          onClick={() => onReprint(detail.JadwalDetailID)}
-          disabled={reprinting}
-          className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border disabled:cursor-default disabled:opacity-50"
+          title="Lihat SI"
+          onClick={() => onOpenSi(detail)}
+          className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border"
         >
           <Printer className="size-3.5" />
         </button>
-      ) : detail.JamSelesai != null ? (
+      ) : hasDeparted && detail.JamSelesai != null ? (
         <button
           type="button"
           title="Lihat bukti pengiriman"
@@ -320,6 +306,10 @@ export function RouteValidationDialog({
   // closes StopDeliveryProofDialog, same open-via-prop convention this
   // dialog itself uses (open={jadwalId != null}).
   const [proofDetail, setProofDetail] = useState<DriverStopRow | null>(null);
+  // The stop whose "Lihat SI" icon was clicked — null closes
+  // StopSalesInvoiceDialog, same open-via-prop convention as proofDetail
+  // above.
+  const [siDetail, setSiDetail] = useState<DriverStopRow | null>(null);
   const [route, setRoute] = useState<MultiPointRoute | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -352,32 +342,6 @@ export function RouteValidationDialog({
   const [availableToAdd, setAvailableToAdd] = useState<AvailableSalesOrder[]>([]);
   const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
-
-  // Tracks the single JadwalDetailID (if any) whose reprint request is
-  // currently in flight — disables just that row's icon (see
-  // SortableStopRow's reprinting prop) so a fast repeat-click can't enqueue
-  // duplicate print-queue rows before the first request's toast lands.
-  // Deliberately its own state rather than reusing the shared `pending`
-  // boolean from useTransition above: `pending` also gates unrelated
-  // buttons elsewhere in this dialog (e.g. "Tambah"), so tying it to a
-  // reprint click would needlessly disable those too.
-  const [reprintingId, setReprintingId] = useState<number | null>(null);
-
-  function handleReprint(jadwalDetailId: number) {
-    setReprintingId(jadwalDetailId);
-    startTransition(async () => {
-      const result = await enqueueManualReprintAction(jadwalDetailId);
-      setReprintingId(null);
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("SI ditambahkan ke antrian cetak.");
-      // Nudge PrintQueuePoller to drain right away instead of leaving this
-      // job to wait for its next scheduled tick (up to POLL_INTERVAL_MS).
-      triggerPrintQueuePollNow();
-    });
-  }
 
   const jadwalId = jadwal?.JadwalID ?? null;
   // RouteValidationDialog is a single persistent instance whose `jadwal`
@@ -424,6 +388,7 @@ export function RouteValidationDialog({
     // Same reasoning — a proof-of-delivery popup for a stop on the
     // previous Jadwal must not stay open against the newly-opened one.
     setProofDetail(null);
+    setSiDetail(null);
 
     if (jadwalId == null) {
       setOrder([]);
@@ -1430,8 +1395,7 @@ export function RouteValidationDialog({
                         index={i}
                         onEdit={onEditSalesOrder}
                         disabled={!isDraft}
-                        onReprint={handleReprint}
-                        reprinting={reprintingId === d.JadwalDetailID}
+                        onOpenSi={setSiDetail}
                         onRemove={isDraft ? handleRemoveStop : undefined}
                         hasDeparted={hasDeparted}
                         onOpenProof={setProofDetail}
@@ -1592,6 +1556,7 @@ export function RouteValidationDialog({
           </div>
         )}
         <StopDeliveryProofDialog detail={proofDetail} onOpenChange={(open) => !open && setProofDetail(null)} />
+        <StopSalesInvoiceDialog detail={siDetail} onOpenChange={(open) => !open && setSiDetail(null)} />
         {conflict && (
           <ArmadaConflictDialog
             conflict={conflict.info}
