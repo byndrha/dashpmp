@@ -56,7 +56,7 @@ export function ProduksiTabShell({
   initialWarehouse?: PalletPosisiRow[];
   initialMesin?: MesinRow[];
   initialKualitas?: KualitasRow[];
-  initialBahanBaku?: { current: CurrentShiftInfo; rows: StokBahanBakuRow[] };
+  initialBahanBaku?: { current: CurrentShiftInfo; rows: StokBahanBakuRow[]; history: StokBahanBakuRow[] };
 }) {
   const [activeTab, setActiveTab] = useState<ProduksiTabKey>(initialTab);
   const [visited, setVisited] = useState<Set<ProduksiTabKey>>(() => new Set([initialTab]));
@@ -66,7 +66,9 @@ export function ProduksiTabShell({
   const [warehouse, setWarehouse] = useState<PalletPosisiRow[] | null>(initialWarehouse ?? null);
   const [mesin, setMesin] = useState<MesinRow[] | null>(initialMesin ?? null);
   const [kualitas, setKualitas] = useState<KualitasRow[] | null>(initialKualitas ?? null);
-  const [bahanBaku, setBahanBaku] = useState<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[] } | null>(initialBahanBaku ?? null);
+  const [bahanBaku, setBahanBaku] = useState<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[]; history: StokBahanBakuRow[] } | null>(
+    initialBahanBaku ?? null
+  );
 
   const [loadingTab, setLoadingTab] = useState<ProduksiTabKey | null>(null);
   const [tabError, setTabError] = useState<string | null>(null);
@@ -263,7 +265,12 @@ export function ProduksiTabShell({
         )}
         {visited.has("bahan-baku") && bahanBaku && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "bahan-baku" && "hidden")}>
-            <BahanBakuView current={bahanBaku.current} rows={bahanBaku.rows} onAfterSimpan={refreshBahanBaku} />
+            <BahanBakuView
+              current={bahanBaku.current}
+              rows={bahanBaku.rows}
+              history={bahanBaku.history}
+              onAfterSimpan={refreshBahanBaku}
+            />
           </div>
         )}
       </div>

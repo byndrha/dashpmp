@@ -38,6 +38,7 @@ import {
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import {
   getCurrentShiftRows,
+  getStokBahanBakuHistory,
   upsertProduksiStok,
   type StokBahanBakuRow,
   type CurrentShiftInfo,
@@ -237,10 +238,13 @@ export async function getSelesaiMuatJadwalRiwayatForProduksiAction(): Promise<Ac
   });
 }
 
-export async function getCurrentShiftRowsForProduksiAction(): Promise<ActionResult<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[] }>> {
+export async function getCurrentShiftRowsForProduksiAction(): Promise<
+  ActionResult<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[]; history: StokBahanBakuRow[] }>
+> {
   return runAction(async () => {
     await requireProduksiView();
-    return getCurrentShiftRows();
+    const [{ current, rows }, history] = await Promise.all([getCurrentShiftRows(), getStokBahanBakuHistory()]);
+    return { current, rows, history };
   });
 }
 

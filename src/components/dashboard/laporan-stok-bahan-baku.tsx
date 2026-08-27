@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/format";
 import { upsertOperasionalStokAction, setSaldoAwalAction } from "@/app/mkesindo/(dashboard)/laporan/actions";
 import type {
@@ -189,6 +190,112 @@ function SaldoAwalDialogInline({ saldoAwal, onSaved }: { saldoAwal: SaldoAwalRow
   );
 }
 
+// Edits a single past Riwayat row's Operasional-owned fields
+// (stokMasukGudang/stokMasukInventoriOperasional) — same upsert action and
+// fields as StokInputCard's current-shift form, just targeting that row's
+// own tanggalUsaha/shift instead of always "today". The MERGE in
+// upsertOperasionalStok keys on (TanggalUsaha, Shift, JenisBarang), so this
+// correctly updates the historical row rather than creating a new one, and
+// every later shift's displayed running balance recomputes automatically
+// on the next read since balances are never stored (see getStokBahanBakuHistory).
+function UbahRiwayatDialog({
+  row,
+  onOpenChange,
+  onSaved,
+}: {
+  row: StokBahanBakuRow | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [masukGudang, setMasukGudang] = useState("");
+  const [masukInventori, setMasukInventori] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  // Identifies which row is CURRENTLY showing, resynced (in an effect, not
+  // during render) whenever the `row` prop changes — a stale-response guard
+  // similar to UbahTanggalPemesananDialog's targetIdRef.
+  const rowKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    rowKeyRef.current = row ? `${row.tanggalUsaha}-${row.shift}-${row.jenisBarang}` : null;
+    if (!row) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMasukGudang(String(row.stokMasukGudang));
+    setMasukInventori(String(row.stokMasukInventoriOperasional));
+    setError(null);
+  }, [row]);
+
+  function handleSave() {
+    if (!row) return;
+    const rowKey = `${row.tanggalUsaha}-${row.shift}-${row.jenisBarang}`;
+    setError(null);
+    startTransition(async () => {
+      const result = await upsertOperasionalStokAction({
+        tanggalUsaha: row.tanggalUsaha,
+        shift: row.shift,
+        jenisBarang: row.jenisBarang,
+        stokMasukGudang: Number(masukGudang) || 0,
+        stokMasukInventoriOperasional: Number(masukInventori) || 0,
+      });
+      if (rowKeyRef.current !== rowKey) return;
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      onOpenChange(false);
+      onSaved();
+    });
+  }
+
+  return (
+    <Dialog open={row != null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Ubah Riwayat</DialogTitle>
+        </DialogHeader>
+
+        {row && (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+              <p className="font-medium">{JENIS_BARANG_LABEL[row.jenisBarang]}</p>
+              <p className="text-muted-foreground">
+                {formatDate(row.tanggalUsaha)} — Shift {row.shift}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ubah-riwayat-masuk-gudang">Masuk Gudang</Label>
+              <Input
+                id="ubah-riwayat-masuk-gudang"
+                type="number"
+                min={0}
+                value={masukGudang}
+                onChange={(e) => setMasukGudang(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ubah-riwayat-masuk-inventori">Masuk Inventori Operasional</Label>
+              <Input
+                id="ubah-riwayat-masuk-inventori"
+                type="number"
+                min={0}
+                value={masukInventori}
+                onChange={(e) => setMasukInventori(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button disabled={!row || pending} onClick={handleSave}>
+            {pending ? "Menyimpan..." : "Simpan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function LaporanStokBahanBaku({
   canEdit,
   canEditSaldoAwal,
@@ -207,6 +314,7 @@ export function LaporanStokBahanBaku({
   namaMap: Record<number, string>;
 }) {
   const router = useRouter();
+  const [editingRow, setEditingRow] = useState<StokBahanBakuRow | null>(null);
   // Any save (operasional input or saldo awal) changes running balances for
   // this AND every later shift (see Global Constraints — balances are
   // computed at read time), so a full server refetch via router.refresh()
@@ -248,6 +356,7 @@ export function LaporanStokBahanBaku({
                 <TableHead className="text-right">Sisa Inventori</TableHead>
                 <TableHead>Diisi Operasional</TableHead>
                 <TableHead>Diisi Produksi</TableHead>
+                {canEdit && <TableHead className="text-right">Aksi</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,11 +373,18 @@ export function LaporanStokBahanBaku({
                   <TableCell className="text-right tabular-nums">{formatQty(r.sisaInventoriAkhir, r.jenisBarang)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{r.operasionalAkunId ? (namaMap[r.operasionalAkunId] ?? "?") : "Belum diisi"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{r.produksiAkunId ? (namaMap[r.produksiAkunId] ?? "?") : "Belum diisi"}</TableCell>
+                  {canEdit && (
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="outline" onClick={() => setEditingRow(r)}>
+                        Ubah
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
               {initialHistory.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={canEdit ? 12 : 11} className="text-center text-muted-foreground py-8">
                     Belum ada data.
                   </TableCell>
                 </TableRow>
@@ -277,6 +393,14 @@ export function LaporanStokBahanBaku({
           </Table>
         </div>
       </div>
+
+      <UbahRiwayatDialog
+        row={editingRow}
+        onOpenChange={(open) => {
+          if (!open) setEditingRow(null);
+        }}
+        onSaved={handleChanged}
+      />
     </div>
   );
 }
