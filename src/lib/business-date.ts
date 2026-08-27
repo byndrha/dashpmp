@@ -112,6 +112,37 @@ export function getNaiveWibTransDate(now: Date = new Date()): Date {
   );
 }
 
+// Plain "right now" as a naive-WIB Date (raw UTC-component values ARE
+// the WIB wall-clock value) — unlike getNaiveWibTransDate, this has NO
+// business-date rollover logic at all (no ROLLOVER_HOUR involved): it's
+// for a pure event timestamp (e.g. a machine on/off toggle) where "which
+// business day does this belong to" isn't a meaningful question, only
+// "what did the clock say." Built via Date.UTC(...), same reasoning as
+// every other naive-WIB constructor in this file.
+export function getNaiveWibNow(now: Date = new Date()): Date {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: WIB_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(now).map((p) => [p.type, p.value]));
+  return new Date(
+    Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour) % 24,
+      Number(parts.minute),
+      Number(parts.second)
+    )
+  );
+}
+
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000; // WIB has no DST — a fixed UTC+7.
 
 // Converts a "naive WIB" Date (raw UTC-component values ARE the WIB
