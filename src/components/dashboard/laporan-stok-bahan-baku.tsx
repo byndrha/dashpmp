@@ -13,38 +13,20 @@ import type {
   StokBahanBakuRow,
   CurrentShiftInfo,
   SaldoAwalRow,
-  JenisBarang,
 } from "@/lib/queries/stok-bahan-baku";
-
-// NOTE: these are intentionally NOT imported (as values) from
-// "@/lib/queries/stok-bahan-baku" — that module also imports "@/lib/db"
-// (mssql) for its DB-backed functions, and since ES module bundling pulls
-// in a file's entire non-type import graph, a "use client" component
-// importing even a single runtime value from it drags mssql/pg (and their
-// Node-only dependencies: net/tls/dns/fs/dgram) into the browser bundle,
-// which fails to resolve and breaks this page entirely. `import type`
-// above is erased at compile time and is safe; these small, stable
-// domain constants are duplicated locally instead so this component pulls
-// in zero runtime code from that module. Keep in sync with the
-// canonical copies in src/lib/queries/stok-bahan-baku.ts if that file's
-// JenisBarang set ever changes.
-const JENIS_BARANG_LIST: JenisBarang[] = ["Plastik10KG", "Plastik5KG", "IkatKabel"];
-
-const JENIS_BARANG_LABEL: Record<JenisBarang, string> = {
-  Plastik10KG: "Kantong Plastik 10 KG",
-  Plastik5KG: "Kantong Plastik 5 KG",
-  IkatKabel: "Ikat Kabel",
-};
-
-const JENIS_BARANG_UNIT_BUNDLE: Record<JenisBarang, string> = {
-  Plastik10KG: "Bundle",
-  Plastik5KG: "Bundle",
-  IkatKabel: "Pack",
-};
-
-function toBundle(lembar: number): number {
-  return lembar <= 0 ? 0 : Math.ceil(lembar / 100);
-}
+// Imported from the client-safe shared module, not "@/lib/queries/stok-bahan-baku"
+// — that module also imports "@/lib/db" (mssql), and since ES module
+// bundling pulls in a file's entire non-type import graph, a "use client"
+// component importing even a single runtime value from it would drag
+// mssql/pg (and their Node-only dependencies: net/tls/dns/fs/dgram) into
+// the browser bundle. See stok-bahan-baku-shared.ts's header comment.
+import {
+  JENIS_BARANG_LIST,
+  JENIS_BARANG_LABEL,
+  JENIS_BARANG_UNIT_BUNDLE,
+  toBundle,
+  type JenisBarang,
+} from "@/lib/stok-bahan-baku-shared";
 
 function formatQty(n: number, jenis: JenisBarang): string {
   return `${n.toLocaleString("id-ID")} lembar (${toBundle(n)} ${JENIS_BARANG_UNIT_BUNDLE[jenis]})`;

@@ -1,29 +1,15 @@
 import { getPool, sql } from "@/lib/db";
 import { getReportShift, getShiftWindow, getShiftLabel, type ShiftNumber } from "@/lib/report-shift";
+import { JENIS_BARANG_LIST, type JenisBarang } from "@/lib/stok-bahan-baku-shared";
 
-export type JenisBarang = "Plastik10KG" | "Plastik5KG" | "IkatKabel";
-
-export const JENIS_BARANG_LIST: JenisBarang[] = ["Plastik10KG", "Plastik5KG", "IkatKabel"];
-
-export const JENIS_BARANG_LABEL: Record<JenisBarang, string> = {
-  Plastik10KG: "Kantong Plastik 10 KG",
-  Plastik5KG: "Kantong Plastik 5 KG",
-  IkatKabel: "Ikat Kabel",
-};
-
-// 1 unit = 100 lembar/pcs for every JenisBarang — "Bundle" for plastik,
-// "Pack" for ikat kabel (same ceil(qty/100) math either way, see toBundle).
-export const JENIS_BARANG_UNIT_BUNDLE: Record<JenisBarang, string> = {
-  Plastik10KG: "Bundle",
-  Plastik5KG: "Bundle",
-  IkatKabel: "Pack",
-};
-
-// ceil(lembar/100), display-only — never stored. 0 lembar = 0 bundle, 100
-// lembar tepat = 1 bundle, 101 = 2.
-export function toBundle(lembar: number): number {
-  return lembar <= 0 ? 0 : Math.ceil(lembar / 100);
-}
+// Re-exported so every existing import of these names from this module
+// (server-side code — actions.ts, page.tsx, etc.) keeps working
+// unchanged. The actual definitions live in stok-bahan-baku-shared.ts so
+// "use client" components can import them without pulling this module's
+// `@/lib/db` (mssql/pg) dependency into the browser bundle — see that
+// file's header comment.
+export type { JenisBarang } from "@/lib/stok-bahan-baku-shared";
+export { JENIS_BARANG_LIST, JENIS_BARANG_LABEL, JENIS_BARANG_UNIT_BUNDLE, toBundle } from "@/lib/stok-bahan-baku-shared";
 
 export interface StokBahanBakuRow {
   stokBahanBakuId: number | null; // null when synthesized for a shift with no row yet
