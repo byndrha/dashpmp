@@ -1,0 +1,189 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TimProduksiRoster } from "@/components/produksi-app/tim-produksi-roster";
+import { MesinEventPanel } from "@/components/produksi-app/mesin-event-panel";
+import type { MesinRow } from "@/lib/queries/produksi-mesin";
+import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
+import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
+import type { StafOperasionalOption } from "@/lib/queries/akun";
+import type { AktivitasShiftInfo, QtyRecap } from "@/lib/queries/aktivitas-produksi";
+import { hitungTotalDenda, hitungKontribusiPerOrang } from "@/lib/aktivitas-produksi-shared";
+import { upsertStafOperasionalAction, upsertKerusakanAction } from "@/app/mkesindo/produksi/actions";
+
+const UNSET = "__unset__";
+
+function QtyRecapCard({ qty, jumlahHadir }: { qty: QtyRecap; jumlahHadir: number }) {
+  const kontribusi = hitungKontribusiPerOrang(qty.totalKantongEkivalen, jumlahHadir);
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle className="text-sm">Rekap Produksi</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 text-sm">
+        {qty.perMesin.map((m) => (
+          <div key={m.mesinId} className="flex justify-between text-xs">
+            <span>{m.mesinNama} (10KG)</span>
+            <span className="tabular-nums">{m.qty10KG.toLocaleString("id-ID")}</span>
+          </div>
+        ))}
+        <div className="flex justify-between border-t pt-2 text-xs">
+          <span>Total 10KG</span>
+          <span className="tabular-nums font-medium">{qty.total10KG.toLocaleString("id-ID")}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Total 5KG (shift ini)</span>
+          <span className="tabular-nums font-medium">{qty.total5KG.toLocaleString("id-ID")}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Kontribusi / Orang</span>
+          <span className="tabular-nums font-medium">
+            {kontribusi === null ? "Belum ada anggota hadir" : kontribusi.toLocaleString("id-ID", { maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function KerusakanCard({
+  tanggalUsaha,
+  shift,
+  current,
+  onSaved,
+}: {
+  tanggalUsaha: string;
+  shift: 1 | 2 | 3;
+  current: AktivitasShiftInfo;
+  onSaved: () => void;
+}) {
+  const [pecah, setPecah] = useState(String(current.pecahKemasanQty));
+  const [jatuh, setJatuh] = useState(String(current.esJatuhQty));
+  const [retur, setRetur] = useState(String(current.gantiReturnQty));
+  const [sealer, setSealer] = useState(String(current.sealerJebolQty));
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const totalDenda = hitungTotalDenda(Number(pecah) || 0, Number(jatuh) || 0);
+
+  function handleSave() {
+    setError(null);
+    startTransition(async () => {
+      const result = await upsertKerusakanAction(tanggalUsaha, shift, {
+        pecahKemasanQty: Number(pecah) || 0,
+        esJatuhQty: Number(jatuh) || 0,
+        gantiReturnQty: Number(retur) || 0,
+        sealerJebolQty: Number(sealer) || 0,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      onSaved();
+    });
+  }
+
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle className="text-sm">Kerusakan</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Pecah Kemasan (Rp1.000/kejadian)</Label>
+            <Input type="number" min={0} value={pecah} onChange={(e) => setPecah(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Es Jatuh (Rp3.000/kejadian)</Label>
+            <Input type="number" min={0} value={jatuh} onChange={(e) => setJatuh(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Ganti Return</Label>
+            <Input type="number" min={0} value={retur} onChange={(e) => setRetur(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Sealer Jebol</Label>
+            <Input type="number" min={0} value={sealer} onChange={(e) => setSealer(e.target.value)} />
+          </div>
+        </div>
+        <p className="text-sm font-medium">Total Denda: Rp{totalDenda.toLocaleString("id-ID")}</p>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <Button size="sm" className="w-fit" disabled={pending} onClick={handleSave}>
+          Simpan
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function AktivitasProduksiView({
+  current,
+  qty,
+  kehadiran,
+  timAnggota,
+  mesinList,
+  mesinEvents,
+  stafOperasionalOptions,
+  onChanged,
+}: {
+  current: AktivitasShiftInfo;
+  qty: QtyRecap;
+  kehadiran: number[];
+  timAnggota: AnggotaTimRow[];
+  mesinList: MesinRow[];
+  mesinEvents: MesinEventRow[];
+  stafOperasionalOptions: StafOperasionalOption[];
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  function handleStafChange(value: string | null) {
+    startTransition(async () => {
+      await upsertStafOperasionalAction(current.tanggalUsaha, current.shift, !value || value === UNSET ? null : Number(value));
+      onChanged();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <h2 className="text-sm font-semibold text-muted-foreground">
+        {current.tanggalUsaha} — {current.shiftLabel}
+      </h2>
+
+      <Card size="sm">
+        <CardContent className="flex flex-col gap-3 pt-4">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Staf Operasional Bertugas</Label>
+            <Select value={current.stafOperasionalAkunId ? String(current.stafOperasionalAkunId) : UNSET} onValueChange={handleStafChange} disabled={pending}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih Staf Operasional" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNSET}>Belum dipilih</SelectItem>
+                {stafOperasionalOptions.map((o) => (
+                  <SelectItem key={o.akunId} value={String(o.akunId)}>
+                    {o.nama}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Stok Es Sebelumnya (10KG): <span className="font-medium text-foreground">{current.stokEsSebelumnya10KG.toLocaleString("id-ID")}</span>
+          </p>
+        </CardContent>
+      </Card>
+
+      <TimProduksiRoster tanggalUsaha={current.tanggalUsaha} shift={current.shift} timAnggota={timAnggota} kehadiran={kehadiran} canEdit onChanged={onChanged} />
+      <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
+      <QtyRecapCard qty={qty} jumlahHadir={kehadiran.length} />
+      <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />
+    </div>
+  );
+}
