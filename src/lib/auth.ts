@@ -24,6 +24,7 @@ interface AuthorizedUser {
   isSatpam: boolean;
   isDriver: boolean;
   isProduksi: boolean;
+  isOperasional: boolean;
   salesmanId: string | null;
   permissions: ReturnType<typeof fullPermissionMap>;
   accountScope: AccountScope;
@@ -86,6 +87,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           isSatpam: row.isSatpam,
           isDriver: row.isDriver,
           isProduksi: row.isProduksi,
+          isOperasional: row.isOperasional,
           salesmanId: row.salesmanId,
           permissions,
           accountScope: (row.perusahaanKode ?? "direktur") as AccountScope,
@@ -107,6 +109,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.isSatpam = u.isSatpam;
         token.isDriver = u.isDriver;
         token.isProduksi = u.isProduksi;
+        token.isOperasional = u.isOperasional;
         token.salesmanId = u.salesmanId;
         token.permissions = u.permissions;
         token.accountScope = u.accountScope;

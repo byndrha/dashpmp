@@ -17,6 +17,7 @@ import {
   setPeranSatpamAction,
   setPeranDriverAction,
   setPeranProduksiAction,
+  setPeranOperasionalAction,
 } from "@/app/grup/akun/peran/actions";
 
 function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
@@ -33,6 +34,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
   const [isSatpam, setIsSatpam] = useState(peran.isSatpam);
   const [isDriver, setIsDriverState] = useState(peran.isDriver);
   const [isProduksi, setIsProduksiState] = useState(peran.isProduksi);
+  const [isOperasional, setIsOperasionalState] = useState(peran.isOperasional);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -63,6 +65,11 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     setDirty(true);
   }
 
+  function toggleOperasional() {
+    setIsOperasionalState((prev) => !prev);
+    setDirty(true);
+  }
+
   function handleSave() {
     setError(null);
     startTransition(async () => {
@@ -78,6 +85,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
         setPeranSatpamAction(peran.id, isSatpam),
         setPeranDriverAction(peran.id, isDriver),
         setPeranProduksiAction(peran.id, isProduksi),
+        setPeranOperasionalAction(peran.id, isOperasional),
       ]);
       const failed = results.find((r) => !r.success);
       if (failed && !failed.success) {
@@ -160,6 +168,16 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
             <span className="block text-muted-foreground">
               Akun dengan peran ini diarahkan ke Modul Produksi (peta warehouse, mesin, riwayat) dan Aplikasi Produksi
               (isi muatan, catat hasil produksi) setelah login.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
+          <input type="checkbox" className="accent-primary" checked={isOperasional} onChange={toggleOperasional} />
+          <span>
+            Peran Khusus: Staf Operasional
+            <span className="block text-muted-foreground">
+              Menandai akun sebagai Staf Operasional — dipakai untuk dropdown pemilihan di fitur lain (mis. Aktivitas
+              Produksi), terpisah dari izin akses modul &quot;Laporan&quot;.
             </span>
           </span>
         </label>

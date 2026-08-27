@@ -16,6 +16,7 @@ declare module "next-auth" {
       isSatpam: boolean;
       isDriver: boolean;
       isProduksi: boolean;
+      isOperasional: boolean;
       salesmanId: string | null;
       permissions: PermissionMap;
       accountScope: AccountScope;
@@ -31,6 +32,7 @@ declare module "next-auth" {
     isSatpam: boolean;
     isDriver: boolean;
     isProduksi: boolean;
+    isOperasional: boolean;
     salesmanId: string | null;
     permissions: PermissionMap;
     accountScope: AccountScope;
@@ -47,6 +49,7 @@ declare module "next-auth/jwt" {
     isSatpam: boolean;
     isDriver: boolean;
     isProduksi: boolean;
+    isOperasional: boolean;
     salesmanId: string | null;
     permissions: PermissionMap;
     accountScope: AccountScope;

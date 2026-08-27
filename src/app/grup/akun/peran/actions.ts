@@ -2,7 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { requireGrupAccess } from "@/lib/require-access";
-import { createPeran, deletePeran, setPeranIzin, setPeranSatpam, setPeranDriver, setPeranProduksi, listAllPeran } from "@/lib/queries/akun";
+import {
+  createPeran,
+  deletePeran,
+  setPeranIzin,
+  setPeranSatpam,
+  setPeranDriver,
+  setPeranProduksi,
+  setPeranOperasional,
+  listAllPeran,
+} from "@/lib/queries/akun";
 import type { ModuleKey } from "@/lib/permissions";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
@@ -61,6 +70,14 @@ export async function setPeranProduksiAction(peranId: number, isProduksi: boolea
   return runAction(async () => {
     await requireGrupAccess();
     await setPeranProduksi(peranId, isProduksi);
+    revalidatePath("/grup/akun/peran");
+  });
+}
+
+export async function setPeranOperasionalAction(peranId: number, isOperasional: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    await setPeranOperasional(peranId, isOperasional);
     revalidatePath("/grup/akun/peran");
   });
 }

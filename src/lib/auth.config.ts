@@ -29,6 +29,7 @@ export const authConfig = {
         session.user.isSatpam = token.isSatpam as boolean;
         session.user.isDriver = token.isDriver as boolean;
         session.user.isProduksi = token.isProduksi as boolean;
+        session.user.isOperasional = token.isOperasional as boolean;
         session.user.salesmanId = token.salesmanId as string | null;
         session.user.permissions = token.permissions as PermissionMap;
         session.user.accountScope = token.accountScope as AccountScope;
