@@ -36,6 +36,13 @@ import {
   type CreateKualitasInput,
 } from "@/lib/queries/produksi-kualitas";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+import {
+  getCurrentShiftRows,
+  upsertProduksiStok,
+  type StokBahanBakuRow,
+  type CurrentShiftInfo,
+  type UpsertProduksiStokInput,
+} from "@/lib/queries/stok-bahan-baku";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
   return runAction(async () => {
@@ -227,5 +234,26 @@ export async function getSelesaiMuatJadwalRiwayatForProduksiAction(): Promise<Ac
   return runAction(async () => {
     await requireProduksiView();
     return getSelesaiMuatJadwalRiwayatForProduksi();
+  });
+}
+
+export async function getCurrentShiftRowsForProduksiAction(): Promise<ActionResult<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[] }>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getCurrentShiftRows();
+  });
+}
+
+export async function upsertProduksiStokAction(
+  input: Omit<UpsertProduksiStokInput, "akunId">
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    if (input.stokDipakaiProduksi < 0 || input.stokRusakProduksi < 0) {
+      throw new AppError("Jumlah tidak boleh negatif.");
+    }
+    await upsertProduksiStok({ ...input, akunId: Number(session.user.id) });
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/laporan");
   });
 }

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { KartuPengirimanList } from "@/components/produksi-app/kartu-pengiriman-list";
 import { WarehouseView } from "@/components/produksi-app/warehouse-view";
 import { KualitasView } from "@/components/produksi-app/kualitas-view";
+import { BahanBakuView } from "@/components/produksi-app/bahan-baku-view";
 import { ProduksiBottomNav } from "@/components/produksi-app/bottom-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
@@ -18,19 +19,22 @@ import {
   getWarehouseMapAction,
   getMesinListAction,
   getKualitasRiwayatAction,
+  getCurrentShiftRowsForProduksiAction,
 } from "@/app/mkesindo/produksi/actions";
 import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { KualitasRow } from "@/lib/queries/produksi-kualitas";
+import type { StokBahanBakuRow, CurrentShiftInfo } from "@/lib/queries/stok-bahan-baku";
 
-export type ProduksiTabKey = "kartu-pengiriman" | "riwayat" | "warehouse" | "kualitas";
+export type ProduksiTabKey = "kartu-pengiriman" | "riwayat" | "warehouse" | "kualitas" | "bahan-baku";
 
 const TAB_PATHS: Record<ProduksiTabKey, string> = {
   "kartu-pengiriman": "/mkesindo/produksi-app",
   riwayat: "/mkesindo/produksi-app/riwayat",
   warehouse: "/mkesindo/produksi-app/warehouse",
   kualitas: "/mkesindo/produksi-app/kualitas",
+  "bahan-baku": "/mkesindo/produksi-app/bahan-baku",
 };
 
 export function ProduksiTabShell({
@@ -42,6 +46,7 @@ export function ProduksiTabShell({
   initialWarehouse,
   initialMesin,
   initialKualitas,
+  initialBahanBaku,
 }: {
   initialTab: ProduksiTabKey;
   userName: string;
@@ -51,6 +56,7 @@ export function ProduksiTabShell({
   initialWarehouse?: PalletPosisiRow[];
   initialMesin?: MesinRow[];
   initialKualitas?: KualitasRow[];
+  initialBahanBaku?: { current: CurrentShiftInfo; rows: StokBahanBakuRow[] };
 }) {
   const [activeTab, setActiveTab] = useState<ProduksiTabKey>(initialTab);
   const [visited, setVisited] = useState<Set<ProduksiTabKey>>(() => new Set([initialTab]));
@@ -60,6 +66,7 @@ export function ProduksiTabShell({
   const [warehouse, setWarehouse] = useState<PalletPosisiRow[] | null>(initialWarehouse ?? null);
   const [mesin, setMesin] = useState<MesinRow[] | null>(initialMesin ?? null);
   const [kualitas, setKualitas] = useState<KualitasRow[] | null>(initialKualitas ?? null);
+  const [bahanBaku, setBahanBaku] = useState<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[] } | null>(initialBahanBaku ?? null);
 
   const [loadingTab, setLoadingTab] = useState<ProduksiTabKey | null>(null);
   const [tabError, setTabError] = useState<string | null>(null);
@@ -81,6 +88,10 @@ export function ProduksiTabShell({
 
   function refreshWarehouse() {
     setWarehouse(null);
+  }
+
+  function refreshBahanBaku() {
+    setBahanBaku(null);
   }
 
   useEffect(() => {
@@ -170,18 +181,30 @@ export function ProduksiTabShell({
         setKualitas(result.data);
         setLoadingTab(null);
       }
+      if (activeTab === "bahan-baku" && bahanBaku === null) {
+        setLoadingTab("bahan-baku");
+        const result = await getCurrentShiftRowsForProduksiAction();
+        if (cancelled) return;
+        if (!result.success) {
+          setTabError(result.error);
+          setLoadingTab(null);
+          return;
+        }
+        setBahanBaku(result.data);
+        setLoadingTab(null);
+      }
     }
     load();
     return () => {
       cancelled = true;
     };
-    // kartuPengiriman/warehouse/mesin/kualitas are deliberately in the
-    // dependency list, not just activeTab: refreshKartuPengiriman/
-    // refreshWarehouse reset the relevant state to null WITHOUT changing
-    // activeTab (a save action's onAfter callback fires while the user is
-    // still on that same tab), and this effect must re-run to refetch in
-    // that case, not only when the user switches tabs.
-  }, [activeTab, kartuPengiriman, riwayat, warehouse, mesin, kualitas]);
+    // kartuPengiriman/warehouse/mesin/kualitas/bahanBaku are deliberately in
+    // the dependency list, not just activeTab: refreshKartuPengiriman/
+    // refreshWarehouse/refreshBahanBaku reset the relevant state to null
+    // WITHOUT changing activeTab (a save action's onAfter callback fires
+    // while the user is still on that same tab), and this effect must
+    // re-run to refetch in that case, not only when the user switches tabs.
+  }, [activeTab, kartuPengiriman, riwayat, warehouse, mesin, kualitas, bahanBaku]);
 
   return (
     <div className="flex h-dvh flex-col bg-background">
@@ -236,6 +259,11 @@ export function ProduksiTabShell({
         {visited.has("kualitas") && kualitas && mesin && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "kualitas" && "hidden")}>
             <KualitasView initialRiwayat={kualitas} mesinList={mesin} />
+          </div>
+        )}
+        {visited.has("bahan-baku") && bahanBaku && (
+          <div className={cn("h-full overflow-y-auto", activeTab !== "bahan-baku" && "hidden")}>
+            <BahanBakuView current={bahanBaku.current} rows={bahanBaku.rows} onAfterSimpan={refreshBahanBaku} />
           </div>
         )}
       </div>
