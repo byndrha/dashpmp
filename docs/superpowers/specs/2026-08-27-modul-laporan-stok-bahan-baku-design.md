@@ -121,55 +121,41 @@ Setiap tempat yang membandingkan nilai ini dengan sesuatu yang true-UTC
 `naiveWibToUtcInstant()`/`utcInstantToWibDisplay()` yang sudah ada di
 `business-date.ts` — jangan pernah bandingkan mentah-mentah.
 
-## Bagian 2: Role & App Baru — Staf Operasional
+## Bagian 2: Akses Staf Operasional — lewat modul `/mkesindo/laporan`, bukan app terpisah
 
-### Kenapa perlu
+### Keputusan (revisi dari draf awal)
 
-Tahap 1 butuh dua pihak pengisi data: Staf Operasional (masuk gudang,
-masuk ke inventori operasional) dan Staf Produksi (dipakai, rusak).
-Staf Produksi sudah punya `isProduksi`/`produksi-app`. Staf Operasional
-belum ada sama sekali sebagai role.
+Tidak ada `operasional-app`, dan tidak ada flag role baru (`isOperasional`)
+di Postgres/`auth.ts`/`next-auth.d.ts`. Staf Operasional memakai
+**sistem izin modul yang sudah ada** — sama seperti peran terbatas
+lainnya di app ini:
 
-### Perubahan yang dibutuhkan (mengikuti pola `isDriver`/`isSatpam`/`isProduksi` persis)
+1. Modul baru `"laporan"` ditambahkan ke `MODULE_KEYS`/`MODULE_LABEL`
+   ([`permissions.ts`](../../../src/lib/permissions.ts) baris 6-9).
+2. Halaman `/mkesindo/laporan` digerbangi `requireModuleAccess("laporan")`
+   — pola generik yang sama dipakai modul desktop lain (Pengiriman,
+   Penjualan, dst; Direktur/Superadmin otomatis lolos lewat
+   `canAccessAllPT`).
+3. Lewat **editor Peran yang sudah ada**
+   ([`peran-editor.tsx`](../../../src/components/dashboard/peran-editor.tsx)),
+   admin membuat Peran baru "Staf Operasional" dan memberinya `canEdit`
+   pada modul "laporan" saja (tidak ada modul lain) — TIDAK perlu
+   perubahan kode apa pun untuk ini, editor Peran & grid izin sudah
+   generik untuk modul apa pun di `MODULE_KEYS`.
+4. Di dalam halaman `/mkesindo/laporan` sendiri: `canEdit` pada modul
+   "laporan" menentukan apakah kartu-kartu input (Bagian 4) ditampilkan;
+   `canView`-saja menampilkan versi read-only (tabel riwayat).
 
-1. **Postgres**: kolom baru `peran.is_operasional` (boolean, default
-   false) — mirror `is_produksi` dkk.
-2. **`src/lib/queries/akun.ts`**: tambah `isOperasional` ke
-   `AkunRow`/`findAkunByUsername` query (~baris 20, 34, 56), ke
-   `PeranRow` (~baris 297, 306, 316), dan fungsi baru
-   `setPeranOperasional(peranId, isOperasional)` (mirror
-   `setPeranProduksi`, ~baris 377).
-3. **`src/lib/auth.ts`**: tambah `isOperasional` ke `AuthorizedUser`,
-   query `authorize()`, dan callback `jwt()` (mirror baris 26/88/109).
-4. **`src/types/next-auth.d.ts`**: tambah `isOperasional: boolean` ke
-   `Session.user`, `User`, dan `JWT` (mirror baris 18/33/49).
-5. **`src/lib/require-access.ts`**: `requireStafOperasional()` baru,
-   mirror persis `requireProduksi()` (baris 92–97) — cek
-   `session.user.isOperasional`.
-6. **`src/components/dashboard/peran-editor.tsx`** +
-   **`src/app/grup/akun/peran/actions.ts`**: tambah toggle "Staf
-   Operasional" di kartu peran (mirror `isProduksi`/`toggleProduksi()`,
-   baris 35/56-59) dan `setPeranOperasionalAction`.
-7. **App shell baru**: `src/app/mkesindo/operasional-app/` — struktur
-   route group `(tabs)` sama seperti `produksi-app`:
-   - `(tabs)/layout.tsx` → `await requireStafOperasional()`.
-   - `(tabs)/page.tsx` → tab utama: form isi shift berjalan.
-   - `(tabs)/riwayat/page.tsx` → riwayat shift-shift sebelumnya
-     (read-only).
-   - Komponen: `src/components/operasional-app/operasional-tab-shell.tsx`
-     (mirror `produksi-tab-shell.tsx` — keep-alive per tab, lazy-load
-     per tab, `visited` Set, `loadingTab` overlay) +
-     `bottom-nav.tsx` (mirror `produksi-app/bottom-nav.tsx`).
-   - Actions: `src/app/mkesindo/operasional-app/actions.ts` (mirror
-     `driver-app/actions.ts` — app baru dengan actions sendiri, bukan
-     numpang ke modul desktop lain karena belum ada modul desktop
-     "Operasional").
-8. **Halaman desktop baru** `/mkesindo/laporan` — untuk melihat riwayat
-   Tahap 1 (lihat Bagian 4). Ditambahkan sebagai module key baru
-   `"laporan"` di `MODULE_KEYS`/`MODULE_LABEL`
-   ([`permissions.ts`](../../../src/lib/permissions.ts) baris 6-9),
-   digerbangi `requireModuleAccess("laporan")` seperti modul desktop
-   lainnya (Direktur/Superadmin otomatis lolos via `canAccessAllPT`).
+Ini menghilangkan seluruh pekerjaan app-shell/bottom-nav/tab-shell baru,
+dan tidak menyentuh `auth.ts`, `next-auth.d.ts`, atau skema Postgres sama
+sekali — modul "laporan" bekerja persis seperti modul desktop lain yang
+sudah ada.
+
+### Staf Produksi — tidak berubah
+
+Staf Produksi tetap memakai `isProduksi`/`produksi-app` yang sudah ada
+(lihat Bagian 4) — instruksi user hanya menghapus `operasional-app`,
+bukan mengubah cara Staf Produksi mengakses bagiannya.
 
 ## Bagian 3: Skema Data Tahap 1
 
@@ -249,37 +235,39 @@ Berlaku sama untuk Plastik10KG, Plastik5KG (unit "Bundle"), dan IkatKabel
 
 ## Bagian 4: Alur UI
 
-### `operasional-app` (baru, mobile-first — role `isOperasional`)
+### Halaman `/mkesindo/laporan` (baru — module key `"laporan"`)
 
-- Tab utama: menampilkan shift kerja SEKARANG (dari
-  `getReportShift("work")`), dengan 3 kartu (Plastik 10KG, Plastik 5KG,
-  Ikat Kabel) masing-masing berisi: saldo gudang & inventori operasional
-  awal shift ini (read-only, hasil hitung), input "Masuk Gudang" & "Masuk
-  Inventori Operasional", saldo akhir hasil hitung real-time saat mengetik.
-- Tab Riwayat: daftar shift-shift sebelumnya, diurutkan terbaru dulu (by
-  `ShiftMulai DESC`) — **tetap bisa diedit** (tap baris → form yang sama
-  terbuka terisi nilai lama, sesuai keputusan "bebas diedit"), bukan
-  murni tampilan.
+Satu halaman, tampilannya bergantung pada izin akun yang login (lihat
+Bagian 2):
 
-### Tab baru "Bahan Baku" di `produksi-app` (role `isProduksi` — sudah tergerbang lewat layout yang ada)
+- **`canEdit` pada "laporan" (Staf Operasional)**: menampilkan shift
+  kerja SEKARANG (dari `getReportShift("work")`) dengan 3 kartu (Plastik
+  10KG, Plastik 5KG, Ikat Kabel), masing-masing berisi saldo gudang &
+  inventori operasional awal shift ini (read-only, hasil hitung), input
+  "Masuk Gudang" & "Masuk Inventori Operasional", dan saldo akhir hasil
+  hitung real-time saat mengetik. Di bawahnya, tabel riwayat shift-shift
+  sebelumnya (`ShiftMulai DESC`) yang barisnya **tetap bisa dibuka &
+  diedit ulang** (sesuai keputusan "bebas diedit"), bukan murni tampilan.
+- **`canView`-saja (mis. Direktur/manajemen)**: tabel riwayat yang sama
+  persis, TANPA kartu input — murni untuk MELIHAT (TanggalUsaha, Shift,
+  JenisBarang, semua angka mentah + saldo berjalan lembar & bundle,
+  siapa yang mengisi tiap bagian).
+- Karena Staf Operasional kemungkinan mengakses ini dari ponsel di
+  lapangan, layout kartu input harus responsif (bukan tabel lebar) —
+  bukan berarti app-shell terpisah, cukup halaman dashboard biasa yang
+  wajar dilihat di layar sempit.
+
+### Tab baru "Bahan Baku" di `produksi-app` (role `isProduksi`, TIDAK berubah dari draf awal)
 
 - Menampilkan shift kerja sekarang, per barang: berapa yang sudah masuk
   ke inventori operasional shift ini (read-only di sisi Produksi, diisi
-  Staf Operasional — bisa kosong/"Belum diisi" kalau Staf Operasional
-  belum sempat input), input "Dipakai" & "Rusak", saldo inventori
+  Staf Operasional lewat `/mkesindo/laporan` — bisa kosong/"Belum diisi"
+  kalau belum sempat diisi), input "Dipakai" & "Rusak", saldo inventori
   produksi akhir hasil hitung.
-- Sama seperti `operasional-app`: ada tab/daftar riwayat shift sebelumnya
-  yang barisnya tetap bisa dibuka & diedit ulang (field "Dipakai"/"Rusak"
-  saja — field milik Staf Operasional tetap read-only di sisi ini).
-
-### Halaman desktop `/mkesindo/laporan` (baru — module key `"laporan"`)
-
-- Tabel riwayat: TanggalUsaha, Shift (label jam, mis. "Shift 2 (15:00)"),
-  JenisBarang, semua angka mentah + saldo berjalan (lembar & bundle),
-  siapa yang mengisi tiap bagian. Murni untuk MELIHAT (oversight
-  Direktur/manajemen) — halaman ini sendiri tidak punya form edit; semua
-  koreksi tetap dilakukan lewat mobile app masing-masing peran (lihat di
-  atas), konsisten dengan siapa yang berwenang mengisi bagian mana.
+- Ada juga daftar riwayat shift sebelumnya yang barisnya tetap bisa
+  dibuka & diedit ulang (field "Dipakai"/"Rusak" saja — field milik Staf
+  Operasional tetap read-only di sisi ini, dan hanya bisa diubah lewat
+  `/mkesindo/laporan`).
 
 ## Ringkasan Keputusan yang Sudah Dikonfirmasi
 
@@ -287,7 +275,9 @@ Berlaku sama untuk Plastik10KG, Plastik5KG (unit "Bundle"), dan IkatKabel
   (tabel awal user ada celah/tumpang-tindih — sudah dikoreksi jadi bersih).
 - Bundle/Pack = `ceil(lembar/100)` murni.
 - Satu baris ringkas per shift per barang (bukan log transaksi).
-- Staf Operasional = role & app baru (`isOperasional` / `operasional-app`).
+- Staf Operasional = Peran baru + izin `canEdit` modul "laporan" yang
+  sudah ada (bukan flag/app baru) — input & riwayat sama-sama di
+  `/mkesindo/laporan`.
 - Cakupan: MKEsindo saja untuk sub-proyek ini.
 - Saldo awal: diisi manual sekali (tabel `DashboardStokBahanBakuSaldoAwal`).
 - Data bebas diedit → saldo dihitung saat baca (window function), tidak
