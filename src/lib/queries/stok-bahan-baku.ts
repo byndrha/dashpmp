@@ -75,7 +75,7 @@ interface RawRow {
 
 function mapRow(r: RawRow): StokBahanBakuRow {
   return {
-    stokBahanBakuId: r.StokBahanBakuID,
+    stokBahanBakuId: Number(r.StokBahanBakuID),
     tanggalUsaha: r.TanggalUsaha.toISOString().slice(0, 10),
     shift: r.Shift as ShiftNumber,
     shiftMulai: r.ShiftMulai,
@@ -153,6 +153,40 @@ export async function getStokBahanBakuHistory(limit = 90): Promise<StokBahanBaku
   return (result.recordset as RawRow[]).map(mapRow);
 }
 
+// Each JenisBarang's single latest running balance over the FULL
+// unfiltered history (no TOP N truncation) — unlike getStokBahanBakuHistory,
+// whose `limit` caps the combined row count across all 3 JenisBarang, so a
+// less-frequently-filled item's true latest row can otherwise fall outside
+// a shared display-limited window. Used by getCurrentShiftRows's fallback
+// so it never mistakes "pushed out of the display window" for "no history
+// at all yet."
+export async function getLatestBalancePerJenisBarang(): Promise<
+  Map<JenisBarang, { sisaGudangAkhir: number; sisaInventoriAkhir: number }>
+> {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT JenisBarang, SisaGudangAkhir, SisaInventoriAkhir
+    FROM (
+      SELECT
+        s.JenisBarang,
+        sa.SaldoAwalGudang + SUM(s.StokMasukGudang - s.StokMasukInventoriOperasional)
+          OVER (PARTITION BY s.JenisBarang ORDER BY s.ShiftMulai ROWS UNBOUNDED PRECEDING) AS SisaGudangAkhir,
+        sa.SaldoAwalInventoriOperasional + SUM(s.StokMasukInventoriOperasional - s.StokDipakaiProduksi - s.StokRusakProduksi)
+          OVER (PARTITION BY s.JenisBarang ORDER BY s.ShiftMulai ROWS UNBOUNDED PRECEDING) AS SisaInventoriAkhir,
+        ROW_NUMBER() OVER (PARTITION BY s.JenisBarang ORDER BY s.ShiftMulai DESC) AS rn
+      FROM DashboardStokBahanBakuShift s
+      JOIN DashboardStokBahanBakuSaldoAwal sa ON sa.JenisBarang = s.JenisBarang
+    ) x
+    WHERE rn = 1
+  `);
+  return new Map(
+    (result.recordset as { JenisBarang: JenisBarang; SisaGudangAkhir: number; SisaInventoriAkhir: number }[]).map((r) => [
+      r.JenisBarang,
+      { sisaGudangAkhir: r.SisaGudangAkhir, sisaInventoriAkhir: r.SisaInventoriAkhir },
+    ])
+  );
+}
+
 // Current work-shift row per JenisBarang — synthesizes a zero-valued row
 // (stokBahanBakuId: null) for any JenisBarang with no row yet this shift,
 // carrying forward the latest known running balance (or SaldoAwal if this
@@ -161,15 +195,20 @@ export async function getStokBahanBakuHistory(limit = 90): Promise<StokBahanBaku
 export async function getCurrentShiftRows(): Promise<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[] }> {
   const { shift, businessDate } = getReportShift("work");
   const tanggalUsaha = businessDate.toISOString().slice(0, 10);
-  const [history, saldoAwal] = await Promise.all([getStokBahanBakuHistory(), getSaldoAwal()]);
+  const [history, latestBalance, saldoAwal] = await Promise.all([
+    getStokBahanBakuHistory(),
+    getLatestBalancePerJenisBarang(),
+    getSaldoAwal(),
+  ]);
   const saldoAwalMap = new Map(saldoAwal.map((s) => [s.jenisBarang, s]));
 
   const rows: StokBahanBakuRow[] = JENIS_BARANG_LIST.map((jenisBarang) => {
     const existing = history.find((r) => r.tanggalUsaha === tanggalUsaha && r.shift === shift && r.jenisBarang === jenisBarang);
     if (existing) return existing;
-    // history is ORDER BY ShiftMulai DESC — the first match for this
-    // jenisBarang is the latest existing shift strictly before this one.
-    const previous = history.find((r) => r.jenisBarang === jenisBarang);
+    // latestBalance is computed over the FULL unfiltered history (no
+    // display-limit truncation), so it never mistakes "pushed out of the
+    // limited history window" for "no history at all yet."
+    const previous = latestBalance.get(jenisBarang);
     const saldo = saldoAwalMap.get(jenisBarang);
     return {
       stokBahanBakuId: null,
