@@ -28,7 +28,7 @@ import {
   type ProduksiSelesaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
 import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
-import { getAkunNamaMap } from "@/lib/queries/akun";
+import { getAkunNamaMap, getStafOperasionalOptions, type StafOperasionalOption } from "@/lib/queries/akun";
 import {
   getKualitasRiwayat,
   createKualitas,
@@ -44,6 +44,22 @@ import {
   type CurrentShiftInfo,
   type UpsertProduksiStokInput,
 } from "@/lib/queries/stok-bahan-baku";
+import { getAnggotaTim, tambahAnggotaTim, hapusAnggotaTim, type AnggotaTimRow } from "@/lib/queries/tim-produksi";
+import { catatMesinEvent, getMesinEventsForShift, type JenisMesinEvent, type MesinEventRow } from "@/lib/queries/produksi-mesin-event";
+import {
+  getCurrentShift,
+  getAktivitasForShift,
+  getAktivitasRiwayat,
+  upsertStafOperasional,
+  upsertKerusakan,
+  getKehadiran,
+  setKehadiran,
+  getQtyRecapForShift,
+  type AktivitasShiftInfo,
+  type QtyRecap,
+  type KerusakanInput,
+} from "@/lib/queries/aktivitas-produksi";
+import type { ShiftNumber } from "@/lib/report-shift";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
   return runAction(async () => {
@@ -257,6 +273,126 @@ export async function upsertProduksiStokAction(
       throw new AppError("Jumlah tidak boleh negatif.");
     }
     await upsertProduksiStok({ ...input, akunId: Number(session.user.id) });
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function getStafOperasionalOptionsAction(): Promise<ActionResult<StafOperasionalOption[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getStafOperasionalOptions();
+  });
+}
+
+export async function getAnggotaTimAction(shift: ShiftNumber): Promise<ActionResult<AnggotaTimRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getAnggotaTim(shift);
+  });
+}
+
+export async function tambahAnggotaTimAction(shift: ShiftNumber, nama: string): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    if (!nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
+    const id = await tambahAnggotaTim(shift, nama.trim());
+    revalidatePath("/mkesindo/produksi-app");
+    return id;
+  });
+}
+
+export async function hapusAnggotaTimAction(anggotaId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    await hapusAnggotaTim(anggotaId);
+    revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+export async function catatMesinEventAction(mesinId: number, jenisEvent: JenisMesinEvent): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    await catatMesinEvent(mesinId, jenisEvent, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+export async function getMesinEventsForShiftAction(tanggalUsaha: string, shift: ShiftNumber): Promise<ActionResult<MesinEventRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    const businessDate = new Date(`${tanggalUsaha}T00:00:00Z`);
+    return getMesinEventsForShift(businessDate, shift);
+  });
+}
+
+export async function getCurrentAktivitasProduksiAction(): Promise<
+  ActionResult<{ current: AktivitasShiftInfo; qty: QtyRecap; kehadiran: number[]; timAnggota: AnggotaTimRow[] }>
+> {
+  return runAction(async () => {
+    await requireProduksiView();
+    const { tanggalUsaha, shift } = getCurrentShift();
+    const [current, qty, kehadiran, timAnggota] = await Promise.all([
+      getAktivitasForShift(tanggalUsaha, shift),
+      getQtyRecapForShift(tanggalUsaha, shift),
+      getKehadiran(tanggalUsaha, shift),
+      getAnggotaTim(shift),
+    ]);
+    return { current, qty, kehadiran, timAnggota };
+  });
+}
+
+export async function getAktivitasRiwayatAction(): Promise<ActionResult<AktivitasShiftInfo[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getAktivitasRiwayat();
+  });
+}
+
+// Used by the Riwayat list when a past row is opened: full detail for
+// ONE specific past shift (its own qty recap + kehadiran + team roster),
+// fetched on demand rather than eagerly for every row.
+export async function getAktivitasDetailAction(
+  tanggalUsaha: string,
+  shift: ShiftNumber
+): Promise<ActionResult<{ current: AktivitasShiftInfo; qty: QtyRecap; kehadiran: number[]; timAnggota: AnggotaTimRow[] }>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    const [current, qty, kehadiran, timAnggota] = await Promise.all([
+      getAktivitasForShift(tanggalUsaha, shift),
+      getQtyRecapForShift(tanggalUsaha, shift),
+      getKehadiran(tanggalUsaha, shift),
+      getAnggotaTim(shift),
+    ]);
+    return { current, qty, kehadiran, timAnggota };
+  });
+}
+
+export async function upsertStafOperasionalAction(tanggalUsaha: string, shift: ShiftNumber, stafOperasionalAkunId: number | null): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    await upsertStafOperasional(tanggalUsaha, shift, stafOperasionalAkunId, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function upsertKerusakanAction(tanggalUsaha: string, shift: ShiftNumber, input: KerusakanInput): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    if (input.pecahKemasanQty < 0 || input.esJatuhQty < 0 || input.gantiReturnQty < 0 || input.sealerJebolQty < 0) {
+      throw new AppError("Jumlah tidak boleh negatif.");
+    }
+    await upsertKerusakan(tanggalUsaha, shift, input, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function setKehadiranAction(tanggalUsaha: string, shift: ShiftNumber, anggotaIds: number[]): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    await setKehadiran(tanggalUsaha, shift, anggotaIds, Number(session.user.id));
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/laporan");
   });
