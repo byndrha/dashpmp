@@ -15,6 +15,7 @@ import {
   type UpsertOperasionalStokInput,
   type JenisBarang,
 } from "@/lib/queries/stok-bahan-baku";
+import { getAktivitasRiwayat, type AktivitasShiftInfo } from "@/lib/queries/aktivitas-produksi";
 
 // Bypasses the permission grid for Direktur/Superadmin the same way every
 // other module's canAccessAllPT() checks do, so they can exercise the
@@ -50,6 +51,13 @@ export async function upsertOperasionalStokAction(
     await upsertOperasionalStok({ ...input, akunId: Number(session.user.id) });
     revalidatePath("/mkesindo/laporan");
     revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+export async function getAktivitasRiwayatForLaporanAction(): Promise<ActionResult<AktivitasShiftInfo[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("laporan");
+    return getAktivitasRiwayat();
   });
 }
 
