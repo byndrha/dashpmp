@@ -3,7 +3,7 @@
 // settings) is deliberately excluded — it's hard-gated to
 // DashboardRole.IsSuperAdmin rather than being assignable per role, per the
 // requirement that only Super Administrator can manage accounts/authority.
-export const MODULE_KEYS = ["beranda", "pnl", "aging", "sales", "transaksi", "electricity", "delivery", "pemesanan", "mitra", "pemasaran", "produksi"] as const;
+export const MODULE_KEYS = ["beranda", "pnl", "aging", "sales", "transaksi", "electricity", "delivery", "pemesanan", "mitra", "pemasaran", "produksi", "laporan"] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 export const MODULE_LABEL: Record<ModuleKey, string> = {
@@ -18,6 +18,7 @@ export const MODULE_LABEL: Record<ModuleKey, string> = {
   mitra: "Mitra",
   pemasaran: "Pemasaran",
   produksi: "Produksi",
+  laporan: "Laporan",
 };
 
 export interface ModulePermission {
