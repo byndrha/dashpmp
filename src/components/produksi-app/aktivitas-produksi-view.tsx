@@ -10,10 +10,9 @@ import { TimProduksiRoster } from "@/components/produksi-app/tim-produksi-roster
 import { MesinEventPanel } from "@/components/produksi-app/mesin-event-panel";
 import { RiwayatAktivitasProduksi } from "@/components/produksi-app/riwayat-aktivitas-produksi";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
-import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
-import type { AktivitasShiftInfo, QtyRecap } from "@/lib/queries/aktivitas-produksi";
+import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import { hitungTotalDenda, hitungKontribusiPerOrang } from "@/lib/aktivitas-produksi-shared";
 import { upsertStafOperasionalAction, upsertKerusakanAction } from "@/app/mkesindo/produksi/actions";
 
@@ -165,8 +164,8 @@ export function StafOperasionalSelect({
 export function AktivitasProduksiView({
   current,
   qty,
-  kehadiran,
-  timAnggota,
+  susunanTim,
+  stafOperasionalNama,
   mesinList,
   mesinEvents,
   stafOperasionalOptions,
@@ -175,10 +174,16 @@ export function AktivitasProduksiView({
 }: {
   current: AktivitasShiftInfo;
   qty: QtyRecap;
-  kehadiran: number[];
-  timAnggota: AnggotaTimRow[];
+  susunanTim: SusunanTimRow[];
+  // Resolved by the caller (page.tsx) via getAkunNamaMap — null only for a
+  // shift that has genuinely never had any activity recorded yet.
+  stafOperasionalNama: string | null;
   mesinList: MesinRow[];
   mesinEvents: MesinEventRow[];
+  // Still needed here — passed through unchanged to RiwayatAktivitasProduksi
+  // below, whose own "Ubah Aktivitas" dialog keeps the manual picker for
+  // correcting past shifts (see riwayat-aktivitas-produksi.tsx, untouched
+  // by this plan).
   stafOperasionalOptions: StafOperasionalOption[];
   riwayat: AktivitasShiftInfo[];
   onChanged: () => void;
@@ -193,23 +198,17 @@ export function AktivitasProduksiView({
         <CardHeader>
           <CardTitle className="text-sm">Staf Operasional Bertugas</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 pt-0">
-          <StafOperasionalSelect
-            tanggalUsaha={current.tanggalUsaha}
-            shift={current.shift}
-            stafOperasionalAkunId={current.stafOperasionalAkunId}
-            stafOperasionalOptions={stafOperasionalOptions}
-            onChanged={onChanged}
-          />
+        <CardContent className="flex flex-col gap-1 pt-0">
+          <p className="text-sm font-medium">{stafOperasionalNama ?? "Belum ada aktivitas tercatat"}</p>
           <p className="text-xs text-muted-foreground">
             Stok Es Sebelumnya (10KG): <span className="font-medium text-foreground">{current.stokEsSebelumnya10KG.toLocaleString("id-ID")}</span>
           </p>
         </CardContent>
       </Card>
 
-      <TimProduksiRoster tanggalUsaha={current.tanggalUsaha} shift={current.shift} timAnggota={timAnggota} kehadiran={kehadiran} canEdit onChanged={onChanged} />
+      <TimProduksiRoster tanggalUsaha={current.tanggalUsaha} shift={current.shift} susunanTim={susunanTim} canEdit onChanged={onChanged} />
       <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
-      <QtyRecapCard qty={qty} jumlahHadir={kehadiran.length} />
+      <QtyRecapCard qty={qty} jumlahHadir={susunanTim.length} />
       <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />
       <RiwayatAktivitasProduksi riwayat={riwayat} stafOperasionalOptions={stafOperasionalOptions} onChanged={onChanged} />
     </div>

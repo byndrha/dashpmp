@@ -31,8 +31,7 @@ import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { KualitasRow } from "@/lib/queries/produksi-kualitas";
 import type { StokBahanBakuRow, CurrentShiftInfo } from "@/lib/queries/stok-bahan-baku";
-import type { AktivitasShiftInfo, QtyRecap } from "@/lib/queries/aktivitas-produksi";
-import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
+import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 
@@ -71,8 +70,8 @@ export function ProduksiTabShell({
   initialAktivitasProduksi?: {
     current: AktivitasShiftInfo;
     qty: QtyRecap;
-    kehadiran: number[];
-    timAnggota: AnggotaTimRow[];
+    susunanTim: SusunanTimRow[];
+    stafOperasionalNama: string | null;
     mesinList: MesinRow[];
     mesinEvents: MesinEventRow[];
     stafOperasionalOptions: StafOperasionalOption[];
@@ -351,8 +350,8 @@ export function ProduksiTabShell({
             <AktivitasProduksiView
               current={aktivitasProduksi.current}
               qty={aktivitasProduksi.qty}
-              kehadiran={aktivitasProduksi.kehadiran}
-              timAnggota={aktivitasProduksi.timAnggota}
+              susunanTim={aktivitasProduksi.susunanTim}
+              stafOperasionalNama={aktivitasProduksi.stafOperasionalNama}
               mesinList={aktivitasProduksi.mesinList}
               mesinEvents={aktivitasProduksi.mesinEvents}
               stafOperasionalOptions={aktivitasProduksi.stafOperasionalOptions}
