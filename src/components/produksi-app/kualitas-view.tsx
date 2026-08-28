@@ -154,14 +154,12 @@ function TambahKualitasDialog({
               so Tanggal/Jam sit flush against each other) separates this
               row from the Shift buttons below it, also per explicit
               request. */}
-          <div className="grid grid-cols-[100px_1fr] gap-x-0 gap-y-3">
+          <div className="grid grid-cols-[150px_1fr] gap-x-0 gap-y-3">
             <div className="relative">
-              <Calendar className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} className="pl-8" />
+              <Input type="time" value={waktu} onChange={(e) => setWaktu(e.target.value)} className="pl-8" />
             </div>
             <div className="relative">
-              <Clock className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input type="time" value={waktu} onChange={(e) => setWaktu(e.target.value)} className="pl-8" />
+              <Input type="date" value={tanggalLabel} onChange={(e) => setTanggalLabel(e.target.value)} className="pl-8" />
             </div>
             <div className="col-span-2 grid grid-cols-3">
               {SHIFT_OPTIONS.map((s) => (
