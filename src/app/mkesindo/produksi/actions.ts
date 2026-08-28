@@ -357,23 +357,29 @@ export async function getCurrentAktivitasProduksiAction(): Promise<
     current: AktivitasShiftInfo;
     qty: QtyRecap;
     susunanTim: SusunanTimRow[];
+    timAnggota: AnggotaTimRow[];
     stafOperasionalNama: string | null;
   }>
 > {
   return runAction(async () => {
     await requireProduksiView();
     const { tanggalUsaha, shift } = getCurrentShift();
-    const [current, qty, susunanTim] = await Promise.all([
+    const [current, qty, susunanTim, timAnggota] = await Promise.all([
       getAktivitasForShift(tanggalUsaha, shift),
       getQtyRecapForShift(tanggalUsaha, shift),
       getSusunanTim(tanggalUsaha, shift),
+      getAnggotaTim(shift),
     ]);
     const namaMap = await getAkunNamaMap(current.stafOperasionalAkunId != null ? [current.stafOperasionalAkunId] : []);
     return {
       current,
       qty,
       susunanTim,
-      stafOperasionalNama: current.stafOperasionalAkunId != null ? (namaMap.get(current.stafOperasionalAkunId) ?? null) : null,
+      timAnggota,
+      stafOperasionalNama:
+        current.stafOperasionalAkunId != null
+          ? (namaMap.get(current.stafOperasionalAkunId) ?? null)
+          : null,
     };
   });
 }
@@ -401,17 +407,22 @@ export async function getAktivitasDetailAction(
 > {
   return runAction(async () => {
     await requireProduksiView();
-    const [current, qty, susunanTim] = await Promise.all([
+    const [current, qty, susunanTim, timAnggota] = await Promise.all([
       getAktivitasForShift(tanggalUsaha, shift),
       getQtyRecapForShift(tanggalUsaha, shift),
       getSusunanTim(tanggalUsaha, shift),
+      getAnggotaTim(shift),
     ]);
     const namaMap = await getAkunNamaMap(current.stafOperasionalAkunId != null ? [current.stafOperasionalAkunId] : []);
     return {
       current,
       qty,
       susunanTim,
-      stafOperasionalNama: current.stafOperasionalAkunId != null ? (namaMap.get(current.stafOperasionalAkunId) ?? null) : null,
+      timAnggota,
+      stafOperasionalNama:
+        current.stafOperasionalAkunId != null
+          ? (namaMap.get(current.stafOperasionalAkunId) ?? null)
+          : null,
     };
   });
 }

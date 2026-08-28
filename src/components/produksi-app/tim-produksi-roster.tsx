@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2 } from "lucide-react";
 import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
-import { tambahAnggotaTimAction, hapusAnggotaTimAction, setKehadiranAction } from "@/app/mkesindo/produksi/actions";
+import { tambahAnggotaTimAction, hapusAnggotaTimAction, setSusunanTimAction } from "@/app/mkesindo/produksi/actions";
 
 export function TimProduksiRoster({
   tanggalUsaha,
@@ -41,7 +41,7 @@ export function TimProduksiRoster({
   function handleSimpanKehadiran() {
     setError(null);
     startTransition(async () => {
-      const result = await setKehadiranAction(tanggalUsaha, shift, [...checked]);
+      const result = await setSusunanTimAction(tanggalUsaha, shift, [...checked]);
       if (!result.success) {
         setError(result.error);
         return;
@@ -83,7 +83,7 @@ export function TimProduksiRoster({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-col gap-2">
-          {timAnggota.map((a) => (
+         {(timAnggota ?? []).map((a) => (
             <div key={a.anggotaId} className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -98,7 +98,7 @@ export function TimProduksiRoster({
               </Button>
             </div>
           ))}
-          {timAnggota.length === 0 && <p className="text-xs text-muted-foreground">Belum ada anggota di tim ini.</p>}
+          {(timAnggota ?? []).length === 0 && <p className="text-xs text-muted-foreground">Belum ada anggota di tim ini.</p>}
         </div>
         {canEdit && (
           <Button size="sm" className="w-fit" disabled={pending} onClick={handleSimpanKehadiran}>
