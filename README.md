@@ -1,8 +1,10 @@
 # Dashboard PMP Ponorogo
 
 Dashboard operasional untuk pabrik es Maesa Group Ponorogo. Membaca data langsung dari SQL Server
-"MKEsindo" (ERP existing), tanpa ORM (pakai `mssql`). Login diverifikasi ke tabel `DashboardAuth`
-(terpisah dari `User.PasswordHash` lama).
+"MKEsindo" (ERP existing), tanpa ORM (pakai `mssql`). Akun, peran, dan izin modul tersimpan di
+Postgres `pmp_directory` (tabel `akun` / `peran` / `peran_izin`) — bukan lagi di MSSQL. Tabel MSSQL
+lama (`DashboardAuth`, `DashboardUser`, `DashboardRole`, `DashboardRolePermission`) sudah di-DROP
+pada 2026-08-22 lewat `scripts/drop-legacy-auth-tables.ts`.
 
 Modul: P&L & BEP, Aging Piutang, Penjualan Harian per Cabang, Biaya Listrik/Operasional, Pengiriman.
 
@@ -13,12 +15,11 @@ Modul: P&L & BEP, Aging Piutang, Penjualan Harian per Cabang, Biaya Listrik/Oper
 2. `npm install`
 3. `npm run dev` — buka [http://localhost:3000](http://localhost:3000)
 
-## Seed password awal user
+## Mengelola akun
 
-Setelah `DashboardAuth` kosong, jalankan `npm run seed:auth` untuk membuat password acak untuk
-setiap user di tabel `User` yang belum punya baris `DashboardAuth`. Hasilnya (username + password
-plaintext) ditulis ke `scratchpad/dashboard-auth-seed-<timestamp>.csv` (di-gitignore) — bagikan
-manual ke tiap user lalu hapus file tersebut.
+Akun dibuat dan direset lewat UI admin di `/grup/akun` (menulis ke Postgres `akun`). Tidak ada lagi
+seed script — `npm run seed:auth` dan `scripts/seed-dashboard-auth.ts` sudah tidak bisa dipakai
+sejak `DashboardAuth` di-DROP; file scriptnya disimpan hanya sebagai catatan historis.
 
 ## Deploy (Coolify)
 

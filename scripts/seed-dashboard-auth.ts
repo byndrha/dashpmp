@@ -1,3 +1,10 @@
+// HISTORICAL — NO LONGER RUNNABLE. This seeded the original login scheme,
+// which keyed passwords on the desktop ERP's own [User] table via
+// DashboardAuth. DashboardAuth was superseded first by DashboardUser and then
+// by Postgres akun, and was dropped on 2026-08-22 by
+// scripts/drop-legacy-auth-tables.ts. New accounts are created through the
+// /grup/akun admin UI (Postgres), not by a seed script. Kept only as the
+// record of how the first generation of dashboard passwords was issued.
 import "dotenv/config";
 import crypto from "node:crypto";
 import fs from "node:fs";

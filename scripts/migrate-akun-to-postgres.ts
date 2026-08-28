@@ -1,3 +1,10 @@
+// HISTORICAL — NO LONGER RUNNABLE. Its three MSSQL source tables were dropped
+// on 2026-08-22 by scripts/drop-legacy-auth-tables.ts once Postgres had been
+// the sole account store for three weeks. Kept as the record of how the
+// current akun/peran/peran_izin rows came to be (notably: akun.id was NOT
+// carried over from DashboardUser.UserID — see the comment at step 3 below,
+// which is why migrate-marketing-userid-to-akun-id.ts had to exist at all).
+//
 // One-off migration: copies DashboardRole/DashboardRolePermission/DashboardUser
 // from MSSQL into Postgres (peran/peran_izin/akun), preserving RoleID values
 // exactly. Read-only against MSSQL — never writes there. Safe to re-run

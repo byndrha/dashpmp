@@ -1,3 +1,9 @@
+// HISTORICAL — NO LONGER RUNNABLE. It reads DashboardUser to build the
+// username -> akun.id map, and that table was dropped on 2026-08-22 by
+// scripts/drop-legacy-auth-tables.ts. Kept as the record of why the
+// MarketingUserID/CreatedByUserID/ReviewedByUserID values in those 3 tables
+// are Postgres akun.id today, not MSSQL UserID.
+//
 // One-off migration: DashboardMarketingWilayah, DashboardMarketingMitra, and
 // DashboardMitraPengajuan store MarketingUserID (and, for the latter two,
 // CreatedByUserID/ReviewedByUserID) as MSSQL DashboardUser.UserID values.

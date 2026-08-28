@@ -214,7 +214,9 @@ ORDER BY gl.TransDate DESC;
 -- Query #4, #4b, #5 di atas akan pakai index ini, bukan full scan lagi.
 -- =====================================================================
 -- STATUS SCHEMA TAMBAHAN (dibuat khusus untuk dashboard, di luar skema asli):
---   - DashboardAuth (tabel baru, FK -> User.UserID)
+--   - DashboardAuth (tabel baru, FK -> User.UserID) — SUDAH DI-DROP 2026-08-22,
+--                  digantikan Postgres akun/peran/peran_izin (lihat
+--                  scripts/drop-legacy-auth-tables.ts)
 --   - ChartOfAccount.CostBehavior (kolom baru, sudah terisi untuk 6xxx)
 --   - IX_GeneralLedger_COA_TransDate (index baru)
 -- =====================================================================
