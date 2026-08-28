@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
-import { formatRupiah, formatDate, formatTime, formatQty } from "@/lib/format";
+import { formatRupiah, formatDate, formatDateWib, formatTimeWib, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { TodayReceivablePayment } from "@/lib/queries/piutang-payments";
@@ -65,7 +65,7 @@ export function PiutangPaymentsPanel({
         wilayah: r.Wilayah,
         kecamatan: r.Kecamatan ?? "",
         salesPaymentId: r.SalesPaymentID,
-        transDate: `${formatDate(r.TransDate)} ${formatTime(r.TransDate)}`,
+        transDate: `${formatDateWib(r.TransDate)} ${formatTimeWib(r.TransDate)}`,
         avgQtyPerOrderDay: r.AvgQtyPerOrderDay,
         sisaPiutang: r.SisaPiutang,
         amount: r.Amount,
@@ -155,7 +155,7 @@ export function PiutangPaymentsPanel({
                       </Badge>
                       <span>{r.Wilayah}</span>
                       {r.Kecamatan && <span>&middot; {r.Kecamatan}</span>}
-                      <span className="font-data">&middot; {formatTime(r.TransDate)}</span>
+                      <span className="font-data">&middot; {formatTimeWib(r.TransDate)}</span>
                     </p>
                   </div>
                   <span className={cn("shrink-0 rounded px-2 py-0.5 text-[11px] font-medium", STATUS_BADGE[r.Status])}>

@@ -26,7 +26,7 @@ import { DriverManager } from "@/components/dashboard/driver-manager";
 import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
 import { PrintQueuePoller } from "@/components/dashboard/print-queue-poller";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
-import { formatDate, formatTime, formatKemasanQty } from "@/lib/format";
+import { formatDate, formatTime, formatTimeWib, formatKemasanQty } from "@/lib/format";
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime, naiveWibToUtcInstant } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
@@ -488,7 +488,7 @@ function MergeExternalDialog({
             {deliveries.map((d) => (
               <div key={d.DeliveryOrderID} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                 <span className="min-w-0 truncate">
-                  {d.CustomerName} <span className="text-xs text-muted-foreground">· {formatTime(d.TransDate)}</span>
+                  {d.CustomerName} <span className="text-xs text-muted-foreground">· {formatTimeWib(d.TransDate)}</span>
                 </span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">{d.TotalKantong} kantong</span>
               </div>
@@ -743,7 +743,7 @@ function ExternalDoCard({
         />
         <span className="truncate font-semibold">{delivery.CustomerName}</span>
       </span>
-      <span className="truncate tabular-nums opacity-80">{formatTime(delivery.TransDate)} &middot; {delivery.TotalKantong} kantong</span>
+      <span className="truncate tabular-nums opacity-80">{formatTimeWib(delivery.TransDate)} &middot; {delivery.TotalKantong} kantong</span>
       <span className="truncate opacity-70">ERP &middot; belum terjadwal</span>
     </button>
   );
@@ -761,7 +761,7 @@ function TakeawayCard({ order, hourWidth, top }: { order: TakeawayOrder; hourWid
     >
       <span className="truncate font-semibold">{order.CustomerName}</span>
       <span className="truncate tabular-nums opacity-80">
-        {formatTime(order.TransDate)} &middot; {order.TotalKantong} kantong
+        {formatTimeWib(order.TransDate)} &middot; {order.TotalKantong} kantong
       </span>
       <span className="truncate opacity-70">Takeaway</span>
     </div>

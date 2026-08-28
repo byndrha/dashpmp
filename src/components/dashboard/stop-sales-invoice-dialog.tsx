@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Printer } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatRupiah } from "@/lib/format";
+import { formatDateWib, formatRupiah } from "@/lib/format";
 import { getSalesInvoiceForViewAction, enqueueManualReprintAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import { triggerPrintQueuePollNow } from "@/components/dashboard/print-queue-poller";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
@@ -72,7 +72,7 @@ export function StopSalesInvoiceDialog({
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">{invoice.VoucherNo}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(invoice.TransDate)}</p>
+                <p className="text-xs text-muted-foreground">{formatDateWib(invoice.TransDate)}</p>
               </div>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={handleReprint} disabled={reprinting}>
                 <Printer className="size-3.5" /> Cetak Ulang

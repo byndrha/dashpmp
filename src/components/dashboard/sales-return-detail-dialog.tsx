@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { formatDate, formatRupiah } from "@/lib/format";
+import { formatDateWib, formatRupiah } from "@/lib/format";
 import { getSalesReturnDetailAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 import type { SalesReturnDetail } from "@/lib/queries/pemesanan";
 
@@ -51,7 +51,7 @@ export function SalesReturnDetailDialog({
           <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto text-sm">
             <div>
               <p className="font-medium">{detail.VoucherNo}</p>
-              <p className="text-xs text-muted-foreground">{formatDate(detail.TransDate)}</p>
+              <p className="text-xs text-muted-foreground">{formatDateWib(detail.TransDate)}</p>
             </div>
             {detail.Lines.map((line, i) => (
               <div key={i} className="flex items-center justify-between border-b pb-1.5 text-xs">

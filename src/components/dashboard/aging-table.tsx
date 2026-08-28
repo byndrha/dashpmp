@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
 import { PelunasanDialog } from "@/components/dashboard/pelunasan-dialog";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
-import { formatDate, formatRupiah } from "@/lib/format";
+import { formatDateWib, formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { AgingRow, PiutangStatus } from "@/lib/queries/aging";
@@ -148,7 +148,7 @@ function InvoiceRow({ invoice }: { invoice: AgingRow }) {
       <div className="min-w-0">
         <p className="font-data truncate text-[11px] text-muted-foreground">{invoice.VoucherNo}</p>
         <p className="text-[11px] text-muted-foreground">
-          Terbit {formatDate(invoice.TransDate)} &middot; Jatuh tempo {formatDate(invoice.DueDate)}
+          Terbit {formatDateWib(invoice.TransDate)} &middot; Jatuh tempo {formatDateWib(invoice.DueDate)}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
@@ -301,8 +301,8 @@ export function AgingTable({ rows, perusahaanId }: { rows: AgingRow[]; perusahaa
           kontak: inv.Kontak ?? "",
           salesInvoiceId: inv.SalesInvoiceID,
           voucherNo: inv.VoucherNo,
-          transDate: formatDate(inv.TransDate),
-          dueDate: formatDate(inv.DueDate),
+          transDate: formatDateWib(inv.TransDate),
+          dueDate: formatDateWib(inv.DueDate),
           outstanding: inv.Outstanding,
           daysOverdue: inv.DaysOverdue,
           agingBucket: inv.AgingBucket,

@@ -1353,7 +1353,7 @@ export async function createJadwalDraft(input: {
   if (conflict) {
     if (conflict.status === "Terbit") {
       throw new AppError(
-        `Armada ini diperkirakan masih dalam perjalanan (berangkat, estimasi kembali ${formatTime(conflict.end)}) — tidak bisa membuat keberangkatan baru yang tumpang tindih waktunya.`
+        `Armada ini diperkirakan masih dalam perjalanan (berangkat, estimasi kembali ${formatTime(utcInstantToWibDisplay(conflict.end))}) — tidak bisa membuat keberangkatan baru yang tumpang tindih waktunya.`
       );
     }
     await addSalesOrdersToJadwal(conflict.jadwalId, input.salesOrderIds);
@@ -1495,7 +1495,7 @@ export async function mergeExternalDeliveriesIntoJadwal(
   if (conflict) {
     if (conflict.status === "Terbit") {
       throw new AppError(
-        `Armada ini diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa menggabungkan DO ke keberangkatan baru yang tumpang tindih waktunya.`
+        `Armada ini diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(utcInstantToWibDisplay(conflict.end))}) — tidak bisa menggabungkan DO ke keberangkatan baru yang tumpang tindih waktunya.`
       );
     }
     await appendRowsToDraft(
@@ -1726,7 +1726,7 @@ export async function updateJadwalDriverTime(
     if (conflict) {
       if (conflict.status === "Terbit") {
         throw new AppError(
-          `Waktu baru ini tumpang tindih dengan armada yang diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa diubah ke waktu tersebut.`
+          `Waktu baru ini tumpang tindih dengan armada yang diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(utcInstantToWibDisplay(conflict.end))}) — tidak bisa diubah ke waktu tersebut.`
         );
       }
       await mergeJadwalInto(pool, jadwalId, conflict.jadwalId, options.skipOrderTimeCheck);
@@ -1795,7 +1795,7 @@ export async function updateJadwalArmada(jadwalId: number, newArmadaId: number, 
   if (conflict) {
     if (conflict.status === "Terbit") {
       throw new AppError(
-        `Armada tujuan diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(conflict.end)}) — tidak bisa dipindah ke sana pada waktu ini.`
+        `Armada tujuan diperkirakan masih dalam perjalanan (estimasi kembali ${formatTime(utcInstantToWibDisplay(conflict.end))}) — tidak bisa dipindah ke sana pada waktu ini.`
       );
     }
     await mergeJadwalInto(pool, jadwalId, conflict.jadwalId);

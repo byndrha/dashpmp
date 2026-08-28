@@ -1,7 +1,7 @@
 "use client";
 
 import EscPosEncoder from "esc-pos-encoder";
-import { formatDate, formatTime, formatRupiah } from "@/lib/format";
+import { formatDateWib, formatTimeWib, formatRupiah } from "@/lib/format";
 import type { ThermalReceiptData } from "@/lib/queries/thermal-receipt";
 import type { PrintFormatSettings } from "@/lib/queries/print-format-settings";
 
@@ -87,7 +87,7 @@ export async function buildReceiptBytes(data: ThermalReceiptData, settings: Prin
     .line("Es Kristal | Ponorogo")
     .bold(false)
     .line(data.voucherNo)
-    .line(`${formatDate(data.transDate)} ${formatTime(data.transDate)}`)
+    .line(`${formatDateWib(data.transDate)} ${formatTimeWib(data.transDate)}`)
     .align("left")
     .newline()
     .line(`Mitra: ${data.mitraName}`);

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getInvoiceByToken } from "@/lib/queries/invoice-public";
 import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 import { formatDate, formatTime, formatRupiah } from "@/lib/format";
+import { utcInstantToWibDisplay } from "@/lib/business-date";
 import { InvoicePaymentRedirect } from "@/components/invoice-payment-redirect";
 import { QrPaymentPanel } from "@/components/dashboard/qr-payment-panel";
 
@@ -112,7 +113,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
               {invoice.Delivery.VehicleNo && <>Armada {invoice.Delivery.VehicleNo}</>}
               {invoice.Delivery.Driver && <> &middot; Driver {invoice.Delivery.Driver}</>}
               {invoice.Delivery.DepartureTime && (
-                <> &middot; Berangkat {formatTime(invoice.Delivery.DepartureTime)}</>
+                <> &middot; Berangkat {formatTime(utcInstantToWibDisplay(new Date(invoice.Delivery.DepartureTime)))}</>
               )}
             </p>
             <div className="mt-2 flex flex-col gap-1 text-sm">

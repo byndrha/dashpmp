@@ -6,7 +6,7 @@ import { Pencil, Trash2, CalendarClock, FileText, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatTime, formatRupiah, formatKemasanQty } from "@/lib/format";
+import { formatDate, formatDateWib, formatTime, formatRupiah, formatKemasanQty } from "@/lib/format";
 import type { SalesOrderListRow, SalesOrderStatus } from "@/lib/queries/pemesanan";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
@@ -71,11 +71,11 @@ function PemesananRow({
           <span>&middot;</span>
           <span>{row.Wilayah}</span>
           <span>&middot;</span>
-          <span>{formatDate(row.TransDate)}</span>
+          <span>{formatDateWib(row.TransDate)}</span>
           {row.DueDate && (
             <>
               <span>&middot;</span>
-              <span>Jatuh tempo {formatDate(row.DueDate)}</span>
+              <span>Jatuh tempo {formatDateWib(row.DueDate)}</span>
             </>
           )}
         </p>

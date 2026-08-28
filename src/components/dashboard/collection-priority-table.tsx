@@ -16,7 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
-import { formatRupiah, formatDate, formatQty, formatDays, formatPercentPoints } from "@/lib/format";
+import { formatRupiah, formatDate, formatDateWib, formatQty, formatDays, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { CollectionPriorityRow } from "@/lib/queries/collection-priority";
@@ -138,8 +138,8 @@ function PriorityCard({ row, onEdit }: { row: CollectionPriorityRow; onEdit: (ro
 
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
           <span>Rata² Pesan {formatQty(row.AvgQtyPerOrderDay)}</span>
-          <span>Terakhir Pesan {row.TerakhirPesan ? formatDate(row.TerakhirPesan) : "-"}</span>
-          <span>Terakhir Bayar {row.TerakhirBayar ? formatDate(row.TerakhirBayar) : "-"}</span>
+          <span>Terakhir Pesan {row.TerakhirPesan ? formatDateWib(row.TerakhirPesan) : "-"}</span>
+          <span>Terakhir Bayar {row.TerakhirBayar ? formatDateWib(row.TerakhirBayar) : "-"}</span>
           <span>Rotasi {formatDays(row.Rotasi)}</span>
           <span className="inline-flex items-center gap-1">
             Tren <TrenIcon tren={row.Tren} />
@@ -190,8 +190,8 @@ export function CollectionPriorityTable({ rows }: { rows: CollectionPriorityRow[
         targetDate: r.TargetDate ? formatDate(r.TargetDate) : "",
         targetNote: r.TargetNote ?? "",
         avgQtyPerOrderDay: r.AvgQtyPerOrderDay,
-        terakhirPesan: r.TerakhirPesan ? formatDate(r.TerakhirPesan) : "",
-        terakhirBayar: r.TerakhirBayar ? formatDate(r.TerakhirBayar) : "",
+        terakhirPesan: r.TerakhirPesan ? formatDateWib(r.TerakhirPesan) : "",
+        terakhirBayar: r.TerakhirBayar ? formatDateWib(r.TerakhirBayar) : "",
         omzet: r.Omzet,
         status: r.Status,
         tren: r.Tren,

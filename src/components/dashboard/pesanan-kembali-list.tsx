@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatRupiah } from "@/lib/format";
+import { formatDateWib, formatRupiah } from "@/lib/format";
 import type { SalesReturnListRow } from "@/lib/queries/pemesanan";
 import { SalesReturnDetailDialog } from "@/components/dashboard/sales-return-detail-dialog";
 
@@ -21,7 +21,7 @@ function PesananKembaliRow({ row, onOpen }: { row: SalesReturnListRow; onOpen: (
           <span>&middot;</span>
           <span>{row.Wilayah}</span>
           <span>&middot;</span>
-          <span>{formatDate(row.TransDate)}</span>
+          <span>{formatDateWib(row.TransDate)}</span>
           {row.DeliveryOrderVoucherNo && (
             <>
               <span>&middot;</span>

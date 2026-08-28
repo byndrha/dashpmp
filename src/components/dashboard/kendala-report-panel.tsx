@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, formatTime } from "@/lib/format";
+import { utcInstantToWibDisplay } from "@/lib/business-date";
 import type { KendalaReportRow } from "@/lib/queries/driver-kendala";
 
 export function KendalaReportPanel({ rows }: { rows: KendalaReportRow[] }) {
@@ -30,7 +31,8 @@ export function KendalaReportPanel({ rows }: { rows: KendalaReportRow[] }) {
             {rows.map((r) => (
               <TableRow key={r.KendalaID}>
                 <TableCell>
-                  {formatDate(r.WaktuLapor)} {formatTime(r.WaktuLapor)}
+                  {formatDate(utcInstantToWibDisplay(new Date(r.WaktuLapor)))}{" "}
+                  {formatTime(utcInstantToWibDisplay(new Date(r.WaktuLapor)))}
                 </TableCell>
                 <TableCell>#{r.JadwalID}</TableCell>
                 <TableCell>

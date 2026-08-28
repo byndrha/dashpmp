@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Pagination } from "@/components/dashboard/pagination";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDateWib, formatTimeWib } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesOrderCard, DeliveryCard } from "@/lib/queries/sales-cards";
 import { getDeliveryCardsAction } from "@/app/mkesindo/(dashboard)/transaksi/actions";
@@ -86,7 +86,7 @@ function DeliveryRow({ delivery }: { delivery: DeliveryCard }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-2">
       <span className="text-xs text-muted-foreground">
-        {formatDate(delivery.TransDate)} · Kirim - {formatTime(delivery.TransDate)}
+        {formatDateWib(delivery.TransDate)} · Kirim - {formatTimeWib(delivery.TransDate)}
       </span>
       <StatusBadges delivery={delivery} />
     </div>
@@ -99,7 +99,7 @@ function DeliveryRowDetailed({ delivery }: { delivery: DeliveryCard }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
-            {formatDate(delivery.TransDate)} · Kirim - {formatTime(delivery.TransDate)}
+            {formatDateWib(delivery.TransDate)} · Kirim - {formatTimeWib(delivery.TransDate)}
           </p>
           <p className="font-data text-xs text-muted-foreground">{delivery.VoucherNo}</p>
           <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
@@ -156,7 +156,7 @@ function SalesOrderTransactionCard({
               </Badge>
             </p>
             <p className="text-xs text-muted-foreground">
-              {formatDate(so.TransDate)} {formatTime(so.TransDate)}
+              {formatDateWib(so.TransDate)} {formatTimeWib(so.TransDate)}
             </p>
             <p className="font-data truncate text-xs text-muted-foreground">{so.VoucherNo}</p>
           </div>

@@ -58,6 +58,28 @@ export function formatDate(value: string | Date): string {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(value));
 }
 
+// formatDate/formatTime read whatever timezone the CALLING environment is
+// in (no explicit `timeZone` passed to Intl) — correct for a naive-WIB
+// value (TransDate/DueDate-family: raw UTC-component values ARE the WIB
+// wall-clock value, see getNaiveWibTransDate's comment) ONLY when called
+// server-side (this app's server runs true UTC, so "ambient timezone"
+// happens to equal "no conversion"). Called from a "use client" component,
+// the ambient timezone is the real end user's own browser (WIB for
+// virtually everyone here), which then WRONGLY re-applies a +7h shift on
+// top of an already-WIB value. formatDateWib/formatTimeWib below pin
+// `timeZone: "UTC"` explicitly, so they read the same raw components
+// correctly regardless of where they're called from — use these for any
+// naive-WIB value displayed from a "use client" file. Do NOT use them for
+// a true-UTC value (JamJadwal-family) — those need the opposite
+// direction of correction (see utcInstantToWibDisplay in business-date.ts).
+export function formatDateWib(value: string | Date): string {
+  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(value));
+}
+
+export function formatTimeWib(value: string | Date): string {
+  return new Intl.DateTimeFormat("id-ID", { timeStyle: "short", timeZone: "UTC" }).format(new Date(value));
+}
+
 // "dd/MM/yy" — compact day+month+year, e.g. for a comparison-period column
 // header where a bare day number would be ambiguous across month/year
 // boundaries. UTC getters (not local) to match this app's

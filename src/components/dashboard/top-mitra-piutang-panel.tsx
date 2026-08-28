@@ -17,7 +17,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { formatRupiah, formatDays, formatPercentPoints, formatQty, formatDate } from "@/lib/format";
+import { formatRupiah, formatDays, formatPercentPoints, formatQty, formatDateWib } from "@/lib/format";
 import type { TopMitraPiutangRow } from "@/lib/queries/top-mitra-piutang";
 import type { PiutangStatus } from "@/lib/queries/aging";
 import { setMitraNoteAction } from "@/app/mkesindo/(dashboard)/aging/actions";
@@ -84,12 +84,12 @@ function MitraCard({ row, onEditNote }: { row: TopMitraPiutangRow; onEditNote: (
           </div>
           <div>
             <p className="text-muted-foreground">DO Terakhir</p>
-            <p className="tabular-nums font-medium">{row.DOTerakhir ? formatDate(row.DOTerakhir) : "-"}</p>
+            <p className="tabular-nums font-medium">{row.DOTerakhir ? formatDateWib(row.DOTerakhir) : "-"}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Terakhir Bayar</p>
             <p className="tabular-nums font-medium">
-              {row.TerakhirPembayaran ? formatDate(row.TerakhirPembayaran) : "-"}
+              {row.TerakhirPembayaran ? formatDateWib(row.TerakhirPembayaran) : "-"}
             </p>
           </div>
         </div>
