@@ -38,31 +38,80 @@ export function MesinEventPanel({
       <CardHeader>
         <CardTitle className="text-sm">Status Mesin</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {mesinList.map((m) => (
-          <div key={m.MesinID} className="flex items-center justify-between gap-2 rounded-md border p-2">
-            <span className="text-sm">{m.Nama}</span>
-            <div className="flex gap-1.5">
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => handleToggle(m.MesinID, "On")}>
-                On
-              </Button>
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => handleToggle(m.MesinID, "Off")}>
-                Off
-              </Button>
+      <CardContent className="grid grid-cols-3 gap-3">
+        {mesinList.map((m) => {
+          const mesinEvents = events.filter(
+            (e) => e.mesinId === m.MesinID
+          );
+
+          const lastEvent =
+            mesinEvents.length > 0
+              ? [...mesinEvents].sort(
+                  (a, b) =>
+                    new Date(b.waktuEvent).getTime() -
+                    new Date(a.waktuEvent).getTime()
+                )[0]
+              : null;
+
+          return (
+            <div
+              key={m.MesinID}
+              className="flex h-full flex-col rounded-md border p-3 pt-[8px]"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between gap-2">
+                <span className="min-w-0 flex-1 whitespace-nowrap text-sm font-medium">
+                  {m.Nama}
+                </span>
+
+                {/* Tombol mepet border kanan & atas */}
+                <div className="-mr-3 -mt-3 flex shrink-0 gap-1">
+                  {(!lastEvent || lastEvent.jenisEvent === "Off") && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="rounded-none rounded-bl-md rounded-tr-md"
+                      disabled={pending}
+                      onClick={() => handleToggle(m.MesinID, "On")}
+                    >
+                      ON
+                    </Button>
+                  )}
+
+                  {lastEvent?.jenisEvent === "On" && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="rounded-none rounded-bl-md rounded-tr-md"
+                      disabled={pending}
+                      onClick={() => handleToggle(m.MesinID, "Off")}
+                    >
+                      OFF
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Detail event */}
+              <div className="mt-3 flex flex-col gap-1 border-t pt-2 text-xs">
+                {mesinEvents.map((e) => (
+                  <p
+                    key={e.eventId}
+                    className="text-muted-foreground"
+                  >
+                    {formatJamNaiveWib(e.waktuEvent)} — {e.jenisEvent}
+                  </p>
+                ))}
+
+                {mesinEvents.length === 0 && (
+                  <p className="text-muted-foreground">
+                    Tanpa Catatan
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        <div className="flex flex-col gap-1 text-xs">
-          {events.map((e) => {
-            const mesin = mesinList.find((m) => m.MesinID === e.mesinId);
-            return (
-              <p key={e.eventId} className="text-muted-foreground">
-                {formatJamNaiveWib(e.waktuEvent)} — {mesin?.Nama ?? "?"}: {e.jenisEvent}
-              </p>
-            );
-          })}
-          {events.length === 0 && <p className="text-muted-foreground">Belum ada kejadian shift ini.</p>}
-        </div>
+          );
+        })}
       </CardContent>
     </Card>
   );
