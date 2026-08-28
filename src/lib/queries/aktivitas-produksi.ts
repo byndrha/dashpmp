@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { getReportShift, getShiftWindow, getShiftLabel, type ShiftNumber } from "@/lib/report-shift";
 import { naiveWibToUtcInstant } from "@/lib/business-date";
+import { getAnggotaTim } from "@/lib/queries/tim-produksi";
 export { hitungTotalDenda, hitungKontribusiPerOrang } from "@/lib/aktivitas-produksi-shared";
 
 export interface AktivitasShiftInfo {
@@ -75,9 +76,9 @@ async function ensureAktivitasRow(pool: sql.ConnectionPool, tanggalUsaha: string
     .input("stokEs", sql.Int, stokEs)
     .input("akunId", sql.Int, akunId)
     .query(`
-      INSERT INTO DashboardAktivitasProduksiShift (TanggalUsaha, Shift, ShiftMulai, StokEsSebelumnya10KG, CreatedByAkunID)
+      INSERT INTO DashboardAktivitasProduksiShift (TanggalUsaha, Shift, ShiftMulai, StokEsSebelumnya10KG, CreatedByAkunID, StafOperasionalAkunID)
       OUTPUT INSERTED.AktivitasID
-      VALUES (@t, @s, @shiftMulai, @stokEs, @akunId)
+      VALUES (@t, @s, @shiftMulai, @stokEs, @akunId, @akunId)
     `);
   return (result.recordset[0] as { AktivitasID: number }).AktivitasID;
 }
@@ -182,24 +183,55 @@ export async function upsertKerusakan(tanggalUsaha: string, shift: ShiftNumber, 
     `);
 }
 
-export async function getKehadiran(tanggalUsaha: string, shift: ShiftNumber): Promise<number[]> {
+export interface SusunanTimRow {
+  anggotaId: number;
+  nama: string;
+  urutan: number;
+}
+
+// Who's actually on duty for this ONE (tanggalUsaha, shift) occurrence --
+// independent of DashboardTimProduksiAnggota's permanent team membership
+// (see getAnggotaTim in tim-produksi.ts). Distinguishes "never saved" (no
+// DashboardAktivitasProduksiShift row at all -- falls back to this shift's
+// own permanent team as a starting point, NOT written to DB yet) from
+// "saved with nobody in it" (a real, empty, already-persisted roster) by
+// checking for the Shift row's existence first, not by whether the
+// Kehadiran query comes back empty.
+export async function getSusunanTim(tanggalUsaha: string, shift: ShiftNumber): Promise<SusunanTimRow[]> {
   const pool = await getPool();
-  const result = await pool
+  const existing = await pool
     .request()
     .input("t", sql.Date, tanggalUsaha)
     .input("s", sql.TinyInt, shift)
-    .query(`
-      SELECT kh.AnggotaID FROM DashboardAktivitasProduksiKehadiran kh
-      JOIN DashboardAktivitasProduksiShift a ON a.AktivitasID = kh.AktivitasID
-      WHERE a.TanggalUsaha = @t AND a.Shift = @s
+    .query(`SELECT AktivitasID FROM DashboardAktivitasProduksiShift WHERE TanggalUsaha = @t AND Shift = @s`);
+  const aktivitasId = (existing.recordset[0] as { AktivitasID: number } | undefined)?.AktivitasID;
+
+  if (aktivitasId == null) {
+    const timTetap = await getAnggotaTim(shift);
+    return timTetap.map((a, i) => ({ anggotaId: a.anggotaId, nama: a.nama, urutan: i }));
+  }
+
+  const result = await pool
+    .request()
+    .input("aktivitasId", sql.Int, aktivitasId).query(`
+      SELECT kh.AnggotaID, kh.Urutan, a.Nama
+      FROM DashboardAktivitasProduksiKehadiran kh
+      JOIN DashboardTimProduksiAnggota a ON a.AnggotaID = kh.AnggotaID
+      WHERE kh.AktivitasID = @aktivitasId
+      ORDER BY kh.Urutan ASC
     `);
-  return (result.recordset as { AnggotaID: number }[]).map((r) => r.AnggotaID);
+  return (result.recordset as { AnggotaID: number; Urutan: number; Nama: string }[]).map((r) => ({
+    anggotaId: r.AnggotaID,
+    urutan: r.Urutan,
+    nama: r.Nama,
+  }));
 }
 
-// Replaces the whole attendance list for this shift (delete then
-// re-insert) rather than diffing — the UI always submits the complete
-// checked set, never an incremental add/remove.
-export async function setKehadiran(tanggalUsaha: string, shift: ShiftNumber, anggotaIds: number[], akunId: number): Promise<void> {
+// Replaces the whole susunan tim for this shift (delete then re-insert)
+// rather than diffing -- the UI always submits the complete ordered list,
+// never an incremental add/remove/reorder. Urutan = the array's own index,
+// so callers encode order purely by array position.
+export async function setSusunanTim(tanggalUsaha: string, shift: ShiftNumber, anggotaIds: number[], akunId: number): Promise<void> {
   const pool = await getPool();
   const aktivitasId = await ensureAktivitasRow(pool, tanggalUsaha, shift, akunId);
   const transaction = new sql.Transaction(pool);
@@ -208,11 +240,12 @@ export async function setKehadiran(tanggalUsaha: string, shift: ShiftNumber, ang
     await new sql.Request(transaction).input("aktivitasId", sql.Int, aktivitasId).query(`
       DELETE FROM DashboardAktivitasProduksiKehadiran WHERE AktivitasID = @aktivitasId
     `);
-    for (const anggotaId of anggotaIds) {
+    for (let i = 0; i < anggotaIds.length; i++) {
       await new sql.Request(transaction)
         .input("aktivitasId", sql.Int, aktivitasId)
-        .input("anggotaId", sql.Int, anggotaId)
-        .query(`INSERT INTO DashboardAktivitasProduksiKehadiran (AktivitasID, AnggotaID) VALUES (@aktivitasId, @anggotaId)`);
+        .input("anggotaId", sql.Int, anggotaIds[i])
+        .input("urutan", sql.Int, i)
+        .query(`INSERT INTO DashboardAktivitasProduksiKehadiran (AktivitasID, AnggotaID, Urutan) VALUES (@aktivitasId, @anggotaId, @urutan)`);
     }
     await transaction.commit();
   } catch (err) {

@@ -44,7 +44,14 @@ import {
   type CurrentShiftInfo,
   type UpsertProduksiStokInput,
 } from "@/lib/queries/stok-bahan-baku";
-import { getAnggotaTim, tambahAnggotaTim, hapusAnggotaTim, type AnggotaTimRow } from "@/lib/queries/tim-produksi";
+import {
+  getAnggotaTim,
+  getSemuaAnggotaTim,
+  tambahAnggotaTim,
+  updateAnggotaTim,
+  hapusAnggotaTim,
+  type AnggotaTimRow,
+} from "@/lib/queries/tim-produksi";
 import { catatMesinEvent, getMesinEventsForShift, type JenisMesinEvent, type MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import {
   getCurrentShift,
@@ -52,12 +59,13 @@ import {
   getAktivitasRiwayat,
   upsertStafOperasional,
   upsertKerusakan,
-  getKehadiran,
-  setKehadiran,
+  getSusunanTim,
+  setSusunanTim,
   getQtyRecapForShift,
   type AktivitasShiftInfo,
   type QtyRecap,
   type KerusakanInput,
+  type SusunanTimRow,
 } from "@/lib/queries/aktivitas-produksi";
 import type { ShiftNumber } from "@/lib/report-shift";
 
@@ -293,6 +301,23 @@ export async function getAnggotaTimAction(shift: ShiftNumber): Promise<ActionRes
   });
 }
 
+export async function getSemuaAnggotaTimAction(): Promise<ActionResult<AnggotaTimRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getSemuaAnggotaTim();
+  });
+}
+
+export async function updateAnggotaTimAction(anggotaId: number, input: { nama: string; shift: ShiftNumber }): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    if (!input.nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
+    await updateAnggotaTim(anggotaId, { nama: input.nama.trim(), shift: input.shift });
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
 export async function tambahAnggotaTimAction(shift: ShiftNumber, nama: string): Promise<ActionResult<number>> {
   return runAction(async () => {
     await requireProduksiView();
@@ -328,18 +353,28 @@ export async function getMesinEventsForShiftAction(tanggalUsaha: string, shift: 
 }
 
 export async function getCurrentAktivitasProduksiAction(): Promise<
-  ActionResult<{ current: AktivitasShiftInfo; qty: QtyRecap; kehadiran: number[]; timAnggota: AnggotaTimRow[] }>
+  ActionResult<{
+    current: AktivitasShiftInfo;
+    qty: QtyRecap;
+    susunanTim: SusunanTimRow[];
+    stafOperasionalNama: string | null;
+  }>
 > {
   return runAction(async () => {
     await requireProduksiView();
     const { tanggalUsaha, shift } = getCurrentShift();
-    const [current, qty, kehadiran, timAnggota] = await Promise.all([
+    const [current, qty, susunanTim] = await Promise.all([
       getAktivitasForShift(tanggalUsaha, shift),
       getQtyRecapForShift(tanggalUsaha, shift),
-      getKehadiran(tanggalUsaha, shift),
-      getAnggotaTim(shift),
+      getSusunanTim(tanggalUsaha, shift),
     ]);
-    return { current, qty, kehadiran, timAnggota };
+    const namaMap = await getAkunNamaMap(current.stafOperasionalAkunId != null ? [current.stafOperasionalAkunId] : []);
+    return {
+      current,
+      qty,
+      susunanTim,
+      stafOperasionalNama: current.stafOperasionalAkunId != null ? (namaMap.get(current.stafOperasionalAkunId) ?? null) : null,
+    };
   });
 }
 
@@ -356,16 +391,28 @@ export async function getAktivitasRiwayatAction(): Promise<ActionResult<Aktivita
 export async function getAktivitasDetailAction(
   tanggalUsaha: string,
   shift: ShiftNumber
-): Promise<ActionResult<{ current: AktivitasShiftInfo; qty: QtyRecap; kehadiran: number[]; timAnggota: AnggotaTimRow[] }>> {
+): Promise<
+  ActionResult<{
+    current: AktivitasShiftInfo;
+    qty: QtyRecap;
+    susunanTim: SusunanTimRow[];
+    stafOperasionalNama: string | null;
+  }>
+> {
   return runAction(async () => {
     await requireProduksiView();
-    const [current, qty, kehadiran, timAnggota] = await Promise.all([
+    const [current, qty, susunanTim] = await Promise.all([
       getAktivitasForShift(tanggalUsaha, shift),
       getQtyRecapForShift(tanggalUsaha, shift),
-      getKehadiran(tanggalUsaha, shift),
-      getAnggotaTim(shift),
+      getSusunanTim(tanggalUsaha, shift),
     ]);
-    return { current, qty, kehadiran, timAnggota };
+    const namaMap = await getAkunNamaMap(current.stafOperasionalAkunId != null ? [current.stafOperasionalAkunId] : []);
+    return {
+      current,
+      qty,
+      susunanTim,
+      stafOperasionalNama: current.stafOperasionalAkunId != null ? (namaMap.get(current.stafOperasionalAkunId) ?? null) : null,
+    };
   });
 }
 
@@ -390,10 +437,10 @@ export async function upsertKerusakanAction(tanggalUsaha: string, shift: ShiftNu
   });
 }
 
-export async function setKehadiranAction(tanggalUsaha: string, shift: ShiftNumber, anggotaIds: number[]): Promise<ActionResult<void>> {
+export async function setSusunanTimAction(tanggalUsaha: string, shift: ShiftNumber, anggotaIds: number[]): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireProduksiView();
-    await setKehadiran(tanggalUsaha, shift, anggotaIds, Number(session.user.id));
+    await setSusunanTim(tanggalUsaha, shift, anggotaIds, Number(session.user.id));
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/laporan");
   });
