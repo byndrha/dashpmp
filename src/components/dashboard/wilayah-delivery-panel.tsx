@@ -84,12 +84,6 @@ export function WilayahDeliveryPanel({
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
-              <div>
-                <p className="text-[11px] text-muted-foreground">Total Periode Terpilih</p>
-                <p className="font-display text-sm font-semibold tabular-nums">
-                  {grandTotal.toLocaleString("id-ID")} kantong
-                </p>
-              </div>
               <div className="text-right">
                 <p className="text-[11px] text-muted-foreground">Hari Ini</p>
                 <p className="font-display text-sm font-semibold tabular-nums text-primary">
@@ -105,6 +99,12 @@ export function WilayahDeliveryPanel({
                   <span className="mx-1">·</span>
                   <Star className="mb-0.5 inline size-2.5 shrink-0 fill-primary text-primary" /> Deviasi{" "}
                   {deviasiPonorogo != null ? deviasiPonorogo.toLocaleString("id-ID") : "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Total Periode Terpilih</p>
+                <p className="font-display text-sm font-semibold tabular-nums">
+                  {grandTotal.toLocaleString("id-ID")} kantong
                 </p>
               </div>
             </div>
@@ -200,6 +200,39 @@ export function WilayahDeliveryPanel({
                 </div>
               </div>
             )}
+
+            {/* Kontribusi per wilayah terhadap total (100%) — beda konsep dari
+                %Pencapaian Target di tile atas. Selalu tampil (tidak ikut
+                collapsed) karena ini ringkasan level-panel, sama seperti kotak
+                Total di atas. Satu baris yang bisa di-scroll horizontal
+                (bukan grid yang wrap) supaya jumlah wilayah berapa pun (saat
+                ini bisa sampai 9) tidak pernah membuat lebih dari 1 baris
+                atau saling tumpang tindih pada layar sempit — eksplisit per
+                permintaan. */}
+            <div className="flex flex-col gap-1.5 border-t pt-2.5">
+              <p className="text-[10px] text-muted-foreground">
+                Kontribusi Wilayah — <span className="font-medium">Harian</span> |{" "}
+                <span className="font-medium">Periode Terpilih</span>
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {sortedData.map((w) => {
+                  const pctHarian = grandTotalToday > 0 ? (w.TotalKantongHariIni / grandTotalToday) * 100 : 0;
+                  const pctPeriode = grandTotal > 0 ? (w.TotalKantong / grandTotal) * 100 : 0;
+                  return (
+                    <div
+                      key={w.Wilayah}
+                      className="flex shrink-0 flex-col items-center gap-1 rounded-md border border-border bg-card/50 px-2 py-1.5"
+                    >
+                      <p className="max-w-20 truncate text-[10px] font-medium text-muted-foreground">{w.Wilayah}</p>
+                      <p className="whitespace-nowrap text-xs font-semibold tabular-nums">
+                        {pctHarian.toFixed(0)}%<span className="mx-1 font-normal text-muted-foreground">|</span>
+                        {pctPeriode.toFixed(0)}%
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </CardContent>
