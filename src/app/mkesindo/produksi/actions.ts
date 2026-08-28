@@ -241,6 +241,7 @@ export async function createKualitasAction(
     const session = await requireProduksiView();
     if (!input.mesinId) throw new AppError("Pilih mesin yang dipakai.");
     if (!input.waktu) throw new AppError("Isi waktu pemeriksaan.");
+    if (!input.qty10KG || input.qty10KG <= 0) throw new AppError("Isi QTY 10 KG Kantong Es.");
     const kualitasId = await createKualitas({ ...input, dicatatOlehUserId: session.user.id });
     revalidatePath("/mkesindo/produksi-app");
     return kualitasId;

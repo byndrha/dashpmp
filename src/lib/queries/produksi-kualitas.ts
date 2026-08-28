@@ -1,13 +1,13 @@
 import { getPool, sql } from "@/lib/db";
 
-// Pass/fail checklist a QC entry records (CekKontaminasi/CekKemasan are no
-// longer collected by the form — see kualitas-view.tsx's CHECKLIST_ITEMS —
-// but stay on historical rows), plus 2 numeric readings (diameter/berat), a
-// free-text note, and one evidence photo — the shared Tanggal/Waktu/Shift/
-// Mesin fields mirror Tambah Produksi's own form exactly (same input types,
-// same Shift/Mesin conventions), since this is the same "who recorded what,
-// on which machine, during which shift" frame as every other produksi-app
-// entry.
+// Pass/fail checklist a QC entry records (Kontaminasi/Kemasan were dropped
+// entirely -- see the 2026-08-28 revisi spec), a QTY reading that doubles as
+// this pemeriksaan's plafon stok (see DashboardProduksiBatch.KualitasID in
+// produksi-warehouse.ts), a diameter reading, a free-text note, and one
+// evidence photo -- the shared Tanggal/Waktu/Shift/Mesin fields mirror
+// Tambah Produksi's own form exactly (same input types, same Shift/Mesin
+// conventions), since this is the same "who recorded what, on which
+// machine, during which shift" frame as every other produksi-app entry.
 export interface KualitasRow {
   KualitasID: number;
   TanggalLabel: string;
@@ -17,19 +17,21 @@ export interface KualitasRow {
   MesinNama: string;
   CekKejernihan: boolean;
   CekUkuranBentuk: boolean;
-  CekKontaminasi: boolean;
-  CekKemasan: boolean;
-  // Column renamed from SuhuEs (see scripts/rename-kualitas-suhues-to-diameter.ts)
-  // — this form used to record ice temperature, now records inner diameter.
-  DiameterDalamCm: number | null;
-  BeratSampel: number | null;
+  Qty10KG: number | null;
+  DiameterDalamMm: number | null;
   Catatan: string | null;
   FotoPath: string | null;
   CreatedByUserID: string;
   CreatedDate: string;
+  // Qty10KG minus SUM(DashboardProduksiBatch.Qty10KG) already allocated to
+  // any pallete under this KualitasID (IsDeleted = 0) -- null when Qty10KG
+  // itself is null (no ceiling to compute against, e.g. legacy rows).
+  // Never negative (floored at 0) even if over-allocated somehow slipped
+  // through before this check existed.
+  SisaAlokasi: number | null;
 }
 
-// Most recent QC entries across all mesin — a flat riwayat log, not
+// Most recent QC entries across all mesin -- a flat riwayat log, not
 // filtered by business-date period like Kartu Pengiriman (a QC log is
 // meant to be browsable further back without a Pengiriman/Riwayat-style
 // split; capped instead, same reasoning as
@@ -40,18 +42,29 @@ export async function getKualitasRiwayat(limit = 50): Promise<KualitasRow[]> {
     .request()
     .input("limit", sql.Int, limit).query(`
       SELECT TOP (@limit) k.KualitasID, k.TanggalLabel, k.Waktu, k.Shift, k.MesinID, m.Nama AS MesinNama,
-             k.CekKejernihan, k.CekUkuranBentuk, k.CekKontaminasi, k.CekKemasan,
-             k.DiameterDalamCm, k.BeratSampel, k.Catatan, k.FotoPath, k.CreatedByUserID, k.CreatedDate
+             k.CekKejernihan, k.CekUkuranBentuk, k.Qty10KG, k.DiameterDalamMm, k.Catatan, k.FotoPath,
+             k.CreatedByUserID, k.CreatedDate,
+             ISNULL(alok.TotalTeralokasi, 0) AS TotalTeralokasi
       FROM DashboardProduksiKualitas k
       LEFT JOIN DashboardProduksiMesin m ON m.MesinID = k.MesinID
+      OUTER APPLY (
+        SELECT SUM(b.Qty10KG) AS TotalTeralokasi
+        FROM DashboardProduksiBatch b
+        WHERE b.KualitasID = k.KualitasID AND b.IsDeleted = 0
+      ) alok
       ORDER BY k.CreatedDate DESC
     `);
   return (
-    result.recordset as (Omit<KualitasRow, "TanggalLabel" | "CreatedDate"> & { TanggalLabel: Date; CreatedDate: Date })[]
+    result.recordset as (Omit<KualitasRow, "TanggalLabel" | "CreatedDate" | "SisaAlokasi"> & {
+      TanggalLabel: Date;
+      CreatedDate: Date;
+      TotalTeralokasi: number;
+    })[]
   ).map((r) => ({
     ...r,
     TanggalLabel: r.TanggalLabel.toISOString().slice(0, 10),
     CreatedDate: r.CreatedDate.toISOString(),
+    SisaAlokasi: r.Qty10KG == null ? null : Math.max(0, r.Qty10KG - r.TotalTeralokasi),
   }));
 }
 
@@ -62,10 +75,8 @@ export interface CreateKualitasInput {
   mesinId: number;
   cekKejernihan: boolean;
   cekUkuranBentuk: boolean;
-  cekKontaminasi: boolean;
-  cekKemasan: boolean;
-  diameterDalam: number | null;
-  beratSampel: number | null;
+  qty10KG: number;
+  diameterDalamMm: number | null;
   catatan: string | null;
   fotoPath: string | null;
   dicatatOlehUserId: string;
@@ -81,18 +92,16 @@ export async function createKualitas(input: CreateKualitasInput): Promise<number
     .input("mesinId", sql.Int, input.mesinId)
     .input("cekKejernihan", sql.Bit, input.cekKejernihan)
     .input("cekUkuranBentuk", sql.Bit, input.cekUkuranBentuk)
-    .input("cekKontaminasi", sql.Bit, input.cekKontaminasi)
-    .input("cekKemasan", sql.Bit, input.cekKemasan)
-    .input("diameterDalam", sql.Decimal(5, 2), input.diameterDalam)
-    .input("beratSampel", sql.Decimal(10, 2), input.beratSampel)
+    .input("qty10KG", sql.Int, input.qty10KG)
+    .input("diameterDalamMm", sql.Decimal(5, 1), input.diameterDalamMm)
     .input("catatan", sql.NVarChar(500), input.catatan)
     .input("fotoPath", sql.VarChar(256), input.fotoPath)
     .input("userId", sql.VarChar(16), input.dicatatOlehUserId).query(`
       INSERT INTO DashboardProduksiKualitas
-        (TanggalLabel, Waktu, Shift, MesinID, CekKejernihan, CekUkuranBentuk, CekKontaminasi, CekKemasan, DiameterDalamCm, BeratSampel, Catatan, FotoPath, CreatedByUserID)
+        (TanggalLabel, Waktu, Shift, MesinID, CekKejernihan, CekUkuranBentuk, Qty10KG, DiameterDalamMm, Catatan, FotoPath, CreatedByUserID)
       OUTPUT INSERTED.KualitasID
       VALUES
-        (@tanggalLabel, @waktu, @shift, @mesinId, @cekKejernihan, @cekUkuranBentuk, @cekKontaminasi, @cekKemasan, @diameterDalam, @beratSampel, @catatan, @fotoPath, @userId)
+        (@tanggalLabel, @waktu, @shift, @mesinId, @cekKejernihan, @cekUkuranBentuk, @qty10KG, @diameterDalamMm, @catatan, @fotoPath, @userId)
     `);
   return (result.recordset[0] as { KualitasID: number }).KualitasID;
 }
