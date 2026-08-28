@@ -18,12 +18,10 @@ function UbahAktivitasDialog({
   row,
   stafOperasionalOptions,
   onOpenChange,
-  onChanged,
 }: {
   row: AktivitasShiftInfo;
   stafOperasionalOptions: StafOperasionalOption[];
   onOpenChange: (open: boolean) => void;
-  onChanged: () => void;
 }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,14 +45,18 @@ function UbahAktivitasDialog({
     };
   }, [row.tanggalUsaha, row.shift]);
 
-  function handleDetailChanged() {
+  function refetchDetail() {
     // Re-fetch this dialog's own detail (qty/kehadiran/kerusakan change
-    // together) — the parent Riwayat list's own data refreshes separately
-    // via the outer onChanged callback.
+    // together) after each individual field save. Do NOT call the outer
+    // onChanged prop here — that resets the whole tab's aktivitasProduksi
+    // state to null (see refreshAktivitasProduksi in produksi-tab-shell.tsx),
+    // which unmounts this dialog's own parent subtree and closes it before
+    // the user can see the refreshed data or edit a second field. The outer
+    // refresh instead happens once, when the dialog actually closes (see
+    // RiwayatAktivitasProduksi's onOpenChange below).
     getAktivitasDetailAction(row.tanggalUsaha, row.shift).then((result) => {
       if (result.success) setDetail(result.data);
     });
-    onChanged();
   }
 
   return (
@@ -78,7 +80,7 @@ function UbahAktivitasDialog({
                   shift={row.shift}
                   stafOperasionalAkunId={detail.current.stafOperasionalAkunId}
                   stafOperasionalOptions={stafOperasionalOptions}
-                  onChanged={handleDetailChanged}
+                  onChanged={refetchDetail}
                 />
               </CardContent>
             </Card>
@@ -88,10 +90,10 @@ function UbahAktivitasDialog({
               timAnggota={detail.timAnggota}
               kehadiran={detail.kehadiran}
               canEdit
-              onChanged={handleDetailChanged}
+              onChanged={refetchDetail}
             />
             <QtyRecapCard qty={detail.qty} jumlahHadir={detail.kehadiran.length} />
-            <KerusakanCard tanggalUsaha={row.tanggalUsaha} shift={row.shift} current={detail.current} onSaved={handleDetailChanged} />
+            <KerusakanCard tanggalUsaha={row.tanggalUsaha} shift={row.shift} current={detail.current} onSaved={refetchDetail} />
           </div>
         )}
       </DialogContent>
@@ -132,8 +134,18 @@ export function RiwayatAktivitasProduksi({
         <UbahAktivitasDialog
           row={editing}
           stafOperasionalOptions={stafOperasionalOptions}
-          onOpenChange={(open) => !open && setEditing(null)}
-          onChanged={onChanged}
+          onOpenChange={(open) => {
+            if (open) return;
+            // Close the dialog first (this local state update is what
+            // actually matters to the still-mounted dialog); only then
+            // trigger the outer refresh, which resets the whole tab's
+            // aktivitasProduksi state to null in produksi-tab-shell.tsx.
+            // Doing this on close (not on every field save) means the
+            // dialog is already meant to go away by the time its parent
+            // subtree gets unmounted/remounted.
+            setEditing(null);
+            onChanged();
+          }}
         />
       )}
     </Card>
