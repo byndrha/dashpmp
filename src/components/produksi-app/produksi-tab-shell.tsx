@@ -22,6 +22,7 @@ import {
   getKualitasRiwayatAction,
   getCurrentShiftRowsForProduksiAction,
   getCurrentAktivitasProduksiAction,
+  getAktivitasRiwayatAction,
   getMesinEventsForShiftAction,
   getStafOperasionalOptionsAction,
 } from "@/app/mkesindo/produksi/actions";
@@ -75,6 +76,7 @@ export function ProduksiTabShell({
     mesinList: MesinRow[];
     mesinEvents: MesinEventRow[];
     stafOperasionalOptions: StafOperasionalOption[];
+    riwayat: AktivitasShiftInfo[];
   };
 }) {
   const [activeTab, setActiveTab] = useState<ProduksiTabKey>(initialTab);
@@ -221,7 +223,11 @@ export function ProduksiTabShell({
       }
       if (activeTab === "aktivitas-produksi" && aktivitasProduksi === null) {
         setLoadingTab("aktivitas-produksi");
-        const [aktivitasResult, mesinResult] = await Promise.all([getCurrentAktivitasProduksiAction(), getMesinListAction()]);
+        const [aktivitasResult, mesinResult, riwayatResult] = await Promise.all([
+          getCurrentAktivitasProduksiAction(),
+          getMesinListAction(),
+          getAktivitasRiwayatAction(),
+        ]);
         if (cancelled) return;
         if (!aktivitasResult.success) {
           setTabError(aktivitasResult.error);
@@ -230,6 +236,11 @@ export function ProduksiTabShell({
         }
         if (!mesinResult.success) {
           setTabError(mesinResult.error);
+          setLoadingTab(null);
+          return;
+        }
+        if (!riwayatResult.success) {
+          setTabError(riwayatResult.error);
           setLoadingTab(null);
           return;
         }
@@ -253,6 +264,7 @@ export function ProduksiTabShell({
           mesinList: mesinResult.data,
           mesinEvents: eventsResult.data,
           stafOperasionalOptions: stafResult.data,
+          riwayat: riwayatResult.data,
         });
         setLoadingTab(null);
       }
@@ -344,6 +356,7 @@ export function ProduksiTabShell({
               mesinList={aktivitasProduksi.mesinList}
               mesinEvents={aktivitasProduksi.mesinEvents}
               stafOperasionalOptions={aktivitasProduksi.stafOperasionalOptions}
+              riwayat={aktivitasProduksi.riwayat}
               onChanged={refreshAktivitasProduksi}
             />
           </div>

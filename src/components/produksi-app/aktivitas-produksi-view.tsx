@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimProduksiRoster } from "@/components/produksi-app/tim-produksi-roster";
 import { MesinEventPanel } from "@/components/produksi-app/mesin-event-panel";
+import { RiwayatAktivitasProduksi } from "@/components/produksi-app/riwayat-aktivitas-produksi";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
@@ -18,7 +19,7 @@ import { upsertStafOperasionalAction, upsertKerusakanAction } from "@/app/mkesin
 
 const UNSET = "__unset__";
 
-function QtyRecapCard({ qty, jumlahHadir }: { qty: QtyRecap; jumlahHadir: number }) {
+export function QtyRecapCard({ qty, jumlahHadir }: { qty: QtyRecap; jumlahHadir: number }) {
   const kontribusi = hitungKontribusiPerOrang(qty.totalKantongEkivalen, jumlahHadir);
   return (
     <Card size="sm">
@@ -51,7 +52,7 @@ function QtyRecapCard({ qty, jumlahHadir }: { qty: QtyRecap; jumlahHadir: number
   );
 }
 
-function KerusakanCard({
+export function KerusakanCard({
   tanggalUsaha,
   shift,
   current,
@@ -122,6 +123,45 @@ function KerusakanCard({
   );
 }
 
+export function StafOperasionalSelect({
+  tanggalUsaha,
+  shift,
+  stafOperasionalAkunId,
+  stafOperasionalOptions,
+  onChanged,
+}: {
+  tanggalUsaha: string;
+  shift: 1 | 2 | 3;
+  stafOperasionalAkunId: number | null;
+  stafOperasionalOptions: StafOperasionalOption[];
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  function handleChange(value: string | null) {
+    startTransition(async () => {
+      await upsertStafOperasionalAction(tanggalUsaha, shift, !value || value === UNSET ? null : Number(value));
+      onChanged();
+    });
+  }
+
+  return (
+    <Select value={stafOperasionalAkunId ? String(stafOperasionalAkunId) : UNSET} onValueChange={handleChange} disabled={pending}>
+      <SelectTrigger>
+        <SelectValue placeholder="Pilih Staf Operasional" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={UNSET}>Belum dipilih</SelectItem>
+        {stafOperasionalOptions.map((o) => (
+          <SelectItem key={o.akunId} value={String(o.akunId)}>
+            {o.nama}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function AktivitasProduksiView({
   current,
   qty,
@@ -130,6 +170,7 @@ export function AktivitasProduksiView({
   mesinList,
   mesinEvents,
   stafOperasionalOptions,
+  riwayat,
   onChanged,
 }: {
   current: AktivitasShiftInfo;
@@ -139,17 +180,9 @@ export function AktivitasProduksiView({
   mesinList: MesinRow[];
   mesinEvents: MesinEventRow[];
   stafOperasionalOptions: StafOperasionalOption[];
+  riwayat: AktivitasShiftInfo[];
   onChanged: () => void;
 }) {
-  const [pending, startTransition] = useTransition();
-
-  function handleStafChange(value: string | null) {
-    startTransition(async () => {
-      await upsertStafOperasionalAction(current.tanggalUsaha, current.shift, !value || value === UNSET ? null : Number(value));
-      onChanged();
-    });
-  }
-
   return (
     <div className="flex flex-col gap-4 p-4">
       <h2 className="text-sm font-semibold text-muted-foreground">
@@ -157,23 +190,17 @@ export function AktivitasProduksiView({
       </h2>
 
       <Card size="sm">
-        <CardContent className="flex flex-col gap-3 pt-4">
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Staf Operasional Bertugas</Label>
-            <Select value={current.stafOperasionalAkunId ? String(current.stafOperasionalAkunId) : UNSET} onValueChange={handleStafChange} disabled={pending}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih Staf Operasional" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNSET}>Belum dipilih</SelectItem>
-                {stafOperasionalOptions.map((o) => (
-                  <SelectItem key={o.akunId} value={String(o.akunId)}>
-                    {o.nama}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <CardHeader>
+          <CardTitle className="text-sm">Staf Operasional Bertugas</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 pt-0">
+          <StafOperasionalSelect
+            tanggalUsaha={current.tanggalUsaha}
+            shift={current.shift}
+            stafOperasionalAkunId={current.stafOperasionalAkunId}
+            stafOperasionalOptions={stafOperasionalOptions}
+            onChanged={onChanged}
+          />
           <p className="text-xs text-muted-foreground">
             Stok Es Sebelumnya (10KG): <span className="font-medium text-foreground">{current.stokEsSebelumnya10KG.toLocaleString("id-ID")}</span>
           </p>
@@ -184,6 +211,7 @@ export function AktivitasProduksiView({
       <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
       <QtyRecapCard qty={qty} jumlahHadir={kehadiran.length} />
       <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />
+      <RiwayatAktivitasProduksi riwayat={riwayat} stafOperasionalOptions={stafOperasionalOptions} onChanged={onChanged} />
     </div>
   );
 }

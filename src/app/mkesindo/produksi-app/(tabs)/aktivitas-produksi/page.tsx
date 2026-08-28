@@ -5,7 +5,7 @@ import { getStafOperasionalOptions } from "@/lib/queries/akun";
 import { getMesinList } from "@/lib/queries/produksi-mesin";
 import { getAnggotaTim } from "@/lib/queries/tim-produksi";
 import { getMesinEventsForShift } from "@/lib/queries/produksi-mesin-event";
-import { getCurrentShift, getAktivitasForShift, getQtyRecapForShift, getKehadiran } from "@/lib/queries/aktivitas-produksi";
+import { getCurrentShift, getAktivitasForShift, getQtyRecapForShift, getKehadiran, getAktivitasRiwayat } from "@/lib/queries/aktivitas-produksi";
 import { ProduksiTabShell } from "@/components/produksi-app/produksi-tab-shell";
 
 export const metadata: Metadata = { title: "Aktivitas Produksi" };
@@ -15,7 +15,7 @@ export default async function ProduksiAppAktivitasProduksiPage() {
   const { tanggalUsaha, shift } = getCurrentShift();
   const businessDate = new Date(`${tanggalUsaha}T00:00:00Z`);
 
-  const [profile, current, qty, kehadiran, timAnggota, mesinList, mesinEvents, stafOperasionalOptions] = await Promise.all([
+  const [profile, current, qty, kehadiran, timAnggota, mesinList, mesinEvents, stafOperasionalOptions, riwayat] = await Promise.all([
     getUserById(Number(session.user.id)),
     getAktivitasForShift(tanggalUsaha, shift),
     getQtyRecapForShift(tanggalUsaha, shift),
@@ -24,6 +24,7 @@ export default async function ProduksiAppAktivitasProduksiPage() {
     getMesinList(),
     getMesinEventsForShift(businessDate, shift),
     getStafOperasionalOptions(),
+    getAktivitasRiwayat(),
   ]);
 
   return (
@@ -31,7 +32,7 @@ export default async function ProduksiAppAktivitasProduksiPage() {
       initialTab="aktivitas-produksi"
       userName={session.user.name ?? session.user.username}
       profile={profile}
-      initialAktivitasProduksi={{ current, qty, kehadiran, timAnggota, mesinList, mesinEvents, stafOperasionalOptions }}
+      initialAktivitasProduksi={{ current, qty, kehadiran, timAnggota, mesinList, mesinEvents, stafOperasionalOptions, riwayat }}
     />
   );
 }
