@@ -242,6 +242,25 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
     // Qty10KG null (baris Kualitas lama, sebelum field ini ada) berarti
     // tidak ada plafon -- dilewati sepenuhnya, sama seperti sebelum
     // pengecekan ini ada.
+    //
+    // WITH (UPDLOCK, HOLDLOCK) di sini WAJIB -- beda dengan capacityCheck di
+    // atas. Kunci baris posisi di awal fungsi hanya menyerialisasi
+    // createBatch konkuren yang menyasar POSISI yang sama; dua panggilan
+    // konkuren untuk KualitasID yang sama tapi posisi yang BERBEDA mengambil
+    // lock pada baris posisi yang berbeda pula, jadi tidak saling
+    // menyerialisasi. Tanpa lock eksplisit di sini, di bawah RCSI
+    // (READ_COMMITTED_SNAPSHOT) kedua transaksi bisa membaca snapshot
+    // sebelum insert satu sama lain, sama-sama menghitung totalTeralokasi di
+    // bawah plafon, dan sama-sama commit -- melebihi Qty10KG berdua.
+    // Mengunci baris Kualitas dulu membuat keduanya antre berurutan
+    // (blocking wait biasa, bukan deadlock, karena tidak ada dependensi
+    // lock melingkar dengan lock posisi di atas), sehingga SELECT SUM di
+    // bawah selalu melihat INSERT spekulatif transaksi sebelumnya yang
+    // sudah commit sebelum menghitung.
+    await new sql.Request(transaction)
+      .input("kualitasId", sql.Int, input.kualitasId)
+      .query(`SELECT KualitasID FROM DashboardProduksiKualitas WITH (UPDLOCK, HOLDLOCK) WHERE KualitasID = @kualitasId`);
+
     if (kualitas.Qty10KG != null) {
       const alokasiCheck = await new sql.Request(transaction)
         .input("kualitasId", sql.Int, input.kualitasId)
