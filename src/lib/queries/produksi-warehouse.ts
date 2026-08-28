@@ -178,9 +178,9 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
     // concurrently mutated in a way that matters here).
     const kualitasResult = await new sql.Request(transaction)
       .input("kualitasId", sql.Int, input.kualitasId)
-      .query(`SELECT MesinID, TanggalLabel, Shift, Waktu FROM DashboardProduksiKualitas WHERE KualitasID = @kualitasId`);
+      .query(`SELECT MesinID, TanggalLabel, Shift, Waktu, Qty10KG FROM DashboardProduksiKualitas WHERE KualitasID = @kualitasId`);
     const kualitas = kualitasResult.recordset[0] as
-      | { MesinID: number; TanggalLabel: Date; Shift: number; Waktu: string }
+      | { MesinID: number; TanggalLabel: Date; Shift: number; Waktu: string; Qty10KG: number | null }
       | undefined;
     if (!kualitas) throw new AppError("Pemeriksaan Kualitas yang dipilih tidak ditemukan.");
 
@@ -234,6 +234,29 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
       throw new AppError(
         `Kapasitas pallet ini penuh -- sudah terisi ${sebelumnya}/${KAPASITAS_PALLET_10KG} kantong 10kg, sisa ruang hanya ${KAPASITAS_PALLET_10KG - sebelumnya}.`
       );
+    }
+
+    // Plafon stok: total Qty10KG yang sudah dialokasikan ke pallete manapun
+    // di bawah Kualitas ini (baris yang baru diinsert di atas sudah ikut
+    // terhitung) tidak boleh melebihi Qty10KG milik Kualitas itu sendiri.
+    // Qty10KG null (baris Kualitas lama, sebelum field ini ada) berarti
+    // tidak ada plafon -- dilewati sepenuhnya, sama seperti sebelum
+    // pengecekan ini ada.
+    if (kualitas.Qty10KG != null) {
+      const alokasiCheck = await new sql.Request(transaction)
+        .input("kualitasId", sql.Int, input.kualitasId)
+        .query(`
+          SELECT ISNULL(SUM(Qty10KG), 0) AS TotalTeralokasi
+          FROM DashboardProduksiBatch
+          WHERE KualitasID = @kualitasId AND IsDeleted = 0
+        `);
+      const totalTeralokasi = alokasiCheck.recordset[0].TotalTeralokasi as number;
+      if (totalTeralokasi > kualitas.Qty10KG) {
+        const sebelumnya = totalTeralokasi - input.qty10KG;
+        throw new AppError(
+          `Melebihi qty produksi tercatat pada pemeriksaan ini (tercatat ${kualitas.Qty10KG} kantong, sudah dialokasikan ${sebelumnya}, sisa ${Math.max(0, kualitas.Qty10KG - sebelumnya)}).`
+        );
+      }
     }
 
     await transaction.commit();
