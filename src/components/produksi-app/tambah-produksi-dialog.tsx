@@ -85,6 +85,9 @@ export function TambahProduksiDialog({
   const [pending, startTransition] = useTransition();
 
   const sisaKapasitas = posisi ? KAPASITAS_PALLET_10KG - posisi.TotalSisaQty10KG : KAPASITAS_PALLET_10KG;
+  const selectedKualitas = kualitasList?.find((k) => String(k.KualitasID) === kualitasId) ?? null;
+  const sisaMax =
+    selectedKualitas?.SisaAlokasi != null ? Math.min(sisaKapasitas, selectedKualitas.SisaAlokasi) : sisaKapasitas;
 
   useEffect(() => {
     if (!open) return;
@@ -116,8 +119,12 @@ export function TambahProduksiDialog({
       setError("Isi jumlah kantong 10kg.");
       return;
     }
-    if (qty10Num > sisaKapasitas) {
-      setError(`Melebihi sisa kapasitas pallet ini (sisa ${sisaKapasitas} kantong).`);
+    if (qty10Num > sisaMax) {
+      setError(
+        selectedKualitas?.SisaAlokasi != null && selectedKualitas.SisaAlokasi < sisaKapasitas
+          ? `Melebihi sisa kuota Kualitas ini (sisa ${sisaMax} kantong).`
+          : `Melebihi sisa kapasitas pallet ini (sisa ${sisaMax} kantong).`
+      );
       return;
     }
     startTransition(async () => {
@@ -171,16 +178,18 @@ export function TambahProduksiDialog({
               <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
                 {kualitasList.map((k) => {
                   const active = kualitasId === String(k.KualitasID);
-                  const allPass = k.CekKejernihan && k.CekUkuranBentuk && k.CekKontaminasi && k.CekKemasan;
+                  const allPass = k.CekKejernihan && k.CekUkuranBentuk;
+                  const habis = k.SisaAlokasi != null && k.SisaAlokasi <= 0;
                   return (
                     <button
                       key={k.KualitasID}
                       type="button"
+                      disabled={habis}
                       onClick={() => setKualitasId(String(k.KualitasID))}
                       className={cn(
                         "flex items-center justify-between gap-2 rounded-lg border p-2 text-left text-xs transition-colors",
-                        "border-border hover:bg-muted/50",
-                        active && "border-primary bg-primary/10"
+                        habis ? "cursor-not-allowed border-border bg-muted/40 opacity-50" : "border-border hover:bg-muted/50",
+                        active && !habis && "border-primary bg-primary/10"
                       )}
                     >
                       <div className="min-w-0">
@@ -192,6 +201,9 @@ export function TambahProduksiDialog({
                           {" • "}
                           {SHIFT_LABEL[k.Shift]}
                         </p>
+                        {k.SisaAlokasi != null && (
+                          <p className="text-[11px] text-muted-foreground">Sisa {k.SisaAlokasi} kantong</p>
+                        )}
                       </div>
                       {!allPass && (
                         <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
@@ -210,6 +222,7 @@ export function TambahProduksiDialog({
             <div className="relative">
               <Input
                 type="number"
+                max={sisaMax}
                 value={qty10}
                 onChange={(e) => setQty10(e.target.value)}
                 className="pr-12"
