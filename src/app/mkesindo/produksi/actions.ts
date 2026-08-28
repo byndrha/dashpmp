@@ -375,6 +375,7 @@ export async function getCurrentAktivitasProduksiAction(): Promise<
       current,
       qty,
       susunanTim,
+      kehadiran: susunanTim.map((s) => s.anggotaId),
       timAnggota,
       stafOperasionalNama:
         current.stafOperasionalAkunId != null
@@ -402,6 +403,8 @@ export async function getAktivitasDetailAction(
     current: AktivitasShiftInfo;
     qty: QtyRecap;
     susunanTim: SusunanTimRow[];
+    kehadiran: number[];
+    timAnggota: AnggotaTimRow[];
     stafOperasionalNama: string | null;
   }>
 > {
@@ -418,6 +421,7 @@ export async function getAktivitasDetailAction(
       current,
       qty,
       susunanTim,
+      kehadiran: susunanTim.map((s) => s.anggotaId),
       timAnggota,
       stafOperasionalNama:
         current.stafOperasionalAkunId != null
