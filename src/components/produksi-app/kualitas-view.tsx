@@ -65,8 +65,8 @@ function TambahKualitasDialog({
   const [shift, setShift] = useState<string>("1");
   const [mesinId, setMesinId] = useState<string>("");
   const [checklist, setChecklist] = useState<ChecklistState>(DEFAULT_CHECKLIST);
-  const [diameterDalam, setDiameterDalam] = useState("");
-  const [beratSampel, setBeratSampel] = useState("");
+  const [diameterDalamMm, setDiameterDalamMm] = useState("");
+  const [qty10KG, setQty10KG] = useState("");
   const [catatan, setCatatan] = useState("");
   const [fotoPath, setFotoPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -79,8 +79,8 @@ function TambahKualitasDialog({
     setShift("1");
     setMesinId("");
     setChecklist(DEFAULT_CHECKLIST);
-    setDiameterDalam("");
-    setBeratSampel("");
+    setDiameterDalamMm("");
+    setQty10KG("");
     setCatatan("");
     setFotoPath(null);
     setError(null);
@@ -109,6 +109,10 @@ function TambahKualitasDialog({
       setError("Isi waktu pemeriksaan.");
       return;
     }
+    if (!qty10KG.trim() || Number(qty10KG) <= 0) {
+      setError("Isi QTY 10 KG Kantong Es.");
+      return;
+    }
     startTransition(async () => {
       const result = await createKualitasAction({
         tanggalLabel,
@@ -117,12 +121,8 @@ function TambahKualitasDialog({
         mesinId: Number(mesinId),
         cekKejernihan: checklist.cekKejernihan,
         cekUkuranBentuk: checklist.cekUkuranBentuk,
-        // Dropped from the form (see CHECKLIST_ITEMS's own comment) — always
-        // true going forward, historical entries keep their real value.
-        cekKontaminasi: true,
-        cekKemasan: true,
-        diameterDalam: diameterDalam.trim() ? Number(diameterDalam) : null,
-        beratSampel: beratSampel.trim() ? Number(beratSampel) : null,
+        diameterDalamMm: diameterDalamMm.trim() ? Number(diameterDalamMm) : null,
+        qty10KG: Number(qty10KG) || 0,
         catatan: catatan.trim() || null,
         fotoPath,
       });
@@ -235,18 +235,26 @@ function TambahKualitasDialog({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Ukuran Diameter Dalam (cm)</label>
+              <label className="text-xs font-medium text-muted-foreground">Ukuran Diameter Dalam (mm)</label>
               <Input
                 type="number"
                 step="0.1"
-                value={diameterDalam}
-                onChange={(e) => setDiameterDalam(e.target.value)}
+                value={diameterDalamMm}
+                onChange={(e) => setDiameterDalamMm(e.target.value)}
+                placeholder="Standar: 28mm"
                 className="mt-1"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Berat Sampel (gram)</label>
-              <Input type="number" step="0.1" value={beratSampel} onChange={(e) => setBeratSampel(e.target.value)} className="mt-1" />
+              <label className="text-xs font-medium text-muted-foreground">QTY 10 KG Kantong Es</label>
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                value={qty10KG}
+                onChange={(e) => setQty10KG(e.target.value)}
+                className="mt-1"
+              />
             </div>
           </div>
 
@@ -289,8 +297,6 @@ function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
   const items = [
     { label: "Kejernihan", pass: kualitas.CekKejernihan },
     { label: "Ukuran/Bentuk", pass: kualitas.CekUkuranBentuk },
-    { label: "Kontaminasi", pass: kualitas.CekKontaminasi },
-    { label: "Kemasan", pass: kualitas.CekKemasan },
   ];
   const allPass = items.every((i) => i.pass);
 
@@ -326,11 +332,11 @@ function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
           </span>
         ))}
       </div>
-      {(kualitas.DiameterDalamCm != null || kualitas.BeratSampel != null) && (
+      {(kualitas.DiameterDalamMm != null || kualitas.Qty10KG != null) && (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          {kualitas.DiameterDalamCm != null && `Diameter dalam: ${kualitas.DiameterDalamCm}cm`}
-          {kualitas.DiameterDalamCm != null && kualitas.BeratSampel != null && " • "}
-          {kualitas.BeratSampel != null && `Berat sampel: ${kualitas.BeratSampel}g`}
+          {kualitas.DiameterDalamMm != null && `Diameter dalam: ${kualitas.DiameterDalamMm}mm`}
+          {kualitas.DiameterDalamMm != null && kualitas.Qty10KG != null && " • "}
+          {kualitas.Qty10KG != null && `QTY: ${kualitas.Qty10KG} kantong 10kg (sisa ${kualitas.SisaAlokasi})`}
         </p>
       )}
       {kualitas.Catatan && <p className="mt-1.5 text-xs text-muted-foreground">Catatan: {kualitas.Catatan}</p>}
