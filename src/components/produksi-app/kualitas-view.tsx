@@ -5,7 +5,13 @@ import { Plus, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { LiveCameraCaptureField } from "@/components/dashboard/live-camera-capture-field";
 import { cn } from "@/lib/utils";
 import { getBusinessDateISO, getWibTimeHHmm } from "@/lib/business-date";
@@ -301,49 +307,108 @@ function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
   const allPass = items.every((i) => i.pass);
 
   return (
-    <div className={cn("rounded-lg border p-3", !allPass && "border-destructive/40 bg-destructive/5")}>
-      <div className="flex items-start justify-between gap-2">
+    <div
+      className={cn(
+        "rounded-lg border p-3",
+        !allPass && "border-destructive/40 bg-destructive/5"
+      )}
+    >
+      <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-3">
+        {/* Foto */}
         <div>
-          <p className="font-semibold">{kualitas.MesinNama}</p>
-          <p className="text-xs text-muted-foreground">
-            {new Date(kualitas.TanggalLabel).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
-            {" • "}
-            {kualitas.Waktu}
-            {" • "}
-            {SHIFT_LABEL[kualitas.Shift]}
-          </p>
+          {kualitas.FotoPath ? (
+            <Dialog>
+              <DialogTrigger
+                type="button"
+                className="block cursor-zoom-in rounded focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset */}
+                <img
+                  src={kualitas.FotoPath}
+                  alt="Foto sampel"
+                  className="h-20 w-20 rounded object-cover"
+                />
+              </DialogTrigger>
+
+              <DialogContent className="max-w-3xl p-2 sm:p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset */}
+                <img
+                  src={kualitas.FotoPath}
+                  alt="Foto sampel"
+                  className="max-h-[80vh] w-full rounded object-contain"
+                />
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded border bg-muted text-center text-[10px] text-muted-foreground">
+              Tidak ada foto
+            </div>
+          )}
         </div>
-        {!allPass && (
-          <span className="shrink-0 rounded bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
-            Ada temuan
-          </span>
-        )}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {items.map((i) => (
-          <span
-            key={i.label}
-            className={cn(
-              "rounded px-2 py-0.5 text-[11px] font-medium",
-              i.pass ? "bg-emerald-500/15 text-emerald-600" : "bg-destructive/15 text-destructive"
+
+        {/* Detail */}
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-semibold">{kualitas.MesinNama}</p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(kualitas.TanggalLabel).toLocaleDateString(
+                  "id-ID",
+                  {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  }
+                )}
+                {" • "}
+                {kualitas.Waktu}
+                {" • "}
+                {SHIFT_LABEL[kualitas.Shift]}
+              </p>
+            </div>
+
+            {!allPass && (
+              <span className="shrink-0 rounded bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+                Ada temuan
+              </span>
             )}
-          >
-            {i.label}: {i.pass ? "Lolos" : "Tidak"}
-          </span>
-        ))}
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {items.map((i) => (
+              <span
+                key={i.label}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[11px] font-medium",
+                  i.pass
+                    ? "bg-emerald-500/15 text-emerald-600"
+                    : "bg-destructive/15 text-destructive"
+                )}
+              >
+                {i.label}: {i.pass ? "Lolos" : "Tidak"}
+              </span>
+            ))}
+          </div>
+
+          {(kualitas.DiameterDalamMm != null || kualitas.Qty10KG != null) && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {kualitas.DiameterDalamMm != null &&
+                `Diameter dalam: ${kualitas.DiameterDalamMm}mm`}
+              {kualitas.DiameterDalamMm != null &&
+                kualitas.Qty10KG != null &&
+                " • "}
+              {kualitas.Qty10KG != null &&
+                `QTY: ${kualitas.Qty10KG} kantong 10kg (sisa ${kualitas.SisaAlokasi})`}
+            </p>
+          )}
+
+          {kualitas.Catatan && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Catatan: {kualitas.Catatan}
+            </p>
+          )}
+        </div>
       </div>
-      {(kualitas.DiameterDalamMm != null || kualitas.Qty10KG != null) && (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          {kualitas.DiameterDalamMm != null && `Diameter dalam: ${kualitas.DiameterDalamMm}mm`}
-          {kualitas.DiameterDalamMm != null && kualitas.Qty10KG != null && " • "}
-          {kualitas.Qty10KG != null && `QTY: ${kualitas.Qty10KG} kantong 10kg (sisa ${kualitas.SisaAlokasi})`}
-        </p>
-      )}
-      {kualitas.Catatan && <p className="mt-1.5 text-xs text-muted-foreground">Catatan: {kualitas.Catatan}</p>}
-      {kualitas.FotoPath && (
-        // eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset
-        <img src={kualitas.FotoPath} alt="Foto sampel" className="mt-2 h-20 w-20 rounded object-cover" />
-      )}
     </div>
   );
 }
