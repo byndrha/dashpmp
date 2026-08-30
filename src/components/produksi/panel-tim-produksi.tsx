@@ -7,23 +7,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SHIFT_LABEL } from "@/lib/produksi-shift";
-import { tambahAnggotaTimAction, updateAnggotaTimAction, hapusAnggotaTimAction } from "@/app/mkesindo/produksi/actions";
-import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
+import { tambahAnggotaTimAction, updateAnggotaTimAction, hapusAnggotaTimAction, updateTimKepalaAction } from "@/app/mkesindo/produksi/actions";
+import type { AnggotaTimRow, TimRow } from "@/lib/queries/tim-produksi";
+import type { StafOperasionalOption } from "@/lib/queries/akun";
 
-const SHIFTS = [1, 2, 3] as const;
+const UNSET = "__unset__";
 
-function AnggotaCard({ anggota }: { anggota: AnggotaTimRow }) {
+function AnggotaCard({ anggota, timList }: { anggota: AnggotaTimRow; timList: TimRow[] }) {
   const [open, setOpen] = useState(false);
   const [nama, setNama] = useState(anggota.nama);
-  const [shift, setShift] = useState<1 | 2 | 3>(anggota.shift);
+  const [timId, setTimId] = useState(anggota.timId);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function handleSave() {
     setError(null);
     startTransition(async () => {
-      const result = await updateAnggotaTimAction(anggota.anggotaId, { nama, shift });
+      const result = await updateAnggotaTimAction(anggota.anggotaId, { nama, timId });
       if (!result.success) {
         setError(result.error);
         return;
@@ -52,7 +52,7 @@ function AnggotaCard({ anggota }: { anggota: AnggotaTimRow }) {
         setOpen(next);
         if (next) {
           setNama(anggota.nama);
-          setShift(anggota.shift);
+          setTimId(anggota.timId);
           setError(null);
         }
       }}
@@ -70,15 +70,15 @@ function AnggotaCard({ anggota }: { anggota: AnggotaTimRow }) {
             <Input value={nama} onChange={(e) => setNama(e.target.value)} />
           </div>
           <div>
-            <Label>Tim (Shift)</Label>
-            <Select value={String(shift)} onValueChange={(v) => setShift((Number(v) as 1 | 2 | 3) ?? shift)}>
+            <Label>Tim</Label>
+            <Select value={String(timId)} onValueChange={(v) => setTimId(Number(v))}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {SHIFTS.map((s) => (
-                  <SelectItem key={s} value={String(s)}>
-                    {SHIFT_LABEL[s]}
+                {timList.map((t) => (
+                  <SelectItem key={t.timId} value={String(t.timId)}>
+                    {t.nama}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -99,7 +99,7 @@ function AnggotaCard({ anggota }: { anggota: AnggotaTimRow }) {
   );
 }
 
-function TambahAnggotaDialog({ shift }: { shift: 1 | 2 | 3 }) {
+function TambahAnggotaDialog({ tim }: { tim: TimRow }) {
   const [open, setOpen] = useState(false);
   const [nama, setNama] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +112,7 @@ function TambahAnggotaDialog({ shift }: { shift: 1 | 2 | 3 }) {
     }
     setError(null);
     startTransition(async () => {
-      const result = await tambahAnggotaTimAction(shift, nama.trim());
+      const result = await tambahAnggotaTimAction(tim.timId, nama.trim());
       if (!result.success) {
         setError(result.error);
         return;
@@ -129,7 +129,7 @@ function TambahAnggotaDialog({ shift }: { shift: 1 | 2 | 3 }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Tambah Anggota — {SHIFT_LABEL[shift]}</DialogTitle>
+          <DialogTitle>Tambah Anggota — {tim.nama}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
           <div>
@@ -148,18 +148,56 @@ function TambahAnggotaDialog({ shift }: { shift: 1 | 2 | 3 }) {
   );
 }
 
-export function PanelTimProduksi({ anggotaList }: { anggotaList: AnggotaTimRow[] }) {
+function KepalaSelect({ tim, produksiAkunOptions }: { tim: TimRow; produksiAkunOptions: StafOperasionalOption[] }) {
+  const [pending, startTransition] = useTransition();
+
+  function handleChange(value: string | null) {
+    startTransition(async () => {
+      await updateTimKepalaAction(tim.timId, !value || value === UNSET ? null : Number(value));
+    });
+  }
+
+  return (
+    <Select value={tim.kepalaAkunId != null ? String(tim.kepalaAkunId) : UNSET} onValueChange={handleChange} disabled={pending}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Pilih Kepala Produksi" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={UNSET}>Belum ditentukan</SelectItem>
+        {produksiAkunOptions.map((o) => (
+          <SelectItem key={o.akunId} value={String(o.akunId)}>
+            {o.nama}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+export function PanelTimProduksi({
+  timList,
+  anggotaList,
+  produksiAkunOptions,
+}: {
+  timList: TimRow[];
+  anggotaList: AnggotaTimRow[];
+  produksiAkunOptions: StafOperasionalOption[];
+}) {
   return (
     <div className="grid gap-3 sm:grid-cols-3">
-      {SHIFTS.map((shift) => (
-        <div key={shift} className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <p className="text-sm font-semibold">{SHIFT_LABEL[shift]}</p>
+      {timList.map((tim) => (
+        <div key={tim.timId} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+          <p className="text-sm font-semibold">{tim.nama}</p>
+          <div>
+            <Label className="text-xs">Kepala Produksi</Label>
+            <KepalaSelect tim={tim} produksiAkunOptions={produksiAkunOptions} />
+          </div>
           {anggotaList
-            .filter((a) => a.shift === shift)
+            .filter((a) => a.timId === tim.timId)
             .map((a) => (
-              <AnggotaCard key={a.anggotaId} anggota={a} />
+              <AnggotaCard key={a.anggotaId} anggota={a} timList={timList} />
             ))}
-          <TambahAnggotaDialog shift={shift} />
+          <TambahAnggotaDialog tim={tim} />
         </div>
       ))}
     </div>

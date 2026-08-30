@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { requireProduksiView } from "@/lib/require-access";
 import { getWarehouseMap, getRiwayatProduksi } from "@/lib/queries/produksi-warehouse";
 import { getMesinList } from "@/lib/queries/produksi-mesin";
-import { getSemuaAnggotaTim } from "@/lib/queries/tim-produksi";
-import { getAkunNamaMap } from "@/lib/queries/akun";
+import { getAllTim, getSemuaAnggotaTim } from "@/lib/queries/tim-produksi";
+import { getAkunNamaMap, getProduksiAkunOptions } from "@/lib/queries/akun";
 import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-desktop";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
 import { PanelTimProduksi } from "@/components/produksi/panel-tim-produksi";
@@ -13,10 +13,12 @@ export const metadata: Metadata = { title: "Produksi" };
 
 export default async function ProduksiPage() {
   await requireProduksiView();
-  const [posisi, mesinList, anggotaTimList, riwayatRaw] = await Promise.all([
+  const [posisi, mesinList, timList, anggotaTimList, produksiAkunOptions, riwayatRaw] = await Promise.all([
     getWarehouseMap(),
     getMesinList(),
+    getAllTim(),
     getSemuaAnggotaTim(),
+    getProduksiAkunOptions(),
     getRiwayatProduksi(),
   ]);
   const namaMap = await getAkunNamaMap(riwayatRaw.map((r) => r.DicatatOlehAkunID));
@@ -35,7 +37,7 @@ export default async function ProduksiPage() {
       </section>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Tim Produksi</h2>
-        <PanelTimProduksi anggotaList={anggotaTimList} />
+        <PanelTimProduksi timList={timList} anggotaList={anggotaTimList} produksiAkunOptions={produksiAkunOptions} />
       </section>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Riwayat Produksi</h2>

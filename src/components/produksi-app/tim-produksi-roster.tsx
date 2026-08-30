@@ -172,7 +172,7 @@ export function TimProduksiRoster({
               </SelectItem>
               {tersedia.map((a) => (
                 <SelectItem key={a.anggotaId} value={String(a.anggotaId)}>
-                  {a.nama} (Shift {a.shift})
+                  {a.nama} ({a.timNama})
                 </SelectItem>
               ))}
             </SelectContent>

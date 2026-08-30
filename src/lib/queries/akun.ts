@@ -516,6 +516,21 @@ export async function getStafOperasionalOptions(): Promise<StafOperasionalOption
   return result.rows.map((row) => ({ akunId: row.id as number, nama: row.nama as string }));
 }
 
+// Daftar akun is_produksi=true aktif -- dipakai dropdown "Kepala Produksi"
+// di panel admin Tim Produksi. Mirip getStafOperasionalOptions di atas,
+// beda flag peran saja (is_produksi, bukan is_operasional).
+export async function getProduksiAkunOptions(): Promise<StafOperasionalOption[]> {
+  const pool = getPgPool();
+  const result = await pool.query(`
+    SELECT a.id, a.nama
+    FROM akun a
+    JOIN peran r ON r.id = a.peran_id
+    WHERE r.is_produksi = true AND a.is_active = true
+    ORDER BY a.nama
+  `);
+  return result.rows.map((row) => ({ akunId: row.id as number, nama: row.nama as string }));
+}
+
 export async function getAkunNamaMap(akunIds: number[]): Promise<Map<number, string>> {
   const uniqueIds = [...new Set(akunIds)];
   if (uniqueIds.length === 0) return new Map();

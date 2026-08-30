@@ -8,6 +8,8 @@ import {
   getRiwayatProduksi,
   getRiwayatProduksiForPosisi,
   createBatch,
+  updateBatchQty,
+  deleteBatch,
   getBatchAktifForAlokasi,
   type PalletPosisiRow,
   type RiwayatProduksiRow,
@@ -28,7 +30,8 @@ import {
   type ProduksiSelesaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
 import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
-import { getAkunNamaMap, getStafOperasionalOptions, type StafOperasionalOption } from "@/lib/queries/akun";
+import { getJadwalBulan, setJadwalTim, type JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
+import { getAkunNamaMap, getStafOperasionalOptions, getProduksiAkunOptions, type StafOperasionalOption } from "@/lib/queries/akun";
 import {
   getKualitasRiwayat,
   createKualitas,
@@ -45,12 +48,17 @@ import {
   type UpsertProduksiStokInput,
 } from "@/lib/queries/stok-bahan-baku";
 import {
+  getAllTim,
   getAnggotaTim,
   getSemuaAnggotaTim,
   tambahAnggotaTim,
   updateAnggotaTim,
   hapusAnggotaTim,
+  hapusAnggotaTimIfOwned,
+  updateTimKepala,
+  getTimByKepalaAkunId,
   type AnggotaTimRow,
+  type TimRow,
 } from "@/lib/queries/tim-produksi";
 import { catatMesinEvent, getMesinEventsForShift, type JenisMesinEvent, type MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import {
@@ -61,6 +69,7 @@ import {
   upsertKerusakan,
   getSusunanTim,
   setSusunanTim,
+  setTimBertugas,
   getQtyRecapForShift,
   type AktivitasShiftInfo,
   type QtyRecap,
@@ -141,6 +150,32 @@ export async function createBatchAction(
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
     return batchId;
+  });
+}
+
+// Koreksi admin/desktop untuk input stok yang salah catat — lihat
+// updateBatchQty di produksi-warehouse.ts untuk aturan lengkapnya (tidak
+// bisa di bawah jumlah yang sudah terpakai, kapasitas pallet dan plafon
+// Kualitas dicek ulang).
+export async function updateBatchQtyAction(batchId: number, qty10KG: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    if (!qty10KG || qty10KG <= 0) throw new AppError("Isi jumlah kantong 10kg.");
+    await updateBatchQty({ batchId, qty10KG });
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+// Koreksi admin/desktop untuk input stok yang salah catat — hanya berhasil
+// kalau belum ada sama sekali yang terpakai, lihat deleteBatch di
+// produksi-warehouse.ts.
+export async function deleteBatchAction(batchId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    await deleteBatch(batchId);
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
   });
 }
 
@@ -294,10 +329,33 @@ export async function getStafOperasionalOptionsAction(): Promise<ActionResult<St
   });
 }
 
-export async function getAnggotaTimAction(shift: ShiftNumber): Promise<ActionResult<AnggotaTimRow[]>> {
+export async function getAllTimAction(): Promise<ActionResult<TimRow[]>> {
   return runAction(async () => {
     await requireProduksiView();
-    return getAnggotaTim(shift);
+    return getAllTim();
+  });
+}
+
+export async function updateTimKepalaAction(timId: number, kepalaAkunId: number | null): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    await updateTimKepala(timId, kepalaAkunId);
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+export async function getProduksiAkunOptionsAction(): Promise<ActionResult<StafOperasionalOption[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getProduksiAkunOptions();
+  });
+}
+
+export async function getAnggotaTimAction(timId: number): Promise<ActionResult<AnggotaTimRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getAnggotaTim(timId);
   });
 }
 
@@ -308,21 +366,21 @@ export async function getSemuaAnggotaTimAction(): Promise<ActionResult<AnggotaTi
   });
 }
 
-export async function updateAnggotaTimAction(anggotaId: number, input: { nama: string; shift: ShiftNumber }): Promise<ActionResult<void>> {
+export async function updateAnggotaTimAction(anggotaId: number, input: { nama: string; timId: number }): Promise<ActionResult<void>> {
   return runAction(async () => {
     await requireProduksiView();
     if (!input.nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
-    await updateAnggotaTim(anggotaId, { nama: input.nama.trim(), shift: input.shift });
+    await updateAnggotaTim(anggotaId, { nama: input.nama.trim(), timId: input.timId });
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
   });
 }
 
-export async function tambahAnggotaTimAction(shift: ShiftNumber, nama: string): Promise<ActionResult<number>> {
+export async function tambahAnggotaTimAction(timId: number, nama: string): Promise<ActionResult<number>> {
   return runAction(async () => {
     await requireProduksiView();
     if (!nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
-    const id = await tambahAnggotaTim(shift, nama.trim());
+    const id = await tambahAnggotaTim(timId, nama.trim());
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/produksi");
     return id;
@@ -451,5 +509,63 @@ export async function setSusunanTimAction(tanggalUsaha: string, shift: ShiftNumb
     await setSusunanTim(tanggalUsaha, shift, anggotaIds, Number(session.user.id));
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function getJadwalBulanAction(tahun: number, bulan: number): Promise<ActionResult<JadwalTimRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getJadwalBulan(tahun, bulan);
+  });
+}
+
+export async function setJadwalTimAction(tanggalUsaha: string, shift: ShiftNumber, timId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    await setJadwalTim(tanggalUsaha, shift, timId, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi");
+  });
+}
+
+export async function setTimBertugasAction(tanggalUsaha: string, shift: ShiftNumber, timId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    await setTimBertugas(tanggalUsaha, shift, timId, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function getTimSayaAction(): Promise<ActionResult<{ timId: number; nama: string; anggota: AnggotaTimRow[] } | null>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    const tim = await getTimByKepalaAkunId(Number(session.user.id));
+    if (!tim) return null;
+    const anggota = await getAnggotaTim(tim.timId);
+    return { ...tim, anggota };
+  });
+}
+
+export async function tambahAnggotaTimSayaAction(nama: string): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    if (!nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
+    const tim = await getTimByKepalaAkunId(Number(session.user.id));
+    if (!tim) throw new AppError("Anda bukan Kepala Produksi tim manapun.");
+    const id = await tambahAnggotaTim(tim.timId, nama.trim());
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/produksi");
+    return id;
+  });
+}
+
+export async function hapusAnggotaTimSayaAction(anggotaId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    const tim = await getTimByKepalaAkunId(Number(session.user.id));
+    if (!tim) throw new AppError("Anda bukan Kepala Produksi tim manapun.");
+    await hapusAnggotaTimIfOwned(anggotaId, tim.timId);
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/produksi");
   });
 }

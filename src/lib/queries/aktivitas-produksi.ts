@@ -2,6 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { getReportShift, getShiftWindow, getShiftLabel, type ShiftNumber } from "@/lib/report-shift";
 import { naiveWibToUtcInstant } from "@/lib/business-date";
 import { getAnggotaTim } from "@/lib/queries/tim-produksi";
+import { getJadwalUntukShift } from "@/lib/queries/jadwal-tim-produksi";
 export { hitungTotalDenda, hitungKontribusiPerOrang } from "@/lib/aktivitas-produksi-shared";
 
 export interface AktivitasShiftInfo {
@@ -9,6 +10,7 @@ export interface AktivitasShiftInfo {
   tanggalUsaha: string;
   shift: ShiftNumber;
   shiftLabel: string;
+  timId: number | null;
   stafOperasionalAkunId: number | null;
   stokEsSebelumnya10KG: number;
   pecahKemasanQty: number;
@@ -68,23 +70,26 @@ async function ensureAktivitasRow(pool: sql.ConnectionPool, tanggalUsaha: string
   const stokEs = await getTotalStokEs10KG(pool);
   const businessDate = new Date(`${tanggalUsaha}T00:00:00Z`);
   const shiftMulai = getShiftWindow(businessDate, shift, "work").start;
+  const timId = await getJadwalUntukShift(tanggalUsaha, shift);
   const result = await pool
     .request()
     .input("t", sql.Date, tanggalUsaha)
     .input("s", sql.TinyInt, shift)
     .input("shiftMulai", sql.DateTime, shiftMulai)
     .input("stokEs", sql.Int, stokEs)
+    .input("timId", sql.Int, timId)
     .input("akunId", sql.Int, akunId)
     .query(`
-      INSERT INTO DashboardAktivitasProduksiShift (TanggalUsaha, Shift, ShiftMulai, StokEsSebelumnya10KG, CreatedByAkunID, StafOperasionalAkunID)
+      INSERT INTO DashboardAktivitasProduksiShift (TanggalUsaha, Shift, ShiftMulai, StokEsSebelumnya10KG, TimID, CreatedByAkunID, StafOperasionalAkunID)
       OUTPUT INSERTED.AktivitasID
-      VALUES (@t, @s, @shiftMulai, @stokEs, @akunId, @akunId)
+      VALUES (@t, @s, @shiftMulai, @stokEs, @timId, @akunId, @akunId)
     `);
   return (result.recordset[0] as { AktivitasID: number }).AktivitasID;
 }
 
 interface RawAktivitasRow {
   AktivitasID: number;
+  TimID: number | null;
   StafOperasionalAkunID: number | null;
   StokEsSebelumnya10KG: number;
   PecahKemasanQty: number;
@@ -99,6 +104,7 @@ function mapAktivitasRow(r: RawAktivitasRow, tanggalUsaha: string, shift: ShiftN
     tanggalUsaha,
     shift,
     shiftLabel: getShiftLabel(shift, "work"),
+    timId: r.TimID,
     stafOperasionalAkunId: r.StafOperasionalAkunID,
     stokEsSebelumnya10KG: r.StokEsSebelumnya10KG,
     pecahKemasanQty: r.PecahKemasanQty,
@@ -119,18 +125,20 @@ export async function getAktivitasForShift(tanggalUsaha: string, shift: ShiftNum
     .input("t", sql.Date, tanggalUsaha)
     .input("s", sql.TinyInt, shift)
     .query(`
-      SELECT AktivitasID, StafOperasionalAkunID, StokEsSebelumnya10KG, PecahKemasanQty, EsJatuhQty, GantiReturnQty, SealerJebolQty
+      SELECT AktivitasID, TimID, StafOperasionalAkunID, StokEsSebelumnya10KG, PecahKemasanQty, EsJatuhQty, GantiReturnQty, SealerJebolQty
       FROM DashboardAktivitasProduksiShift WHERE TanggalUsaha = @t AND Shift = @s
     `);
   const row = result.recordset[0] as RawAktivitasRow | undefined;
   if (row) return mapAktivitasRow(row, tanggalUsaha, shift);
 
   const stokEs = await getTotalStokEs10KG(pool);
+  const timId = await getJadwalUntukShift(tanggalUsaha, shift);
   return {
     aktivitasId: null,
     tanggalUsaha,
     shift,
     shiftLabel: getShiftLabel(shift, "work"),
+    timId,
     stafOperasionalAkunId: null,
     stokEsSebelumnya10KG: stokEs,
     pecahKemasanQty: 0,
@@ -146,7 +154,7 @@ export async function getAktivitasRiwayat(limit = 30): Promise<AktivitasShiftInf
     .request()
     .input("limit", sql.Int, limit)
     .query(`
-      SELECT TOP (@limit) AktivitasID, TanggalUsaha, Shift, StafOperasionalAkunID, StokEsSebelumnya10KG,
+      SELECT TOP (@limit) AktivitasID, TanggalUsaha, Shift, TimID, StafOperasionalAkunID, StokEsSebelumnya10KG,
              PecahKemasanQty, EsJatuhQty, GantiReturnQty, SealerJebolQty
       FROM DashboardAktivitasProduksiShift
       ORDER BY ShiftMulai DESC
@@ -207,7 +215,9 @@ export async function getSusunanTim(tanggalUsaha: string, shift: ShiftNumber): P
   const aktivitasId = (existing.recordset[0] as { AktivitasID: number } | undefined)?.AktivitasID;
 
   if (aktivitasId == null) {
-    const timTetap = await getAnggotaTim(shift);
+    const timId = await getJadwalUntukShift(tanggalUsaha, shift);
+    if (timId == null) return [];
+    const timTetap = await getAnggotaTim(timId);
     return timTetap.map((a, i) => ({ anggotaId: a.anggotaId, nama: a.nama, urutan: i }));
   }
 
@@ -251,6 +261,32 @@ export async function setSusunanTim(tanggalUsaha: string, shift: ShiftNumber, an
   } catch (err) {
     await transaction.rollback();
     throw err;
+  }
+}
+
+// Koreksi live "Tim Bertugas" -- hanya memengaruhi kejadian shift ini
+// (DashboardJadwalTimProduksi TIDAK ikut berubah, lihat spec Bagian 3.2).
+// Kalau nilainya benar-benar berubah, Susunan Tim ditulis ulang ke roster
+// default Tim yang baru (spec Bagian 3.3) -- memilih Tim yang sama tidak
+// menghapus penyesuaian manual yang sudah dilakukan.
+export async function setTimBertugas(tanggalUsaha: string, shift: ShiftNumber, timId: number, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const aktivitasId = await ensureAktivitasRow(pool, tanggalUsaha, shift, akunId);
+  const current = await pool
+    .request()
+    .input("aktivitasId", sql.Int, aktivitasId)
+    .query(`SELECT TimID FROM DashboardAktivitasProduksiShift WHERE AktivitasID = @aktivitasId`);
+  const timIdSaatIni = (current.recordset[0] as { TimID: number | null }).TimID;
+
+  await pool
+    .request()
+    .input("aktivitasId", sql.Int, aktivitasId)
+    .input("timId", sql.Int, timId)
+    .query(`UPDATE DashboardAktivitasProduksiShift SET TimID = @timId, ModifiedDate = GETDATE() WHERE AktivitasID = @aktivitasId`);
+
+  if (timIdSaatIni !== timId) {
+    const anggotaBaru = await getAnggotaTim(timId);
+    await setSusunanTim(tanggalUsaha, shift, anggotaBaru.map((a) => a.anggotaId), akunId);
   }
 }
 
