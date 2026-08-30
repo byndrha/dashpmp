@@ -26,6 +26,7 @@ import {
   getMesinEventsForShiftAction,
   getStafOperasionalOptionsAction,
   getAllTimAction,
+  getTimSayaAction,
 } from "@/app/mkesindo/produksi/actions";
 import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
@@ -35,7 +36,7 @@ import type { StokBahanBakuRow, CurrentShiftInfo } from "@/lib/queries/stok-baha
 import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
-import type { TimRow } from "@/lib/queries/tim-produksi";
+import type { TimRow, AnggotaTimRow } from "@/lib/queries/tim-produksi";
 
 export type ProduksiTabKey = "kartu-pengiriman" | "riwayat" | "warehouse" | "kualitas" | "bahan-baku" | "aktivitas-produksi";
 
@@ -78,6 +79,7 @@ export function ProduksiTabShell({
     mesinEvents: MesinEventRow[];
     stafOperasionalOptions: StafOperasionalOption[];
     timList: TimRow[];
+    timSaya: { timId: number; nama: string; anggota: AnggotaTimRow[] } | null;
     riwayat: AktivitasShiftInfo[];
   };
 }) {
@@ -225,11 +227,12 @@ export function ProduksiTabShell({
       }
       if (activeTab === "aktivitas-produksi" && aktivitasProduksi === null) {
         setLoadingTab("aktivitas-produksi");
-        const [aktivitasResult, mesinResult, riwayatResult, timListResult] = await Promise.all([
+        const [aktivitasResult, mesinResult, riwayatResult, timListResult, timSayaResult] = await Promise.all([
           getCurrentAktivitasProduksiAction(),
           getMesinListAction(),
           getAktivitasRiwayatAction(),
           getAllTimAction(),
+          getTimSayaAction(),
         ]);
         if (cancelled) return;
         if (!aktivitasResult.success) {
@@ -249,6 +252,11 @@ export function ProduksiTabShell({
         }
         if (!timListResult.success) {
           setTabError(timListResult.error);
+          setLoadingTab(null);
+          return;
+        }
+        if (!timSayaResult.success) {
+          setTabError(timSayaResult.error);
           setLoadingTab(null);
           return;
         }
@@ -273,6 +281,7 @@ export function ProduksiTabShell({
           mesinEvents: eventsResult.data,
           stafOperasionalOptions: stafResult.data,
           timList: timListResult.data,
+          timSaya: timSayaResult.data,
           riwayat: riwayatResult.data,
         });
         setLoadingTab(null);
@@ -366,6 +375,7 @@ export function ProduksiTabShell({
               mesinEvents={aktivitasProduksi.mesinEvents}
               stafOperasionalOptions={aktivitasProduksi.stafOperasionalOptions}
               timList={aktivitasProduksi.timList}
+              timSaya={aktivitasProduksi.timSaya}
               riwayat={aktivitasProduksi.riwayat}
               onChanged={refreshAktivitasProduksi}
             />

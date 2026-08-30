@@ -13,9 +13,10 @@ import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
-import type { TimRow } from "@/lib/queries/tim-produksi";
+import type { TimRow, AnggotaTimRow } from "@/lib/queries/tim-produksi";
 import { hitungTotalDenda, hitungKontribusiPerOrang } from "@/lib/aktivitas-produksi-shared";
 import { upsertStafOperasionalAction, upsertKerusakanAction, setTimBertugasAction } from "@/app/mkesindo/produksi/actions";
+import { TimSayaPanel } from "@/components/produksi-app/tim-saya-panel";
 
 const UNSET = "__unset__";
 
@@ -215,6 +216,7 @@ export function AktivitasProduksiView({
   mesinEvents,
   stafOperasionalOptions,
   timList,
+  timSaya,
   riwayat,
   onChanged,
 }: {
@@ -232,6 +234,7 @@ export function AktivitasProduksiView({
   // by this plan).
   stafOperasionalOptions: StafOperasionalOption[];
   timList: TimRow[];
+  timSaya: { timId: number; nama: string; anggota: AnggotaTimRow[] } | null;
   riwayat: AktivitasShiftInfo[];
   onChanged: () => void;
 }) {
@@ -240,6 +243,8 @@ export function AktivitasProduksiView({
       <h2 className="text-sm font-semibold text-muted-foreground">
         {current.tanggalUsaha} — {current.shiftLabel}
       </h2>
+
+      {timSaya && <TimSayaPanel timNama={timSaya.nama} anggota={timSaya.anggota} onChanged={onChanged} />}
 
       <Card size="sm">
         <CardHeader>
