@@ -3,13 +3,18 @@
 import { useState } from "react";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
-import { RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
+import { RiwayatPosisiListDesktop } from "@/components/produksi/riwayat-posisi-list-desktop";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
 export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) {
-  const [selected, setSelected] = useState<PalletPosisiRow | null>(null);
+  // Stores just the id, not the row itself -- so the summary below (Terisi
+  // X/120, batch count) always reflects the LATEST posisi prop after an
+  // Ubah/Hapus in RiwayatPosisiListDesktop triggers a server refresh,
+  // instead of freezing on the stale row object captured at click time.
+  const [selectedPosisiId, setSelectedPosisiId] = useState<number | null>(null);
   const byKode = new Map(posisi.map((p) => [p.Kode, p]));
+  const selected = selectedPosisiId != null ? (posisi.find((p) => p.PosisiID === selectedPosisiId) ?? null) : null;
 
   return (
     <div className="rounded-lg border border-border p-4">
@@ -30,7 +35,7 @@ export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) 
                           key={kode}
                           kode={kode}
                           row={byKode.get(kode)}
-                          onClick={(r) => r && setSelected(r)}
+                          onClick={(r) => r && setSelectedPosisiId(r.PosisiID)}
                         />
                       ))}
                     </div>
@@ -69,7 +74,7 @@ export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) 
 
       {selected && (
         <div className="mt-4 flex flex-col gap-3">
-          <RiwayatPosisiList posisiId={selected.PosisiID} open={selected != null} />
+          <RiwayatPosisiListDesktop posisiId={selected.PosisiID} />
           <div className="rounded-md border border-border p-3 text-sm">
             <p className="font-semibold">Pallet {selected.Kode}</p>
             <p className="text-muted-foreground">

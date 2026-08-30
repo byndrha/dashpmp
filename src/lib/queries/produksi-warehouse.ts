@@ -285,3 +285,126 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
     throw err;
   }
 }
+
+export interface UpdateBatchQtyInput {
+  batchId: number;
+  qty10KG: number;
+}
+
+// Koreksi jumlah kantong pada satu input stok yang sudah tercatat --
+// dipakai untuk memperbaiki salah input, bukan alur normal (alur normal
+// selalu lewat createBatch). Tidak bisa diubah ke bawah jumlah yang sudah
+// terpakai (Qty10KG asli dikurangi SisaQty10KG saat ini), supaya
+// SisaQty10KG tidak pernah jadi negatif dan riwayat pengiriman yang sudah
+// memakainya tetap konsisten. Mengunci baris posisi lalu (kalau ada) baris
+// Kualitas sebelum menghitung ulang kapasitas pallet/plafon, urutan yang
+// sama persis dengan createBatch, supaya tidak ada risiko deadlock antara
+// dua fungsi yang mengunci tabel yang sama.
+export async function updateBatchQty(input: UpdateBatchQtyInput): Promise<void> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const batchResult = await new sql.Request(transaction)
+      .input("batchId", sql.Int, input.batchId)
+      .query(
+        `SELECT BatchID, PosisiID, KualitasID, Qty10KG, SisaQty10KG, IsDeleted FROM DashboardProduksiBatch WHERE BatchID = @batchId`
+      );
+    const batch = batchResult.recordset[0] as
+      | { BatchID: number; PosisiID: number; KualitasID: number | null; Qty10KG: number; SisaQty10KG: number; IsDeleted: boolean }
+      | undefined;
+    if (!batch || batch.IsDeleted) throw new AppError("Input stok ini tidak ditemukan.");
+
+    const terpakai = batch.Qty10KG - batch.SisaQty10KG;
+    if (input.qty10KG < terpakai) {
+      throw new AppError(`Tidak bisa diubah ke bawah jumlah yang sudah terpakai (${terpakai} kantong).`);
+    }
+
+    await new sql.Request(transaction)
+      .input("posisiId", sql.Int, batch.PosisiID)
+      .query(`SELECT PosisiID FROM DashboardProduksiPalletPosisi WITH (UPDLOCK, HOLDLOCK) WHERE PosisiID = @posisiId`);
+
+    const sisaBaru = batch.SisaQty10KG + (input.qty10KG - batch.Qty10KG);
+    await new sql.Request(transaction)
+      .input("batchId", sql.Int, input.batchId)
+      .input("qty10", sql.Int, input.qty10KG)
+      .input("sisa", sql.Int, sisaBaru)
+      .query(
+        `UPDATE DashboardProduksiBatch SET Qty10KG = @qty10, SisaQty10KG = @sisa, ModifiedDate = GETDATE() WHERE BatchID = @batchId`
+      );
+
+    const capacityCheck = await new sql.Request(transaction)
+      .input("posisiId", sql.Int, batch.PosisiID)
+      .query(`
+        SELECT ISNULL(SUM(SisaQty10KG), 0) AS TotalSisa
+        FROM DashboardProduksiBatch
+        WHERE PosisiID = @posisiId AND IsDeleted = 0 AND SisaQty10KG > 0
+      `);
+    const totalSisa = capacityCheck.recordset[0].TotalSisa as number;
+    if (totalSisa > KAPASITAS_PALLET_10KG) {
+      throw new AppError(`Kapasitas pallet ini penuh -- total jadi ${totalSisa}/${KAPASITAS_PALLET_10KG} kantong 10kg.`);
+    }
+
+    if (batch.KualitasID != null) {
+      await new sql.Request(transaction)
+        .input("kualitasId", sql.Int, batch.KualitasID)
+        .query(`SELECT KualitasID FROM DashboardProduksiKualitas WITH (UPDLOCK, HOLDLOCK) WHERE KualitasID = @kualitasId`);
+
+      const kualitasResult = await new sql.Request(transaction)
+        .input("kualitasId", sql.Int, batch.KualitasID)
+        .query(`SELECT Qty10KG FROM DashboardProduksiKualitas WHERE KualitasID = @kualitasId`);
+      const kualitasQty = (kualitasResult.recordset[0] as { Qty10KG: number | null } | undefined)?.Qty10KG ?? null;
+
+      if (kualitasQty != null) {
+        const alokasiCheck = await new sql.Request(transaction)
+          .input("kualitasId", sql.Int, batch.KualitasID)
+          .query(`
+            SELECT ISNULL(SUM(Qty10KG), 0) AS TotalTeralokasi
+            FROM DashboardProduksiBatch
+            WHERE KualitasID = @kualitasId AND IsDeleted = 0
+          `);
+        const totalTeralokasi = alokasiCheck.recordset[0].TotalTeralokasi as number;
+        if (totalTeralokasi > kualitasQty) {
+          throw new AppError(
+            `Melebihi qty produksi tercatat pada pemeriksaan ini (tercatat ${kualitasQty} kantong, total teralokasi jadi ${totalTeralokasi}).`
+          );
+        }
+      }
+    }
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+// Hapus (soft-delete) satu input stok yang salah catat -- hanya untuk yang
+// belum ada sama sekali yang terpakai (SisaQty10KG masih persis sama
+// dengan Qty10KG aslinya). Kondisi ini ditaruh langsung di klausa WHERE
+// (bukan baca-lalu-putuskan terpisah) supaya atomik terhadap
+// produksiSelesaiMuat yang mungkin mengurangi SisaQty10KG di saat
+// bersamaan -- pola yang sama seperti UPDATE...WHERE SisaQty10KG >=
+// @qty10 yang sudah dipakai di produksi-muatan.ts.
+export async function deleteBatch(batchId: number): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("batchId", sql.Int, batchId)
+    .query(`
+      UPDATE DashboardProduksiBatch
+      SET IsDeleted = 1, ModifiedDate = GETDATE()
+      OUTPUT INSERTED.BatchID
+      WHERE BatchID = @batchId AND IsDeleted = 0 AND SisaQty10KG = Qty10KG
+    `);
+  if (result.recordset.length === 0) {
+    const check = await pool
+      .request()
+      .input("batchId", sql.Int, batchId)
+      .query(`SELECT IsDeleted, Qty10KG, SisaQty10KG FROM DashboardProduksiBatch WHERE BatchID = @batchId`);
+    const row = check.recordset[0] as { IsDeleted: boolean; Qty10KG: number; SisaQty10KG: number } | undefined;
+    if (!row || row.IsDeleted) throw new AppError("Input stok ini tidak ditemukan.");
+    const terpakai = row.Qty10KG - row.SisaQty10KG;
+    throw new AppError(`Tidak bisa dihapus, sudah ada ${terpakai} kantong yang terpakai.`);
+  }
+}
