@@ -16,6 +16,7 @@ import {
   type JenisBarang,
 } from "@/lib/queries/stok-bahan-baku";
 import { getAktivitasRiwayat, type AktivitasShiftInfo } from "@/lib/queries/aktivitas-produksi";
+import { getAktivitasMuatanDistribusi, type AktivitasMuatanDistribusiRow } from "@/lib/queries/laporan-muatan-distribusi";
 
 // Bypasses the permission grid for Direktur/Superadmin the same way every
 // other module's canAccessAllPT() checks do, so they can exercise the
@@ -83,5 +84,12 @@ export async function setSaldoAwalAction(
     }
     await setSaldoAwal(jenisBarang, saldoAwalGudang, saldoAwalInventoriOperasional, Number(session.user.id));
     revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function getAktivitasMuatanDistribusiAction(tahun: number, bulan: number): Promise<ActionResult<AktivitasMuatanDistribusiRow[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("laporan");
+    return getAktivitasMuatanDistribusi(tahun, bulan);
   });
 }
