@@ -18,16 +18,18 @@ function SortableRosterRow({
   entry,
   index,
   canEdit,
+  pending,
   onRemove,
 }: {
   entry: SusunanTimRow;
   index: number;
   canEdit: boolean;
+  pending: boolean;
   onRemove: (anggotaId: number) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.anggotaId,
-    disabled: !canEdit,
+    disabled: !canEdit || pending,
   });
 
   return (
@@ -37,7 +39,13 @@ function SortableRosterRow({
       className={cn("flex items-center gap-2 rounded-md border border-border px-2 py-1.5", isDragging && "z-10 opacity-70 shadow-lg")}
     >
       {canEdit && (
-        <button type="button" {...attributes} {...listeners} className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          disabled={pending}
+          className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
+        >
           <GripVertical className="size-4" />
         </button>
       )}
@@ -50,7 +58,8 @@ function SortableRosterRow({
           type="button"
           title="Keluarkan dari susunan shift ini"
           onClick={() => onRemove(entry.anggotaId)}
-          className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          disabled={pending}
+          className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
         >
           <X className="size-4" />
         </button>
@@ -101,6 +110,9 @@ export function TimProduksiRoster({
       const result = await setSusunanTimAction(tanggalUsaha, shift, next.map((n) => n.anggotaId));
       if (!result.success) {
         setError(result.error);
+        // Revert the rejected optimistic order back to the last known-good
+        // server state instead of leaving it on screen.
+        setOrder(susunanTim);
         return;
       }
       onChanged();
@@ -143,7 +155,7 @@ export function TimProduksiRoster({
             <SortableContext items={order.map((o) => o.anggotaId)} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-1.5">
                 {order.map((entry, i) => (
-                  <SortableRosterRow key={entry.anggotaId} entry={entry} index={i} canEdit={canEdit} onRemove={handleRemove} />
+                  <SortableRosterRow key={entry.anggotaId} entry={entry} index={i} canEdit={canEdit} pending={pending} onRemove={handleRemove} />
                 ))}
               </div>
             </SortableContext>

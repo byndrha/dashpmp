@@ -25,13 +25,12 @@ const SHIFT_OPTIONS = [1, 2, 3] as const;
 
 // Pass/fail checklist this form collects — was 4 items (Kejernihan Es,
 // Ukuran/Bentuk Sesuai, Bebas Kontaminasi/Benda Asing, Kemasan Rapi);
-// Kontaminasi and Kemasan were dropped from the form per explicit request
-// (kept on KualitasRow/the DB as always-true going forward — see
-// createKualitasAction — so historical entries that genuinely failed one of
-// those two stay meaningful, and every other query/consumer of those
-// columns keeps working unchanged). Each item defaults to "Lolos" (true)
-// rather than forcing every entry to explicitly confirm both every time —
-// an operator only needs to touch the items that actually failed.
+// Kontaminasi and Kemasan were dropped from the form per explicit request,
+// and the underlying columns were dropped from the database entirely (they
+// no longer exist, including for historical rows). Each remaining item
+// defaults to "Lolos" (true) rather than forcing every entry to explicitly
+// confirm both every time — an operator only needs to touch the items that
+// actually failed.
 const CHECKLIST_ITEMS = [
   { key: "cekKejernihan", label: "Kejernihan Es" },
   { key: "cekUkuranBentuk", label: "Ukuran/Bentuk Sesuai" },

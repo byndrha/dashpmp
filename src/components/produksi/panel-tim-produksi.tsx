@@ -33,6 +33,7 @@ function AnggotaCard({ anggota }: { anggota: AnggotaTimRow }) {
   }
 
   function handleNonaktifkan() {
+    if (!confirm(`Nonaktifkan ${anggota.nama}? Tindakan ini tidak bisa dibatalkan dari sini.`)) return;
     setError(null);
     startTransition(async () => {
       const result = await hapusAnggotaTimAction(anggota.anggotaId);
