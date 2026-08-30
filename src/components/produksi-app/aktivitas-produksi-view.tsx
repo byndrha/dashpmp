@@ -13,8 +13,9 @@ import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
+import type { TimRow } from "@/lib/queries/tim-produksi";
 import { hitungTotalDenda, hitungKontribusiPerOrang } from "@/lib/aktivitas-produksi-shared";
-import { upsertStafOperasionalAction, upsertKerusakanAction } from "@/app/mkesindo/produksi/actions";
+import { upsertStafOperasionalAction, upsertKerusakanAction, setTimBertugasAction } from "@/app/mkesindo/produksi/actions";
 
 const UNSET = "__unset__";
 
@@ -161,6 +162,50 @@ export function StafOperasionalSelect({
   );
 }
 
+const BELUM_DIJADWALKAN = "__belum_dijadwalkan__";
+
+export function TimBertugasSelect({
+  tanggalUsaha,
+  shift,
+  timId,
+  timList,
+  onChanged,
+}: {
+  tanggalUsaha: string;
+  shift: 1 | 2 | 3;
+  timId: number | null;
+  timList: TimRow[];
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  function handleChange(value: string | null) {
+    if (!value || value === BELUM_DIJADWALKAN) return;
+    startTransition(async () => {
+      await setTimBertugasAction(tanggalUsaha, shift, Number(value));
+      onChanged();
+    });
+  }
+
+  return (
+    <Select value={timId != null ? String(timId) : BELUM_DIJADWALKAN} onValueChange={handleChange} disabled={pending}>
+      <SelectTrigger>
+        <SelectValue placeholder="Pilih Tim" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={BELUM_DIJADWALKAN} disabled>
+          Tim belum dijadwalkan — pilih Tim
+        </SelectItem>
+        {timList.map((t) => (
+          <SelectItem key={t.timId} value={String(t.timId)}>
+            {t.nama}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function AktivitasProduksiView({
   current,
   qty,
@@ -169,6 +214,7 @@ export function AktivitasProduksiView({
   mesinList,
   mesinEvents,
   stafOperasionalOptions,
+  timList,
   riwayat,
   onChanged,
 }: {
@@ -185,6 +231,7 @@ export function AktivitasProduksiView({
   // correcting past shifts (see riwayat-aktivitas-produksi.tsx, untouched
   // by this plan).
   stafOperasionalOptions: StafOperasionalOption[];
+  timList: TimRow[];
   riwayat: AktivitasShiftInfo[];
   onChanged: () => void;
 }) {
@@ -193,6 +240,15 @@ export function AktivitasProduksiView({
       <h2 className="text-sm font-semibold text-muted-foreground">
         {current.tanggalUsaha} — {current.shiftLabel}
       </h2>
+
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle className="text-sm">Tim Bertugas</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <TimBertugasSelect tanggalUsaha={current.tanggalUsaha} shift={current.shift} timId={current.timId} timList={timList} onChanged={onChanged} />
+        </CardContent>
+      </Card>
 
       <Card size="sm">
         <CardHeader>
@@ -210,7 +266,7 @@ export function AktivitasProduksiView({
       <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
       <QtyRecapCard qty={qty} jumlahHadir={susunanTim.length} />
       <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />
-      <RiwayatAktivitasProduksi riwayat={riwayat} stafOperasionalOptions={stafOperasionalOptions} onChanged={onChanged} />
+      <RiwayatAktivitasProduksi riwayat={riwayat} stafOperasionalOptions={stafOperasionalOptions} timList={timList} onChanged={onChanged} />
     </div>
   );
 }

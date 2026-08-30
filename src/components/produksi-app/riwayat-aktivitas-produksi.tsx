@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/format";
 import { TimProduksiRoster } from "@/components/produksi-app/tim-produksi-roster";
-import { QtyRecapCard, KerusakanCard, StafOperasionalSelect } from "@/components/produksi-app/aktivitas-produksi-view";
+import { QtyRecapCard, KerusakanCard, StafOperasionalSelect, TimBertugasSelect } from "@/components/produksi-app/aktivitas-produksi-view";
 import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
+import type { TimRow } from "@/lib/queries/tim-produksi";
 import { getAktivitasDetailAction } from "@/app/mkesindo/produksi/actions";
 
 type Detail = { current: AktivitasShiftInfo; qty: QtyRecap; susunanTim: SusunanTimRow[] };
@@ -16,10 +17,12 @@ type Detail = { current: AktivitasShiftInfo; qty: QtyRecap; susunanTim: SusunanT
 function UbahAktivitasDialog({
   row,
   stafOperasionalOptions,
+  timList,
   onOpenChange,
 }: {
   row: AktivitasShiftInfo;
   stafOperasionalOptions: StafOperasionalOption[];
+  timList: TimRow[];
   onOpenChange: (open: boolean) => void;
 }) {
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -71,6 +74,14 @@ function UbahAktivitasDialog({
           <div className="flex flex-col gap-4">
             <Card size="sm">
               <CardHeader>
+                <CardTitle className="text-sm">Tim Bertugas</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <TimBertugasSelect tanggalUsaha={row.tanggalUsaha} shift={row.shift} timId={detail.current.timId} timList={timList} onChanged={refetchDetail} />
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader>
                 <CardTitle className="text-sm">Staf Operasional Bertugas</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
@@ -102,10 +113,12 @@ function UbahAktivitasDialog({
 export function RiwayatAktivitasProduksi({
   riwayat,
   stafOperasionalOptions,
+  timList,
   onChanged,
 }: {
   riwayat: AktivitasShiftInfo[];
   stafOperasionalOptions: StafOperasionalOption[];
+  timList: TimRow[];
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState<AktivitasShiftInfo | null>(null);
@@ -132,6 +145,7 @@ export function RiwayatAktivitasProduksi({
         <UbahAktivitasDialog
           row={editing}
           stafOperasionalOptions={stafOperasionalOptions}
+          timList={timList}
           onOpenChange={(open) => {
             if (open) return;
             // Close the dialog first (this local state update is what

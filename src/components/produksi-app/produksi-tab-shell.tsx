@@ -25,6 +25,7 @@ import {
   getAktivitasRiwayatAction,
   getMesinEventsForShiftAction,
   getStafOperasionalOptionsAction,
+  getAllTimAction,
 } from "@/app/mkesindo/produksi/actions";
 import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
@@ -34,6 +35,7 @@ import type { StokBahanBakuRow, CurrentShiftInfo } from "@/lib/queries/stok-baha
 import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
+import type { TimRow } from "@/lib/queries/tim-produksi";
 
 export type ProduksiTabKey = "kartu-pengiriman" | "riwayat" | "warehouse" | "kualitas" | "bahan-baku" | "aktivitas-produksi";
 
@@ -75,6 +77,7 @@ export function ProduksiTabShell({
     mesinList: MesinRow[];
     mesinEvents: MesinEventRow[];
     stafOperasionalOptions: StafOperasionalOption[];
+    timList: TimRow[];
     riwayat: AktivitasShiftInfo[];
   };
 }) {
@@ -222,10 +225,11 @@ export function ProduksiTabShell({
       }
       if (activeTab === "aktivitas-produksi" && aktivitasProduksi === null) {
         setLoadingTab("aktivitas-produksi");
-        const [aktivitasResult, mesinResult, riwayatResult] = await Promise.all([
+        const [aktivitasResult, mesinResult, riwayatResult, timListResult] = await Promise.all([
           getCurrentAktivitasProduksiAction(),
           getMesinListAction(),
           getAktivitasRiwayatAction(),
+          getAllTimAction(),
         ]);
         if (cancelled) return;
         if (!aktivitasResult.success) {
@@ -240,6 +244,11 @@ export function ProduksiTabShell({
         }
         if (!riwayatResult.success) {
           setTabError(riwayatResult.error);
+          setLoadingTab(null);
+          return;
+        }
+        if (!timListResult.success) {
+          setTabError(timListResult.error);
           setLoadingTab(null);
           return;
         }
@@ -263,6 +272,7 @@ export function ProduksiTabShell({
           mesinList: mesinResult.data,
           mesinEvents: eventsResult.data,
           stafOperasionalOptions: stafResult.data,
+          timList: timListResult.data,
           riwayat: riwayatResult.data,
         });
         setLoadingTab(null);
@@ -355,6 +365,7 @@ export function ProduksiTabShell({
               mesinList={aktivitasProduksi.mesinList}
               mesinEvents={aktivitasProduksi.mesinEvents}
               stafOperasionalOptions={aktivitasProduksi.stafOperasionalOptions}
+              timList={aktivitasProduksi.timList}
               riwayat={aktivitasProduksi.riwayat}
               onChanged={refreshAktivitasProduksi}
             />
