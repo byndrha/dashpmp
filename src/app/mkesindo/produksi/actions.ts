@@ -324,6 +324,7 @@ export async function tambahAnggotaTimAction(shift: ShiftNumber, nama: string): 
     if (!nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
     const id = await tambahAnggotaTim(shift, nama.trim());
     revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/produksi");
     return id;
   });
 }
@@ -333,6 +334,7 @@ export async function hapusAnggotaTimAction(anggotaId: number): Promise<ActionRe
     await requireProduksiView();
     await hapusAnggotaTim(anggotaId);
     revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/produksi");
   });
 }
 
