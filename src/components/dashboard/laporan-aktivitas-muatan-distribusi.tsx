@@ -23,21 +23,31 @@ export function LaporanAktivitasMuatanDistribusi({
   const [bulan, setBulan] = useState(bulanAwal);
   const [rows, setRows] = useState(rowsAwal);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (tahun === tahunAwal && bulan === bulanAwal) return;
+    if (tahun === tahunAwal && bulan === bulanAwal) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRows(rowsAwal);
+      setError(null);
+      return;
+    }
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     getAktivitasMuatanDistribusiAction(tahun, bulan).then((result) => {
       if (cancelled) return;
-      if (result.success) setRows(result.data);
+      if (result.success) {
+        setRows(result.data);
+        setError(null);
+      } else {
+        setError(result.error);
+      }
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [tahun, bulan, tahunAwal, bulanAwal]);
+  }, [tahun, bulan, tahunAwal, bulanAwal, rowsAwal]);
 
   function gantiBulan(delta: number) {
     let nextBulan = bulan + delta;
@@ -66,6 +76,7 @@ export function LaporanAktivitasMuatanDistribusi({
           <ChevronRight className="size-4" />
         </Button>
       </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
       {loading ? (
         <p className="text-xs text-muted-foreground">Memuat...</p>
       ) : (
