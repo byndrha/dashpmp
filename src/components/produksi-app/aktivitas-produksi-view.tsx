@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimProduksiRoster } from "@/components/produksi-app/tim-produksi-roster";
 import { MesinEventPanel } from "@/components/produksi-app/mesin-event-panel";
 import { RiwayatAktivitasProduksi } from "@/components/produksi-app/riwayat-aktivitas-produksi";
-import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
@@ -166,7 +165,6 @@ export function AktivitasProduksiView({
   current,
   qty,
   susunanTim,
-  timAnggota,
   stafOperasionalNama,
   mesinList,
   mesinEvents,
@@ -177,7 +175,6 @@ export function AktivitasProduksiView({
   current: AktivitasShiftInfo;
   qty: QtyRecap;
   susunanTim: SusunanTimRow[];
-  timAnggota: AnggotaTimRow[];
   // Resolved by the caller (page.tsx) via getAkunNamaMap — null only for a
   // shift that has genuinely never had any activity recorded yet.
   stafOperasionalNama: string | null;
@@ -209,14 +206,7 @@ export function AktivitasProduksiView({
         </CardContent>
       </Card>
 
-      <TimProduksiRoster
-        tanggalUsaha={current.tanggalUsaha}
-        shift={current.shift}
-        timAnggota={timAnggota}
-        kehadiran={susunanTim.map((s) => s.anggotaId)}
-        canEdit
-        onChanged={onChanged}
-      />
+      <TimProduksiRoster tanggalUsaha={current.tanggalUsaha} shift={current.shift} susunanTim={susunanTim} canEdit onChanged={onChanged} />
       <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
       <QtyRecapCard qty={qty} jumlahHadir={susunanTim.length} />
       <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />

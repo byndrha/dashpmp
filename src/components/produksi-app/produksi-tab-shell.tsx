@@ -11,7 +11,6 @@ import { AktivitasProduksiView } from "@/components/produksi-app/aktivitas-produ
 import { ProduksiBottomNav } from "@/components/produksi-app/bottom-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
-import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
 import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
 import {
   getDraftJadwalForProduksiAction,
@@ -23,7 +22,6 @@ import {
   getKualitasRiwayatAction,
   getCurrentShiftRowsForProduksiAction,
   getCurrentAktivitasProduksiAction,
-  getAnggotaTimAction,
   getAktivitasRiwayatAction,
   getMesinEventsForShiftAction,
   getStafOperasionalOptionsAction,
@@ -73,7 +71,6 @@ export function ProduksiTabShell({
     current: AktivitasShiftInfo;
     qty: QtyRecap;
     susunanTim: SusunanTimRow[];
-    timAnggota: AnggotaTimRow[];
     stafOperasionalNama: string | null;
     mesinList: MesinRow[];
     mesinEvents: MesinEventRow[];
@@ -223,49 +220,29 @@ export function ProduksiTabShell({
         setBahanBaku(result.data);
         setLoadingTab(null);
       }
-      if (
-        activeTab === "aktivitas-produksi" &&
-        (
-          aktivitasProduksi === null ||
-          !Array.isArray(aktivitasProduksi.timAnggota)
-        )
-      ) {
+      if (activeTab === "aktivitas-produksi" && aktivitasProduksi === null) {
         setLoadingTab("aktivitas-produksi");
-        const aktivitasResult = await getCurrentAktivitasProduksiAction();
-
-      if (cancelled) return;
-
-      if (!aktivitasResult.success) {
-        setTabError(aktivitasResult.error);
-        setLoadingTab(null);
-        return;
-      }
-
-      const [timAnggotaResult, mesinResult, riwayatResult] = await Promise.all([
-        getAnggotaTimAction(aktivitasResult.data.current.shift),
-        getMesinListAction(),
-        getAktivitasRiwayatAction(),
-      ]);
-
-      if (cancelled) return;
-
-      if (!timAnggotaResult.success) {
-        setTabError(timAnggotaResult.error);
-        setLoadingTab(null);
-        return;
-      }
-
-      if (!mesinResult.success) {
-        setTabError(mesinResult.error);
-        setLoadingTab(null);
-        return;
-      }
-
-      if (!riwayatResult.success) {
-        setTabError(riwayatResult.error);
-        setLoadingTab(null);
-        return;
-      }
+        const [aktivitasResult, mesinResult, riwayatResult] = await Promise.all([
+          getCurrentAktivitasProduksiAction(),
+          getMesinListAction(),
+          getAktivitasRiwayatAction(),
+        ]);
+        if (cancelled) return;
+        if (!aktivitasResult.success) {
+          setTabError(aktivitasResult.error);
+          setLoadingTab(null);
+          return;
+        }
+        if (!mesinResult.success) {
+          setTabError(mesinResult.error);
+          setLoadingTab(null);
+          return;
+        }
+        if (!riwayatResult.success) {
+          setTabError(riwayatResult.error);
+          setLoadingTab(null);
+          return;
+        }
         const [eventsResult, stafResult] = await Promise.all([
           getMesinEventsForShiftAction(aktivitasResult.data.current.tanggalUsaha, aktivitasResult.data.current.shift),
           getStafOperasionalOptionsAction(),
@@ -283,7 +260,6 @@ export function ProduksiTabShell({
         }
         setAktivitasProduksi({
           ...aktivitasResult.data,
-          timAnggota: timAnggotaResult.data,
           mesinList: mesinResult.data,
           mesinEvents: eventsResult.data,
           stafOperasionalOptions: stafResult.data,
@@ -369,18 +345,12 @@ export function ProduksiTabShell({
             />
           </div>
         )}
-        {visited.has("aktivitas-produksi") &&
-        aktivitasProduksi &&
-        Array.isArray(aktivitasProduksi.timAnggota) && (
-          <div className={cn(
-            "h-full overflow-y-auto",
-            activeTab !== "aktivitas-produksi" && "hidden"
-          )}>
+        {visited.has("aktivitas-produksi") && aktivitasProduksi && (
+          <div className={cn("h-full overflow-y-auto", activeTab !== "aktivitas-produksi" && "hidden")}>
             <AktivitasProduksiView
               current={aktivitasProduksi.current}
               qty={aktivitasProduksi.qty}
               susunanTim={aktivitasProduksi.susunanTim}
-              timAnggota={aktivitasProduksi.timAnggota}
               stafOperasionalNama={aktivitasProduksi.stafOperasionalNama}
               mesinList={aktivitasProduksi.mesinList}
               mesinEvents={aktivitasProduksi.mesinEvents}

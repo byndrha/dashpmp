@@ -7,12 +7,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { formatDate } from "@/lib/format";
 import { TimProduksiRoster } from "@/components/produksi-app/tim-produksi-roster";
 import { QtyRecapCard, KerusakanCard, StafOperasionalSelect } from "@/components/produksi-app/aktivitas-produksi-view";
-import type { AktivitasShiftInfo, QtyRecap } from "@/lib/queries/aktivitas-produksi";
-import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
+import type { AktivitasShiftInfo, QtyRecap, SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 import { getAktivitasDetailAction } from "@/app/mkesindo/produksi/actions";
 
-type Detail = { current: AktivitasShiftInfo; qty: QtyRecap; kehadiran: number[]; timAnggota: AnggotaTimRow[] };
+type Detail = { current: AktivitasShiftInfo; qty: QtyRecap; susunanTim: SusunanTimRow[] };
 
 function UbahAktivitasDialog({
   row,
@@ -87,12 +86,11 @@ function UbahAktivitasDialog({
             <TimProduksiRoster
               tanggalUsaha={row.tanggalUsaha}
               shift={row.shift}
-              timAnggota={detail.timAnggota}
-              kehadiran={detail.kehadiran}
+              susunanTim={detail.susunanTim}
               canEdit
               onChanged={refetchDetail}
             />
-            <QtyRecapCard qty={detail.qty} jumlahHadir={detail.kehadiran.length} />
+            <QtyRecapCard qty={detail.qty} jumlahHadir={detail.susunanTim.length} />
             <KerusakanCard tanggalUsaha={row.tanggalUsaha} shift={row.shift} current={detail.current} onSaved={refetchDetail} />
           </div>
         )}

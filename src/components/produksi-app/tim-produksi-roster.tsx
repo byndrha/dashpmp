@@ -1,47 +1,104 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useEffect, useState, useTransition } from "react";
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import type { SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
-import { tambahAnggotaTimAction, hapusAnggotaTimAction, setSusunanTimAction } from "@/app/mkesindo/produksi/actions";
+import { setSusunanTimAction, getSemuaAnggotaTimAction } from "@/app/mkesindo/produksi/actions";
+
+const TAMBAH_PLACEHOLDER = "__pilih__";
+
+function SortableRosterRow({
+  entry,
+  index,
+  canEdit,
+  onRemove,
+}: {
+  entry: SusunanTimRow;
+  index: number;
+  canEdit: boolean;
+  onRemove: (anggotaId: number) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: entry.anggotaId,
+    disabled: !canEdit,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("flex items-center gap-2 rounded-md border border-border px-2 py-1.5", isDragging && "z-10 opacity-70 shadow-lg")}
+    >
+      {canEdit && (
+        <button type="button" {...attributes} {...listeners} className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
+          <GripVertical className="size-4" />
+        </button>
+      )}
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+        {index + 1}
+      </span>
+      <span className="flex-1 text-sm">{entry.nama}</span>
+      {canEdit && (
+        <button
+          type="button"
+          title="Keluarkan dari susunan shift ini"
+          onClick={() => onRemove(entry.anggotaId)}
+          className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function TimProduksiRoster({
   tanggalUsaha,
   shift,
-  timAnggota,
-  kehadiran,
+  susunanTim,
   canEdit,
   onChanged,
 }: {
   tanggalUsaha: string;
   shift: 1 | 2 | 3;
-  timAnggota: AnggotaTimRow[];
-  kehadiran: number[];
+  susunanTim: SusunanTimRow[];
   canEdit: boolean;
   onChanged: () => void;
 }) {
-  const [namaBaru, setNamaBaru] = useState("");
-  const [checked, setChecked] = useState<Set<number>>(new Set(kehadiran));
+  const [order, setOrder] = useState(susunanTim);
+  const [semuaAnggota, setSemuaAnggota] = useState<AnggotaTimRow[] | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  function toggleHadir(anggotaId: number) {
+  // susunanTim comes from the parent's own fetch (re-run after onChanged)
+  // -- resync local drag/edit state whenever a fresh copy arrives, same
+  // reasoning as every other "server state -> local editable copy" pattern
+  // in this app (e.g. RouteValidationDialog's own `order` state).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrder(susunanTim);
+  }, [susunanTim]);
+
+  useEffect(() => {
     if (!canEdit) return;
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(anggotaId)) next.delete(anggotaId);
-      else next.add(anggotaId);
-      return next;
+    getSemuaAnggotaTimAction().then((result) => {
+      if (result.success) setSemuaAnggota(result.data);
     });
-  }
+  }, [canEdit]);
 
-  function handleSimpanKehadiran() {
+  function persist(next: SusunanTimRow[]) {
+    setOrder(next);
     setError(null);
     startTransition(async () => {
-      const result = await setSusunanTimAction(tanggalUsaha, shift, [...checked]);
+      const result = await setSusunanTimAction(tanggalUsaha, shift, next.map((n) => n.anggotaId));
       if (!result.success) {
         setError(result.error);
         return;
@@ -50,67 +107,65 @@ export function TimProduksiRoster({
     });
   }
 
-  function handleTambahAnggota() {
-    if (!namaBaru.trim()) return;
-    setError(null);
-    startTransition(async () => {
-      const result = await tambahAnggotaTimAction(shift, namaBaru.trim());
-      if (!result.success) {
-        setError(result.error);
-        return;
-      }
-      setNamaBaru("");
-      onChanged();
-    });
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = order.findIndex((o) => o.anggotaId === active.id);
+    const newIndex = order.findIndex((o) => o.anggotaId === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    persist(arrayMove(order, oldIndex, newIndex));
   }
 
-  function handleHapusAnggota(anggotaId: number) {
-    setError(null);
-    startTransition(async () => {
-      const result = await hapusAnggotaTimAction(anggotaId);
-      if (!result.success) {
-        setError(result.error);
-        return;
-      }
-      onChanged();
-    });
+  function handleRemove(anggotaId: number) {
+    persist(order.filter((o) => o.anggotaId !== anggotaId));
   }
+
+  function handleTambah(value: string | null) {
+    if (!value || value === TAMBAH_PLACEHOLDER) return;
+    const anggotaId = Number(value);
+    const anggota = semuaAnggota?.find((a) => a.anggotaId === anggotaId);
+    if (!anggota || order.some((o) => o.anggotaId === anggotaId)) return;
+    persist([...order, { anggotaId, nama: anggota.nama, urutan: order.length }]);
+  }
+
+  const tersedia = (semuaAnggota ?? []).filter((a) => !order.some((o) => o.anggotaId === a.anggotaId));
 
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle className="text-sm">Tim Produksi (Shift {shift})</CardTitle>
+        <CardTitle className="text-sm">Tim Produksi bertugas — Shift {shift}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2">
-         {(timAnggota ?? []).map((a) => (
-            <div key={a.anggotaId} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                className="accent-primary"
-                checked={checked.has(a.anggotaId)}
-                onChange={() => toggleHadir(a.anggotaId)}
-                disabled={!canEdit}
-              />
-              <span className="flex-1 text-sm">{a.nama}</span>
-              <Button variant="ghost" size="icon" className="size-6" disabled={pending} onClick={() => handleHapusAnggota(a.anggotaId)}>
-                <Trash2 className="size-3.5 text-destructive" />
-              </Button>
-            </div>
-          ))}
-          {(timAnggota ?? []).length === 0 && <p className="text-xs text-muted-foreground">Belum ada anggota di tim ini.</p>}
-        </div>
-        {canEdit && (
-          <Button size="sm" className="w-fit" disabled={pending} onClick={handleSimpanKehadiran}>
-            Simpan Kehadiran
-          </Button>
+        {order.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Belum ada anggota bertugas.</p>
+        ) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={order.map((o) => o.anggotaId)} strategy={verticalListSortingStrategy}>
+              <div className="flex flex-col gap-1.5">
+                {order.map((entry, i) => (
+                  <SortableRosterRow key={entry.anggotaId} entry={entry} index={i} canEdit={canEdit} onRemove={handleRemove} />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
-        <div className="flex gap-2">
-          <Input placeholder="Nama anggota baru" value={namaBaru} onChange={(e) => setNamaBaru(e.target.value)} />
-          <Button size="sm" variant="outline" disabled={pending} onClick={handleTambahAnggota}>
-            Tambah
-          </Button>
-        </div>
+        {canEdit && (
+          <Select value={TAMBAH_PLACEHOLDER} onValueChange={handleTambah} disabled={pending}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tambah dari tim lain..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TAMBAH_PLACEHOLDER} disabled>
+                Tambah dari tim lain...
+              </SelectItem>
+              {tersedia.map((a) => (
+                <SelectItem key={a.anggotaId} value={String(a.anggotaId)}>
+                  {a.nama} (Shift {a.shift})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {error && <p className="text-xs text-destructive">{error}</p>}
       </CardContent>
     </Card>
