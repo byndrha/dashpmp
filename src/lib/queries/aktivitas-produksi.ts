@@ -272,17 +272,26 @@ export async function setSusunanTim(tanggalUsaha: string, shift: ShiftNumber, an
 export async function setTimBertugas(tanggalUsaha: string, shift: ShiftNumber, timId: number, akunId: number): Promise<void> {
   const pool = await getPool();
   const aktivitasId = await ensureAktivitasRow(pool, tanggalUsaha, shift, akunId);
-  const current = await pool
-    .request()
-    .input("aktivitasId", sql.Int, aktivitasId)
-    .query(`SELECT TimID FROM DashboardAktivitasProduksiShift WHERE AktivitasID = @aktivitasId`);
-  const timIdSaatIni = (current.recordset[0] as { TimID: number | null }).TimID;
 
-  await pool
-    .request()
-    .input("aktivitasId", sql.Int, aktivitasId)
-    .input("timId", sql.Int, timId)
-    .query(`UPDATE DashboardAktivitasProduksiShift SET TimID = @timId, ModifiedDate = GETDATE() WHERE AktivitasID = @aktivitasId`);
+  let timIdSaatIni: number | null;
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const current = await new sql.Request(transaction)
+      .input("aktivitasId", sql.Int, aktivitasId)
+      .query(`SELECT TimID FROM DashboardAktivitasProduksiShift WITH (UPDLOCK, HOLDLOCK) WHERE AktivitasID = @aktivitasId`);
+    timIdSaatIni = (current.recordset[0] as { TimID: number | null }).TimID;
+
+    await new sql.Request(transaction)
+      .input("aktivitasId", sql.Int, aktivitasId)
+      .input("timId", sql.Int, timId)
+      .query(`UPDATE DashboardAktivitasProduksiShift SET TimID = @timId, ModifiedDate = GETDATE() WHERE AktivitasID = @aktivitasId`);
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 
   if (timIdSaatIni !== timId) {
     const anggotaBaru = await getAnggotaTim(timId);

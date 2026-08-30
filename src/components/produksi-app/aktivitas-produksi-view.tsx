@@ -267,10 +267,18 @@ export function AktivitasProduksiView({
         </CardContent>
       </Card>
 
-      <TimProduksiRoster tanggalUsaha={current.tanggalUsaha} shift={current.shift} susunanTim={susunanTim} canEdit onChanged={onChanged} />
-      <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
-      <QtyRecapCard qty={qty} jumlahHadir={susunanTim.length} />
-      <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />
+      {current.timId == null ? (
+        <p className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+          Pilih Tim Bertugas terlebih dahulu sebelum mengisi data lain di shift ini.
+        </p>
+      ) : (
+        <>
+          <TimProduksiRoster tanggalUsaha={current.tanggalUsaha} shift={current.shift} susunanTim={susunanTim} canEdit onChanged={onChanged} />
+          <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
+          <QtyRecapCard qty={qty} jumlahHadir={susunanTim.length} />
+          <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />
+        </>
+      )}
       <RiwayatAktivitasProduksi riwayat={riwayat} stafOperasionalOptions={stafOperasionalOptions} timList={timList} onChanged={onChanged} />
     </div>
   );

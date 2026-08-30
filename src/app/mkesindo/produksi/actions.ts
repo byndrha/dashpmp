@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireProduksiView } from "@/lib/require-access";
+import { requireProduksiView, requireProduksiAdmin } from "@/lib/require-access";
 import { getMesinList, updateMesin, type MesinRow, type UpdateMesinInput } from "@/lib/queries/produksi-mesin";
 import {
   getWarehouseMap,
@@ -338,7 +338,7 @@ export async function getAllTimAction(): Promise<ActionResult<TimRow[]>> {
 
 export async function updateTimKepalaAction(timId: number, kepalaAkunId: number | null): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireProduksiView();
+    await requireProduksiAdmin();
     await updateTimKepala(timId, kepalaAkunId);
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
@@ -521,7 +521,7 @@ export async function getJadwalBulanAction(tahun: number, bulan: number): Promis
 
 export async function setJadwalTimAction(tanggalUsaha: string, shift: ShiftNumber, timId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
-    const session = await requireProduksiView();
+    const session = await requireProduksiAdmin();
     await setJadwalTim(tanggalUsaha, shift, timId, Number(session.user.id));
     revalidatePath("/mkesindo/produksi");
   });

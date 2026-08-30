@@ -122,6 +122,22 @@ export async function requireProduksiView() {
   return session;
 }
 
+// Stricter than requireProduksiView() — deliberately excludes the bare
+// isProduksi bypass. Guards actions that must stay supervisor/admin-only
+// even though ordinary is_produksi (floor/Kepala Produksi) accounts can
+// otherwise reach every other action in this module — see
+// setJadwalTimAction/updateTimKepalaAction in
+// src/app/mkesindo/produksi/actions.ts, both of which let the caller
+// affect OTHER teams/accounts, not just their own.
+export async function requireProduksiAdmin() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!canAccessAllPT(session.user) && !canView(session.user.permissions, "produksi")) {
+    redirect("/akses-ditolak");
+  }
+  return session;
+}
+
 // Gerbang app mobile /pmpersada/produksi-app — operator lantai produksi
 // PMPersada. Beda dari requireProduksiView() milik MKEsindo: sengaja TIDAK
 // pakai canAccessAllPT() bypass di sini, karena akun Direktur/PMP Group
