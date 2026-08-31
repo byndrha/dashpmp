@@ -77,6 +77,9 @@ function TambahKualitasDialog({
   const [fotoPath, setFotoPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [fotoStatus, setFotoStatus] = useState<PhotoUploadStatus | undefined>(undefined);
+  const [fotoBeratKemasanPath, setFotoBeratKemasanPath] = useState<string | null>(null);
+  const [uploadingBeratKemasan, setUploadingBeratKemasan] = useState(false);
+  const [fotoBeratKemasanStatus, setFotoBeratKemasanStatus] = useState<PhotoUploadStatus | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -91,6 +94,8 @@ function TambahKualitasDialog({
     setCatatan("");
     setFotoPath(null);
     setFotoStatus(undefined);
+    setFotoBeratKemasanPath(null);
+    setFotoBeratKemasanStatus(undefined);
     setError(null);
   }
 
@@ -107,6 +112,22 @@ function TambahKualitasDialog({
       setFotoStatus("error");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleCaptureBeratKemasan(file: File) {
+    setError(null);
+    setUploadingBeratKemasan(true);
+    setFotoBeratKemasanStatus("uploading");
+    try {
+      const path = await uploadFotoKualitas(file);
+      setFotoBeratKemasanPath(path);
+      setFotoBeratKemasanStatus("success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal mengunggah foto.");
+      setFotoBeratKemasanStatus("error");
+    } finally {
+      setUploadingBeratKemasan(false);
     }
   }
 
@@ -136,6 +157,7 @@ function TambahKualitasDialog({
         qty10KG: Number(qty10KG) || 0,
         catatan: catatan.trim() || null,
         fotoPath,
+        fotoBeratKemasanPath,
       });
       if (!result.success) {
         setError(result.error);
@@ -280,26 +302,68 @@ function TambahKualitasDialog({
             />
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Foto Bukti Sampel</label>
-            <div className="mt-1 h-32 w-32">
-              <LiveCameraCaptureField
-                label="Foto Sampel"
-                photoUrl={fotoPath}
-                size="main"
-                active
-                disabled={uploading || pending}
-                onCapture={handleCapture}
-                status={fotoStatus}
-              />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Foto Bukti Sampel</label>
+              <div className="mt-1 h-32 w-32">
+                <LiveCameraCaptureField
+                  label="Foto Sampel"
+                  photoUrl={fotoPath}
+                  size="main"
+                  active
+                  disabled={uploading || pending}
+                  onCapture={handleCapture}
+                  status={fotoStatus}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Foto Bukti Berat Kemasan</label>
+              <div className="mt-1 h-32 w-32">
+                <LiveCameraCaptureField
+                  label="Foto Berat Kemasan"
+                  photoUrl={fotoBeratKemasanPath}
+                  size="main"
+                  active
+                  disabled={uploadingBeratKemasan || pending}
+                  onCapture={handleCaptureBeratKemasan}
+                  status={fotoBeratKemasanStatus}
+                />
+              </div>
             </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button disabled={pending || uploading} onClick={handleSubmit}>
+          <Button disabled={pending || uploading || uploadingBeratKemasan} onClick={handleSubmit}>
             {pending ? "Menyimpan..." : "Simpan"}
           </Button>
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FotoThumbnail({ path, alt }: { path: string | null; alt: string }) {
+  if (!path) {
+    return (
+      <div className="flex h-20 w-20 items-center justify-center rounded border bg-muted text-center text-[10px] text-muted-foreground">
+        Tidak ada foto
+      </div>
+    );
+  }
+  return (
+    <Dialog>
+      <DialogTrigger
+        type="button"
+        className="block cursor-zoom-in rounded focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset */}
+        <img src={path} alt={alt} className="h-20 w-20 rounded object-cover" />
+      </DialogTrigger>
+
+      <DialogContent className="max-w-3xl p-2 sm:p-3">
+        {/* eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset */}
+        <img src={path} alt={alt} className="max-h-[80vh] w-full rounded object-contain" />
       </DialogContent>
     </Dialog>
   );
@@ -321,35 +385,9 @@ function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
     >
       <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-3">
         {/* Foto */}
-        <div>
-          {kualitas.FotoPath ? (
-            <Dialog>
-              <DialogTrigger
-                type="button"
-                className="block cursor-zoom-in rounded focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset */}
-                <img
-                  src={kualitas.FotoPath}
-                  alt="Foto sampel"
-                  className="h-20 w-20 rounded object-cover"
-                />
-              </DialogTrigger>
-
-              <DialogContent className="max-w-3xl p-2 sm:p-3">
-                {/* eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset */}
-                <img
-                  src={kualitas.FotoPath}
-                  alt="Foto sampel"
-                  className="max-h-[80vh] w-full rounded object-contain"
-                />
-              </DialogContent>
-            </Dialog>
-          ) : (
-            <div className="flex h-20 w-20 items-center justify-center rounded border bg-muted text-center text-[10px] text-muted-foreground">
-              Tidak ada foto
-            </div>
-          )}
+        <div className="flex flex-col gap-1.5">
+          <FotoThumbnail path={kualitas.FotoPath} alt="Foto sampel" />
+          <FotoThumbnail path={kualitas.FotoBeratKemasanPath} alt="Foto berat kemasan" />
         </div>
 
         {/* Detail */}

@@ -21,6 +21,7 @@ export interface KualitasRow {
   DiameterDalamMm: number | null;
   Catatan: string | null;
   FotoPath: string | null;
+  FotoBeratKemasanPath: string | null;
   CreatedByUserID: string;
   CreatedDate: string;
   // Qty10KG minus SUM(DashboardProduksiBatch.Qty10KG) already allocated to
@@ -43,7 +44,7 @@ export async function getKualitasRiwayat(limit = 50): Promise<KualitasRow[]> {
     .input("limit", sql.Int, limit).query(`
       SELECT TOP (@limit) k.KualitasID, k.TanggalLabel, k.Waktu, k.Shift, k.MesinID, m.Nama AS MesinNama,
              k.CekKejernihan, k.CekUkuranBentuk, k.Qty10KG, k.DiameterDalamMm, k.Catatan, k.FotoPath,
-             k.CreatedByUserID, k.CreatedDate,
+             k.FotoBeratKemasanPath, k.CreatedByUserID, k.CreatedDate,
              ISNULL(alok.TotalTeralokasi, 0) AS TotalTeralokasi
       FROM DashboardProduksiKualitas k
       LEFT JOIN DashboardProduksiMesin m ON m.MesinID = k.MesinID
@@ -79,6 +80,7 @@ export interface CreateKualitasInput {
   diameterDalamMm: number | null;
   catatan: string | null;
   fotoPath: string | null;
+  fotoBeratKemasanPath: string | null;
   dicatatOlehUserId: string;
 }
 
@@ -96,12 +98,13 @@ export async function createKualitas(input: CreateKualitasInput): Promise<number
     .input("diameterDalamMm", sql.Decimal(5, 1), input.diameterDalamMm)
     .input("catatan", sql.NVarChar(500), input.catatan)
     .input("fotoPath", sql.VarChar(256), input.fotoPath)
+    .input("fotoBeratKemasanPath", sql.VarChar(256), input.fotoBeratKemasanPath)
     .input("userId", sql.VarChar(16), input.dicatatOlehUserId).query(`
       INSERT INTO DashboardProduksiKualitas
-        (TanggalLabel, Waktu, Shift, MesinID, CekKejernihan, CekUkuranBentuk, Qty10KG, DiameterDalamMm, Catatan, FotoPath, CreatedByUserID)
+        (TanggalLabel, Waktu, Shift, MesinID, CekKejernihan, CekUkuranBentuk, Qty10KG, DiameterDalamMm, Catatan, FotoPath, FotoBeratKemasanPath, CreatedByUserID)
       OUTPUT INSERTED.KualitasID
       VALUES
-        (@tanggalLabel, @waktu, @shift, @mesinId, @cekKejernihan, @cekUkuranBentuk, @qty10KG, @diameterDalamMm, @catatan, @fotoPath, @userId)
+        (@tanggalLabel, @waktu, @shift, @mesinId, @cekKejernihan, @cekUkuranBentuk, @qty10KG, @diameterDalamMm, @catatan, @fotoPath, @fotoBeratKemasanPath, @userId)
     `);
   return (result.recordset[0] as { KualitasID: number }).KualitasID;
 }
