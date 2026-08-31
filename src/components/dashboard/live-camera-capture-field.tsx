@@ -4,6 +4,7 @@ import { Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useLiveCameraCapture } from "@/hooks/use-live-camera-capture";
+import { PhotoStatusOverlay, type PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 
 export function LiveCameraCaptureField({
   label,
@@ -13,6 +14,7 @@ export function LiveCameraCaptureField({
   onTogglePress,
   active,
   disabled,
+  status,
 }: {
   label: string;
   photoUrl: string | null;
@@ -21,6 +23,7 @@ export function LiveCameraCaptureField({
   onTogglePress?: () => void;
   active: boolean;
   disabled?: boolean;
+  status?: PhotoUploadStatus;
 }) {
   const { videoRef, displayedPhotoUrl, showLive, error, retry, handleTap } = useLiveCameraCapture({
     label,
@@ -85,6 +88,7 @@ export function LiveCameraCaptureField({
           <span className="px-1 text-center leading-tight">{label}</span>
         </div>
       )}
+      <PhotoStatusOverlay status={status} />
     </div>
   );
 }
