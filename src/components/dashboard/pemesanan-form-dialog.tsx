@@ -31,7 +31,6 @@ import type { KantongVariant } from "@/lib/queries/sales-order";
 import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
 import { createPemesananAction, createTakeAwayPemesananAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 import { checkArmadaConflictAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
-import { triggerPrintQueuePollNow } from "@/components/dashboard/print-queue-poller";
 
 // Sentinel for "not chosen yet" — Select items can't use an empty string as
 // a value (established convention, see the "all" sentinel in
@@ -158,8 +157,7 @@ export function PemesananFormDialog({
           setError(result.error);
           return;
         }
-        toast.success("SI ditambahkan ke antrian cetak.");
-        triggerPrintQueuePollNow();
+        toast.success("Pesanan TakeAway dibuat — menunggu diproses produksi.");
         handleOpenChange(false);
       });
       return;

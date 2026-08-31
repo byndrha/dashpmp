@@ -1941,8 +1941,8 @@ async function nextSalesInvoiceDetailId(pool: PoolOrTransaction): Promise<string
 }
 
 // Same numbering shape as nextDOVoucherSeq, MKE/SI/ prefix (matches the real
-// SalesInvoice VoucherNo pattern already seen in takeaway.ts's own
-// createTakeAwayPemesanan, e.g. "MKE/SI/000123/2026-08/003/001").
+// SalesInvoice VoucherNo pattern already seen in takeaway-muatan.ts's own
+// takeAwaySelesaiMuat, e.g. "MKE/SI/000123/2026-08/003/001").
 async function nextSIVoucherSeq(pool: PoolOrTransaction, yearMonth: string): Promise<string> {
   const result = await pool
     .request()
@@ -2000,8 +2000,8 @@ interface SalesOrderDetailForPublish {
 // Satpam at the gate. Route/driver validation already happened while the
 // Jadwal sat in Draft; this is the moment the dashboard's SO selection
 // becomes real DeliveryOrder AND SalesInvoice documents (reusing
-// createTakeAwayPemesanan's exact SalesInvoice column/value shape from
-// takeaway.ts) so a Surat SI can be printed and handed to the driver before
+// takeAwaySelesaiMuat's exact SalesInvoice column/value shape from
+// takeaway-muatan.ts) so a Surat SI can be printed and handed to the driver before
 // the vehicle leaves. For each detail row (in Urutan order), creates one real
 // DeliveryOrder + DeliveryOrderDetail(s) AND one SalesInvoice +
 // SalesInvoiceDetail(s) from the linked SalesOrder/SalesOrderDetail. Writes
@@ -2012,7 +2012,7 @@ interface SalesOrderDetailForPublish {
 // and the entire per-stop loop) runs inside one real sql.Transaction — same
 // shape as createVehicleCheck in vehicle-check.ts, which established this
 // pattern in this codebase for the same reason. This deliberately departs
-// from createTakeAwayPemesanan's (takeaway.ts) compensating-cleanup-only
+// from takeAwaySelesaiMuat's (takeaway-muatan.ts) compensating-cleanup-only
 // style: this loop can create many DO/DODetail/SI/SIDetail rows plus
 // per-row JadwalDetail updates across potentially many stops, and a
 // JS-catchable error is not the only way it can fail partway through — a
@@ -2112,8 +2112,8 @@ export async function createSalesInvoiceForStop(
   // one where staff created the SO+DO manually in ERP and dashpmp only
   // added the SI): both broken chains had IsInvoiced=0 on their SO and DO
   // even after this function ran, while the working reference had 1 on
-  // both. This function never flipped them — createTakeAwayPemesanan
-  // (takeaway.ts) already does this correctly for its own chain, and this
+  // both. This function never flipped them — takeAwaySelesaiMuat
+  // (takeaway-muatan.ts) already does this correctly for its own chain, and this
   // mirrors that exact pattern.
   await new sql.Request(transaction)
     .input("soId", sql.VarChar(16), params.salesOrderId)
