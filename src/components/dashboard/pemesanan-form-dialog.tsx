@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getWibTimeHHmm } from "@/lib/business-date";
+import { getWibTimeHHmm, resolveBusinessDateTime } from "@/lib/business-date";
 import { MitraSelect } from "@/components/dashboard/mitra-select";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { formatRupiah } from "@/lib/format";
@@ -69,7 +69,7 @@ export function PemesananFormDialog({
   const [salesmanId, setSalesmanId] = useState<string>(UNSET);
   const [isTakeAway, setIsTakeAway] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; deliveryDateTime: Date } | null>(null);
+  const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; deliveryDateTime: Date; jamJadwal: Date } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const mitra = useMemo(
@@ -121,7 +121,7 @@ export function PemesananFormDialog({
     if (!next) resetForm();
   }
 
-  function doCreatePemesanan(deliveryDateTime: Date) {
+  function doCreatePemesanan(deliveryDateTime: Date, jamJadwal: Date) {
     if (!mitra) return;
     startTransition(async () => {
       const result = await createPemesananAction({
@@ -130,6 +130,7 @@ export function PemesananFormDialog({
         qtyKantong: qtyNumber,
         bonusQty: bonusQtyNumber,
         deliveryDateTime,
+        jamJadwal,
         armadaId: Number(armadaId),
         salesmanId: salesmanId === UNSET ? null : salesmanId,
       });
@@ -164,14 +165,25 @@ export function PemesananFormDialog({
       return;
     }
     const candidateQty = qtyNumber + bonusQtyNumber;
+    // deliveryDateTime is the real intended moment (used for SalesOrder.DueDate
+    // and other document-date purposes) — kept as-is, unshifted. jamJadwal is
+    // the SAME moment reconciled against the 14:00 WIB rollover (see
+    // resolveBusinessDateTime's own comment): `date` here already IS a
+    // rollover-adjusted business-date label (todayISO), so combining it
+    // directly with the raw current time and using THAT for scheduling would
+    // apply the rollover a second time once the Papan Pengiriman board
+    // re-derives a period from it — e.g. an order placed at 19:00 (past the
+    // cutoff, hence `date` already bumped to tomorrow) would otherwise land
+    // one whole period further out than the moment it was actually placed.
     const deliveryDateTime = new Date(`${date}T${time}:00`);
+    const jamJadwal = resolveBusinessDateTime(date, time);
     startTransition(async () => {
-      const check = await checkArmadaConflictAction(Number(armadaId), deliveryDateTime, candidateQty, null);
+      const check = await checkArmadaConflictAction(Number(armadaId), jamJadwal, candidateQty, null);
       if (check) {
-        setConflict({ info: check, deliveryDateTime });
+        setConflict({ info: check, deliveryDateTime, jamJadwal });
         return;
       }
-      doCreatePemesanan(deliveryDateTime);
+      doCreatePemesanan(deliveryDateTime, jamJadwal);
     });
   }
 
@@ -372,9 +384,9 @@ export function PemesananFormDialog({
           conflict={conflict.info}
           onCancel={() => setConflict(null)}
           onConfirm={() => {
-            const deliveryDateTime = conflict.deliveryDateTime;
+            const { deliveryDateTime, jamJadwal } = conflict;
             setConflict(null);
-            doCreatePemesanan(deliveryDateTime);
+            doCreatePemesanan(deliveryDateTime, jamJadwal);
           }}
         />
       )}

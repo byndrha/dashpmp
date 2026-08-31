@@ -22,7 +22,17 @@ export interface CreatePemesananInput {
   // Free/bonus kantong on top of qtyKantong — not billed, see
   // createSalesOrderManual for how it's stored.
   bonusQty: number;
+  // The real intended delivery moment — used ONLY for SalesOrder.DueDate
+  // (createSalesOrderManual). Deliberately NOT used for scheduling: see
+  // jamJadwal below.
   deliveryDateTime: Date;
+  // Same moment as deliveryDateTime, but reconciled against the 14:00 WIB
+  // rollover via resolveBusinessDateTime (business-date.ts) — used for the
+  // Jadwal's own scheduling (findDraftJadwalByArmadaAndTime/
+  // createJadwalDraft/updateJadwalDriverTime) so the Papan Pengiriman board
+  // buckets this order under the period covering when it was actually
+  // placed, not a period derived a second rollover-application further out.
+  jamJadwal: Date;
   armadaId: number;
   salesmanId: string | null;
 }
@@ -58,7 +68,7 @@ export async function createPemesanan(input: CreatePemesananInput): Promise<Crea
 
   let createdJadwalId: number | null = null;
   try {
-    const existingJadwalId = await findDraftJadwalByArmadaAndTime(input.armadaId, input.deliveryDateTime);
+    const existingJadwalId = await findDraftJadwalByArmadaAndTime(input.armadaId, input.jamJadwal);
     if (existingJadwalId != null) {
       await addSalesOrdersToJadwal(existingJadwalId, [salesOrderId]);
       return { salesOrderId, jadwalId: existingJadwalId };
@@ -66,13 +76,13 @@ export async function createPemesanan(input: CreatePemesananInput): Promise<Crea
 
     createdJadwalId = await createJadwalDraft({
       armadaId: input.armadaId,
-      jamJadwal: input.deliveryDateTime,
+      jamJadwal: input.jamJadwal,
       salesOrderIds: [salesOrderId],
     });
 
     if (input.salesmanId) {
       await updateJadwalDriverTime(createdJadwalId, {
-        jamJadwal: input.deliveryDateTime,
+        jamJadwal: input.jamJadwal,
         salesmanId: input.salesmanId,
       });
     }
