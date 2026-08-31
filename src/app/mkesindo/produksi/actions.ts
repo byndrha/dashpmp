@@ -77,6 +77,16 @@ import {
   type SusunanTimRow,
 } from "@/lib/queries/aktivitas-produksi";
 import type { ShiftNumber } from "@/lib/report-shift";
+import { getPool } from "@/lib/db";
+import { enqueuePrintJob } from "@/lib/queries/print-queue";
+import {
+  getTakeAwayMuatanPending,
+  getTakeAwayMuatanSelesaiRecent,
+  takeAwayMulaiMuat,
+  takeAwaySelesaiMuat,
+  type TakeAwayMuatanPendingRow,
+  type TakeAwayMuatanSelesaiRow,
+} from "@/lib/queries/takeaway-muatan";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
   return runAction(async () => {
@@ -567,5 +577,44 @@ export async function hapusAnggotaTimSayaAction(anggotaId: number): Promise<Acti
     await hapusAnggotaTimIfOwned(anggotaId, tim.timId);
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/produksi");
+  });
+}
+
+export async function getTakeAwayMuatanPendingAction(): Promise<ActionResult<TakeAwayMuatanPendingRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getTakeAwayMuatanPending();
+  });
+}
+
+export async function getTakeAwayMuatanSelesaiAction(): Promise<ActionResult<TakeAwayMuatanSelesaiRow[]>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getTakeAwayMuatanSelesaiRecent();
+  });
+}
+
+export async function takeAwayMulaiMuatAction(takeAwayMuatanId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    await takeAwayMulaiMuat(takeAwayMuatanId);
+    revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+// Menyelesaikan muat: membuat DeliveryOrder+SalesInvoice yang sebenarnya
+// (ditunda dari saat order dibuat sampai di sini — lihat takeAwaySelesaiMuat
+// di takeaway-muatan.ts), lalu mengantre SI untuk dicetak — persis seperti
+// enqueuePrintJob yang dulu dipanggil langsung dari createTakeAwayPemesananAction.
+export async function takeAwaySelesaiMuatAction(takeAwayMuatanId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    const result = await takeAwaySelesaiMuat(takeAwayMuatanId, Number(session.user.id));
+    const pool = await getPool();
+    await enqueuePrintJob(pool, result.salesInvoiceId, null, false);
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/pemesanan");
+    revalidatePath("/mkesindo/delivery");
+    revalidatePath("/mkesindo/laporan");
   });
 }
