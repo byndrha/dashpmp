@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { saveDocTemplateAction } from "@/app/grup/akun/actions";
 import { PAPER_SIZES, type DocTemplate, type PaperSize } from "@/lib/doc-template-types";
+import { PhotoStatusOverlay, type PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -48,6 +49,7 @@ export function DocTemplatePanel({ initial }: { initial: DocTemplate }) {
   const [showSignatureBlock, setShowSignatureBlock] = useState(initial.showSignatureBlock);
   const [footerNotes, setFooterNotes] = useState(initial.footerNotes ?? "");
   const [uploading, setUploading] = useState(false);
+  const [logoUploadStatus, setLogoUploadStatus] = useState<PhotoUploadStatus | undefined>(undefined);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function DocTemplatePanel({ initial }: { initial: DocTemplate }) {
     if (!file) return;
     setUploading(true);
     setError(null);
+    setLogoUploadStatus("uploading");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -64,8 +67,10 @@ export function DocTemplatePanel({ initial }: { initial: DocTemplate }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah logo");
       setLogoPath(data.path);
+      setLogoUploadStatus("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengunggah logo");
+      setLogoUploadStatus("error");
     } finally {
       setUploading(false);
     }
@@ -150,11 +155,15 @@ export function DocTemplatePanel({ initial }: { initial: DocTemplate }) {
           <Label className="text-xs text-muted-foreground">Logo</Label>
           <div className="flex items-center gap-3">
             {logoPath ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoPath} alt="Logo" className="size-14 rounded-lg border object-contain" />
+              <div className="relative size-14 shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoPath} alt="Logo" className="size-14 rounded-lg border object-contain" />
+                <PhotoStatusOverlay status={logoUploadStatus} />
+              </div>
             ) : (
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-lg border border-dashed text-[10px] text-muted-foreground">
+              <div className="relative flex size-14 shrink-0 items-center justify-center rounded-lg border border-dashed text-[10px] text-muted-foreground">
                 Tanpa logo
+                <PhotoStatusOverlay status={logoUploadStatus} />
               </div>
             )}
             <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleLogoChange} disabled={uploading} className="text-xs" />

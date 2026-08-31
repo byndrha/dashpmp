@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { setSiteSettingsAction } from "@/app/grup/akun/actions";
 import type { SiteSettings } from "@/lib/queries/site-settings";
+import { PhotoStatusOverlay, type PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 
 // Same upload-then-set-path pattern as armada-dialog.tsx's photo field —
 // upload happens immediately on file selection (separate from the form's
@@ -29,6 +30,7 @@ function ImageUploadField({
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const status: PhotoUploadStatus | undefined = uploading ? "uploading" : uploadError ? "error" : path ? "success" : undefined;
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -56,11 +58,15 @@ function ImageUploadField({
       {caption && <p className="text-[11px] text-muted-foreground">{caption}</p>}
       <div className="flex items-center gap-3">
         {path ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={path} alt={label} className="size-16 rounded-lg border object-cover" />
+          <div className="relative size-16 shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={path} alt={label} className="size-16 rounded-lg border object-cover" />
+            <PhotoStatusOverlay status={status} />
+          </div>
         ) : (
-          <div className="flex size-16 shrink-0 items-center justify-center rounded-lg border border-dashed text-[10px] text-muted-foreground">
+          <div className="relative flex size-16 shrink-0 items-center justify-center rounded-lg border border-dashed text-[10px] text-muted-foreground">
             Default
+            <PhotoStatusOverlay status={status} />
           </div>
         )}
         <div className="flex flex-col gap-1">
