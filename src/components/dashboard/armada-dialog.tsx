@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhotoStatusOverlay, type PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 import { cn } from "@/lib/utils";
 import { ARMADA_STATUS, type ArmadaStatus } from "@/lib/armada-status";
 import { FUEL_TYPES, type FuelType } from "@/lib/armada-fuel";
@@ -106,6 +107,21 @@ export function ArmadaFormDialog({
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [qrUploading, setQrUploading] = useState(false);
   const [qrUploadError, setQrUploadError] = useState<string | null>(null);
+
+  const fotoStatus: PhotoUploadStatus | undefined = uploading
+    ? "uploading"
+    : uploadError
+    ? "error"
+    : previewUrl ?? fotoPath
+    ? "success"
+    : undefined;
+  const qrFotoStatus: PhotoUploadStatus | undefined = qrUploading
+    ? "uploading"
+    : qrUploadError
+    ? "error"
+    : qrPreviewUrl ?? qrMyPertaminaPath
+    ? "success"
+    : undefined;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -357,9 +373,12 @@ export function ArmadaFormDialog({
               <p className="text-xs text-muted-foreground">Foto baru dipilih — diunggah saat &quot;Simpan&quot; ditekan.</p>
             )}
             {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
-            {(previewUrl ?? fotoPath) && !uploading && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl ?? fotoPath ?? undefined} alt="Pratinjau foto armada" className="h-24 w-24 rounded-lg object-cover" />
+            {(previewUrl ?? fotoPath) && (
+              <div className="relative h-24 w-24">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={previewUrl ?? fotoPath ?? undefined} alt="Pratinjau foto armada" className="h-full w-full rounded-lg object-cover" />
+                <PhotoStatusOverlay status={fotoStatus} />
+              </div>
             )}
           </div>
           <div className="col-span-2 flex flex-col gap-1.5">
@@ -378,13 +397,16 @@ export function ArmadaFormDialog({
               <p className="text-xs text-muted-foreground">QR baru dipilih — diunggah saat &quot;Simpan&quot; ditekan.</p>
             )}
             {qrUploadError && <p className="text-xs text-destructive">{qrUploadError}</p>}
-            {(qrPreviewUrl ?? qrMyPertaminaPath) && !qrUploading && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={qrPreviewUrl ?? qrMyPertaminaPath ?? undefined}
-                alt="Pratinjau QR MyPertamina"
-                className="h-24 w-24 rounded-lg object-cover"
-              />
+            {(qrPreviewUrl ?? qrMyPertaminaPath) && (
+              <div className="relative h-24 w-24">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrPreviewUrl ?? qrMyPertaminaPath ?? undefined}
+                  alt="Pratinjau QR MyPertamina"
+                  className="h-full w-full rounded-lg object-cover"
+                />
+                <PhotoStatusOverlay status={qrFotoStatus} />
+              </div>
             )}
           </div>
           {error && <p className="col-span-2 text-xs text-destructive">{error}</p>}
