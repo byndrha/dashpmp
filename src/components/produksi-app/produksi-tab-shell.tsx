@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KartuPengirimanList } from "@/components/produksi-app/kartu-pengiriman-list";
 import { WarehouseView } from "@/components/produksi-app/warehouse-view";
+import { TakeAwayMuatanList } from "@/components/produksi-app/takeaway-muatan-list";
 import { KualitasView } from "@/components/produksi-app/kualitas-view";
 import { BahanBakuView } from "@/components/produksi-app/bahan-baku-view";
 import { AktivitasProduksiView } from "@/components/produksi-app/aktivitas-produksi-view";
@@ -19,6 +20,8 @@ import {
   getSelesaiMuatJadwalRiwayatForProduksiAction,
   getWarehouseMapAction,
   getMesinListAction,
+  getTakeAwayMuatanPendingAction,
+  getTakeAwayMuatanSelesaiAction,
   getKualitasRiwayatAction,
   getCurrentShiftRowsForProduksiAction,
   getCurrentAktivitasProduksiAction,
@@ -30,6 +33,7 @@ import {
 } from "@/app/mkesindo/produksi/actions";
 import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
+import type { TakeAwayMuatanPendingRow } from "@/lib/queries/takeaway-muatan";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { KualitasRow } from "@/lib/queries/produksi-kualitas";
 import type { StokBahanBakuRow, CurrentShiftInfo } from "@/lib/queries/stok-bahan-baku";
@@ -57,6 +61,7 @@ export function ProduksiTabShell({
   initialRiwayat,
   initialWarehouse,
   initialMesin,
+  initialTakeAwayPending,
   initialKualitas,
   initialBahanBaku,
   initialAktivitasProduksi,
@@ -68,6 +73,7 @@ export function ProduksiTabShell({
   initialRiwayat?: DraftJadwalForProduksi[];
   initialWarehouse?: PalletPosisiRow[];
   initialMesin?: MesinRow[];
+  initialTakeAwayPending?: TakeAwayMuatanPendingRow[];
   initialKualitas?: KualitasRow[];
   initialBahanBaku?: { current: CurrentShiftInfo; rows: StokBahanBakuRow[]; history: StokBahanBakuRow[] };
   initialAktivitasProduksi?: {
@@ -90,6 +96,7 @@ export function ProduksiTabShell({
   const [riwayat, setRiwayat] = useState<DraftJadwalForProduksi[] | null>(initialRiwayat ?? null);
   const [warehouse, setWarehouse] = useState<PalletPosisiRow[] | null>(initialWarehouse ?? null);
   const [mesin, setMesin] = useState<MesinRow[] | null>(initialMesin ?? null);
+  const [takeAwayPending, setTakeAwayPending] = useState<TakeAwayMuatanPendingRow[] | null>(initialTakeAwayPending ?? null);
   const [kualitas, setKualitas] = useState<KualitasRow[] | null>(initialKualitas ?? null);
   const [bahanBaku, setBahanBaku] = useState<{ current: CurrentShiftInfo; rows: StokBahanBakuRow[]; history: StokBahanBakuRow[] } | null>(
     initialBahanBaku ?? null
@@ -116,6 +123,10 @@ export function ProduksiTabShell({
 
   function refreshWarehouse() {
     setWarehouse(null);
+  }
+
+  function refreshTakeAway() {
+    setTakeAwayPending(null);
   }
 
   function refreshBahanBaku() {
@@ -184,6 +195,18 @@ export function ProduksiTabShell({
         setMesin(result.data);
         setLoadingTab(null);
         return;
+      }
+      if (activeTab === "warehouse" && takeAwayPending === null) {
+        setLoadingTab("warehouse");
+        const result = await getTakeAwayMuatanPendingAction();
+        if (cancelled) return;
+        if (!result.success) {
+          setTabError(result.error);
+          setLoadingTab(null);
+          return;
+        }
+        setTakeAwayPending(result.data);
+        setLoadingTab(null);
       }
       // Kualitas also needs the Mesin list for its Tambah Pemeriksaan
       // dialog's Mesin picker — same dual-fetch shape as Warehouse above,
@@ -297,7 +320,7 @@ export function ProduksiTabShell({
     // state to null WITHOUT changing activeTab (a save action's onAfter callback fires
     // while the user is still on that same tab), and this effect must
     // re-run to refetch in that case, not only when the user switches tabs.
-  }, [activeTab, kartuPengiriman, riwayat, warehouse, mesin, kualitas, bahanBaku, aktivitasProduksi]);
+  }, [activeTab, kartuPengiriman, riwayat, warehouse, mesin, takeAwayPending, kualitas, bahanBaku, aktivitasProduksi]);
 
   return (
     <div className="flex h-dvh flex-col bg-background">
@@ -344,9 +367,14 @@ export function ProduksiTabShell({
             />
           </div>
         )}
-        {visited.has("warehouse") && warehouse && mesin && (
+        {visited.has("warehouse") && warehouse && mesin && takeAwayPending && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "warehouse" && "hidden")}>
             <WarehouseView posisi={warehouse} onAfterTambah={refreshWarehouse} />
+            <TakeAwayMuatanList
+              initialPending={takeAwayPending}
+              fetchSelesaiList={getTakeAwayMuatanSelesaiAction}
+              onAfterMuat={refreshTakeAway}
+            />
           </div>
         )}
         {visited.has("kualitas") && kualitas && mesin && (
