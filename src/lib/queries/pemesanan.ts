@@ -14,7 +14,7 @@ import {
   addSalesOrdersToJadwal,
 } from "@/lib/queries/pengiriman-jadwal";
 import { AppError } from "@/lib/action-result";
-import { softDeleteTakeAwayMuatanForSalesOrder } from "@/lib/queries/takeaway-muatan";
+import { softDeleteTakeAwayMuatanForSalesOrder, isTakeAwayMuatanStarted } from "@/lib/queries/takeaway-muatan";
 
 export interface CreatePemesananInput {
   businessPartnerId: string;
@@ -469,6 +469,16 @@ export async function deletePemesanan(salesOrderId: string): Promise<void> {
     .query(`SELECT COUNT(*) AS Cnt FROM DeliveryOrder WHERE SalesOrderID = @soId AND IsDeleted = 0`);
   if ((doCheck.recordset[0] as { Cnt: number }).Cnt > 0) {
     throw new AppError("Pesanan ini sudah terkirim (DO sudah terbit) — tidak bisa dihapus.");
+  }
+
+  // TakeAway-only in-between state: no DeliveryOrder exists yet (that only
+  // gets created at Selesai Muat), but Kepala Produksi has already tapped
+  // Mulai Muat in produksi-app and is physically loading it — cancelling
+  // now would soft-delete this SO's DashboardTakeAwayMuatan row out from
+  // under that in-progress work, and Selesai Muat would then fail on its
+  // own IsDeleted=0 guard with a confusing, unexplained error.
+  if (await isTakeAwayMuatanStarted(salesOrderId)) {
+    throw new AppError("Order TakeAway ini sedang diproses di aplikasi produksi — tidak bisa dibatalkan sekarang.");
   }
 
   const current = await getCurrentAssignment(salesOrderId);

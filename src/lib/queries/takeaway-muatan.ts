@@ -126,6 +126,24 @@ export async function takeAwayMulaiMuat(takeAwayMuatanId: number): Promise<void>
   }
 }
 
+// Guards deletePemesanan (pemesanan.ts) against cancelling a TakeAway order
+// that Kepala Produksi has already started physically loading -- mirrors
+// deletePemesanan's own DeliveryOrder-exists guard for the non-TakeAway
+// case, closing the same kind of gap for TakeAway's own in-between state
+// (Mulai Muat done, Selesai Muat not yet) that has no DeliveryOrder to
+// check against. No-op-safe (returns false) for a non-TakeAway SO, same
+// convention as softDeleteTakeAwayMuatanForSalesOrder below.
+export async function isTakeAwayMuatanStarted(salesOrderId: string): Promise<boolean> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .query(
+      `SELECT COUNT(*) AS Cnt FROM DashboardTakeAwayMuatan WHERE SalesOrderID = @soId AND IsDeleted = 0 AND JamMulaiMuat IS NOT NULL AND JamSelesaiMuat IS NULL`
+    );
+  return (result.recordset[0] as { Cnt: number }).Cnt > 0;
+}
+
 // Dipanggil dari deletePemesanan (pemesanan.ts, Task 4) saat SO TakeAway
 // dibatalkan sebelum Mulai Muat — mencegah baris ini terus muncul di daftar
 // menunggu produksi-app padahal SO-nya sudah dihapus. Aman dipanggil untuk
@@ -313,11 +331,22 @@ export async function takeAwaySelesaiMuat(
       .input("dueDate", sql.DateTime, so.DueDate)
       .input("termOfPaymentId", sql.VarChar(16), so.TermOfPaymentID)
       .input("soId", sql.VarChar(16), salesOrderId)
+      // Wrapped in literal single quotes to match the ERP's own historical
+      // storage convention for SalesInvoice.DeliveryOrderID — see the
+      // identical fix/comment on createSalesInvoiceForStop in
+      // pengiriman-jadwal.ts for the live evidence behind this. Every read
+      // site already strips these quotes via REPLACE(DeliveryOrderID,
+      // '''', ''), so this doesn't break anything downstream.
       .input("doId", sql.VarChar(16), `'${deliveryOrderId}'`)
       .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
       .input("branchId", sql.VarChar(16), BRANCH_ID)
       .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
       .input("amount", sql.Decimal(23, 4), totalAmount)
+      // IsAccountReceiveable (5th value on the "0, 0, GETDATE(), 1, '', 0, 1"
+      // VALUES line below) was hardcoded to 1 (true) — see the identical
+      // fix/comment on createSalesInvoiceForStop in pengiriman-jadwal.ts
+      // for the live-diff evidence behind changing it to 0 (false), matching
+      // 98.6% of real desktop-ERP-created invoices regardless of paid status.
       .input("transDate", sql.DateTime, getNaiveWibTransDate())
       .input("salesmanId", sql.VarChar(16), TAKEAWAY_SALESMAN_ID).query(`
         INSERT INTO SalesInvoice
