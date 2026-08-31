@@ -290,9 +290,9 @@ export async function getPengirimanBoard(
         WHERE do_.IsDeleted = 0
           AND do_.SalesmanID = '0127'
           -- TransDate here is written by this dashboard's own code via
-          -- getNaiveWibTransDate() (takeaway.ts) -- a NAIVE-WIB, already
+          -- getNaiveWibTransDate() (takeaway-muatan.ts) -- a NAIVE-WIB, already
           -- rollover-labeled business-date value (confirmed live 2026-08-31
-          -- against takeaway.ts's actual source; the comment that used to
+          -- against takeaway-muatan.ts's actual source; the comment that used to
           -- sit here claiming "true UTC / GETDATE()" was stale, left over
           -- from before takeaway.ts was migrated to getNaiveWibTransDate on
           -- 2026-08-27, and never updated -- the true-UTC + 14:00-rollover

@@ -316,8 +316,8 @@ export function PemesananFormDialog({
               <span>
                 <span className="font-medium">TakeAway (Ambil Sendiri)</span>
                 <span className="block text-xs text-muted-foreground">
-                  Mitra ambil sendiri di pabrik — SO, DO, dan Invoice langsung terbit tanpa armada/driver, lalu SI
-                  langsung masuk ke antrian cetak thermal.
+                  Mitra ambil sendiri di pabrik — SO langsung terbit tanpa armada/driver. DO, Invoice, dan cetak SI
+                  baru diproses setelah Kepala Produksi menyelesaikan Muat di aplikasi produksi.
                 </span>
               </span>
             </label>
