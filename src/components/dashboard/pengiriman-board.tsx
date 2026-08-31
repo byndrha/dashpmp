@@ -87,6 +87,23 @@ function hourFraction(value: string | Date): number {
   return (hour - ROLLOVER_HOUR + 24) % 24;
 }
 
+// Same purpose as hourFraction, but for a "naive WIB" timestamp (raw UTC
+// components ARE the WIB wall-clock value — see business-date.ts's own
+// convention, e.g. DeliveryOrder.TransDate for Takeaway/desktop-ERP rows)
+// instead of a genuine true-UTC instant like JamJadwal. hourFraction's
+// plain .getHours()/.getMinutes() are LOCAL-timezone getters — correct
+// only when the underlying value is real true-UTC, so a WIB-set browser
+// converts it correctly for display. Applying those to an already
+// WIB-labeled naive value shifts it by another +7h on top, which is
+// exactly why Takeaway and ExternalDoCard cards used to render up to 7
+// hours later on the timeline than their own (correctly shown, via
+// formatTimeWib) label time — confirmed live 2026-08-31.
+function hourFractionNaiveWib(value: string | Date): number {
+  const d = new Date(value);
+  const hour = d.getUTCHours() + d.getUTCMinutes() / 60;
+  return (hour - ROLLOVER_HOUR + 24) % 24;
+}
+
 interface TimelineBlock {
   key: string;
   left: number;
@@ -737,7 +754,7 @@ function ExternalDoCard({
         "absolute flex flex-col justify-center overflow-hidden rounded-md border border-dashed px-1.5 py-1 text-left text-[9px] transition-colors",
         selected ? "border-warning bg-warning/25 text-warning" : "border-warning/50 bg-warning/10 text-warning hover:bg-warning/20"
       )}
-      style={{ left: hourFraction(delivery.TransDate) * hourWidth, top, width: EXTERNAL_DO_WIDTH, height: CARD_HEIGHT }}
+      style={{ left: hourFractionNaiveWib(delivery.TransDate) * hourWidth, top, width: EXTERNAL_DO_WIDTH, height: CARD_HEIGHT }}
     >
       <span className="flex items-center gap-1">
         <span
@@ -762,7 +779,7 @@ function TakeawayCard({ order, hourWidth, top }: { order: TakeawayOrder; hourWid
     <div
       title={`${order.VoucherNo} — ${order.CustomerName} (${order.TotalKantong} kantong) — Takeaway`}
       className="absolute flex flex-col justify-center overflow-hidden rounded-md border border-primary/30 bg-primary/10 px-1.5 py-1 text-left text-[9px] text-primary"
-      style={{ left: hourFraction(order.TransDate) * hourWidth, top, width: EXTERNAL_DO_WIDTH, height: CARD_HEIGHT }}
+      style={{ left: hourFractionNaiveWib(order.TransDate) * hourWidth, top, width: EXTERNAL_DO_WIDTH, height: CARD_HEIGHT }}
     >
       <span className="truncate font-semibold">{order.CustomerName}</span>
       <span className="truncate tabular-nums opacity-80">
@@ -775,7 +792,7 @@ function TakeawayCard({ order, hourWidth, top }: { order: TakeawayOrder; hourWid
 
 function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrder[]; hourWidth: number; dayWidth: number }) {
   const blocks = useMemo(
-    () => orders.map((o) => ({ key: o.DeliveryOrderID, left: hourFraction(o.TransDate) * hourWidth, width: EXTERNAL_DO_WIDTH })),
+    () => orders.map((o) => ({ key: o.DeliveryOrderID, left: hourFractionNaiveWib(o.TransDate) * hourWidth, width: EXTERNAL_DO_WIDTH })),
     [orders, hourWidth]
   );
   const { laneOf, laneCount } = useMemo(() => assignLanes(blocks), [blocks]);
@@ -1078,7 +1095,7 @@ function ArmadaRowBoard({
       })),
       ...externalDeliveries.map((d) => ({
         key: `ext-${d.DeliveryOrderID}`,
-        left: hourFraction(d.TransDate) * hourWidth,
+        left: hourFractionNaiveWib(d.TransDate) * hourWidth,
         width: EXTERNAL_DO_WIDTH,
       })),
     ];
@@ -1128,7 +1145,7 @@ function ArmadaRowBoard({
         if (maxX - minX > 4 || maxY - minY > 4) {
           const hits = new Set<string>();
           for (const d of externalDeliveries) {
-            const left = hourFraction(d.TransDate) * hourWidth;
+            const left = hourFractionNaiveWib(d.TransDate) * hourWidth;
             const top = ROW_TOP_PADDING + (laneOf.get(`ext-${d.DeliveryOrderID}`) ?? 0) * (CARD_HEIGHT + CARD_GAP);
             if (left < maxX && left + EXTERNAL_DO_WIDTH > minX && top < maxY && top + CARD_HEIGHT > minY) {
               hits.add(d.DeliveryOrderID);

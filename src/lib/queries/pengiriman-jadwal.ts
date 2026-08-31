@@ -289,14 +289,22 @@ export async function getPengirimanBoard(
         LEFT JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
         WHERE do_.IsDeleted = 0
           AND do_.SalesmanID = '0127'
-          -- TransDate here is written by this dashboard's own code
-          -- (takeaway.ts's GETDATE()), so it's true UTC — same
-          -- true-UTC + 14:00-WIB-rollover window as this function's own
-          -- Jadwal query above, NOT the plain-WIB-calendar-date match the
-          -- externalDeliveries query above uses (that one is specifically
-          -- for naive-WIB desktop-ERP-authored timestamps).
-          AND do_.TransDate >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
-          AND do_.TransDate < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+          -- TransDate here is written by this dashboard's own code via
+          -- getNaiveWibTransDate() (takeaway.ts) -- a NAIVE-WIB, already
+          -- rollover-labeled business-date value (confirmed live 2026-08-31
+          -- against takeaway.ts's actual source; the comment that used to
+          -- sit here claiming "true UTC / GETDATE()" was stale, left over
+          -- from before takeaway.ts was migrated to getNaiveWibTransDate on
+          -- 2026-08-27, and never updated -- the true-UTC + 14:00-rollover
+          -- window this block used to apply here double-counted the
+          -- rollover exactly like assertJamJadwalNotBeforeOrders did before
+          -- its own fix, silently shifting every Takeaway card by up to a
+          -- full day off its correct Periode). TransDate's DATE portion IS
+          -- ALREADY the business-date label to match against -- no window
+          -- arithmetic needed, same plain-date-match shape as the
+          -- externalDeliveries query above (that one for a different
+          -- reason: genuinely non-rollover desktop-ERP timestamps).
+          AND CAST(do_.TransDate AS DATE) = @businessDate
         GROUP BY do_.DeliveryOrderID, do_.VoucherNo, bp.Name, do_.TransDate
         ORDER BY do_.TransDate
       `),
