@@ -28,14 +28,18 @@ bersama `LiveCameraCaptureField` di level client):
 5. **Tanda Tangan** (`src/components/driver-app/steps/konfir-terima-step.tsx`)
    — upload saat submit konfirmasi terima.
 6. **Foto Armada** (`src/components/dashboard/armada-dialog.tsx`,
-   termasuk foto QR MyPertamina) — input file biasa, upload saat pilih
-   file.
+   termasuk foto QR MyPertamina) — input file biasa, file dipilih dulu
+   (pratinjau lokal via `previewUrl`), upload sungguhan baru jalan saat
+   tombol Simpan dialog ditekan (di dalam `handleSubmit`) — pola yang sama
+   seperti Bukti Pengiriman (upload ditunda sampai submit), bukan upload
+   langsung saat file dipilih.
 7. **Logo Situs & Template Dokumen** (panel pengaturan situs & template
    dokumen, admin) — input file biasa, upload saat pilih file.
 
-(Penomoran di atas 7 karena Retur dihitung terpisah dari Bukti Pengiriman
-meski satu file — keduanya independen secara UI meski upload-nya
-bersamaan.)
+(Penomoran di atas jadi 8 titik retrofit karena Retur dihitung terpisah
+dari Bukti Pengiriman meski satu file — keduanya independen secara UI
+meski upload-nya bersamaan — dan Logo Situs/Template Dokumen dihitung
+sebagai dua titik terpisah, lihat Bagian 3.)
 
 ## Non-Goals
 
@@ -103,8 +107,9 @@ langsung di sekitar `<img>` masing-masing.
 | 3 | Bukti Pengiriman (multi-foto) | Array/map status baru di `konfir-kirim-step.tsx`, diteruskan ke `MultiPhotoCaptureField` lewat prop baru `statuses?: Record<number, "uploading"\|"success"\|"error">` | Diisi saat `handleSubmit` menjalankan `Promise.all` upload — setiap foto diberi `.then`/`.catch` sendiri supaya statusnya bisa diperbarui satu-satu, bukan menunggu semua selesai baru tahu mana yang gagal | **Pojok kanan-atas berbagi peran dengan tombol hapus (X) yang sudah ada**: selama belum submit, tombol hapus tetap seperti sekarang. Begitu `submitting` true, pojok itu berganti jadi `PhotoStatusOverlay` (form memang terkunci saat submit, jadi hapus foto saat itu tidak relevan). |
 | 4 | Retur (foto per item) | Map status baru `returFotoStatus: Record<string, "uploading"\|"success"\|"error">` (kunci: `SalesOrderDetailID`) | Diisi bersamaan dengan #3, di `Promise.all` yang sama | — |
 | 5 | Tanda Tangan | State baru `signatureStatus?: "uploading"\|"success"\|"error"` | Diisi di `handleConfirm` sekitar pemanggilan `uploadSignature` | Overlay dipasang di atas area pratinjau tanda tangan (`SignaturePad`). |
-| 6 | Foto Armada (+ QR MyPertamina) | Diturunkan langsung dari state `uploading`/`uploadError` yang sudah ada (sudah spesifik ke foto ini, tidak tercampur validasi lain) | — | **Perubahan perilaku**: saat ini foto disembunyikan total selama upload (`{(previewUrl ?? fotoPath) && !uploading && (<img/>)}`); diubah supaya foto (pakai `previewUrl`, sudah tersedia begitu file dipilih) tetap tampil dengan overlay loading di atasnya, tidak hilang. |
-| 7 | Logo Situs & Template Dokumen | Diturunkan dari `uploading`/`uploadError` yang sudah ada | — | Paling sederhana — `<img>` sudah selalu tampil tanpa syarat, tinggal dibungkus `relative` + overlay. |
+| 6 | Foto Armada (+ QR MyPertamina) | Diturunkan langsung dari state `uploading`/`uploadError` yang sudah ada (sudah spesifik ke foto ini, tidak tercampur validasi lain) | Upload baru jalan saat tombol Simpan ditekan (di dalam `handleSubmit`), bukan saat file dipilih | **Perubahan perilaku**: saat ini foto disembunyikan total selama upload (`{(previewUrl ?? fotoPath) && !uploading && (<img/>)}`); diubah supaya foto (pakai `previewUrl`, sudah tersedia begitu file dipilih) tetap tampil dengan overlay loading di atasnya, tidak hilang. |
+| 7a | Logo Situs (`site-settings-panel.tsx`, `ImageUploadField`, dipakai untuk favicon & gambar Open Graph) | Diturunkan dari `uploading`/`uploadError` yang sudah ada — keduanya sudah dedicated ke gambar itu saja (satu instance state per pemanggilan `ImageUploadField`, tidak tercampur validasi lain) | — | Paling sederhana — `<img>` sudah selalu tampil tanpa syarat, tinggal dibungkus `relative` + overlay. |
+| 7b | Template Dokumen (`doc-template-panel.tsx`, logo) | State baru `logoUploadStatus?: "uploading"\|"success"\|"error"` | Diisi eksplisit di `handleLogoChange` | State ini **terpisah** dari state `error` form yang sudah ada — `error` di file ini dipakai bersama oleh `handleLogoChange` DAN `handleSave` (klik Simpan Template), jadi tidak bisa dipakai langsung sebagai sumber status ikon tanpa risiko silang salah muncul akibat kegagalan simpan yang tidak berkaitan dengan foto. |
 
 ## Bagian 4: Reset, Aksesibilitas, Verifikasi
 
@@ -119,13 +124,15 @@ langsung di sekitar `<img>` masing-masing.
 - **Verifikasi**: tidak ada automated test framework di repo ini —
   verifikasi tiap lokasi lewat `npx tsc --noEmit`, `npx eslint`, dan cek
   manual di browser (mode dev) untuk memastikan ketiga status tampil
-  benar di setiap dari 7 titik retrofit.
+  benar di setiap dari 8 titik retrofit.
 
 ## Ringkasan Keputusan yang Sudah Dikonfirmasi
 
 - Cakupan: semua 6 alur upload foto yang ada (Kualitas, Vehicle Check,
   Bukti Pengiriman, Retur, Tanda Tangan, Armada, Logo Situs & Template
-  Dokumen — 7 titik retrofit karena Retur dihitung terpisah).
+  Dokumen — 8 titik retrofit karena Retur dihitung terpisah dari Bukti
+  Pengiriman, dan Logo Situs/Template Dokumen dihitung sebagai dua titik
+  terpisah).
 - Pendekatan: komponen overlay tampilan bersama (`PhotoStatusOverlay`)
   ditambah prop `status` opsional di `LiveCameraCaptureField` yang sudah
   ada — TANPA hook upload bersama; logika fetch/FormData di keenam alur
