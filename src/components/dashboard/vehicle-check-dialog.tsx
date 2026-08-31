@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LiveCameraCaptureField } from "@/components/dashboard/live-camera-capture-field";
+import type { PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 import { TruckCubeCarousel } from "@/components/dashboard/truck-cube-carousel";
 import { TruckSideIllustration } from "@/components/dashboard/truck-side-illustration";
 import { CheckSummary, TIPE_LABEL } from "@/components/vehicle-check-summary";
@@ -88,6 +89,7 @@ function CheckForm({
   const [belakangMainTarget, setBelakangMainTarget] = useState<JenisFotoKendaraan>("BELAKANG");
   const [photos, setPhotos] = useState<Partial<Record<JenisFotoKendaraan, string>>>({});
   const [uploading, setUploading] = useState<JenisFotoKendaraan | null>(null);
+  const [photoStatus, setPhotoStatus] = useState<Partial<Record<JenisFotoKendaraan, PhotoUploadStatus>>>({});
   const [odometerKM, setOdometerKM] = useState("");
   const [fuelBar, setFuelBar] = useState<FuelBar>(2);
   const [muatanQty, setMuatanQty] = useState("");
@@ -97,11 +99,14 @@ function CheckForm({
   async function handleCapture(file: File, jenisFoto: JenisFotoKendaraan) {
     setError(null);
     setUploading(jenisFoto);
+    setPhotoStatus((prev) => ({ ...prev, [jenisFoto]: "uploading" }));
     try {
       const path = await onUploadPhoto(file, jenisFoto);
       setPhotos((prev) => ({ ...prev, [jenisFoto]: path }));
+      setPhotoStatus((prev) => ({ ...prev, [jenisFoto]: "success" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengunggah foto.");
+      setPhotoStatus((prev) => ({ ...prev, [jenisFoto]: "error" }));
     } finally {
       setUploading(null);
     }
@@ -152,6 +157,7 @@ function CheckForm({
             active={activeSide === side}
             disabled={uploading != null || pending}
             onCapture={(file) => handleCapture(file, mainTarget)}
+            status={photoStatus[mainTarget]}
           />
           {toggleTarget && (
             <LiveCameraCaptureField
@@ -163,6 +169,7 @@ function CheckForm({
               disabled={uploading != null || pending}
               onCapture={() => {}}
               onTogglePress={() => setMainTarget(toggleTarget)}
+              status={photoStatus[toggleTarget]}
             />
           )}
         </div>
