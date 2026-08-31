@@ -9,6 +9,7 @@ import { formatRupiah } from "@/lib/format";
 import { getStopOrderItemsAction } from "@/app/mkesindo/driver-app/actions";
 import type { KonfirKirimResult } from "@/components/driver-app/stop-flow";
 import type { DriverStopRow, StopOrderItem } from "@/lib/queries/pengiriman-jadwal";
+import type { PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 
 async function uploadDriverPhoto(jadwalDetailId: number, jenisFoto: string, file: File): Promise<string> {
   const formData = new FormData();
@@ -19,6 +20,29 @@ async function uploadDriverPhoto(jadwalDetailId: number, jenisFoto: string, file
   const data = (await res.json()) as { path?: string; error?: string };
   if (!res.ok || !data.path) throw new Error(data.error ?? "Gagal mengunggah foto");
   return data.path;
+}
+
+// Upload satu foto sambil melaporkan statusnya ke peta status milik
+// caller (fotoBuktiStatus atau returFotoStatus) — dipakai di dalam
+// Promise.all supaya tiap foto melaporkan status masing-masing begitu
+// upload-nya sendiri selesai, bukan menunggu SEMUA foto selesai baru
+// tahu mana yang gagal.
+async function uploadWithStatus<K extends string | number>(
+  key: K,
+  jadwalDetailId: number,
+  jenisFoto: string,
+  file: File,
+  setStatus: React.Dispatch<React.SetStateAction<Record<K, PhotoUploadStatus>>>
+): Promise<string> {
+  setStatus((prev) => ({ ...prev, [key]: "uploading" }));
+  try {
+    const path = await uploadDriverPhoto(jadwalDetailId, jenisFoto, file);
+    setStatus((prev) => ({ ...prev, [key]: "success" }));
+    return path;
+  } catch (err) {
+    setStatus((prev) => ({ ...prev, [key]: "error" }));
+    throw err;
+  }
 }
 
 export function KonfirKirimStep({
@@ -39,6 +63,8 @@ export function KonfirKirimStep({
   const [keteranganRetur, setKeteranganRetur] = useState<Record<string, string>>({});
   const [returKeteranganOpen, setReturKeteranganOpen] = useState<string | null>(null);
   const [fotoBuktiFiles, setFotoBuktiFiles] = useState<File[]>([]);
+  const [fotoBuktiStatus, setFotoBuktiStatus] = useState<Record<number, PhotoUploadStatus>>({});
+  const [returFotoStatus, setReturFotoStatus] = useState<Record<string, PhotoUploadStatus>>({});
   const [activeReturSlot, setActiveReturSlot] = useState<string | null>(null);
   const [tanpaPembayaran, setTanpaPembayaran] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -80,12 +106,22 @@ export function KonfirKirimStep({
     setSubmitting(true);
     try {
       const fotoBuktiUrls = await Promise.all(
-        fotoBuktiFiles.map((file, i) => uploadDriverPhoto(jadwalDetailId, `bukti-pengiriman-${i + 1}`, file))
+        fotoBuktiFiles.map((file, i) =>
+          uploadWithStatus(i, jadwalDetailId, `bukti-pengiriman-${i + 1}`, file, setFotoBuktiStatus)
+        )
       );
       const resultItems = await Promise.all(
         items.map(async (item) => {
           const returFile = returFotoFiles[item.SalesOrderDetailID];
-          const fotoReturUrl = returFile ? await uploadDriverPhoto(jadwalDetailId, `retur-${item.SalesOrderDetailID}`, returFile) : null;
+          const fotoReturUrl = returFile
+            ? await uploadWithStatus(
+                item.SalesOrderDetailID,
+                jadwalDetailId,
+                `retur-${item.SalesOrderDetailID}`,
+                returFile,
+                setReturFotoStatus
+              )
+            : null;
           return {
             salesOrderDetailId: item.SalesOrderDetailID,
             qtyDiterima: qtyDiterima[item.SalesOrderDetailID] ?? item.Qty,
@@ -120,7 +156,12 @@ export function KonfirKirimStep({
         {stop.Alamat && <p className="text-xs text-muted-foreground">{stop.Alamat}</p>}
       </div>
 
-      <MultiPhotoCaptureField label="Bukti Pengiriman" files={fotoBuktiFiles} onChange={setFotoBuktiFiles} />
+      <MultiPhotoCaptureField
+        label="Bukti Pengiriman"
+        files={fotoBuktiFiles}
+        onChange={setFotoBuktiFiles}
+        statuses={submitting ? fotoBuktiStatus : undefined}
+      />
 
       <div className="flex flex-col gap-3">
         <p className="text-sm font-medium">Konfirmasi Muatan</p>
@@ -171,6 +212,7 @@ export function KonfirKirimStep({
                             setReturFotoFiles((prev) => ({ ...prev, [item.SalesOrderDetailID]: file }));
                             setActiveReturSlot(null);
                           }}
+                          status={submitting ? returFotoStatus[item.SalesOrderDetailID] : undefined}
                         />
                         {activeReturSlot !== item.SalesOrderDetailID && (
                           <button

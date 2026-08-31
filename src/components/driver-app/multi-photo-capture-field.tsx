@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { X } from "lucide-react";
 import { LiveCameraCaptureField } from "@/components/dashboard/live-camera-capture-field";
+import { PhotoStatusOverlay, type PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 
 // One object URL per captured File, created during render (memoized on the
 // files array's identity) and revoked by the cleanup effect once that
@@ -23,10 +24,12 @@ export function MultiPhotoCaptureField({
   label,
   files,
   onChange,
+  statuses,
 }: {
   label: string;
   files: File[];
   onChange: (files: File[]) => void;
+  statuses?: Record<number, PhotoUploadStatus>;
 }) {
   const urls = useObjectUrls(files);
 
@@ -42,20 +45,27 @@ export function MultiPhotoCaptureField({
     <div className="flex flex-col gap-2">
       <p className="text-sm font-medium">{label}</p>
       <div className="grid grid-cols-3 gap-2">
-        {files.map((_, i) => (
-          <div key={i} className="relative h-24 w-24">
-            {/* eslint-disable-next-line @next/next/no-img-element -- local object URL, not a static build asset */}
-            <img src={urls[i]} alt={`${label} ${i + 1}`} className="h-full w-full rounded-lg object-cover" />
-            <button
-              type="button"
-              aria-label={`Hapus foto ${i + 1}`}
-              onClick={() => handleRemove(i)}
-              className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-md"
-            >
-              <X className="size-3" />
-            </button>
-          </div>
-        ))}
+        {files.map((_, i) => {
+          const status = statuses?.[i];
+          return (
+            <div key={i} className="relative h-24 w-24">
+              {/* eslint-disable-next-line @next/next/no-img-element -- local object URL, not a static build asset */}
+              <img src={urls[i]} alt={`${label} ${i + 1}`} className="h-full w-full rounded-lg object-cover" />
+              {status ? (
+                <PhotoStatusOverlay status={status} />
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`Hapus foto ${i + 1}`}
+                  onClick={() => handleRemove(i)}
+                  className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-md"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
+          );
+        })}
         <div className="h-24 w-24">
           <LiveCameraCaptureField label="Tambah Foto" photoUrl={null} size="main" active onCapture={handleCapture} />
         </div>

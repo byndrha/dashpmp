@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SignaturePad } from "@/components/driver-app/signature-pad";
 import { confirmStopDeliveryAction } from "@/app/mkesindo/driver-app/actions";
 import type { KonfirKirimResult } from "@/components/driver-app/stop-flow";
+import { PhotoStatusOverlay, type PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 
 async function uploadSignature(jadwalDetailId: number, file: File): Promise<string> {
   const formData = new FormData();
@@ -28,6 +29,7 @@ export function KonfirTerimaStep({
   onConfirmed: (salesInvoiceId: string | null) => void;
 }) {
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signatureStatus, setSignatureStatus] = useState<PhotoUploadStatus | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,8 +40,10 @@ export function KonfirTerimaStep({
     }
     setError(null);
     setSubmitting(true);
+    setSignatureStatus("uploading");
     try {
       const tandaTanganUrl = await uploadSignature(jadwalDetailId, signatureFile);
+      setSignatureStatus("success");
       const actionResult = await confirmStopDeliveryAction({
         jadwalDetailId,
         items: result.items,
@@ -54,6 +58,7 @@ export function KonfirTerimaStep({
       onConfirmed(actionResult.data.salesInvoiceId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengunggah tanda tangan.");
+      setSignatureStatus("error");
     } finally {
       setSubmitting(false);
     }
@@ -69,7 +74,16 @@ export function KonfirTerimaStep({
             cancel/back flow. */}
         <X className="size-4 text-muted-foreground" />
       </div>
-      <SignaturePad onCapture={setSignatureFile} onClear={() => setSignatureFile(null)} />
+      <div className="relative">
+        <SignaturePad
+          onCapture={setSignatureFile}
+          onClear={() => {
+            setSignatureFile(null);
+            setSignatureStatus(undefined);
+          }}
+        />
+        <PhotoStatusOverlay status={signatureStatus} />
+      </div>
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
       <Button className="mt-3 w-full" disabled={submitting} onClick={handleConfirm}>
         {submitting ? "Menyimpan..." : "Konfirmasi Penerima"}
