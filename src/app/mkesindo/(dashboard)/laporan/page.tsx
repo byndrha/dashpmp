@@ -4,6 +4,8 @@ import { getCurrentShiftRows, getStokBahanBakuHistory, getSaldoAwal } from "@/li
 import { getAktivitasRiwayat } from "@/lib/queries/aktivitas-produksi";
 import { getAktivitasMuatanDistribusi } from "@/lib/queries/laporan-muatan-distribusi";
 import { getSaldoAwalKasKecil, getKasKecilHistory, getCurrentShiftKasKecil } from "@/lib/queries/kas-kecil";
+import { getRingkasanLintasShift } from "@/lib/queries/laporan-ringkasan-lintas-shift";
+import { getAllTim } from "@/lib/queries/tim-produksi";
 import { getAkunNamaMap } from "@/lib/queries/akun";
 import { getReportShift } from "@/lib/report-shift";
 import { LaporanTabShell } from "@/components/dashboard/laporan-tab-shell";
@@ -16,8 +18,8 @@ export default async function LaporanPage() {
   const canEditSaldoAwal = canAccessAllPT(session.user);
 
   const { businessDate } = getReportShift("work");
-  const muatanDistribusiTahunAwal = businessDate.getUTCFullYear();
-  const muatanDistribusiBulanAwal = businessDate.getUTCMonth() + 1;
+  const tahunAwal = businessDate.getUTCFullYear();
+  const bulanAwal = businessDate.getUTCMonth() + 1;
 
   const [
     { current, rows },
@@ -28,23 +30,29 @@ export default async function LaporanPage() {
     kasKecilSaldoAwal,
     kasKecilHistory,
     kasKecilCurrentShift,
+    ringkasanRowsAwal,
+    timList,
   ] = await Promise.all([
     getCurrentShiftRows(),
     getStokBahanBakuHistory(),
     getSaldoAwal(),
     getAktivitasRiwayat(),
-    getAktivitasMuatanDistribusi(muatanDistribusiTahunAwal, muatanDistribusiBulanAwal),
+    getAktivitasMuatanDistribusi(tahunAwal, bulanAwal),
     getSaldoAwalKasKecil(),
     getKasKecilHistory(),
     getCurrentShiftKasKecil(),
+    getRingkasanLintasShift(tahunAwal, bulanAwal),
+    getAllTim(),
   ]);
 
   const akunIds = [
     ...[...rows, ...history].flatMap((r) => [r.operasionalAkunId, r.produksiAkunId]),
     ...aktivitasRiwayat.map((r) => r.stafOperasionalAkunId),
     ...kasKecilHistory.map((r) => r.diisiOlehAkunId),
+    ...ringkasanRowsAwal.map((r) => r.produksiStafOperasionalAkunId),
   ].filter((id): id is number => id != null);
   const namaMap = await getAkunNamaMap(akunIds);
+  const timNamaMap = Object.fromEntries(timList.map((t) => [t.timId, t.nama]));
 
   return (
     <div className="flex flex-col gap-4">
@@ -58,13 +66,17 @@ export default async function LaporanPage() {
         initialSaldoAwal={saldoAwal}
         namaMap={Object.fromEntries(namaMap)}
         aktivitasRiwayat={aktivitasRiwayat}
-        muatanDistribusiTahunAwal={muatanDistribusiTahunAwal}
-        muatanDistribusiBulanAwal={muatanDistribusiBulanAwal}
+        muatanDistribusiTahunAwal={tahunAwal}
+        muatanDistribusiBulanAwal={bulanAwal}
         muatanDistribusiRowsAwal={muatanDistribusiRowsAwal}
         kasKecilCurrent={kasKecilCurrentShift.current}
         kasKecilInitialRow={kasKecilCurrentShift.row}
         kasKecilInitialHistory={kasKecilHistory}
         kasKecilInitialSaldoAwal={kasKecilSaldoAwal}
+        ringkasanTahunAwal={tahunAwal}
+        ringkasanBulanAwal={bulanAwal}
+        ringkasanRowsAwal={ringkasanRowsAwal}
+        timNamaMap={timNamaMap}
       />
     </div>
   );

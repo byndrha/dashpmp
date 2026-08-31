@@ -7,12 +7,14 @@ import { LaporanStokBahanBaku } from "@/components/dashboard/laporan-stok-bahan-
 import { LaporanAktivitasProduksi } from "@/components/dashboard/laporan-aktivitas-produksi";
 import { LaporanAktivitasMuatanDistribusi } from "@/components/dashboard/laporan-aktivitas-muatan-distribusi";
 import { LaporanKasKecil } from "@/components/dashboard/laporan-kas-kecil";
+import { LaporanRingkasanLintasShift } from "@/components/dashboard/laporan-ringkasan-lintas-shift";
 import type { StokBahanBakuRow, CurrentShiftInfo, SaldoAwalRow } from "@/lib/queries/stok-bahan-baku";
 import type { AktivitasShiftInfo } from "@/lib/queries/aktivitas-produksi";
 import type { AktivitasMuatanDistribusiRow } from "@/lib/queries/laporan-muatan-distribusi";
 import type { KasKecilShiftRow, CurrentShiftKasKecilInfo } from "@/lib/queries/kas-kecil";
+import type { RingkasanShiftRow } from "@/lib/queries/laporan-ringkasan-lintas-shift";
 
-type LaporanTab = "stok-bahan-baku" | "aktivitas-produksi" | "aktivitas-muatan-distribusi" | "keuangan-operasional";
+type LaporanTab = "stok-bahan-baku" | "aktivitas-produksi" | "aktivitas-muatan-distribusi" | "keuangan-operasional" | "ringkasan-lintas-shift";
 
 export function LaporanTabShell({
   canEdit,
@@ -30,6 +32,10 @@ export function LaporanTabShell({
   kasKecilInitialRow,
   kasKecilInitialHistory,
   kasKecilInitialSaldoAwal,
+  ringkasanTahunAwal,
+  ringkasanBulanAwal,
+  ringkasanRowsAwal,
+  timNamaMap,
 }: {
   canEdit: boolean;
   canEditSaldoAwal: boolean;
@@ -46,6 +52,10 @@ export function LaporanTabShell({
   kasKecilInitialRow: KasKecilShiftRow;
   kasKecilInitialHistory: KasKecilShiftRow[];
   kasKecilInitialSaldoAwal: number;
+  ringkasanTahunAwal: number;
+  ringkasanBulanAwal: number;
+  ringkasanRowsAwal: RingkasanShiftRow[];
+  timNamaMap: Record<number, string>;
 }) {
   const [tab, setTab] = useState<LaporanTab>("stok-bahan-baku");
 
@@ -67,6 +77,9 @@ export function LaporanTabShell({
         </Button>
         <Button size="sm" variant={tab === "keuangan-operasional" ? "default" : "outline"} onClick={() => setTab("keuangan-operasional")}>
           Keuangan Operasional
+        </Button>
+        <Button size="sm" variant={tab === "ringkasan-lintas-shift" ? "default" : "outline"} onClick={() => setTab("ringkasan-lintas-shift")}>
+          Ringkasan Lintas Shift
         </Button>
       </div>
       <div className={cn(tab !== "stok-bahan-baku" && "hidden")}>
@@ -99,6 +112,15 @@ export function LaporanTabShell({
           initialHistory={kasKecilInitialHistory}
           initialSaldoAwal={kasKecilInitialSaldoAwal}
           namaMap={namaMap}
+        />
+      </div>
+      <div className={cn(tab !== "ringkasan-lintas-shift" && "hidden")}>
+        <LaporanRingkasanLintasShift
+          tahunAwal={ringkasanTahunAwal}
+          bulanAwal={ringkasanBulanAwal}
+          rowsAwal={ringkasanRowsAwal}
+          namaMap={namaMap}
+          timNamaMap={timNamaMap}
         />
       </div>
     </div>

@@ -23,6 +23,7 @@ import {
   tambahPengeluaran,
   hapusPengeluaran,
 } from "@/lib/queries/kas-kecil";
+import { getRingkasanLintasShift, type RingkasanShiftRow } from "@/lib/queries/laporan-ringkasan-lintas-shift";
 import type { ShiftNumber } from "@/lib/report-shift";
 
 // Bypasses the permission grid for Direktur/Superadmin the same way every
@@ -146,5 +147,12 @@ export async function hapusPengeluaranAction(pengeluaranId: number): Promise<Act
     assertCanEditLaporan(session.user);
     await hapusPengeluaran(pengeluaranId);
     revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function getRingkasanLintasShiftAction(tahun: number, bulan: number): Promise<ActionResult<RingkasanShiftRow[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("laporan");
+    return getRingkasanLintasShift(tahun, bulan);
   });
 }
