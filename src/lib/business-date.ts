@@ -158,6 +158,34 @@ export function naiveWibToUtcInstant(naiveWib: Date): Date {
   return new Date(naiveWib.getTime() - WIB_OFFSET_MS);
 }
 
+// Converts a naive-WIB value from the getNaiveWibTransDate family
+// specifically (SalesOrder/DeliveryOrder/SalesInvoice/SalesReturn.TransDate)
+// into the real true-UTC instant it represents — unlike naiveWibToUtcInstant
+// above, this accounts for the fact that TransDate's DATE portion is a
+// ROLLOVER-ADJUSTED BUSINESS-DATE LABEL (see getBusinessDate), not
+// necessarily the real calendar day the value was recorded on: whenever the
+// wall-clock hour is >= ROLLOVER_HOUR, that hour was, by construction,
+// already stamped onto the FOLLOWING calendar day's label. Naively shifting
+// -7h without un-labeling first (what naiveWibToUtcInstant alone does)
+// silently reconstructs a moment 24h later than the real one for every such
+// row — exactly the gap that let this stay unnoticed for a long time:
+// jamJadwal used to be built the SAME wrong way (see resolveBusinessDateTime
+// in pemesanan-form-dialog.tsx's history), so both sides of
+// assertJamJadwalNotBeforeOrders's comparison were wrong in the same
+// direction and happened to agree. Fixing jamJadwal alone (without this)
+// made a real order — created at 20:22 WIB, correctly bucketed under that
+// moment's own Papan Pengiriman period — fail assertJamJadwalNotBeforeOrders
+// with "waktu pengiriman tidak boleh sebelum waktu pemesanan," comparing
+// against a TransDate that had been mis-read as a day later than it really
+// was. Uses pure getTime() arithmetic (never Intl/string parsing) so it
+// stays correct regardless of the server process's own OS timezone.
+export function naiveWibTransDateToUtcInstant(naiveWibTransDate: Date): Date {
+  const hour = naiveWibTransDate.getUTCHours();
+  const realCalendarDay =
+    hour >= ROLLOVER_HOUR ? new Date(naiveWibTransDate.getTime() - 24 * 60 * 60 * 1000) : naiveWibTransDate;
+  return naiveWibToUtcInstant(realCalendarDay);
+}
+
 // Inverse of naiveWibToUtcInstant: shifts a true-UTC instant so its raw
 // UTC-component values equal the WIB wall-clock time — lets a true-UTC
 // value (e.g. JamJadwal) be displayed via formatDate/formatTime, which

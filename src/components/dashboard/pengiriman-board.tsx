@@ -27,7 +27,7 @@ import { RouteValidationDialog } from "@/components/dashboard/route-validation-d
 import { PrintQueuePoller } from "@/components/dashboard/print-queue-poller";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime, formatTimeWib, formatKemasanQty } from "@/lib/format";
-import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime, naiveWibToUtcInstant } from "@/lib/business-date";
+import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime, naiveWibTransDateToUtcInstant } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
 import type { ExpeditionVehicleOption } from "@/lib/queries/expedition";
@@ -405,12 +405,17 @@ function MergeExternalDialog({
         return;
       }
       // iso is SalesOrder.TransDate — a "naive WIB" value (raw components
-      // ARE the WIB wall-clock value, see getNaiveWibTransDate's comment) —
-      // convert to the true-UTC instant it represents before using it as
-      // jamJadwal (a true-UTC value, like every other JamJadwal here) or
-      // reading it with the local getters below.
+      // ARE the WIB wall-clock value, see getNaiveWibTransDate's comment)
+      // whose DATE portion may be a rollover-adjusted business-date label
+      // rather than the real calendar day — convert via
+      // naiveWibTransDateToUtcInstant (not the plain naiveWibToUtcInstant,
+      // which would silently reconstruct a moment 24h later than reality
+      // for any order placed at/after ROLLOVER_HOUR) to the true-UTC instant
+      // it represents before using it as jamJadwal (a true-UTC value, like
+      // every other JamJadwal here) or reading it with the local getters
+      // below.
       const naiveWib = new Date(Math.ceil(new Date(iso).getTime() / 60000) * 60000);
-      const ceiled = naiveWibToUtcInstant(naiveWib);
+      const ceiled = naiveWibTransDateToUtcInstant(naiveWib);
       setDefaultJamJadwal(ceiled);
       setDate(
         `${ceiled.getFullYear()}-${String(ceiled.getMonth() + 1).padStart(2, "0")}-${String(ceiled.getDate()).padStart(2, "0")}`

@@ -8,7 +8,12 @@ import { estimateTravelMinutes, estimateTripMinutes, haversineKm, type LatLng } 
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { enqueuePrintJob } from "@/lib/queries/print-queue";
-import { getBusinessDateISO, getNaiveWibTransDate, naiveWibToUtcInstant, utcInstantToWibDisplay } from "@/lib/business-date";
+import {
+  getBusinessDateISO,
+  getNaiveWibTransDate,
+  naiveWibTransDateToUtcInstant,
+  utcInstantToWibDisplay,
+} from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
@@ -933,8 +938,29 @@ async function assertJamJadwalNotBeforeOrders(pool: sql.ConnectionPool, salesOrd
   // split, confirmed live 2026-08-27) — compare them on the same true-UTC
   // scale, and display jamJadwal back in WIB terms so the error message
   // doesn't show its raw (misleadingly 7-hours-off) UTC components.
-  const maxTransDateUtc = naiveWibToUtcInstant(maxTransDate);
-  if (jamJadwal < maxTransDateUtc) {
+  // naiveWibTransDateToUtcInstant (not the plain naiveWibToUtcInstant) is
+  // required here specifically: TransDate's DATE portion is itself a
+  // rollover-adjusted business-date label, not necessarily the real
+  // calendar day — see that function's own comment for why a flat -7h
+  // shift alone silently reconstructs a moment 24h later than reality for
+  // any order placed at/after ROLLOVER_HOUR.
+  const maxTransDateUtc = naiveWibTransDateToUtcInstant(maxTransDate);
+  // A grace window, not zero tolerance: jamJadwal is captured client-side
+  // (once, at dialog-open/reset) while TransDate is stamped server-side at
+  // the moment SalesOrder actually gets INSERTed — for createPemesanan
+  // specifically, these represent the SAME real-world "order placed" event,
+  // just read a request round-trip plus however long the user spent filling
+  // the rest of the form apart. Comparing them with zero tolerance made
+  // literally every order placed after ROLLOVER_HOUR fail this check on
+  // ordinary network/DB latency alone (confirmed live: a 3-second gap was
+  // enough) — a real regression introduced when jamJadwal stopped being
+  // (wrongly) shifted a full day forward, since that 24h error used to
+  // supply all the slack this comparison never actually needed until now.
+  // 30 minutes comfortably covers normal form-filling time while staying
+  // far smaller than any realistic accidental past-date reschedule via
+  // Ubah Pemesanan, the other caller of this same check.
+  const GRACE_PERIOD_MS = 30 * 60 * 1000;
+  if (jamJadwal.getTime() < maxTransDateUtc.getTime() - GRACE_PERIOD_MS) {
     throw new AppError(
       `Waktu pengiriman (${formatDate(utcInstantToWibDisplay(jamJadwal))} ${formatTime(utcInstantToWibDisplay(jamJadwal))}) tidak boleh sebelum waktu pemesanan SO terkait (${formatDate(maxTransDate)} ${formatTime(maxTransDate)}).`
     );
