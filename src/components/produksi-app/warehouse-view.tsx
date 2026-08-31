@@ -7,6 +7,7 @@ import { WarehouseCell } from "@/components/produksi/warehouse-cell";
 import { TambahProduksiDialog, RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Truck } from "lucide-react";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
@@ -129,51 +130,59 @@ export function WarehouseView({
                   ref={(el) => {
                     panelRefs.current[zone.id] = el;
                   }}
-                  className="flex w-fit shrink-0 snap-start flex-col gap-1 rounded-lg border border-border p-3"
+                  className="flex w-fit shrink-0 snap-start gap-3 rounded-lg border border-border p-3"
                 >
-                  <div className="relative flex flex-col gap-1 mr-2">
-                    {zone.grup.map((g) => (
-                      <div key={g.id} className="flex flex-col gap-1">
-                        {g.rows.map((row, i) => (
-                          <div key={i} className="flex gap-2">
-                            {isSelatan && (
-                              <span className="flex w-[60px] shrink-0 items-center justify-center">
-                                <span className="size-3 rounded-full border border-border bg-muted-foreground/30" />
-                              </span>
-                            )}
-                            {row.map((kode) => (
-                              <WarehouseCell key={kode} kode={kode} row={byKode.get(kode)} onClick={handleCellClick} />
-                            ))}
-                          </div>
-                        ))}
-                        {g.dividerAfter && (
-                          <div
-                            className={cn(
-                              "flex items-center gap-2 text-center text-[11px] text-muted-foreground",
-                              g.dividerAfter === "Jalan" && "py-2"
-                            )}
-                          >
-                            {isSelatan && <span className="w-[60px] shrink-0" />}
-                            <span className="flex-1 border-t border-dashed border-border" />
-                            <span>{g.dividerAfter}</span>
-                            <span className="flex-1 border-t border-dashed border-border" />
-                            <span className="flex-1 border-t border-dashed border-border" />
-                            <span className="flex-1 border-t border-dashed border-border" />
-                            {g.dividerAfter.includes("Jendela") && (
-                              <span
-                                title="Jendela"
-                                className="relative z-10 h-6 w-1.5 shrink-0 rounded-sm border border-border bg-muted"
-                              />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {hasJendela && <div className="pointer-events-none absolute inset-y-0 right-0 w-1 bg-foreground/70" />}
+                  {/* Konten pallet zona ini — ukuran & skala kotak pallete tidak diubah sama sekali. */}
+                  <div className="flex flex-col gap-1">
+                    <div className="relative flex flex-col gap-1 mr-2 pr-3">
+                      {zone.grup.map((g) => (
+                        <div key={g.id} className="flex flex-col gap-1">
+                          {g.rows.map((row, i) => (
+                            <div key={i} className="flex gap-1">
+                              {isSelatan && (
+                                <span className="flex w-[60px] shrink-0 items-center justify-center">
+                                  <span className="size-3 rounded-full border border-border bg-muted-foreground/30" />
+                                </span>
+                              )}
+                              {row.map((kode) => (
+                                <WarehouseCell key={kode} kode={kode} row={byKode.get(kode)} onClick={handleCellClick} />
+                              ))}
+                            </div>
+                          ))}
+                          {g.dividerAfter && (
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 text-center text-[11px] text-muted-foreground",
+                                g.dividerAfter === "Jalan" && "py-2"
+                              )}
+                            >
+                              {isSelatan && <span className="w-[60px] shrink-0" />}
+                              <span className="flex-1 border-t border-dashed border-border" />
+                              <span className="shrink-0 whitespace-nowrap">{g.dividerAfter}</span>
+                              <span className="flex-1 border-t border-dashed border-border" />
+                              <span className="flex-1 border-t border-dashed border-border" />
+                              <span className="flex-1 border-t border-dashed border-border" />
+                              {g.dividerAfter.includes("Jendela") && (
+                                <span
+                                  title="Jendela"
+                                  className="relative -mr-3 z-10 h-6 w-1.5 shrink-0 rounded-sm border border-border bg-muted"
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {hasJendela && <div className="pointer-events-none absolute inset-y-0 right-0 w-1 bg-foreground/70" />}
+                    </div>
+                    {zone.showPintuGeser && (
+                      <p className="mt-2 rounded-md bg-muted py-1 text-center text-xs font-medium">Pintu Geser</p>
+                    )}
                   </div>
-                  {zone.showPintuGeser && (
-                    <p className="mt-2 rounded-md bg-muted py-1 text-center text-xs font-medium">Pintu Geser</p>
-                  )}
+
+                  {/* Dermaga truk — hanya di zona Utara, sejajar dengan 3 "Jalan & Jendela".
+                      Ditaruh sebagai kolom terpisah (bukan menimpa kotak pallete) supaya
+                      ukuran/skala pallete di atas sama sekali tidak berubah. */}
+                  {zone.id === "U" && <TruckDockColumn jadwal={jadwalMendekat} now={now} />}
                 </div>
               );
             })}
@@ -285,6 +294,107 @@ function KartuPengirimanMendekatPanel({ jadwal, now }: { jadwal: DraftJadwalForP
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// Ukuran acuan 1 kotak pallete (lihat size-[55px] di WarehouseCell). Kartu
+// truk dibuat dari ukuran ini juga (bukan angka bebas) supaya proporsinya
+// memang "2 kotak lebar x 4 kotak panjang" sesuai kotak pallete yang sudah
+// ada, tanpa perlu mengubah kotak pallete itu sendiri.
+const PALLET_CELL_PX = 55;
+const TRUCK_HEIGHT_PX = PALLET_CELL_PX * 2 + 8; // ~lebar kendaraan: 2 kotak pallete
+const TRUCK_WIDTH_PX = PALLET_CELL_PX * 4 + 12; // ~panjang kendaraan: 4 kotak pallete
+
+// Kolom dermaga truk di sisi kanan zona Utara. Dibagi rata jadi 3 baris
+// (grid-rows-3) supaya otomatis sejajar dengan 3 kelompok "Jalan & Jendela"
+// di kolom pallete sebelah kiri (U1/U2/U3 tingginya nyaris sama), tanpa
+// perlu hitung offset piksel manual yang gampang meleset kalau layout
+// pallete berubah nanti. Selalu menggambar 3 truk — kalau untuk slot itu
+// belum ada jadwal keberangkatan yang mendekat, truk tetap tergambar tapi
+// kosong & redup (lihat TruckCard).
+function TruckDockColumn({ jadwal, now }: { jadwal: DraftJadwalForProduksi[]; now: Date }) {
+  // Maksimal 3 jadwal terdekat untuk 3 dermaga; kalau jadwalnya lebih dari
+  // 3, sisanya tetap kelihatan di panel "Keberangkatan Mendekat" di kanan.
+  const slots: Array<DraftJadwalForProduksi | null> = [0, 1, 2].map((i) => jadwal[i] ?? null);
+
+  return (
+    <div className="grid grid-rows-3 gap-2">
+      {slots.map((j, i) => (
+        <div key={j?.JadwalID ?? `dermaga-kosong-${i}`} className="flex items-center">
+          <TruckCard jadwal={j} now={now} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Satu slot dermaga: kotak polos dengan arsiran garis diagonal (bukan lagi
+// bentuk bak+kabin+roda), ikon truk tetap ditaruh di ujung kanan sebagai
+// penanda "ini dermaga truk". Kalau `jadwal` null (belum ada keberangkatan
+// yang mendekat untuk dermaga ini), slotnya tetap digambar — arsiran &
+// border tetap ada — hanya diredupkan (opacity rendah), bukan disembunyikan.
+function TruckCard({ jadwal, now }: { jadwal: DraftJadwalForProduksi | null; now: Date }) {
+  const isKosong = jadwal == null;
+  const diffMs = jadwal ? new Date(jadwal.JamJadwal).getTime() - now.getTime() : 0;
+  const terlambat = !isKosong && diffMs < 0;
+  const sedangDimuat = jadwal?.JamMulaiMuat != null;
+
+  // Warna arsiran & border mengikuti status yang sama seperti sebelumnya,
+  // hanya bentuknya sekarang garis diagonal tipis, bukan warna blok penuh.
+  // Slot kosong ("Area Muat") pakai kuning dan garisnya sedikit lebih tebal
+  // dari status lain supaya kelihatan beda meski redup.
+  const hatchColor = isKosong
+    ? "rgba(234,179,8,0.5)" // yellow-500
+    : terlambat
+    ? "rgba(220,38,38,0.35)" // red-600
+    : sedangDimuat
+    ? "rgba(217,119,6,0.35)" // amber-600
+    : "rgba(2,132,199,0.35)"; // sky-600
+  const hatchThickness = isKosong ? "2.5px" : "1.5px";
+
+  return (
+    <div
+      style={{
+        height: TRUCK_HEIGHT_PX,
+        width: TRUCK_WIDTH_PX,
+        backgroundImage: `repeating-linear-gradient(135deg, ${hatchColor} 0px, ${hatchColor} ${hatchThickness}, transparent ${hatchThickness}, transparent 8px)`,
+      }}
+      className={cn(
+        "relative flex shrink-0 items-center gap-2 overflow-hidden rounded-md border px-2 py-1",
+        isKosong
+          ? "border-dashed border-border/60 opacity-50"
+          : terlambat
+          ? "border-red-600/40"
+          : sedangDimuat
+          ? "border-amber-500/50"
+          : "border-sky-500/40"
+      )}
+      title={isKosong ? "Belum ada jadwal keberangkatan mendekat" : jadwal.ArmadaNama}
+    >
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+        {isKosong ? (
+          <span className="text-[11px] text-muted-foreground">Area Muat</span>
+        ) : (
+          <>
+            <p className="truncate text-xs font-semibold">{jadwal.ArmadaNama}</p>
+            <p className="text-[10px] text-muted-foreground">
+              {new Date(jadwal.JamJadwal).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} ·{" "}
+              {formatSelisihWaktu(diffMs)}
+            </p>
+            <p className="text-[10px]">
+              {jadwal.Qty10KGDibutuhkan} kantong 10kg, {jadwal.Qty5KGDibutuhkan} kantong 5kg
+            </p>
+            {sedangDimuat && (
+              <span className="mt-0.5 w-fit rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-medium text-amber-700">
+                Sedang dimuat
+              </span>
+            )}
+          </>
+        )}
+      </div>
+      {/* Ikon truk tetap di ujung, sebagai penanda dermaga */}
+      <Truck className={cn("size-4 shrink-0", isKosong ? "text-muted-foreground/50" : "text-current")} />
     </div>
   );
 }
