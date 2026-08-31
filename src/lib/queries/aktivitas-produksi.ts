@@ -309,6 +309,10 @@ export async function setTimBertugas(tanggalUsaha: string, shift: ShiftNumber, t
 // window is converted via naiveWibToUtcInstant() before the SQL
 // comparison. Total only, no per-machine breakdown (no machine link
 // exists on this data at all).
+// TakeAway 10KG/5KG: same JamSelesaiMuat-in-shift-window pattern, from
+// DashboardTakeAwayMuatan (its own manual, non-FIFO qty, see
+// takeaway-muatan.ts) — folded into total10KG/total5KG below rather than
+// broken out separately.
 export async function getQtyRecapForShift(tanggalUsaha: string, shift: ShiftNumber): Promise<QtyRecap> {
   const pool = await getPool();
 
@@ -329,7 +333,7 @@ export async function getQtyRecapForShift(tanggalUsaha: string, shift: ShiftNumb
     mesinNama: r.MesinNama,
     qty10KG: r.Qty10KG,
   }));
-  const total10KG = perMesin.reduce((sum, r) => sum + r.qty10KG, 0);
+  const total10KGBatch = perMesin.reduce((sum, r) => sum + r.qty10KG, 0);
 
   const businessDate = new Date(`${tanggalUsaha}T00:00:00Z`);
   const window = getShiftWindow(businessDate, shift, "work");
@@ -344,7 +348,29 @@ export async function getQtyRecapForShift(tanggalUsaha: string, shift: ShiftNumb
       FROM DashboardPengirimanJadwal
       WHERE IsDeleted = 0 AND JamSelesaiMuat IS NOT NULL AND JamSelesaiMuat BETWEEN @start AND @end
     `);
-  const total5KG = (qty5Result.recordset[0] as { Total: number }).Total;
+  const total5KGJadwal = (qty5Result.recordset[0] as { Total: number }).Total;
+
+  // TakeAway 10kg/5kg — dicatat manual tanpa FIFO (sama seperti Qty5KGDimuat
+  // di atas), diselesaikan lewat Selesai Muat produksi-app milik TakeAway
+  // sendiri (JamSelesaiMuat true-UTC, window shift yang sama dipakai ulang).
+  // Digabung ke total yang sudah ada, bukan kategori laporan terpisah — lihat
+  // docs/superpowers/specs/2026-08-31-takeaway-alur-muat-produksi-design.md.
+  const takeAwayResult = await pool
+    .request()
+    .input("start", sql.DateTime, startUtc)
+    .input("end", sql.DateTime, endUtc)
+    .query(`
+      SELECT Variant, ISNULL(SUM(QtyDimuat), 0) AS Total
+      FROM DashboardTakeAwayMuatan
+      WHERE IsDeleted = 0 AND JamSelesaiMuat IS NOT NULL AND JamSelesaiMuat BETWEEN @start AND @end
+      GROUP BY Variant
+    `);
+  const takeAwayRows = takeAwayResult.recordset as { Variant: string; Total: number }[];
+  const takeAway10KG = takeAwayRows.find((r) => r.Variant === "10kg")?.Total ?? 0;
+  const takeAway5KG = takeAwayRows.find((r) => r.Variant === "5kg")?.Total ?? 0;
+
+  const total10KG = total10KGBatch + takeAway10KG;
+  const total5KG = total5KGJadwal + takeAway5KG;
 
   return { perMesin, total10KG, total5KG, totalKantongEkivalen: total10KG + total5KG / 2 };
 }
