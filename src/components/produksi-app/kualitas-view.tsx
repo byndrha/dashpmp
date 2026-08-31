@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { LiveCameraCaptureField } from "@/components/dashboard/live-camera-capture-field";
+import type { PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 import { cn } from "@/lib/utils";
 import { getBusinessDateISO, getWibTimeHHmm } from "@/lib/business-date";
 import { SHIFT_LABEL } from "@/lib/produksi-shift";
@@ -75,6 +76,7 @@ function TambahKualitasDialog({
   const [catatan, setCatatan] = useState("");
   const [fotoPath, setFotoPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [fotoStatus, setFotoStatus] = useState<PhotoUploadStatus | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -88,17 +90,21 @@ function TambahKualitasDialog({
     setQty10KG("");
     setCatatan("");
     setFotoPath(null);
+    setFotoStatus(undefined);
     setError(null);
   }
 
   async function handleCapture(file: File) {
     setError(null);
     setUploading(true);
+    setFotoStatus("uploading");
     try {
       const path = await uploadFotoKualitas(file);
       setFotoPath(path);
+      setFotoStatus("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengunggah foto.");
+      setFotoStatus("error");
     } finally {
       setUploading(false);
     }
@@ -284,6 +290,7 @@ function TambahKualitasDialog({
                 active
                 disabled={uploading || pending}
                 onCapture={handleCapture}
+                status={fotoStatus}
               />
             </div>
           </div>
