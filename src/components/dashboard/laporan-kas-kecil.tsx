@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -93,6 +93,11 @@ function KasKecilCard({ row, canEdit, onChanged }: { row: KasKecilShiftRow; canE
   const [kasMasuk, setKasMasuk] = useState(String(row.kasMasuk));
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setKasMasuk(String(row.kasMasuk));
+  }, [row.kasMasuk]);
 
   function handleSave() {
     setError(null);
