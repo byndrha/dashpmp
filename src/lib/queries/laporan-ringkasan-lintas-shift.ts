@@ -13,6 +13,10 @@ export interface KantongEkivalenProduksiRow {
   totalKantongEkivalen: number;
 }
 
+function keyOf(tanggalUsaha: string, shift: number): string {
+  return `${tanggalUsaha}|${shift}`;
+}
+
 // Bulk, whole-month version of getQtyRecapForShift's kantong-ekivalen
 // formula (aktivitas-produksi.ts) -- that function only computes ONE
 // shift at a time, this computes every shift in a month in 2 queries
@@ -84,7 +88,6 @@ export async function getKantongEkivalenProduksiPerBulan(tahun: number, bulan: n
     `);
 
   const map = new Map<string, { tanggalUsaha: string; shift: ShiftNumber; total10KG: number; total5KG: number }>();
-  const keyOf = (tanggalUsaha: string, shift: number) => `${tanggalUsaha}|${shift}`;
 
   for (const row of batchResult.recordset as { TanggalLabel: Date; Shift: number; Total10KG: number }[]) {
     const tanggalUsaha = row.TanggalLabel.toISOString().slice(0, 10);
@@ -138,8 +141,24 @@ export interface RingkasanShiftRow {
   kasKecilSaldoAkhir: number;
 }
 
-function keyOf(tanggalUsaha: string, shift: number): string {
-  return `${tanggalUsaha}|${shift}`;
+// getStokBahanBakuHistory/getAktivitasRiwayat/getKasKecilHistory below are
+// all "TOP N terbaru" queries (ORDER BY ShiftMulai DESC, tanpa filter
+// rentang tanggal sungguhan) -- beda dengan getAktivitasMuatanDistribusi
+// dan getKantongEkivalenProduksiPerBulan yang memfilter (tahun, bulan) di
+// SQL secara langsung. Kalau limit-nya konstan, meminta bulan yang cukup
+// jauh di masa lalu (Grafik Tren Tahap 5 mengizinkan navigasi bulan
+// sembarang) akan diam-diam terpotong sebelum dalamBulan() di bawah
+// sempat menyaring apa pun, membuat bulan itu tampak kosong padahal
+// datanya ada. Limit dihitung dinamis dari seberapa jauh (tahun, bulan)
+// dari hari ini supaya jendela TOP N selalu mencakup seluruh bulan yang
+// diminta, untuk bulan manapun di masa lalu, bukan cuma menggeser
+// ambang batasnya lebih jauh.
+function hitungLimitHistori(tahun: number, bulan: number, maxBarisPerHari: number): number {
+  const akhirBulanTarget = new Date(Date.UTC(tahun, bulan, 0)); // hari terakhir bulan target
+  const sekarang = new Date();
+  const hariMundur = Math.max(0, Math.ceil((sekarang.getTime() - akhirBulanTarget.getTime()) / 86_400_000));
+  // +31 hari ekstra untuk mencakup bulan target itu sendiri, +7 hari buffer pengaman
+  return (hariMundur + 31 + 7) * maxBarisPerHari;
 }
 
 // Menggabungkan Tahap 1/2/3/4 jadi satu baris per (TanggalUsaha, Shift).
@@ -152,12 +171,16 @@ export async function getRingkasanLintasShift(tahun: number, bulan: number): Pro
   const { shift: shiftBerjalan, businessDate: businessDateBerjalan } = getReportShift("work");
   const tanggalUsahaBerjalan = businessDateBerjalan.toISOString().slice(0, 10);
 
+  const bahanBakuLimit = hitungLimitHistori(tahun, bulan, 9); // 3 JenisBarang x 3 shift
+  const aktivitasLimit = hitungLimitHistori(tahun, bulan, 3); // 3 shift
+  const kasKecilLimit = hitungLimitHistori(tahun, bulan, 3); // 3 shift
+
   const [bahanBakuHistory, aktivitasRiwayat, kantongEkivalenProduksi, muatanDistribusi, kasKecilHistory] = await Promise.all([
-    getStokBahanBakuHistory(400),
-    getAktivitasRiwayat(120),
+    getStokBahanBakuHistory(bahanBakuLimit),
+    getAktivitasRiwayat(aktivitasLimit),
     getKantongEkivalenProduksiPerBulan(tahun, bulan),
     getAktivitasMuatanDistribusi(tahun, bulan),
-    getKasKecilHistory(120),
+    getKasKecilHistory(kasKecilLimit),
   ]);
 
   const awalBulan = `${tahun}-${String(bulan).padStart(2, "0")}-01`;
