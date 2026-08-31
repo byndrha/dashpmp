@@ -21,12 +21,13 @@ export default async function LaporanPage() {
   const tahunAwal = businessDate.getUTCFullYear();
   const bulanAwal = businessDate.getUTCMonth() + 1;
 
+  const muatanDistribusiRowsAwal = await getAktivitasMuatanDistribusi(tahunAwal, bulanAwal);
+
   const [
     { current, rows },
     history,
     saldoAwal,
     aktivitasRiwayat,
-    muatanDistribusiRowsAwal,
     kasKecilSaldoAwal,
     kasKecilHistory,
     kasKecilCurrentShift,
@@ -37,11 +38,10 @@ export default async function LaporanPage() {
     getStokBahanBakuHistory(),
     getSaldoAwal(),
     getAktivitasRiwayat(),
-    getAktivitasMuatanDistribusi(tahunAwal, bulanAwal),
     getSaldoAwalKasKecil(),
     getKasKecilHistory(),
     getCurrentShiftKasKecil(),
-    getRingkasanLintasShift(tahunAwal, bulanAwal),
+    getRingkasanLintasShift(tahunAwal, bulanAwal, muatanDistribusiRowsAwal),
     getAllTim(),
   ]);
 

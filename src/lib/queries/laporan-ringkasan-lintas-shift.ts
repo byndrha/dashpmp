@@ -4,7 +4,7 @@ import { getStokBahanBakuHistory } from "@/lib/queries/stok-bahan-baku";
 import { JENIS_BARANG_LIST, type JenisBarang } from "@/lib/stok-bahan-baku-shared";
 import { getAktivitasRiwayat } from "@/lib/queries/aktivitas-produksi";
 import { hitungTotalDenda } from "@/lib/aktivitas-produksi-shared";
-import { getAktivitasMuatanDistribusi } from "@/lib/queries/laporan-muatan-distribusi";
+import { getAktivitasMuatanDistribusi, type AktivitasMuatanDistribusiRow } from "@/lib/queries/laporan-muatan-distribusi";
 import { getKasKecilHistory } from "@/lib/queries/kas-kecil";
 
 export interface KantongEkivalenProduksiRow {
@@ -167,7 +167,11 @@ function hitungLimitHistori(tahun: number, bulan: number, maxBarisPerHari: numbe
 // mengembalikan baris yang BENAR-BENAR ada di DB, tidak pernah
 // mensintesis baris kosong) -- tidak perlu query terpisah untuk cek
 // "sudah diisi atau belum".
-export async function getRingkasanLintasShift(tahun: number, bulan: number): Promise<RingkasanShiftRow[]> {
+export async function getRingkasanLintasShift(
+  tahun: number,
+  bulan: number,
+  muatanDistribusiPrefetched?: AktivitasMuatanDistribusiRow[]
+): Promise<RingkasanShiftRow[]> {
   const { shift: shiftBerjalan, businessDate: businessDateBerjalan } = getReportShift("work");
   const tanggalUsahaBerjalan = businessDateBerjalan.toISOString().slice(0, 10);
 
@@ -175,13 +179,13 @@ export async function getRingkasanLintasShift(tahun: number, bulan: number): Pro
   const aktivitasLimit = hitungLimitHistori(tahun, bulan, 3); // 3 shift
   const kasKecilLimit = hitungLimitHistori(tahun, bulan, 3); // 3 shift
 
-  const [bahanBakuHistory, aktivitasRiwayat, kantongEkivalenProduksi, muatanDistribusi, kasKecilHistory] = await Promise.all([
+  const [bahanBakuHistory, aktivitasRiwayat, kantongEkivalenProduksi, kasKecilHistory] = await Promise.all([
     getStokBahanBakuHistory(bahanBakuLimit),
     getAktivitasRiwayat(aktivitasLimit),
     getKantongEkivalenProduksiPerBulan(tahun, bulan),
-    getAktivitasMuatanDistribusi(tahun, bulan),
     getKasKecilHistory(kasKecilLimit),
   ]);
+  const muatanDistribusi = muatanDistribusiPrefetched ?? (await getAktivitasMuatanDistribusi(tahun, bulan));
 
   const awalBulan = `${tahun}-${String(bulan).padStart(2, "0")}-01`;
   const akhirBulan = new Date(Date.UTC(tahun, bulan, 1)).toISOString().slice(0, 10);
