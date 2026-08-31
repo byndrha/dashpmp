@@ -3,6 +3,7 @@ import { requireModuleAccess, canAccessAllPT } from "@/lib/require-access";
 import { getCurrentShiftRows, getStokBahanBakuHistory, getSaldoAwal } from "@/lib/queries/stok-bahan-baku";
 import { getAktivitasRiwayat } from "@/lib/queries/aktivitas-produksi";
 import { getAktivitasMuatanDistribusi } from "@/lib/queries/laporan-muatan-distribusi";
+import { getSaldoAwalKasKecil, getKasKecilHistory, getCurrentShiftKasKecil } from "@/lib/queries/kas-kecil";
 import { getAkunNamaMap } from "@/lib/queries/akun";
 import { getReportShift } from "@/lib/report-shift";
 import { LaporanTabShell } from "@/components/dashboard/laporan-tab-shell";
@@ -18,17 +19,30 @@ export default async function LaporanPage() {
   const muatanDistribusiTahunAwal = businessDate.getUTCFullYear();
   const muatanDistribusiBulanAwal = businessDate.getUTCMonth() + 1;
 
-  const [{ current, rows }, history, saldoAwal, aktivitasRiwayat, muatanDistribusiRowsAwal] = await Promise.all([
+  const [
+    { current, rows },
+    history,
+    saldoAwal,
+    aktivitasRiwayat,
+    muatanDistribusiRowsAwal,
+    kasKecilSaldoAwal,
+    kasKecilHistory,
+    kasKecilCurrentShift,
+  ] = await Promise.all([
     getCurrentShiftRows(),
     getStokBahanBakuHistory(),
     getSaldoAwal(),
     getAktivitasRiwayat(),
     getAktivitasMuatanDistribusi(muatanDistribusiTahunAwal, muatanDistribusiBulanAwal),
+    getSaldoAwalKasKecil(),
+    getKasKecilHistory(),
+    getCurrentShiftKasKecil(),
   ]);
 
   const akunIds = [
     ...[...rows, ...history].flatMap((r) => [r.operasionalAkunId, r.produksiAkunId]),
     ...aktivitasRiwayat.map((r) => r.stafOperasionalAkunId),
+    ...kasKecilHistory.map((r) => r.diisiOlehAkunId),
   ].filter((id): id is number => id != null);
   const namaMap = await getAkunNamaMap(akunIds);
 
@@ -47,6 +61,10 @@ export default async function LaporanPage() {
         muatanDistribusiTahunAwal={muatanDistribusiTahunAwal}
         muatanDistribusiBulanAwal={muatanDistribusiBulanAwal}
         muatanDistribusiRowsAwal={muatanDistribusiRowsAwal}
+        kasKecilCurrent={kasKecilCurrentShift.current}
+        kasKecilInitialRow={kasKecilCurrentShift.row}
+        kasKecilInitialHistory={kasKecilHistory}
+        kasKecilInitialSaldoAwal={kasKecilSaldoAwal}
       />
     </div>
   );

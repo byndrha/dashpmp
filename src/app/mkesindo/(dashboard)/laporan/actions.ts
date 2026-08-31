@@ -17,6 +17,13 @@ import {
 } from "@/lib/queries/stok-bahan-baku";
 import { getAktivitasRiwayat, type AktivitasShiftInfo } from "@/lib/queries/aktivitas-produksi";
 import { getAktivitasMuatanDistribusi, type AktivitasMuatanDistribusiRow } from "@/lib/queries/laporan-muatan-distribusi";
+import {
+  setSaldoAwalKasKecil,
+  upsertKasMasuk,
+  tambahPengeluaran,
+  hapusPengeluaran,
+} from "@/lib/queries/kas-kecil";
+import type { ShiftNumber } from "@/lib/report-shift";
 
 // Bypasses the permission grid for Direktur/Superadmin the same way every
 // other module's canAccessAllPT() checks do, so they can exercise the
@@ -91,5 +98,53 @@ export async function getAktivitasMuatanDistribusiAction(tahun: number, bulan: n
   return runAction(async () => {
     await requireModuleAccess("laporan");
     return getAktivitasMuatanDistribusi(tahun, bulan);
+  });
+}
+
+export async function setSaldoAwalKasKecilAction(saldoAwal: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("laporan");
+    if (!canAccessAllPT(session.user)) {
+      throw new AppError("Hanya Direktur/Superadmin yang bisa mengubah saldo awal.");
+    }
+    if (saldoAwal < 0) throw new AppError("Saldo awal tidak boleh negatif.");
+    await setSaldoAwalKasKecil(saldoAwal, Number(session.user.id));
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function upsertKasMasukAction(tanggalUsaha: string, shift: ShiftNumber, kasMasuk: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("laporan");
+    assertCanEditLaporan(session.user);
+    if (kasMasuk < 0) throw new AppError("Kas masuk tidak boleh negatif.");
+    await upsertKasMasuk(tanggalUsaha, shift, kasMasuk, Number(session.user.id));
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function tambahPengeluaranAction(
+  tanggalUsaha: string,
+  shift: ShiftNumber,
+  keterangan: string,
+  nominal: number
+): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("laporan");
+    assertCanEditLaporan(session.user);
+    if (!keterangan.trim()) throw new AppError("Keterangan tidak boleh kosong.");
+    if (!nominal || nominal <= 0) throw new AppError("Nominal harus lebih dari 0.");
+    const id = await tambahPengeluaran(tanggalUsaha, shift, keterangan.trim(), nominal, Number(session.user.id));
+    revalidatePath("/mkesindo/laporan");
+    return id;
+  });
+}
+
+export async function hapusPengeluaranAction(pengeluaranId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("laporan");
+    assertCanEditLaporan(session.user);
+    await hapusPengeluaran(pengeluaranId);
+    revalidatePath("/mkesindo/laporan");
   });
 }
