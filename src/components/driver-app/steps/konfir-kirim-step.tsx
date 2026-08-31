@@ -160,7 +160,7 @@ export function KonfirKirimStep({
         label="Bukti Pengiriman"
         files={fotoBuktiFiles}
         onChange={setFotoBuktiFiles}
-        statuses={submitting ? fotoBuktiStatus : undefined}
+        statuses={fotoBuktiStatus}
       />
 
       <div className="flex flex-col gap-3">
@@ -212,7 +212,7 @@ export function KonfirKirimStep({
                             setReturFotoFiles((prev) => ({ ...prev, [item.SalesOrderDetailID]: file }));
                             setActiveReturSlot(null);
                           }}
-                          status={submitting ? returFotoStatus[item.SalesOrderDetailID] : undefined}
+                          status={returFotoStatus[item.SalesOrderDetailID]}
                         />
                         {activeReturSlot !== item.SalesOrderDetailID && (
                           <button
