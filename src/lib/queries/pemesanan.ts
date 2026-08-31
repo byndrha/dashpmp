@@ -14,6 +14,7 @@ import {
   addSalesOrdersToJadwal,
 } from "@/lib/queries/pengiriman-jadwal";
 import { AppError } from "@/lib/action-result";
+import { softDeleteTakeAwayMuatanForSalesOrder } from "@/lib/queries/takeaway-muatan";
 
 export interface CreatePemesananInput {
   businessPartnerId: string;
@@ -474,6 +475,9 @@ export async function deletePemesanan(salesOrderId: string): Promise<void> {
   if (current) {
     await removeSalesOrderFromJadwal(current.jadwalId, salesOrderId);
   }
+  // No-op for a non-TakeAway SO (no matching row) — see
+  // softDeleteTakeAwayMuatanForSalesOrder's own comment.
+  await softDeleteTakeAwayMuatanForSalesOrder(salesOrderId);
   await softDeleteSalesOrder(salesOrderId);
 }
 
