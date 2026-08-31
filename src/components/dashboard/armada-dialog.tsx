@@ -112,14 +112,18 @@ export function ArmadaFormDialog({
     ? "uploading"
     : uploadError
     ? "error"
-    : previewUrl ?? fotoPath
+    : selectedFile
+    ? undefined
+    : fotoPath
     ? "success"
     : undefined;
   const qrFotoStatus: PhotoUploadStatus | undefined = qrUploading
     ? "uploading"
     : qrUploadError
     ? "error"
-    : qrPreviewUrl ?? qrMyPertaminaPath
+    : selectedQrFile
+    ? undefined
+    : qrMyPertaminaPath
     ? "success"
     : undefined;
 
