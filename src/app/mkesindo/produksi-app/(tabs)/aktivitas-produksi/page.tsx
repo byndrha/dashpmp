@@ -25,8 +25,13 @@ export default async function ProduksiAppAktivitasProduksiPage() {
     getAllTim(),
     getAktivitasRiwayat(),
   ]);
-  const namaMap = await getAkunNamaMap(current.stafOperasionalAkunId != null ? [current.stafOperasionalAkunId] : []);
+  const akunIds = [current.stafOperasionalAkunId, current.kepalaAkunId, current.wakilKepalaAkunId].filter(
+    (id): id is number => id != null
+  );
+  const namaMap = await getAkunNamaMap(akunIds);
   const stafOperasionalNama = current.stafOperasionalAkunId != null ? (namaMap.get(current.stafOperasionalAkunId) ?? null) : null;
+  const kepalaNama = current.kepalaAkunId != null ? (namaMap.get(current.kepalaAkunId) ?? null) : null;
+  const wakilKepalaNama = current.wakilKepalaAkunId != null ? (namaMap.get(current.wakilKepalaAkunId) ?? null) : null;
 
   const timSayaBase = await getTimByKepalaAkunId(Number(session.user.id));
   const timSaya = timSayaBase ? { ...timSayaBase, anggota: await getAnggotaTim(timSayaBase.timId) } : null;
@@ -36,7 +41,20 @@ export default async function ProduksiAppAktivitasProduksiPage() {
       initialTab="aktivitas-produksi"
       userName={session.user.name ?? session.user.username}
       profile={profile}
-      initialAktivitasProduksi={{ current, qty, susunanTim, stafOperasionalNama, mesinList, mesinEvents, stafOperasionalOptions, timList, timSaya, riwayat }}
+      initialAktivitasProduksi={{
+        current,
+        qty,
+        susunanTim,
+        stafOperasionalNama,
+        kepalaNama,
+        wakilKepalaNama,
+        mesinList,
+        mesinEvents,
+        stafOperasionalOptions,
+        timList,
+        timSaya,
+        riwayat,
+      }}
     />
   );
 }

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import type { SusunanTimRow } from "@/lib/queries/aktivitas-produksi";
 import type { AnggotaTimRow } from "@/lib/queries/tim-produksi";
-import { setSusunanTimAction, getSemuaAnggotaTimAction } from "@/app/mkesindo/produksi/actions";
+import { setSusunanTimAction, getSemuaAnggotaTimAction, setKepalaHadirAction, setWakilHadirAction } from "@/app/mkesindo/produksi/actions";
 
 const TAMBAH_PLACEHOLDER = "__pilih__";
 
@@ -68,24 +68,99 @@ function SortableRosterRow({
   );
 }
 
+function KepalaWakilRow({
+  label,
+  nama,
+  hadir,
+  pending,
+  onToggle,
+}: {
+  label: string;
+  nama: string;
+  hadir: boolean;
+  pending: boolean;
+  onToggle: () => void;
+}) {
+  if (!hadir) {
+    return (
+      <div className="flex items-center justify-between rounded-md border border-dashed border-border px-2 py-1.5 text-sm text-muted-foreground">
+        <span>{label} tidak hadir shift ini</span>
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={pending}
+          className="rounded px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Tandai hadir kembali
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+      <span className="flex-1 text-sm">
+        <span className="text-xs font-medium text-muted-foreground">{label}: </span>
+        <span className="font-medium">{nama}</span>
+      </span>
+      <button
+        type="button"
+        title={`Tandai ${label} tidak hadir shift ini`}
+        onClick={onToggle}
+        disabled={pending}
+        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <X className="size-4" />
+      </button>
+    </div>
+  );
+}
+
 export function TimProduksiRoster({
   tanggalUsaha,
   shift,
   susunanTim,
+  kepalaAkunId,
+  kepalaNama,
+  kepalaHadir,
+  wakilKepalaAkunId,
+  wakilKepalaNama,
+  wakilHadir,
   canEdit,
   onChanged,
 }: {
   tanggalUsaha: string;
   shift: 1 | 2 | 3;
   susunanTim: SusunanTimRow[];
+  kepalaAkunId: number | null;
+  kepalaNama: string | null;
+  kepalaHadir: boolean;
+  wakilKepalaAkunId: number | null;
+  wakilKepalaNama: string | null;
+  wakilHadir: boolean;
   canEdit: boolean;
   onChanged: () => void;
 }) {
   const [order, setOrder] = useState(susunanTim);
   const [semuaAnggota, setSemuaAnggota] = useState<AnggotaTimRow[] | null>(null);
   const [pending, startTransition] = useTransition();
+  const [kepalaPending, startKepalaTransition] = useTransition();
+  const [wakilPending, startWakilTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleToggleKepala() {
+    startKepalaTransition(async () => {
+      const result = await setKepalaHadirAction(tanggalUsaha, shift, !kepalaHadir);
+      if (result.success) onChanged();
+    });
+  }
+
+  function handleToggleWakil() {
+    startWakilTransition(async () => {
+      const result = await setWakilHadirAction(tanggalUsaha, shift, !wakilHadir);
+      if (result.success) onChanged();
+    });
+  }
 
   // susunanTim comes from the parent's own fetch (re-run after onChanged)
   // -- resync local drag/edit state whenever a fresh copy arrives, same
@@ -148,6 +223,12 @@ export function TimProduksiRoster({
         <CardTitle className="text-sm">Tim Produksi bertugas — Shift {shift}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {kepalaAkunId != null && kepalaNama != null && (
+          <KepalaWakilRow label="Kepala Produksi" nama={kepalaNama} hadir={kepalaHadir} pending={kepalaPending} onToggle={handleToggleKepala} />
+        )}
+        {wakilKepalaAkunId != null && wakilKepalaNama != null && (
+          <KepalaWakilRow label="Wakil Kepala Produksi" nama={wakilKepalaNama} hadir={wakilHadir} pending={wakilPending} onToggle={handleToggleWakil} />
+        )}
         {order.length === 0 ? (
           <p className="text-xs text-muted-foreground">Belum ada anggota bertugas.</p>
         ) : (

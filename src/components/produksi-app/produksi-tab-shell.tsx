@@ -81,6 +81,8 @@ export function ProduksiTabShell({
     qty: QtyRecap;
     susunanTim: SusunanTimRow[];
     stafOperasionalNama: string | null;
+    kepalaNama: string | null;
+    wakilKepalaNama: string | null;
     mesinList: MesinRow[];
     mesinEvents: MesinEventRow[];
     stafOperasionalOptions: StafOperasionalOption[];
@@ -399,6 +401,8 @@ export function ProduksiTabShell({
               qty={aktivitasProduksi.qty}
               susunanTim={aktivitasProduksi.susunanTim}
               stafOperasionalNama={aktivitasProduksi.stafOperasionalNama}
+              kepalaNama={aktivitasProduksi.kepalaNama}
+              wakilKepalaNama={aktivitasProduksi.wakilKepalaNama}
               mesinList={aktivitasProduksi.mesinList}
               mesinEvents={aktivitasProduksi.mesinEvents}
               stafOperasionalOptions={aktivitasProduksi.stafOperasionalOptions}

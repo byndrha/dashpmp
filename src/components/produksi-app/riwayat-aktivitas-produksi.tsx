@@ -12,7 +12,13 @@ import type { StafOperasionalOption } from "@/lib/queries/akun";
 import type { TimRow } from "@/lib/queries/tim-produksi";
 import { getAktivitasDetailAction } from "@/app/mkesindo/produksi/actions";
 
-type Detail = { current: AktivitasShiftInfo; qty: QtyRecap; susunanTim: SusunanTimRow[] };
+type Detail = {
+  current: AktivitasShiftInfo;
+  qty: QtyRecap;
+  susunanTim: SusunanTimRow[];
+  kepalaNama: string | null;
+  wakilKepalaNama: string | null;
+};
 
 function UbahAktivitasDialog({
   row,
@@ -98,10 +104,23 @@ function UbahAktivitasDialog({
               tanggalUsaha={row.tanggalUsaha}
               shift={row.shift}
               susunanTim={detail.susunanTim}
+              kepalaAkunId={detail.current.kepalaAkunId}
+              kepalaNama={detail.kepalaNama}
+              kepalaHadir={detail.current.kepalaHadir}
+              wakilKepalaAkunId={detail.current.wakilKepalaAkunId}
+              wakilKepalaNama={detail.wakilKepalaNama}
+              wakilHadir={detail.current.wakilHadir}
               canEdit
               onChanged={refetchDetail}
             />
-            <QtyRecapCard qty={detail.qty} jumlahHadir={detail.susunanTim.length} />
+            <QtyRecapCard
+              qty={detail.qty}
+              jumlahHadir={
+                (detail.current.kepalaAkunId != null && detail.current.kepalaHadir ? 1 : 0) +
+                (detail.current.wakilKepalaAkunId != null && detail.current.wakilHadir ? 1 : 0) +
+                detail.susunanTim.length
+              }
+            />
             <KerusakanCard tanggalUsaha={row.tanggalUsaha} shift={row.shift} current={detail.current} onSaved={refetchDetail} />
           </div>
         )}

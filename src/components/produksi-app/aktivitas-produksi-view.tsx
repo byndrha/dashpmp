@@ -216,6 +216,8 @@ export function AktivitasProduksiView({
   qty,
   susunanTim,
   stafOperasionalNama,
+  kepalaNama,
+  wakilKepalaNama,
   mesinList,
   mesinEvents,
   stafOperasionalOptions,
@@ -230,12 +232,15 @@ export function AktivitasProduksiView({
   // Resolved by the caller (page.tsx) via getAkunNamaMap — null only for a
   // shift that has genuinely never had any activity recorded yet.
   stafOperasionalNama: string | null;
+  kepalaNama: string | null;
+  wakilKepalaNama: string | null;
   mesinList: MesinRow[];
   mesinEvents: MesinEventRow[];
   // Still needed here — passed through unchanged to RiwayatAktivitasProduksi
   // below, whose own "Ubah Aktivitas" dialog keeps the manual picker for
-  // correcting past shifts (see riwayat-aktivitas-produksi.tsx, untouched
-  // by this plan).
+  // correcting past shifts (see riwayat-aktivitas-produksi.tsx, which gained
+  // its own Kepala/Wakil wiring alongside this file's — see that file's
+  // Detail type and its TimProduksiRoster/QtyRecapCard call sites).
   stafOperasionalOptions: StafOperasionalOption[];
   timList: TimRow[];
   timSaya: { timId: number; nama: string; anggota: AnggotaTimRow[] } | null;
@@ -277,9 +282,28 @@ export function AktivitasProduksiView({
         </p>
       ) : (
         <>
-          <TimProduksiRoster tanggalUsaha={current.tanggalUsaha} shift={current.shift} susunanTim={susunanTim} canEdit onChanged={onChanged} />
+          <TimProduksiRoster
+            tanggalUsaha={current.tanggalUsaha}
+            shift={current.shift}
+            susunanTim={susunanTim}
+            kepalaAkunId={current.kepalaAkunId}
+            kepalaNama={kepalaNama}
+            kepalaHadir={current.kepalaHadir}
+            wakilKepalaAkunId={current.wakilKepalaAkunId}
+            wakilKepalaNama={wakilKepalaNama}
+            wakilHadir={current.wakilHadir}
+            canEdit
+            onChanged={onChanged}
+          />
           <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
-          <QtyRecapCard qty={qty} jumlahHadir={susunanTim.length} />
+          <QtyRecapCard
+            qty={qty}
+            jumlahHadir={
+              (current.kepalaAkunId != null && current.kepalaHadir ? 1 : 0) +
+              (current.wakilKepalaAkunId != null && current.wakilHadir ? 1 : 0) +
+              susunanTim.length
+            }
+          />
           <KerusakanCard tanggalUsaha={current.tanggalUsaha} shift={current.shift} current={current} onSaved={onChanged} />
         </>
       )}
