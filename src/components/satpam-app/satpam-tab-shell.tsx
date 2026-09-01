@@ -57,7 +57,7 @@ export function SatpamTabShell({
       <div className="relative min-h-0 flex-1">
         {visited.has("inspeksi") && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "inspeksi" && "hidden")}>
-            <InspeksiPanel cards={initialCards} timeline={initialTimeline} />
+            <InspeksiPanel cards={initialCards} timeline={initialTimeline} active={activeTab === "inspeksi"} />
           </div>
         )}
         {visited.has("patroli") && (

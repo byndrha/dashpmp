@@ -131,33 +131,33 @@ function TimelineCard({ entry }: { entry: SatpamTimelineEntry }) {
 
 // Konten tab "Inspeksi" — diekstrak dari SatpamBerandaClient lama, minus
 // <header>-nya (header sekarang dimiliki SatpamTabShell, dipakai bersama
-// oleh ketiga tab). Polling 30 detik dipertahankan apa adanya: router.refresh()
-// tetap benar di arsitektur baru karena ini adalah re-render Server
-// Component sungguhan untuk route (tabs)/*/page.tsx yang sedang dimuat,
-// yang hanya memengaruhi prop data route itu sendiri.
+// oleh ketiga tab).
 export function InspeksiPanel({
   cards,
   timeline,
+  active,
 }: {
   cards: SatpamInspectionCard[];
   timeline: SatpamTimelineEntry[];
+  active: boolean;
 }) {
   const [tab, setTab] = useState<"BERANGKAT" | "DATANG">("BERANGKAT");
   const filtered = cards.filter((c) => c.tipe === tab);
   const router = useRouter();
 
-  // Board data is server-fetched once at page load — poll for fresh Kartu
-  // Pengiriman/Riwayat without the satpam having to close and reopen the
-  // app. router.refresh() re-runs the page's Server Component fetch and
-  // hands this client component new props; it's a no-op on an inactive tab
-  // (mobile browsers throttle background timers) and doesn't reset local
-  // state like `tab`. (Extracted as-is from SatpamBerandaClient — still
-  // correct here since this remains a real page-level Server Component
-  // re-render.)
+  // Polling only runs while this panel is the visible/active tab -- if it
+  // kept running while hidden behind Patroli/Tamu, router.refresh() would
+  // fire while Next's router believes the current route is that OTHER
+  // tab's path (history.replaceState alone is enough for Next's App Router
+  // to update its internal "current route" tracking, confirmed via network
+  // log), causing a real remount that resets this component's own `tab`
+  // state. Starting/stopping the interval on `active` keeps refresh timing
+  // aligned with whichever route Next's router actually believes is current.
   useEffect(() => {
+    if (!active) return;
     const id = setInterval(() => router.refresh(), 30000);
     return () => clearInterval(id);
-  }, [router]);
+  }, [router, active]);
 
   // Tidak pakai min-h-screen di sini (beda dari beranda-client.tsx lama) --
   // panel ini akan dibungkus wrapper h-full overflow-y-auto milik shell
