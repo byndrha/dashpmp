@@ -160,7 +160,11 @@ function KepalaSelect({ tim, produksiAkunOptions }: { tim: TimRow; produksiAkunO
   return (
     <Select value={tim.kepalaAkunId != null ? String(tim.kepalaAkunId) : UNSET} onValueChange={handleChange} disabled={pending}>
       <SelectTrigger className="w-full">
-        <SelectValue placeholder="Pilih Kepala Produksi" />
+        <SelectValue placeholder="Pilih Kepala Produksi">
+          {(v: string) =>
+            v === UNSET ? "Pilih Kepala Produksi" : (produksiAkunOptions.find((o) => String(o.akunId) === v)?.nama ?? "Pilih Kepala Produksi")
+          }
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={UNSET}>Belum ditentukan</SelectItem>

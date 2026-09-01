@@ -191,7 +191,11 @@ export function TimBertugasSelect({
   return (
     <Select value={timId != null ? String(timId) : BELUM_DIJADWALKAN} onValueChange={handleChange} disabled={pending}>
       <SelectTrigger>
-        <SelectValue placeholder="Pilih Tim" />
+        <SelectValue placeholder="Pilih Tim">
+          {(v: string) =>
+            v === BELUM_DIJADWALKAN ? "Pilih Tim" : (timList.find((t) => String(t.timId) === v)?.nama ?? "Pilih Tim")
+          }
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={BELUM_DIJADWALKAN} disabled>

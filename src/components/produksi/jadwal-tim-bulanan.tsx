@@ -42,7 +42,9 @@ function SelSelect({
   return (
     <Select value={timId != null ? String(timId) : UNSET} onValueChange={handleChange} disabled={pending}>
       <SelectTrigger className="h-8 text-xs">
-        <SelectValue placeholder="Belum dijadwalkan" />
+        <SelectValue placeholder="Belum dijadwalkan">
+          {(v: string) => (v === UNSET ? "Belum dijadwalkan" : (timList.find((t) => String(t.timId) === v)?.nama ?? "Belum dijadwalkan"))}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={UNSET} disabled>
