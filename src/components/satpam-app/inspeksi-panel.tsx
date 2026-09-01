@@ -146,11 +146,22 @@ export function InspeksiPanel({
   const filtered = cards.filter((c) => c.tipe === tab);
   const router = useRouter();
 
+  // Board data is server-fetched once at page load — poll for fresh Kartu
+  // Pengiriman/Riwayat without the satpam having to close and reopen the
+  // app. router.refresh() re-runs the page's Server Component fetch and
+  // hands this client component new props; it's a no-op on an inactive tab
+  // (mobile browsers throttle background timers) and doesn't reset local
+  // state like `tab`. (Extracted as-is from SatpamBerandaClient — still
+  // correct here since this remains a real page-level Server Component
+  // re-render.)
   useEffect(() => {
     const id = setInterval(() => router.refresh(), 30000);
     return () => clearInterval(id);
   }, [router]);
 
+  // Tidak pakai min-h-screen di sini (beda dari beranda-client.tsx lama) --
+  // panel ini akan dibungkus wrapper h-full overflow-y-auto milik shell
+  // (Task 2/3), bukan lagi dirender sebagai halaman penuh sendiri.
   return (
     <div className="flex flex-col bg-background">
       <Tabs value={tab} onValueChange={(v) => setTab(v as "BERANGKAT" | "DATANG")} className="flex-1">
