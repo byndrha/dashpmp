@@ -9,10 +9,11 @@ import type { DraftJadwalForProduksi, SelesaiMuatJadwalForProduksi } from "@/lib
 import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
 
 // Reused for both the Pengiriman tab (current + future period) and the
-// Riwayat tab (previous periods) — same Mulai Muat -> Alokasi -> Selesai
-// Muat flow either way, just fed a different pre-filtered list and a
-// different "Sudah Selesai Muat" fetcher, since a backlogged card is fully
-// actionable, not a frozen read-only record.
+// Riwayat tab (previous periods) — cards are read-only here (Mulai Muat /
+// pallet allocation now happens from the Stok Es warehouse map), just fed
+// a different pre-filtered list and a different "Sudah Selesai Muat"
+// fetcher, since a backlogged card still needs its own "Selesai Muat cepat"
+// action, not a frozen read-only record.
 export function KartuPengirimanList({
   initialJadwal,
   fetchSelesaiList,
@@ -116,10 +117,10 @@ export function KartuPengirimanList({
   );
 }
 
-// Quick "Selesai Muat" path fired from the card's top-right button — same
-// Ya/Tidak destination-confirmation UX as AlokasiScreen's dialog below, but
-// skips the Stok Es allocation screen entirely (produksiSelesaiMuatManualAction
-// touches no pallet stock).
+// Quick "Selesai Muat" path fired from the card's top-right button — a
+// simple Ya/Tidak destination-confirmation dialog that skips the Stok Es
+// allocation screen entirely (produksiSelesaiMuatManualAction touches no
+// pallet stock).
 function QuickSelesaiDialog({
   jadwal,
   onClose,
