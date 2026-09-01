@@ -2,18 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import {
-  getBatchAktifForAlokasiAction,
-  produksiStartMuatAction,
-  produksiSelesaiMuatAction,
-  produksiSelesaiMuatManualAction,
-  getJadwalDetailForProduksiAction,
-} from "@/app/mkesindo/produksi/actions";
+import { produksiSelesaiMuatManualAction, getJadwalDetailForProduksiAction } from "@/app/mkesindo/produksi/actions";
 import type { ActionResult } from "@/lib/action-result";
 import type { DraftJadwalForProduksi, SelesaiMuatJadwalForProduksi } from "@/lib/queries/produksi-muatan";
-import type { BatchAktifRow } from "@/lib/queries/produksi-warehouse";
 import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
 
 // Reused for both the Pengiriman tab (current + future period) and the
@@ -33,7 +25,6 @@ export function KartuPengirimanList({
   onAfterMuat: () => void;
 }) {
   const [jadwalList, setJadwalList] = useState(initialJadwal);
-  const [selected, setSelected] = useState<DraftJadwalForProduksi | null>(null);
   const [quickJadwal, setQuickJadwal] = useState<DraftJadwalForProduksi | null>(null);
   const [selesaiList, setSelesaiList] = useState<SelesaiMuatJadwalForProduksi[] | null>(null);
 
@@ -52,28 +43,11 @@ export function KartuPengirimanList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleDone(jadwalId: number) {
-    setJadwalList((prev) => prev.filter((j) => j.JadwalID !== jadwalId));
-    setSelected(null);
-    refreshSelesaiList();
-    onAfterMuat();
-  }
-
   function handleQuickDone(jadwalId: number) {
     setJadwalList((prev) => prev.filter((j) => j.JadwalID !== jadwalId));
     setQuickJadwal(null);
     refreshSelesaiList();
     onAfterMuat();
-  }
-
-  if (selected) {
-    return (
-      <IsiMuatanScreen
-        jadwal={selected}
-        onBack={() => setSelected(null)}
-        onDone={() => handleDone(selected.JadwalID)}
-      />
-    );
   }
 
   return (
@@ -83,7 +57,7 @@ export function KartuPengirimanList({
       ) : (
         jadwalList.map((jadwal) => (
           <div key={jadwal.JadwalID} className="relative rounded-lg border border-border p-3">
-            <button type="button" onClick={() => setSelected(jadwal)} className="block w-full pr-24 text-left">
+            <div className="block w-full pr-24 text-left">
               <p className="font-semibold">{jadwal.ArmadaNama}</p>
               <p className="text-xs text-muted-foreground">
                 {new Date(jadwal.JamJadwal).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
@@ -93,16 +67,13 @@ export function KartuPengirimanList({
               <p className="mt-1 text-sm">
                 Dibutuhkan: {jadwal.Qty10KGDibutuhkan} kantong 10kg, {jadwal.Qty5KGDibutuhkan} kantong 5kg
               </p>
-            </button>
+            </div>
             <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setQuickJadwal(jadwal);
-                }}
+                onClick={() => setQuickJadwal(jadwal)}
               >
                 Selesai Muat
               </Button>
@@ -226,218 +197,5 @@ function QuickSelesaiDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// Step 1/2 gate: a Jadwal already resumed after backing out mid-flow skips
-// straight to the alokasi screen (jadwal.JamMulaiMuat is already set), a
-// fresh one shows the explicit "Mulai Muat" screen first.
-function IsiMuatanScreen({
-  jadwal,
-  onBack,
-  onDone,
-}: {
-  jadwal: DraftJadwalForProduksi;
-  onBack: () => void;
-  onDone: () => void;
-}) {
-  const [step, setStep] = useState<"mulai" | "alokasi">(jadwal.JamMulaiMuat != null ? "alokasi" : "mulai");
-  const [startError, setStartError] = useState<string | null>(null);
-  const [startPending, startTransition] = useTransition();
-
-  if (step === "mulai") {
-    return (
-      <div className="flex flex-col gap-3 p-4">
-        <Button variant="outline" size="sm" onClick={onBack} className="w-fit">
-          Kembali
-        </Button>
-        <p className="font-semibold">{jadwal.ArmadaNama}</p>
-        <p className="text-sm text-muted-foreground">
-          {new Date(jadwal.JamJadwal).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
-          {" • "}
-          {new Date(jadwal.JamJadwal).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
-        </p>
-        <p className="text-sm">
-          Dibutuhkan: {jadwal.Qty10KGDibutuhkan} kantong 10kg, {jadwal.Qty5KGDibutuhkan} kantong 5kg
-        </p>
-        {startError && <p className="text-sm text-destructive">{startError}</p>}
-        <Button
-          disabled={startPending}
-          onClick={() => {
-            setStartError(null);
-            startTransition(async () => {
-              const result = await produksiStartMuatAction(jadwal.JadwalID);
-              if (!result.success) {
-                setStartError(result.error);
-                return;
-              }
-              setStep("alokasi");
-            });
-          }}
-        >
-          {startPending ? "Memproses..." : "Mulai Muat"}
-        </Button>
-      </div>
-    );
-  }
-
-  return <AlokasiScreen jadwal={jadwal} onBack={onBack} onDone={onDone} />;
-}
-
-function AlokasiScreen({
-  jadwal,
-  onBack,
-  onDone,
-}: {
-  jadwal: DraftJadwalForProduksi;
-  onBack: () => void;
-  onDone: () => void;
-}) {
-  const [batchList, setBatchList] = useState<BatchAktifRow[] | null>(null);
-  const [alokasi, setAlokasi] = useState<Record<number, number>>({});
-  const [qty5Dimuat, setQty5Dimuat] = useState(() => String(jadwal.Qty5KGDibutuhkan));
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const [confirmDetail, setConfirmDetail] = useState<JadwalDetailRow[] | null>(null);
-  const [confirmLoading, setConfirmLoading] = useState(false);
-
-  useEffect(() => {
-    getBatchAktifForAlokasiAction().then((result) => {
-      if (result.success) setBatchList(result.data);
-    });
-  }, []);
-
-  const totalQty10 = Object.values(alokasi).reduce((sum, q) => sum + q, 0);
-  const qty5Num = Number(qty5Dimuat) || 0;
-  const cukup = totalQty10 >= jadwal.Qty10KGDibutuhkan && qty5Num >= jadwal.Qty5KGDibutuhkan;
-
-  function setAmbil(batchId: number, value: number, max: number) {
-    setAlokasi((prev) => ({ ...prev, [batchId]: Math.min(Math.max(0, value), max) }));
-  }
-
-  function handleAmbilSemua(row: BatchAktifRow) {
-    setAlokasi((prev) => ({ ...prev, [row.BatchID]: row.SisaQty10KG }));
-  }
-
-  function buildAlokasiList() {
-    if (!batchList) return [];
-    return batchList
-      .filter((row) => (alokasi[row.BatchID] ?? 0) > 0)
-      .map((row) => ({ batchId: row.BatchID, qty10KG: alokasi[row.BatchID] }));
-  }
-
-  function handleOpenConfirm() {
-    setError(null);
-    setConfirmLoading(true);
-    getJadwalDetailForProduksiAction(jadwal.JadwalID).then((result) => {
-      setConfirmLoading(false);
-      if (!result.success) {
-        setError(result.error);
-        return;
-      }
-      setConfirmDetail(result.data);
-    });
-  }
-
-  function handleConfirmYa() {
-    const alokasiList = buildAlokasiList();
-    startTransition(async () => {
-      const result = await produksiSelesaiMuatAction({
-        jadwalId: jadwal.JadwalID,
-        alokasi: alokasiList,
-        qty5KGDimuat: qty5Num,
-      });
-      if (!result.success) {
-        setConfirmDetail(null);
-        setError(result.error);
-        return;
-      }
-      onDone();
-    });
-  }
-
-  return (
-    <div className="flex flex-col gap-3 p-4">
-      <Button variant="outline" size="sm" onClick={onBack} className="w-fit">
-        Kembali
-      </Button>
-      <p className="font-semibold">{jadwal.ArmadaNama}</p>
-      <p className="text-sm text-muted-foreground">
-        Dibutuhkan: {jadwal.Qty10KGDibutuhkan} kantong 10kg, {jadwal.Qty5KGDibutuhkan} kantong 5kg
-      </p>
-      <p className="text-sm">Sudah dialokasikan: {totalQty10} kantong 10kg</p>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">Qty 5kg dimuat (tanpa pallet, langsung)</label>
-        <Input type="number" value={qty5Dimuat} onChange={(e) => setQty5Dimuat(e.target.value)} className="mt-1" />
-      </div>
-
-      {batchList === null ? (
-        <p className="text-sm text-muted-foreground">Memuat data pallet...</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {batchList.map((row, index) => (
-            <div
-              key={row.BatchID}
-              className={index === 0 ? "rounded-lg border-2 border-amber-500 p-3" : "rounded-lg border border-border p-3"}
-            >
-              <div className="flex items-center justify-between">
-                <p className="font-medium">
-                  Pallet {row.Kode}
-                  {index === 0 && <span className="ml-2 text-xs text-amber-600">Paling lama — ambil dulu</span>}
-                </p>
-                <Button size="sm" variant="outline" onClick={() => handleAmbilSemua(row)}>
-                  Ambil semua sisa
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Sisa: {row.SisaQty10KG} kantong 10kg</p>
-              <div className="mt-2">
-                <Input
-                  type="number"
-                  placeholder="Qty 10kg"
-                  value={alokasi[row.BatchID] ?? ""}
-                  onChange={(e) => setAmbil(row.BatchID, Number(e.target.value), row.SisaQty10KG)}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button disabled={!cukup || confirmLoading} onClick={handleOpenConfirm}>
-        {confirmLoading ? "Memuat..." : "Konfirmasi Isi Muatan"}
-      </Button>
-
-      <Dialog open={confirmDetail != null} onOpenChange={(open) => !open && !pending && setConfirmDetail(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Selesaikan Muat?</DialogTitle>
-          </DialogHeader>
-          <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-            <p className="text-sm text-muted-foreground">
-              Muatan akan dikunci dan Surat Jalan/Invoice diterbitkan untuk tujuan berikut:
-            </p>
-            {confirmDetail?.map((d) => (
-              <div key={d.JadwalDetailID} className="rounded-md border border-border p-2 text-sm">
-                <p className="font-medium">{d.CustomerName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {d.Qty10KG} kantong 10kg, {d.Qty5KG} kantong 5kg
-                </p>
-              </div>
-            ))}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" disabled={pending} onClick={() => setConfirmDetail(null)}>
-              Tidak
-            </Button>
-            <Button disabled={pending} onClick={handleConfirmYa}>
-              {pending ? "Memproses..." : "Ya, Selesai Muat"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
   );
 }
