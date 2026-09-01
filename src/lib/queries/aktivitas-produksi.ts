@@ -17,6 +17,18 @@ export interface AktivitasShiftInfo {
   esJatuhQty: number;
   gantiReturnQty: number;
   sealerJebolQty: number;
+  // Kepala/Wakil Kepala Produksi Tim yang bertugas shift ini (dari
+  // DashboardTimProduksi.KepalaAkunID/WakilKepalaAkunID via TimID di
+  // atas) -- assignment standing, bukan per-shift. null kalau Tim belum
+  // punya Kepala/Wakil ditetapkan.
+  kepalaAkunId: number | null;
+  wakilKepalaAkunId: number | null;
+  // Status hadir KHUSUS shift ini (DashboardAktivitasProduksiShift.KepalaHadir/
+  // WakilHadir) -- tidak mengubah assignment standing di atas. true untuk
+  // shift yang belum pernah disimpan (belum ada baris untuk ditandai
+  // tidak hadir sama sekali).
+  kepalaHadir: boolean;
+  wakilHadir: boolean;
 }
 
 export interface QtyPerMesinRow {
@@ -49,6 +61,16 @@ async function getTotalStokEs10KG(pool: sql.ConnectionPool): Promise<number> {
     SELECT ISNULL(SUM(SisaQty10KG), 0) AS Total FROM DashboardProduksiBatch WHERE IsDeleted = 0 AND SisaQty10KG > 0
   `);
   return (result.recordset[0] as { Total: number }).Total;
+}
+
+async function getTimKepalaWakil(pool: sql.ConnectionPool, timId: number | null): Promise<{ kepalaAkunId: number | null; wakilKepalaAkunId: number | null }> {
+  if (timId == null) return { kepalaAkunId: null, wakilKepalaAkunId: null };
+  const result = await pool
+    .request()
+    .input("timId", sql.Int, timId)
+    .query(`SELECT KepalaAkunID, WakilKepalaAkunID FROM DashboardTimProduksi WHERE TimID = @timId AND IsDeleted = 0`);
+  const row = result.recordset[0] as { KepalaAkunID: number | null; WakilKepalaAkunID: number | null } | undefined;
+  return row ? { kepalaAkunId: row.KepalaAkunID, wakilKepalaAkunId: row.WakilKepalaAkunID } : { kepalaAkunId: null, wakilKepalaAkunId: null };
 }
 
 // Creates the shift's row on first write (any of the upsert functions
@@ -96,6 +118,10 @@ interface RawAktivitasRow {
   EsJatuhQty: number;
   GantiReturnQty: number;
   SealerJebolQty: number;
+  KepalaAkunID: number | null;
+  WakilKepalaAkunID: number | null;
+  KepalaHadir: boolean;
+  WakilHadir: boolean;
 }
 
 function mapAktivitasRow(r: RawAktivitasRow, tanggalUsaha: string, shift: ShiftNumber): AktivitasShiftInfo {
@@ -111,6 +137,10 @@ function mapAktivitasRow(r: RawAktivitasRow, tanggalUsaha: string, shift: ShiftN
     esJatuhQty: r.EsJatuhQty,
     gantiReturnQty: r.GantiReturnQty,
     sealerJebolQty: r.SealerJebolQty,
+    kepalaAkunId: r.KepalaAkunID,
+    wakilKepalaAkunId: r.WakilKepalaAkunID,
+    kepalaHadir: r.KepalaHadir,
+    wakilHadir: r.WakilHadir,
   };
 }
 
@@ -125,14 +155,18 @@ export async function getAktivitasForShift(tanggalUsaha: string, shift: ShiftNum
     .input("t", sql.Date, tanggalUsaha)
     .input("s", sql.TinyInt, shift)
     .query(`
-      SELECT AktivitasID, TimID, StafOperasionalAkunID, StokEsSebelumnya10KG, PecahKemasanQty, EsJatuhQty, GantiReturnQty, SealerJebolQty
-      FROM DashboardAktivitasProduksiShift WHERE TanggalUsaha = @t AND Shift = @s
+      SELECT s.AktivitasID, s.TimID, s.StafOperasionalAkunID, s.StokEsSebelumnya10KG, s.PecahKemasanQty, s.EsJatuhQty,
+             s.GantiReturnQty, s.SealerJebolQty, s.KepalaHadir, s.WakilHadir, t.KepalaAkunID, t.WakilKepalaAkunID
+      FROM DashboardAktivitasProduksiShift s
+      LEFT JOIN DashboardTimProduksi t ON t.TimID = s.TimID
+      WHERE s.TanggalUsaha = @t AND s.Shift = @s
     `);
   const row = result.recordset[0] as RawAktivitasRow | undefined;
   if (row) return mapAktivitasRow(row, tanggalUsaha, shift);
 
   const stokEs = await getTotalStokEs10KG(pool);
   const timId = await getJadwalUntukShift(tanggalUsaha, shift);
+  const { kepalaAkunId, wakilKepalaAkunId } = await getTimKepalaWakil(pool, timId);
   return {
     aktivitasId: null,
     tanggalUsaha,
@@ -145,6 +179,10 @@ export async function getAktivitasForShift(tanggalUsaha: string, shift: ShiftNum
     esJatuhQty: 0,
     gantiReturnQty: 0,
     sealerJebolQty: 0,
+    kepalaAkunId,
+    wakilKepalaAkunId,
+    kepalaHadir: true,
+    wakilHadir: true,
   };
 }
 
@@ -154,10 +192,12 @@ export async function getAktivitasRiwayat(limit = 30): Promise<AktivitasShiftInf
     .request()
     .input("limit", sql.Int, limit)
     .query(`
-      SELECT TOP (@limit) AktivitasID, TanggalUsaha, Shift, TimID, StafOperasionalAkunID, StokEsSebelumnya10KG,
-             PecahKemasanQty, EsJatuhQty, GantiReturnQty, SealerJebolQty
-      FROM DashboardAktivitasProduksiShift
-      ORDER BY ShiftMulai DESC
+      SELECT TOP (@limit) s.AktivitasID, s.TanggalUsaha, s.Shift, s.TimID, s.StafOperasionalAkunID, s.StokEsSebelumnya10KG,
+             s.PecahKemasanQty, s.EsJatuhQty, s.GantiReturnQty, s.SealerJebolQty, s.KepalaHadir, s.WakilHadir,
+             t.KepalaAkunID, t.WakilKepalaAkunID
+      FROM DashboardAktivitasProduksiShift s
+      LEFT JOIN DashboardTimProduksi t ON t.TimID = s.TimID
+      ORDER BY s.ShiftMulai DESC
     `);
   return (result.recordset as (RawAktivitasRow & { TanggalUsaha: Date; Shift: number })[]).map((r) =>
     mapAktivitasRow(r, r.TanggalUsaha.toISOString().slice(0, 10), r.Shift as ShiftNumber)
@@ -189,6 +229,29 @@ export async function upsertKerusakan(tanggalUsaha: string, shift: ShiftNumber, 
       SET PecahKemasanQty = @pecah, EsJatuhQty = @jatuh, GantiReturnQty = @retur, SealerJebolQty = @sealer, ModifiedDate = GETDATE()
       WHERE AktivitasID = @aktivitasId
     `);
+}
+
+// Menandai Kepala Produksi hadir/tidak hadir KHUSUS shift ini -- tidak
+// mengubah DashboardTimProduksi.KepalaAkunID (assignment standing Tim
+// tetap sama). Dipanggil dari roster Aktivitas Produksi (produksi-app).
+export async function setKepalaHadir(tanggalUsaha: string, shift: ShiftNumber, hadir: boolean, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const aktivitasId = await ensureAktivitasRow(pool, tanggalUsaha, shift, akunId);
+  await pool
+    .request()
+    .input("aktivitasId", sql.Int, aktivitasId)
+    .input("hadir", sql.Bit, hadir)
+    .query(`UPDATE DashboardAktivitasProduksiShift SET KepalaHadir = @hadir, ModifiedDate = GETDATE() WHERE AktivitasID = @aktivitasId`);
+}
+
+export async function setWakilHadir(tanggalUsaha: string, shift: ShiftNumber, hadir: boolean, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const aktivitasId = await ensureAktivitasRow(pool, tanggalUsaha, shift, akunId);
+  await pool
+    .request()
+    .input("aktivitasId", sql.Int, aktivitasId)
+    .input("hadir", sql.Bit, hadir)
+    .query(`UPDATE DashboardAktivitasProduksiShift SET WakilHadir = @hadir, ModifiedDate = GETDATE() WHERE AktivitasID = @aktivitasId`);
 }
 
 export interface SusunanTimRow {

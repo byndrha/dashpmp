@@ -5,6 +5,7 @@ export interface TimRow {
   timId: number;
   nama: string;
   kepalaAkunId: number | null;
+  wakilKepalaAkunId: number | null;
 }
 
 export interface AnggotaTimRow {
@@ -17,12 +18,15 @@ export interface AnggotaTimRow {
 export async function getAllTim(): Promise<TimRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT TimID, Nama, KepalaAkunID FROM DashboardTimProduksi WHERE IsDeleted = 0 ORDER BY Nama
+    SELECT TimID, Nama, KepalaAkunID, WakilKepalaAkunID FROM DashboardTimProduksi WHERE IsDeleted = 0 ORDER BY Nama
   `);
-  return (result.recordset as { TimID: number; Nama: string; KepalaAkunID: number | null }[]).map((r) => ({
+  return (
+    result.recordset as { TimID: number; Nama: string; KepalaAkunID: number | null; WakilKepalaAkunID: number | null }[]
+  ).map((r) => ({
     timId: r.TimID,
     nama: r.Nama,
     kepalaAkunId: r.KepalaAkunID,
+    wakilKepalaAkunId: r.WakilKepalaAkunID,
   }));
 }
 
@@ -33,6 +37,15 @@ export async function updateTimKepala(timId: number, kepalaAkunId: number | null
     .input("timId", sql.Int, timId)
     .input("kepalaAkunId", sql.Int, kepalaAkunId)
     .query(`UPDATE DashboardTimProduksi SET KepalaAkunID = @kepalaAkunId, ModifiedDate = GETDATE() WHERE TimID = @timId`);
+}
+
+export async function updateTimWakilKepala(timId: number, wakilKepalaAkunId: number | null): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("timId", sql.Int, timId)
+    .input("wakilKepalaAkunId", sql.Int, wakilKepalaAkunId)
+    .query(`UPDATE DashboardTimProduksi SET WakilKepalaAkunID = @wakilKepalaAkunId, ModifiedDate = GETDATE() WHERE TimID = @timId`);
 }
 
 // Dipakai panel "Tim Saya" di produksi-app -- mencari Tim milik akun yang
