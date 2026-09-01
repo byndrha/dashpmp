@@ -56,6 +56,7 @@ import {
   hapusAnggotaTim,
   hapusAnggotaTimIfOwned,
   updateTimKepala,
+  updateTimWakilKepala,
   getTimByKepalaAkunId,
   type AnggotaTimRow,
   type TimRow,
@@ -70,6 +71,8 @@ import {
   getSusunanTim,
   setSusunanTim,
   setTimBertugas,
+  setKepalaHadir,
+  setWakilHadir,
   getQtyRecapForShift,
   type AktivitasShiftInfo,
   type QtyRecap,
@@ -355,6 +358,15 @@ export async function updateTimKepalaAction(timId: number, kepalaAkunId: number 
   });
 }
 
+export async function updateTimWakilKepalaAction(timId: number, wakilKepalaAkunId: number | null): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiAdmin();
+    await updateTimWakilKepala(timId, wakilKepalaAkunId);
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
 export async function getProduksiAkunOptionsAction(): Promise<ActionResult<StafOperasionalOption[]>> {
   return runAction(async () => {
     await requireProduksiView();
@@ -428,6 +440,8 @@ export async function getCurrentAktivitasProduksiAction(): Promise<
     qty: QtyRecap;
     susunanTim: SusunanTimRow[];
     stafOperasionalNama: string | null;
+    kepalaNama: string | null;
+    wakilKepalaNama: string | null;
   }>
 > {
   return runAction(async () => {
@@ -438,7 +452,10 @@ export async function getCurrentAktivitasProduksiAction(): Promise<
       getQtyRecapForShift(tanggalUsaha, shift),
       getSusunanTim(tanggalUsaha, shift),
     ]);
-    const namaMap = await getAkunNamaMap(current.stafOperasionalAkunId != null ? [current.stafOperasionalAkunId] : []);
+    const akunIds = [current.stafOperasionalAkunId, current.kepalaAkunId, current.wakilKepalaAkunId].filter(
+      (id): id is number => id != null
+    );
+    const namaMap = await getAkunNamaMap(akunIds);
     return {
       current,
       qty,
@@ -447,6 +464,8 @@ export async function getCurrentAktivitasProduksiAction(): Promise<
         current.stafOperasionalAkunId != null
           ? (namaMap.get(current.stafOperasionalAkunId) ?? null)
           : null,
+      kepalaNama: current.kepalaAkunId != null ? (namaMap.get(current.kepalaAkunId) ?? null) : null,
+      wakilKepalaNama: current.wakilKepalaAkunId != null ? (namaMap.get(current.wakilKepalaAkunId) ?? null) : null,
     };
   });
 }
@@ -470,6 +489,8 @@ export async function getAktivitasDetailAction(
     qty: QtyRecap;
     susunanTim: SusunanTimRow[];
     stafOperasionalNama: string | null;
+    kepalaNama: string | null;
+    wakilKepalaNama: string | null;
   }>
 > {
   return runAction(async () => {
@@ -479,7 +500,10 @@ export async function getAktivitasDetailAction(
       getQtyRecapForShift(tanggalUsaha, shift),
       getSusunanTim(tanggalUsaha, shift),
     ]);
-    const namaMap = await getAkunNamaMap(current.stafOperasionalAkunId != null ? [current.stafOperasionalAkunId] : []);
+    const akunIds = [current.stafOperasionalAkunId, current.kepalaAkunId, current.wakilKepalaAkunId].filter(
+      (id): id is number => id != null
+    );
+    const namaMap = await getAkunNamaMap(akunIds);
     return {
       current,
       qty,
@@ -488,6 +512,8 @@ export async function getAktivitasDetailAction(
         current.stafOperasionalAkunId != null
           ? (namaMap.get(current.stafOperasionalAkunId) ?? null)
           : null,
+      kepalaNama: current.kepalaAkunId != null ? (namaMap.get(current.kepalaAkunId) ?? null) : null,
+      wakilKepalaNama: current.wakilKepalaAkunId != null ? (namaMap.get(current.wakilKepalaAkunId) ?? null) : null,
     };
   });
 }
@@ -541,6 +567,24 @@ export async function setTimBertugasAction(tanggalUsaha: string, shift: ShiftNum
   return runAction(async () => {
     const session = await requireProduksiView();
     await setTimBertugas(tanggalUsaha, shift, timId, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function setKepalaHadirAction(tanggalUsaha: string, shift: ShiftNumber, hadir: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    await setKepalaHadir(tanggalUsaha, shift, hadir, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi-app");
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function setWakilHadirAction(tanggalUsaha: string, shift: ShiftNumber, hadir: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    await setWakilHadir(tanggalUsaha, shift, hadir, Number(session.user.id));
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/laporan");
   });
