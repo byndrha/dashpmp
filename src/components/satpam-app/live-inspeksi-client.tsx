@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { PhotoStatusOverlay, type PhotoUploadStatus } from "@/components/ui/photo-status-overlay";
 import { cn } from "@/lib/utils";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import { useLiveCameraCapture } from "@/hooks/use-live-camera-capture";
@@ -246,6 +247,12 @@ export function LiveInspeksiClient({
 
   const photosDone = JENIS_FOTO_LIST.filter((j) => photos[j] != null).length;
 
+  function photoStatusFor(j: JenisFotoKendaraan): PhotoUploadStatus | undefined {
+    if (uploading === j) return "uploading";
+    if (photos[j] != null) return "success";
+    return undefined;
+  }
+
   return (
     <div className="fixed inset-0 flex flex-col bg-black text-foreground">
       <ActiveSlotView
@@ -309,11 +316,14 @@ export function LiveInspeksiClient({
                 j === activeSlot ? "border-warning bg-warning/10" : "border-border bg-muted/30"
               )}
             >
-              <div className="aspect-square w-full overflow-hidden rounded bg-muted/50">
-                {previewUrls[j] ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- local object URL, not a static build asset
-                  <img src={previewUrls[j]} alt={JENIS_FOTO_LABEL[j]} className="h-full w-full object-cover" />
-                ) : null}
+              <div className="relative aspect-square w-full">
+                <div className="h-full w-full overflow-hidden rounded bg-muted/50">
+                  {previewUrls[j] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- local object URL, not a static build asset
+                    <img src={previewUrls[j]} alt={JENIS_FOTO_LABEL[j]} className="h-full w-full object-cover" />
+                  ) : null}
+                </div>
+                <PhotoStatusOverlay status={photoStatusFor(j)} />
               </div>
               <span className={cn("text-[9px] font-bold uppercase", j === activeSlot ? "text-warning" : "text-muted-foreground")}>
                 {JENIS_FOTO_LABEL[j]}
