@@ -15,12 +15,13 @@ import { SATPAM_SHIFT_LIST, SATPAM_SHIFT_LABEL, type SatpamShiftType } from "@/l
 import type { SatpamJadwalDisplayRow } from "@/lib/queries/satpam-jadwal-jaga";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function dateOnlyISO(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function isValidRange(range: { start: string; end: string }): boolean {
+  if (!range.start || !range.end) return false;
+  return range.start <= range.end; // ISO "YYYY-MM-DD" strings compare correctly lexicographically
 }
 
 // Panel admin roster shift Satpam -- form tambah + daftar dikelompokkan per
@@ -31,14 +32,16 @@ export function SatpamRosterPanel({
   initialRows,
   satpamOptions,
   initialRange,
+  todayISO,
 }: {
   initialRows: SatpamJadwalDisplayRow[];
   satpamOptions: StafOperasionalOption[];
   initialRange: { start: string; end: string };
+  todayISO: string;
 }) {
   const [rows, setRows] = useState(initialRows);
   const [range, setRange] = useState(initialRange);
-  const [tanggal, setTanggal] = useState(todayISO());
+  const [tanggal, setTanggal] = useState(todayISO);
   const [shiftType, setShiftType] = useState<SatpamShiftType | "">("");
   const [satpamAkunId, setSatpamAkunId] = useState("");
   const [catatan, setCatatan] = useState("");
@@ -183,11 +186,25 @@ export function SatpamRosterPanel({
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex w-40 flex-col gap-1">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Dari Tanggal</span>
-            <Input type="date" value={range.start} onChange={(e) => refetchRange({ ...range, start: e.target.value })} />
+            <Input
+              type="date"
+              value={range.start}
+              onChange={(e) => {
+                const next = { ...range, start: e.target.value };
+                refetchRange(isValidRange(next) ? next : initialRange);
+              }}
+            />
           </div>
           <div className="flex w-40 flex-col gap-1">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Sampai Tanggal</span>
-            <Input type="date" value={range.end} onChange={(e) => refetchRange({ ...range, end: e.target.value })} />
+            <Input
+              type="date"
+              value={range.end}
+              onChange={(e) => {
+                const next = { ...range, end: e.target.value };
+                refetchRange(isValidRange(next) ? next : initialRange);
+              }}
+            />
           </div>
           {filterPending && <span className="text-xs text-muted-foreground">Memuat...</span>}
         </div>
