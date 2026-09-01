@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { tambahAnggotaTimAction, updateAnggotaTimAction, hapusAnggotaTimAction, updateTimKepalaAction } from "@/app/mkesindo/produksi/actions";
+import { tambahAnggotaTimAction, updateAnggotaTimAction, hapusAnggotaTimAction, updateTimKepalaAction, updateTimWakilKepalaAction } from "@/app/mkesindo/produksi/actions";
 import type { AnggotaTimRow, TimRow } from "@/lib/queries/tim-produksi";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 
@@ -157,18 +157,50 @@ function KepalaSelect({ tim, produksiAkunOptions }: { tim: TimRow; produksiAkunO
     });
   }
 
+  const options = produksiAkunOptions.filter((o) => o.akunId !== tim.wakilKepalaAkunId);
+
   return (
     <Select value={tim.kepalaAkunId != null ? String(tim.kepalaAkunId) : UNSET} onValueChange={handleChange} disabled={pending}>
       <SelectTrigger className="w-full">
         <SelectValue placeholder="Pilih Kepala Produksi">
+          {(v: string) => (v === UNSET ? "Pilih Kepala Produksi" : (options.find((o) => String(o.akunId) === v)?.nama ?? "Pilih Kepala Produksi"))}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={UNSET}>Belum ditentukan</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o.akunId} value={String(o.akunId)}>
+            {o.nama}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function WakilKepalaSelect({ tim, produksiAkunOptions }: { tim: TimRow; produksiAkunOptions: StafOperasionalOption[] }) {
+  const [pending, startTransition] = useTransition();
+
+  function handleChange(value: string | null) {
+    startTransition(async () => {
+      await updateTimWakilKepalaAction(tim.timId, !value || value === UNSET ? null : Number(value));
+    });
+  }
+
+  const options = produksiAkunOptions.filter((o) => o.akunId !== tim.kepalaAkunId);
+
+  return (
+    <Select value={tim.wakilKepalaAkunId != null ? String(tim.wakilKepalaAkunId) : UNSET} onValueChange={handleChange} disabled={pending}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Pilih Wakil Kepala Produksi">
           {(v: string) =>
-            v === UNSET ? "Pilih Kepala Produksi" : (produksiAkunOptions.find((o) => String(o.akunId) === v)?.nama ?? "Pilih Kepala Produksi")
+            v === UNSET ? "Pilih Wakil Kepala Produksi" : (options.find((o) => String(o.akunId) === v)?.nama ?? "Pilih Wakil Kepala Produksi")
           }
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={UNSET}>Belum ditentukan</SelectItem>
-        {produksiAkunOptions.map((o) => (
+        {options.map((o) => (
           <SelectItem key={o.akunId} value={String(o.akunId)}>
             {o.nama}
           </SelectItem>
@@ -195,6 +227,10 @@ export function PanelTimProduksi({
           <div>
             <Label className="text-xs">Kepala Produksi</Label>
             <KepalaSelect tim={tim} produksiAkunOptions={produksiAkunOptions} />
+          </div>
+          <div>
+            <Label className="text-xs">Wakil Kepala Produksi</Label>
+            <WakilKepalaSelect tim={tim} produksiAkunOptions={produksiAkunOptions} />
           </div>
           {anggotaList
             .filter((a) => a.timId === tim.timId)
