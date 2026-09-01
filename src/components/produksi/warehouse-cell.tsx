@@ -21,19 +21,30 @@ export function WarehouseCell({
   kode,
   row,
   onClick,
+  disabled = false,
+  highlighted = false,
 }: {
   kode: string;
   row: PalletPosisiRow | undefined;
   onClick?: (row: PalletPosisiRow | undefined) => void;
+  // Mode ambil stok: kotak kosong dinonaktifkan sepenuhnya (mode ini murni
+  // untuk mengambil, bukan menambah stok) -- lihat pallet-ambil-panel.tsx.
+  disabled?: boolean;
+  // Mode ambil stok: menandai pallet FIFO-terdepan hasil
+  // getBatchAktifForAlokasiAction ("ambil di sini dulu").
+  highlighted?: boolean;
 }) {
   const terisi = (row?.JumlahBatchAktif ?? 0) > 0;
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => onClick?.(row)}
       className={cn(
         "relative flex size-[55px] shrink-0 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight",
-        terisi ? ageClass(row!.TanggalLabelTertua, row!.JamPanenTertua) : "bg-muted text-muted-foreground"
+        terisi ? ageClass(row!.TanggalLabelTertua, row!.JamPanenTertua) : "bg-muted text-muted-foreground",
+        disabled && "opacity-40",
+        highlighted && "ring-2 ring-offset-1 ring-sky-500"
       )}
     >
       <span>{kode}</span>

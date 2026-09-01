@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
 import { TambahProduksiDialog, RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Truck } from "lucide-react";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
+import { produksiStartMuatAction } from "@/app/mkesindo/produksi/actions";
+import { usePalletAmbilStok, PalletCellAmbilPopover, FloatingAmbilPanel } from "@/components/produksi-app/pallet-ambil-panel";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 import type { DraftJadwalForProduksi } from "@/lib/queries/produksi-muatan";
 
@@ -23,6 +25,7 @@ export function WarehouseView({
   posisi,
   jadwal = [],
   onAfterTambah,
+  onAfterMuat,
 }: {
   posisi: PalletPosisiRow[];
   // Daftar draft jadwal yang sama seperti yang dipakai tab Pengiriman
@@ -32,6 +35,9 @@ export function WarehouseView({
   // supaya panel ini gunanya kepakai.
   jadwal?: DraftJadwalForProduksi[];
   onAfterTambah: () => void;
+  // Dipanggil setelah satu sesi ambil-stok selesai (Selesai Muat sukses) --
+  // pemanggil me-refresh baik posisi pallet maupun daftar Kartu Pengiriman.
+  onAfterMuat: () => void;
 }) {
   const [detailPosisi, setDetailPosisi] = useState<PalletPosisiRow | null>(null);
   const [dialogPosisi, setDialogPosisi] = useState<PalletPosisiRow | null>(null);
@@ -52,6 +58,40 @@ export function WarehouseView({
     const interval = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(interval);
   }, []);
+
+  const [pickingJadwal, setPickingJadwal] = useState<DraftJadwalForProduksi | null>(null);
+  const [openPopoverKode, setOpenPopoverKode] = useState<string | null>(null);
+  const [confirmMulaiJadwal, setConfirmMulaiJadwal] = useState<DraftJadwalForProduksi | null>(null);
+  const [mulaiError, setMulaiError] = useState<string | null>(null);
+  const [mulaiPending, startMulaiTransition] = useTransition();
+
+  const pallet = usePalletAmbilStok(pickingJadwal, () => {
+    setPickingJadwal(null);
+    setOpenPopoverKode(null);
+    onAfterMuat();
+  });
+
+  function handleTruckCardClick(j: DraftJadwalForProduksi) {
+    if (j.JamMulaiMuat != null) {
+      setPickingJadwal(j);
+      return;
+    }
+    setConfirmMulaiJadwal(j);
+  }
+
+  function handleMulaiYa() {
+    if (!confirmMulaiJadwal) return;
+    setMulaiError(null);
+    startMulaiTransition(async () => {
+      const result = await produksiStartMuatAction(confirmMulaiJadwal.JadwalID);
+      if (!result.success) {
+        setMulaiError(result.error);
+        return;
+      }
+      setPickingJadwal(confirmMulaiJadwal);
+      setConfirmMulaiJadwal(null);
+    });
+  }
 
   const jadwalMendekat = jadwal
     .filter((j) => {
@@ -144,9 +184,20 @@ export function WarehouseView({
                                   <span className="size-3 rounded-full border border-border bg-muted-foreground/30" />
                                 </span>
                               )}
-                              {row.map((kode) => (
-                                <WarehouseCell key={kode} kode={kode} row={byKode.get(kode)} onClick={handleCellClick} />
-                              ))}
+                              {row.map((kode) =>
+                                pickingJadwal != null ? (
+                                  <PalletCellAmbilPopover
+                                    key={kode}
+                                    kode={kode}
+                                    row={byKode.get(kode)}
+                                    pallet={pallet}
+                                    open={openPopoverKode === kode}
+                                    onOpenChange={(open) => setOpenPopoverKode(open ? kode : null)}
+                                  />
+                                ) : (
+                                  <WarehouseCell key={kode} kode={kode} row={byKode.get(kode)} onClick={handleCellClick} />
+                                )
+                              )}
                             </div>
                           ))}
                           {g.dividerAfter && (
@@ -182,7 +233,14 @@ export function WarehouseView({
                   {/* Dermaga truk — hanya di zona Utara, sejajar dengan 3 "Jalan & Jendela".
                       Ditaruh sebagai kolom terpisah (bukan menimpa kotak pallete) supaya
                       ukuran/skala pallete di atas sama sekali tidak berubah. */}
-                  {zone.id === "U" && <TruckDockColumn jadwal={jadwalMendekat} now={now} />}
+                  {zone.id === "U" && (
+                    <TruckDockColumn
+                      jadwal={jadwalMendekat}
+                      now={now}
+                      pickingActiveId={pickingJadwal?.JadwalID ?? null}
+                      onSelect={handleTruckCardClick}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -206,6 +264,37 @@ export function WarehouseView({
 
         <KartuPengirimanMendekatPanel jadwal={jadwalMendekat} now={now} />
       </div>
+
+      {pickingJadwal && (
+        <FloatingAmbilPanel
+          jadwal={pickingJadwal}
+          pallet={pallet}
+          onBatal={() => {
+            setPickingJadwal(null);
+            setOpenPopoverKode(null);
+          }}
+        />
+      )}
+
+      <Dialog open={confirmMulaiJadwal != null} onOpenChange={(open) => !open && !mulaiPending && setConfirmMulaiJadwal(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mulai Muat — {confirmMulaiJadwal?.ArmadaNama}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm">
+            Dibutuhkan: {confirmMulaiJadwal?.Qty10KGDibutuhkan} kantong 10kg, {confirmMulaiJadwal?.Qty5KGDibutuhkan} kantong 5kg
+          </p>
+          {mulaiError && <p className="text-sm text-destructive">{mulaiError}</p>}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" disabled={mulaiPending} onClick={() => setConfirmMulaiJadwal(null)}>
+              Batal
+            </Button>
+            <Button disabled={mulaiPending} onClick={handleMulaiYa}>
+              {mulaiPending ? "Memproses..." : "Ya, Mulai Muat"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={detailPosisi != null} onOpenChange={(open) => !open && setDetailPosisi(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -313,7 +402,20 @@ const TRUCK_WIDTH_PX = PALLET_CELL_PX * 4 + 12; // ~panjang kendaraan: 4 kotak p
 // pallete berubah nanti. Selalu menggambar 3 truk — kalau untuk slot itu
 // belum ada jadwal keberangkatan yang mendekat, truk tetap tergambar tapi
 // kosong & redup (lihat TruckCard).
-function TruckDockColumn({ jadwal, now }: { jadwal: DraftJadwalForProduksi[]; now: Date }) {
+function TruckDockColumn({
+  jadwal,
+  now,
+  pickingActiveId,
+  onSelect,
+}: {
+  jadwal: DraftJadwalForProduksi[];
+  now: Date;
+  // JadwalID sesi ambil-stok yang sedang berjalan (null kalau tidak ada
+  // sesi aktif) -- dermaga LAIN selain yang aktif dinonaktifkan sementara,
+  // mencegah dua sesi ambil-stok berjalan tumpang tindih.
+  pickingActiveId: number | null;
+  onSelect: (jadwal: DraftJadwalForProduksi) => void;
+}) {
   // Maksimal 3 jadwal terdekat untuk 3 dermaga; kalau jadwalnya lebih dari
   // 3, sisanya tetap kelihatan di panel "Keberangkatan Mendekat" di kanan.
   const slots: Array<DraftJadwalForProduksi | null> = [0, 1, 2].map((i) => jadwal[i] ?? null);
@@ -322,7 +424,12 @@ function TruckDockColumn({ jadwal, now }: { jadwal: DraftJadwalForProduksi[]; no
     <div className="grid grid-rows-3 gap-2">
       {slots.map((j, i) => (
         <div key={j?.JadwalID ?? `dermaga-kosong-${i}`} className="flex items-center">
-          <TruckCard jadwal={j} now={now} />
+          <TruckCard
+            jadwal={j}
+            now={now}
+            onClick={j ? () => onSelect(j) : undefined}
+            disabled={pickingActiveId != null && j?.JadwalID !== pickingActiveId}
+          />
         </div>
       ))}
     </div>
@@ -334,7 +441,17 @@ function TruckDockColumn({ jadwal, now }: { jadwal: DraftJadwalForProduksi[]; no
 // penanda "ini dermaga truk". Kalau `jadwal` null (belum ada keberangkatan
 // yang mendekat untuk dermaga ini), slotnya tetap digambar — arsiran &
 // border tetap ada — hanya diredupkan (opacity rendah), bukan disembunyikan.
-function TruckCard({ jadwal, now }: { jadwal: DraftJadwalForProduksi | null; now: Date }) {
+function TruckCard({
+  jadwal,
+  now,
+  onClick,
+  disabled = false,
+}: {
+  jadwal: DraftJadwalForProduksi | null;
+  now: Date;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   const isKosong = jadwal == null;
   const diffMs = jadwal ? new Date(jadwal.JamJadwal).getTime() - now.getTime() : 0;
   const terlambat = !isKosong && diffMs < 0;
@@ -354,21 +471,25 @@ function TruckCard({ jadwal, now }: { jadwal: DraftJadwalForProduksi | null; now
   const hatchThickness = isKosong ? "2.5px" : "1.5px";
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isKosong || disabled}
       style={{
         height: TRUCK_HEIGHT_PX,
         width: TRUCK_WIDTH_PX,
         backgroundImage: `repeating-linear-gradient(135deg, ${hatchColor} 0px, ${hatchColor} ${hatchThickness}, transparent ${hatchThickness}, transparent 8px)`,
       }}
       className={cn(
-        "relative flex shrink-0 items-center gap-2 overflow-hidden rounded-md border px-2 py-1",
+        "relative flex shrink-0 items-center gap-2 overflow-hidden rounded-md border px-2 py-1 text-left",
         isKosong
           ? "border-dashed border-border/60 opacity-50"
           : terlambat
           ? "border-red-600/40"
           : sedangDimuat
           ? "border-amber-500/50"
-          : "border-sky-500/40"
+          : "border-sky-500/40",
+        disabled && !isKosong && "opacity-30"
       )}
       title={isKosong ? "Belum ada jadwal keberangkatan mendekat" : jadwal.ArmadaNama}
     >
@@ -395,7 +516,7 @@ function TruckCard({ jadwal, now }: { jadwal: DraftJadwalForProduksi | null; now
       </div>
       {/* Ikon truk tetap di ujung, sebagai penanda dermaga */}
       <Truck className={cn("size-4 shrink-0", isKosong ? "text-muted-foreground/50" : "text-current")} />
-    </div>
+    </button>
   );
 }
 
