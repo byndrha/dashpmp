@@ -26,6 +26,7 @@ export function WarehouseView({
   jadwal = [],
   onAfterTambah,
   onAfterMuat,
+  onMulaiMuatStarted,
 }: {
   posisi: PalletPosisiRow[];
   // Daftar draft jadwal yang sama seperti yang dipakai tab Pengiriman
@@ -38,6 +39,12 @@ export function WarehouseView({
   // Dipanggil setelah satu sesi ambil-stok selesai (Selesai Muat sukses) --
   // pemanggil me-refresh baik posisi pallet maupun daftar Kartu Pengiriman.
   onAfterMuat: () => void;
+  // Dipanggil segera setelah produksiStartMuatAction sukses, supaya pemanggil
+  // bisa memperbarui field JamMulaiMuat pada jadwal itu di daftarnya sendiri
+  // TANPA memicu refetch penuh (refetch penuh lewat onAfterMuat akan
+  // menge-null-kan warehouseJadwal dan membuat WarehouseView ter-unmount di
+  // tengah sesi ambil-stok yang baru saja dimulai).
+  onMulaiMuatStarted: (jadwalId: number, jamMulaiMuat: Date) => void;
 }) {
   const [detailPosisi, setDetailPosisi] = useState<PalletPosisiRow | null>(null);
   const [dialogPosisi, setDialogPosisi] = useState<PalletPosisiRow | null>(null);
@@ -88,7 +95,9 @@ export function WarehouseView({
         setMulaiError(result.error);
         return;
       }
-      setPickingJadwal(confirmMulaiJadwal);
+      const jamMulaiMuat = new Date();
+      setPickingJadwal({ ...confirmMulaiJadwal, JamMulaiMuat: jamMulaiMuat });
+      onMulaiMuatStarted(confirmMulaiJadwal.JadwalID, jamMulaiMuat);
       setConfirmMulaiJadwal(null);
     });
   }

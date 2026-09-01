@@ -395,6 +395,11 @@ export function ProduksiTabShell({
                 refreshWarehouse();
                 refreshKartuPengiriman();
               }}
+              onMulaiMuatStarted={(jadwalId, jamMulaiMuat) => {
+                setWarehouseJadwal((prev) =>
+                  prev ? prev.map((j) => (j.JadwalID === jadwalId ? { ...j, JamMulaiMuat: jamMulaiMuat } : j)) : prev
+                );
+              }}
             />
             <TakeAwayMuatanList
               initialPending={takeAwayPending}
