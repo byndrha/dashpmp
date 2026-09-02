@@ -61,7 +61,11 @@ export async function addPatroliFotoAction(input: {
   longitude: number | null;
 }): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireSatpam();
+    const session = await requireSatpam();
+    const sesi = await getActivePatroliSesi(Number(session.user.id));
+    if (!sesi || sesi.sesiId !== input.sesiId) {
+      throw new AppError("Sesi Patroli tidak ditemukan atau sudah selesai.");
+    }
     if (input.titikPatroli === null && !input.keterangan?.trim()) {
       throw new AppError("Foto Tambahan wajib diberi keterangan.");
     }
