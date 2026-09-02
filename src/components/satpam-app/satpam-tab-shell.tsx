@@ -7,10 +7,11 @@ import { UserMenu } from "@/components/dashboard/user-menu";
 import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
 import { InspeksiPanel } from "@/components/satpam-app/inspeksi-panel";
 import { PatroliPanel } from "@/components/satpam-app/patroli-panel";
-import { ComingSoonPanel } from "@/components/satpam-app/coming-soon-panel";
+import { TamuPanel } from "@/components/satpam-app/tamu-panel";
 import { SatpamBottomNav } from "@/components/satpam-app/satpam-bottom-nav";
 import type { SatpamInspectionCard, SatpamTimelineEntry } from "@/lib/queries/satpam-inspection";
 import type { PatroliSesiDetail, PatroliSesiRingkas } from "@/lib/queries/satpam-patroli";
+import type { TamuKunjunganRow } from "@/lib/queries/satpam-tamu";
 
 export type SatpamTabKey = "inspeksi" | "patroli" | "tamu";
 
@@ -33,6 +34,8 @@ export function SatpamTabShell({
   initialTimeline,
   initialActivePatroliSesi,
   initialPatroliRiwayat,
+  initialTamuDiDalam,
+  initialTamuRiwayat,
 }: {
   initialTab: SatpamTabKey;
   userName: string;
@@ -41,6 +44,8 @@ export function SatpamTabShell({
   initialTimeline: SatpamTimelineEntry[];
   initialActivePatroliSesi: PatroliSesiDetail | null;
   initialPatroliRiwayat: PatroliSesiRingkas[];
+  initialTamuDiDalam: TamuKunjunganRow[];
+  initialTamuRiwayat: TamuKunjunganRow[];
 }) {
   const [activeTab, setActiveTab] = useState<SatpamTabKey>(initialTab);
   const [visited, setVisited] = useState<Set<SatpamTabKey>>(() => new Set([initialTab]));
@@ -72,8 +77,8 @@ export function SatpamTabShell({
           </div>
         )}
         {visited.has("tamu") && (
-          <div className={cn("h-full", activeTab !== "tamu" && "hidden")}>
-            <ComingSoonPanel title="Tamu" />
+          <div className={cn("h-full overflow-y-auto", activeTab !== "tamu" && "hidden")}>
+            <TamuPanel initialDiDalam={initialTamuDiDalam} initialRiwayat={initialTamuRiwayat} />
           </div>
         )}
       </div>
