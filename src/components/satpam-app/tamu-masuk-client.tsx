@@ -112,7 +112,13 @@ export function TamuMasukClient() {
           <div className="flex flex-col gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element -- local object URL, not a static build asset */}
             <img src={previewUrl} alt="Foto masuk tamu" className="aspect-video w-full rounded-lg object-cover" />
-            <Button variant="outline" onClick={() => setCaptured(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCaptured(null);
+                setCameraActive(true);
+              }}
+            >
               <RotateCcw className="size-4" /> Ambil Ulang
             </Button>
           </div>
