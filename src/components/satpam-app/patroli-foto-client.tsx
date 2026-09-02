@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { usePatroliCameraCapture, type PatroliCaptureResult } from "@/hooks/use-patroli-camera-capture";
+import { useWatermarkCameraCapture, type WatermarkCaptureResult } from "@/hooks/use-watermark-camera-capture";
 import { addPatroliFotoAction } from "@/app/mkesindo/satpam-app/actions";
 
 async function uploadPatroliFoto(file: File, sesiId: number, titikPatroli: string | null): Promise<string> {
@@ -22,7 +22,7 @@ async function uploadPatroliFoto(file: File, sesiId: number, titikPatroli: strin
 
 export function PatroliFotoClient({ sesiId, titikPatroli }: { sesiId: number; titikPatroli: string | null }) {
   const router = useRouter();
-  const [captured, setCaptured] = useState<PatroliCaptureResult | null>(null);
+  const [captured, setCaptured] = useState<WatermarkCaptureResult | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [keterangan, setKeterangan] = useState("");
   const [saving, setSaving] = useState(false);
@@ -33,7 +33,7 @@ export function PatroliFotoClient({ sesiId, titikPatroli }: { sesiId: number; ti
   // dan live-inspeksi-client.tsx yang sudah ada).
   useEffect(() => {
     if (!captured) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- same accepted pattern as use-patroli-camera-capture.ts's setError(null) reset
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- same accepted pattern as use-watermark-camera-capture.ts's setError(null) reset
       setPreviewUrl(null);
       return;
     }
@@ -42,7 +42,7 @@ export function PatroliFotoClient({ sesiId, titikPatroli }: { sesiId: number; ti
     return () => URL.revokeObjectURL(url);
   }, [captured]);
 
-  const { videoRef, error, capturing, retry, handleCapture } = usePatroliCameraCapture({
+  const { videoRef, error, capturing, retry, handleCapture } = useWatermarkCameraCapture({
     label: titikPatroli ?? "tambahan",
     active: captured === null,
     onCapture: (result) => setCaptured(result),

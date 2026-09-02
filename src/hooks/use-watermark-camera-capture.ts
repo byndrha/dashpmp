@@ -2,19 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export interface PatroliCaptureResult {
+export interface WatermarkCaptureResult {
   file: File;
   latitude: number | null;
   longitude: number | null;
 }
 
-export interface UsePatroliCameraCaptureOptions {
+export interface UseWatermarkCameraCaptureOptions {
   label: string;
   active: boolean;
-  onCapture: (result: PatroliCaptureResult) => void;
+  onCapture: (result: WatermarkCaptureResult) => void;
 }
 
-export interface UsePatroliCameraCaptureResult {
+export interface UseWatermarkCameraCaptureResult {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   error: string | null;
   capturing: boolean;
@@ -25,9 +25,9 @@ export interface UsePatroliCameraCaptureResult {
 // Format tanggal+jam WIB untuk watermark -- SENGAJA pin timeZone:"Asia/Jakarta"
 // secara eksplisit (bukan mengandalkan zona waktu perangkat/browser), meniru
 // teknik getWibTimeHHmm di business-date.ts. Ini murni formatter kosmetik
-// untuk SATU pemakai (watermark foto), sehingga sengaja ditaruh di sini,
-// bukan di business-date.ts yang jadi tumpuan logika penulisan tanggal ke
-// database yang jauh lebih sensitif (lihat Global Constraints plan ini).
+// untuk pemakai watermark foto (Patroli & Tamu), sehingga sengaja ditaruh di
+// sini, bukan di business-date.ts yang jadi tumpuan logika penulisan tanggal
+// ke database yang jauh lebih sensitif (lihat Global Constraints plan ini).
 function formatWibWatermarkDateTime(now: Date): string {
   const formatter = new Intl.DateTimeFormat("id-ID", {
     timeZone: "Asia/Jakarta",
@@ -125,11 +125,11 @@ function drawWatermark(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement,
   });
 }
 
-export function usePatroliCameraCapture({
+export function useWatermarkCameraCapture({
   label,
   active,
   onCapture,
-}: UsePatroliCameraCaptureOptions): UsePatroliCameraCaptureResult {
+}: UseWatermarkCameraCaptureOptions): UseWatermarkCameraCaptureResult {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const capturingRef = useRef(false);
