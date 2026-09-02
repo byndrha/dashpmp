@@ -1,21 +1,11 @@
 import { getPool, sql } from "@/lib/db";
 import type { SatpamShiftType } from "@/lib/satpam-shift";
 
-export const PATROLI_TITIK_LIST: string[] = [
-  "Area Produksi Es Balok-A",
-  "Area Produksi Es Balok-B",
-  "Area Produksi Es Balok-C",
-  "Area Produksi Es Kristal-A",
-  "Area Produksi Es Kristal-B",
-  "Area Produksi Es Kristal-C",
-  "Area Cuci Armada Es Kristal",
-  "Gudang",
-  "Distribusi",
-  "Ruang Trafo Kelistrikan",
-  "Tempat Parkir Kendaraan Karyawan",
-  "Area Parkir Armada Operasional",
-  "Area Luar Kantor",
-];
+// Re-exported for existing server-side consumers (e.g. satpam-app/actions.ts)
+// so their import path stays unchanged -- the real definition moved to a
+// DB-import-free module so client components can use it directly without
+// pulling mssql/tedious/pg into the browser bundle (see that file's comment).
+export { PATROLI_TITIK_LIST } from "@/lib/satpam-patroli-titik";
 
 export interface PatroliFotoRow {
   fotoId: number;

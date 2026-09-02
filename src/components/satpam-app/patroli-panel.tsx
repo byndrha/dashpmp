@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { Camera, CheckCircle2, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { startPatroliSesiAction, selesaiPatroliSesiAction } from "@/app/mkesindo/satpam-app/actions";
-import { PATROLI_TITIK_LIST, type PatroliSesiDetail, type PatroliSesiRingkas } from "@/lib/queries/satpam-patroli";
+import type { PatroliSesiDetail, PatroliSesiRingkas } from "@/lib/queries/satpam-patroli";
+import { PATROLI_TITIK_LIST } from "@/lib/satpam-patroli-titik";
 import { formatDate, formatTime } from "@/lib/format";
 
 // Konten tab "Patroli" -- dua kondisi: tidak ada sesi aktif (tombol Mulai +
