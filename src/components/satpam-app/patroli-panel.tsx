@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { Camera, CheckCircle2, Circle } from "lucide-react";
+import { Camera, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { startPatroliSesiAction, selesaiPatroliSesiAction } from "@/app/mkesindo/satpam-app/actions";
 import type { PatroliSesiDetail, PatroliSesiRingkas } from "@/lib/queries/satpam-patroli";
-import { PATROLI_TITIK_LIST } from "@/lib/satpam-patroli-titik";
+import { PATROLI_TITIK_GROUPS, PATROLI_TITIK_LIST } from "@/lib/satpam-patroli-titik";
 import { formatDate, formatTime } from "@/lib/format";
 
 // Konten tab "Patroli" -- dua kondisi: tidak ada sesi aktif (tombol Mulai +
@@ -77,51 +77,87 @@ export function PatroliPanel({
     initialActiveSesi.fotos.filter((f) => f.titikPatroli != null).map((f) => [f.titikPatroli as string, f])
   );
   const fotoTambahan = initialActiveSesi.fotos.filter((f) => f.titikPatroli == null);
-  const semuaTitikTerisi = PATROLI_TITIK_LIST.every((t) => fotoByTitik.has(t));
+  const totalTitik = PATROLI_TITIK_LIST.length;
+  const jumlahSelesai = PATROLI_TITIK_LIST.filter((t) => fotoByTitik.has(t)).length;
+  const semuaTitikTerisi = jumlahSelesai === totalTitik;
+  const persenSelesai = Math.round((jumlahSelesai / totalTitik) * 100);
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-col gap-2">
-        {PATROLI_TITIK_LIST.map((titik) => {
-          const sudah = fotoByTitik.has(titik);
-          return (
-            <button
-              key={titik}
-              type="button"
-              className="flex items-center justify-between gap-2 rounded-lg border p-3 text-left"
-              onClick={() =>
-                router.push(`/mkesindo/satpam-app/patroli/foto/${initialActiveSesi.sesiId}?titik=${encodeURIComponent(titik)}`)
-              }
-            >
-              <span className="text-sm">{titik}</span>
-              {sudah ? (
-                <CheckCircle2 className="size-5 text-emerald-600" />
-              ) : (
-                <Circle className="size-5 text-muted-foreground" />
-              )}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-1.5 rounded-lg border p-3">
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm font-medium">
+            {jumlahSelesai} dari {totalTitik} titik
+          </span>
+          <span className="text-xs text-muted-foreground">Mulai {formatTime(initialActiveSesi.mulaiWaktu)}</span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-emerald-600 transition-[width]"
+            style={{ width: `${persenSelesai}%` }}
+          />
+        </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="font-display text-base font-semibold">Foto Tambahan</h2>
-        {fotoTambahan.map((f) => (
-          <div key={f.fotoId} className="rounded-lg border p-3 text-sm">
-            {f.keterangan}
+      {PATROLI_TITIK_GROUPS.map((group) => (
+        <div key={group.label} className="flex flex-col gap-2">
+          <h2 className="text-xs font-medium text-muted-foreground">{group.label}</h2>
+          <div className="flex flex-col gap-2">
+            {group.titik.map((titik) => {
+              const foto = fotoByTitik.get(titik);
+              return (
+                <button
+                  key={titik}
+                  type="button"
+                  className="flex items-center gap-3 rounded-lg border p-2 text-left"
+                  onClick={() =>
+                    router.push(`/mkesindo/satpam-app/patroli/foto/${initialActiveSesi.sesiId}?titik=${encodeURIComponent(titik)}`)
+                  }
+                >
+                  <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                    {foto ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- remote Google Drive thumbnail, not a static build asset
+                      <img src={foto.fotoPath} alt="" className="size-full object-cover" />
+                    ) : (
+                      <Camera className="size-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">{titik}</p>
+                    <p className="text-xs text-muted-foreground">{foto ? formatTime(foto.waktuFoto) : "Belum difoto"}</p>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })}
           </div>
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.push(`/mkesindo/satpam-app/patroli/foto/${initialActiveSesi.sesiId}`)}
-        >
-          <Camera className="size-4" /> Tambah Foto
-        </Button>
+        </div>
+      ))}
+
+      <div className="flex flex-col gap-2">
+        <h2 className="text-xs font-medium text-muted-foreground">Foto Tambahan</h2>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {fotoTambahan.map((f) => (
+            <div key={f.fotoId} className="flex w-20 shrink-0 flex-col gap-1">
+              <div className="size-20 overflow-hidden rounded-lg border bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element -- remote Google Drive thumbnail, not a static build asset */}
+                <img src={f.fotoPath} alt={f.keterangan ?? "Foto tambahan"} className="size-full object-cover" />
+              </div>
+              <p className="truncate text-xs text-muted-foreground">{f.keterangan}</p>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="flex size-20 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground"
+            onClick={() => router.push(`/mkesindo/satpam-app/patroli/foto/${initialActiveSesi.sesiId}`)}
+          >
+            <Plus className="size-5" />
+          </button>
+        </div>
       </div>
 
       <Button size="lg" className="h-14" disabled={pending || !semuaTitikTerisi} onClick={handleSelesai}>
-        Selesai Patroli
+        {semuaTitikTerisi ? "Selesai Patroli" : `Selesai Patroli · ${totalTitik - jumlahSelesai} titik lagi`}
       </Button>
     </div>
   );
