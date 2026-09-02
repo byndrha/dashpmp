@@ -1090,8 +1090,15 @@ interface JadwalBusyWindow {
   end: Date;
 }
 
-// An armada's estimated occupied window for one Jadwal: JamJadwal through
-// JamJadwal + its own estimated busy duration (see estimateBusyMinutes).
+// An armada's occupied window for one Jadwal: JamJadwal through either its
+// estimated busy duration (see estimateBusyMinutes) or, once a real Cek
+// Datang exists (DashboardVehicleCheck Tipe='DATANG'), the real return
+// timestamp — same "real trumps estimate" preference pengiriman-board.tsx's
+// own cardWidthFor/autoSegments already apply to this exact field for
+// display. Without this, an armada that returns faster than its estimated
+// DurasiMenit (a generous bongkar-time estimate, easily hours off in
+// practice) stays falsely "busy" on paper until the stale estimate's end,
+// hard-blocking legitimate new bookings the moment it's actually back.
 async function getJadwalBusyWindow(pool: sql.ConnectionPool, pabrik: LatLng, jadwalId: number): Promise<JadwalBusyWindow | null> {
   const header = await pool
     .request()
@@ -1100,6 +1107,16 @@ async function getJadwalBusyWindow(pool: sql.ConnectionPool, pabrik: LatLng, jad
   const row = header.recordset[0] as { Status: JadwalStatus; JamJadwal: Date; DurasiMenit: number | null } | undefined;
   if (!row) return null;
 
+  const start = row.JamJadwal;
+
+  if (row.Status === "Terbit") {
+    const kembaliMap = await getJamKembaliAktualMap([jadwalId]);
+    const jamKembaliAktual = kembaliMap.get(jadwalId);
+    if (jamKembaliAktual) {
+      return { jadwalId, status: row.Status, start, end: new Date(jamKembaliAktual) };
+    }
+  }
+
   const detailResult = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId)
@@ -1107,7 +1124,6 @@ async function getJadwalBusyWindow(pool: sql.ConnectionPool, pabrik: LatLng, jad
   const salesOrderIds = (detailResult.recordset as { SalesOrderID: string }[]).map((r) => r.SalesOrderID);
 
   const minutes = await estimateBusyMinutes(pool, pabrik, salesOrderIds, row.Status === "Terbit" ? row.DurasiMenit : null);
-  const start = row.JamJadwal;
   return { jadwalId, status: row.Status, start, end: new Date(start.getTime() + minutes * 60 * 1000) };
 }
 
