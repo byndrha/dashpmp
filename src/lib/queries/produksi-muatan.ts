@@ -8,6 +8,7 @@ import {
   JADWAL_KANTONG_10KG_EXPR,
   JADWAL_KANTONG_5KG_EXPR,
 } from "@/lib/queries/pengiriman-jadwal";
+import { getShiftWindow, type ShiftNumber } from "@/lib/report-shift";
 
 // Same 14:00 WIB rollover rule as the rest of the app (business-date.ts) —
 // a card whose own JamJadwal falls in today's business-date window or
@@ -82,17 +83,6 @@ export async function getDraftJadwalForProduksi(): Promise<DraftJadwalForProduks
   return all.filter((r) => isCurrentOrFuturePeriod(r.JamJadwal));
 }
 
-// Riwayat tab — every Draft whose own JamJadwal is a previous business-date
-// period, whether or not loading was ever started (JamMulaiMuat set or
-// not). Still routes through the exact same Mulai Muat -> Alokasi ->
-// Selesai Muat flow as the Pengiriman tab (KartuPengirimanList is reused
-// as-is, just fed this list instead) — a backlogged card isn't frozen,
-// it's just no longer cluttering the main list.
-export async function getDraftJadwalRiwayatForProduksi(): Promise<DraftJadwalForProduksi[]> {
-  const all = await fetchAllDraftJadwalForProduksi();
-  return all.filter((r) => !isCurrentOrFuturePeriod(r.JamJadwal));
-}
-
 export interface SelesaiMuatJadwalForProduksi {
   JadwalID: number;
   ArmadaNama: string;
@@ -107,49 +97,6 @@ export interface SelesaiMuatJadwalForProduksi {
   // yang diselesaikan lewat jalur manual (produksiSelesaiMuatManual) yang
   // tidak pernah melalui alokasi pallet sama sekali.
   Qty5KGDimuat: number | null;
-}
-
-// Recent Jadwal that have already finished loading (Status flipped to
-// 'Terbit' by either produksiSelesaiMuat or produksiSelesaiMuatManual
-// below) — a read-only companion list to getDraftJadwalForProduksi above.
-// Capped at the 100 most recent rather than date-windowed, to sidestep the
-// WIB/naive-vs-UTC timestamp ambiguity documented for other TransDate-like
-// columns in this codebase (see business-date.ts) — JamSelesaiMuat is
-// simply ordered newest-first and truncated. 100 (not the original 30) so
-// the Pengiriman/Riwayat split below still has reasonable depth on both
-// sides after partitioning by the row's own JamJadwal period.
-async function fetchRecentSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
-  const pool = await getPool();
-  const result = await pool.request().query(`
-    SELECT TOP (100) j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat,
-           ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
-           ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG
-    FROM DashboardPengirimanJadwal j
-    LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
-    LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
-    LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
-    WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL
-    GROUP BY j.JadwalID, a.Nama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat
-    ORDER BY j.JamSelesaiMuat DESC
-  `);
-  return result.recordset;
-}
-
-// Pengiriman tab's "Sudah Selesai Muat" section — shown so operators can
-// see what they just finished without leaving the tab. Partitioned by the
-// SAME period as the Draft list above (the card's own JamJadwal, not when
-// it happened to be completed), so a card's tab placement stays consistent
-// regardless of load status.
-export async function getSelesaiMuatJadwalForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
-  const all = await fetchRecentSelesaiMuatJadwalForProduksi();
-  return all.filter((r) => isCurrentOrFuturePeriod(r.JamJadwal));
-}
-
-// Riwayat tab's already-completed section — same 100-row recency window,
-// restricted to previous-period cards.
-export async function getSelesaiMuatJadwalRiwayatForProduksi(): Promise<SelesaiMuatJadwalForProduksi[]> {
-  const all = await fetchRecentSelesaiMuatJadwalForProduksi();
-  return all.filter((r) => !isCurrentOrFuturePeriod(r.JamJadwal));
 }
 
 // Explicit "Mulai Muat" step — stamps JamMulaiMuat with no pallet allocation
@@ -271,4 +218,63 @@ export async function produksiSelesaiMuat(input: ProduksiSelesaiMuatInput): Prom
   // genuinely reject (AppError) after pallet stock has already been
   // committed. Accepted trade-off, unchanged from before this task.
   await selesaiMuat(input.jadwalId);
+}
+
+// Layar Riwayat baru (menggantikan tab Pengiriman/Riwayat lama) — "Belum
+// Selesai" untuk satu periode kerja (tanggal usaha + shift) eksplisit,
+// bukan cuma "sekarang" vs "sebelumnya". getShiftWindow mengembalikan Date
+// ber-representasi naive-WIB, sama seperti JamJadwal kolom ini disimpan
+// (dikonfirmasi empiris lewat investigasi bug armada Truk 52 sesi ini) --
+// perbandingan BETWEEN di bawah aman tanpa konversi zona waktu apa pun.
+export async function getKartuPengirimanBelumSelesaiUntukPeriode(
+  tanggalUsaha: Date,
+  shift: ShiftNumber
+): Promise<DraftJadwalForProduksi[]> {
+  const { start, end } = getShiftWindow(tanggalUsaha, shift, "work");
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("start", sql.DateTime, start)
+    .input("end", sql.DateTime, end).query(`
+      SELECT j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamMulaiMuat,
+             ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KGDibutuhkan,
+             ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KGDibutuhkan
+      FROM DashboardPengirimanJadwal j
+      LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+      LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+      LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+      WHERE j.IsDeleted = 0 AND j.Status = 'Draft' AND j.JamJadwal BETWEEN @start AND @end
+      GROUP BY j.JadwalID, a.Nama, j.JamJadwal, j.JamMulaiMuat
+      ORDER BY j.JamJadwal DESC
+    `);
+  return result.recordset;
+}
+
+// "Sudah Selesai Muat" untuk periode yang sama — dikelompokkan berdasarkan
+// JamJadwal kartu (jadwal keberangkatannya), BUKAN JamSelesaiMuat (kapan ia
+// benar-benar diselesaikan), supaya satu kartu selalu konsisten berada di
+// periode/bagian yang sama terlepas dari kapan proses Selesai Muat-nya
+// terjadi -- lihat Global Constraints rencana ini.
+export async function getKartuPengirimanSelesaiUntukPeriode(
+  tanggalUsaha: Date,
+  shift: ShiftNumber
+): Promise<SelesaiMuatJadwalForProduksi[]> {
+  const { start, end } = getShiftWindow(tanggalUsaha, shift, "work");
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("start", sql.DateTime, start)
+    .input("end", sql.DateTime, end).query(`
+      SELECT j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat,
+             ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
+             ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG
+      FROM DashboardPengirimanJadwal j
+      LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+      LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+      LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+      WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL AND j.JamJadwal BETWEEN @start AND @end
+      GROUP BY j.JadwalID, a.Nama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat
+      ORDER BY j.JamJadwal DESC
+    `);
+  return result.recordset;
 }
