@@ -1,6 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
-import { getBusinessDateISO } from "@/lib/business-date";
+import { getBusinessDateISO, naiveWibToUtcInstant } from "@/lib/business-date";
 import {
   startMuat,
   selesaiMuat,
@@ -223,19 +223,26 @@ export async function produksiSelesaiMuat(input: ProduksiSelesaiMuatInput): Prom
 // Layar Riwayat baru (menggantikan tab Pengiriman/Riwayat lama) — "Belum
 // Selesai" untuk satu periode kerja (tanggal usaha + shift) eksplisit,
 // bukan cuma "sekarang" vs "sebelumnya". getShiftWindow mengembalikan Date
-// ber-representasi naive-WIB, sama seperti JamJadwal kolom ini disimpan
-// (dikonfirmasi empiris lewat investigasi bug armada Truk 52 sesi ini) --
-// perbandingan BETWEEN di bawah aman tanpa konversi zona waktu apa pun.
+// ber-representasi naive-WIB, TAPI j.JamJadwal adalah instant true-UTC asli
+// (dikonfirmasi lewat commit 0b2fe85, "fix: reconcile JamJadwal (true UTC)
+// vs TransDate (naive WIB) comparisons", serta lewat fungsi hourFraction di
+// pengiriman-board.tsx yang memakai getter .getHours()/.getMinutes() LOCAL
+// timezone untuk menampilkan JamJadwal -- benar hanya jika nilainya memang
+// true-UTC asli) -- jadi start/end WAJIB dikonversi ke true-UTC lebih dulu
+// (naiveWibToUtcInstant, pola yang sama dipakai assertJamJadwalNotBeforeOrders
+// di pengiriman-jadwal.ts) sebelum dipakai dalam perbandingan BETWEEN di bawah.
 export async function getKartuPengirimanBelumSelesaiUntukPeriode(
   tanggalUsaha: Date,
   shift: ShiftNumber
 ): Promise<DraftJadwalForProduksi[]> {
   const { start, end } = getShiftWindow(tanggalUsaha, shift, "work");
+  const startUtc = naiveWibToUtcInstant(start);
+  const endUtc = naiveWibToUtcInstant(end);
   const pool = await getPool();
   const result = await pool
     .request()
-    .input("start", sql.DateTime, start)
-    .input("end", sql.DateTime, end).query(`
+    .input("start", sql.DateTime, startUtc)
+    .input("end", sql.DateTime, endUtc).query(`
       SELECT j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamMulaiMuat,
              ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KGDibutuhkan,
              ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KGDibutuhkan
@@ -260,11 +267,15 @@ export async function getKartuPengirimanSelesaiUntukPeriode(
   shift: ShiftNumber
 ): Promise<SelesaiMuatJadwalForProduksi[]> {
   const { start, end } = getShiftWindow(tanggalUsaha, shift, "work");
+  // Same true-UTC conversion as getKartuPengirimanBelumSelesaiUntukPeriode
+  // above — j.JamJadwal is true-UTC, getShiftWindow returns naive-WIB.
+  const startUtc = naiveWibToUtcInstant(start);
+  const endUtc = naiveWibToUtcInstant(end);
   const pool = await getPool();
   const result = await pool
     .request()
-    .input("start", sql.DateTime, start)
-    .input("end", sql.DateTime, end).query(`
+    .input("start", sql.DateTime, startUtc)
+    .input("end", sql.DateTime, endUtc).query(`
       SELECT j.JadwalID, a.Nama AS ArmadaNama, j.JamJadwal, j.JamSelesaiMuat, j.Qty5KGDimuat,
              ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
              ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG
