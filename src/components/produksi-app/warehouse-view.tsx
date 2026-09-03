@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
 import { TambahProduksiDialog, RiwayatPosisiList } from "@/components/produksi-app/tambah-produksi-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Truck } from "lucide-react";
+import { History, Truck } from "lucide-react";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import { produksiStartMuatAction } from "@/app/mkesindo/produksi/actions";
 import { usePalletAmbilStok, PalletCellAmbilPopover, FloatingAmbilPanel } from "@/components/produksi-app/pallet-ambil-panel";
@@ -351,9 +352,21 @@ export function WarehouseView({
 // JAM_AMBANG_MENDEKATI_KEBERANGKATAN) — bukan seluruh kartu pengiriman
 // seperti di tab Pengiriman.
 function KartuPengirimanMendekatPanel({ jadwal, now }: { jadwal: DraftJadwalForProduksi[]; now: Date }) {
+  const router = useRouter();
   return (
     <div className="flex w-full shrink-0 flex-col gap-2 rounded-lg border border-border p-3 lg:w-72">
-      <p className="text-sm font-medium">Keberangkatan Mendekat</p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">Keberangkatan Mendekat</p>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1 px-2 text-xs"
+          onClick={() => router.push("/mkesindo/produksi-app/riwayat")}
+        >
+          <History className="size-3.5" /> Riwayat
+        </Button>
+      </div>
       {jadwal.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           Tidak ada jadwal keberangkatan dalam {JAM_AMBANG_MENDEKATI_KEBERANGKATAN} jam ke depan.
