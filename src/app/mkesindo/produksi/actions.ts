@@ -18,10 +18,9 @@ import {
 } from "@/lib/queries/produksi-warehouse";
 import {
   getDraftJadwalForProduksi,
-  getDraftJadwalRiwayatForProduksi,
   getAllDraftJadwalForProduksi,
-  getSelesaiMuatJadwalForProduksi,
-  getSelesaiMuatJadwalRiwayatForProduksi,
+  getKartuPengirimanBelumSelesaiUntukPeriode,
+  getKartuPengirimanSelesaiUntukPeriode,
   produksiStartMuat,
   produksiSelesaiMuat,
   produksiSelesaiMuatManual,
@@ -266,20 +265,23 @@ export async function produksiSelesaiMuatManualAction(jadwalId: number): Promise
   });
 }
 
-// Read-only companion list to getDraftJadwalForProduksiAction — Jadwal that
-// have already finished loading, shown below the main list.
-export async function getSelesaiMuatJadwalForProduksiAction(): Promise<ActionResult<SelesaiMuatJadwalForProduksi[]>> {
+export async function getKartuPengirimanBelumSelesaiAction(
+  tanggalUsahaISO: string,
+  shift: ShiftNumber
+): Promise<ActionResult<DraftJadwalForProduksi[]>> {
   return runAction(async () => {
     await requireProduksiView();
-    return getSelesaiMuatJadwalForProduksi();
+    return getKartuPengirimanBelumSelesaiUntukPeriode(new Date(tanggalUsahaISO), shift);
   });
 }
 
-// Riwayat tab — previous-period counterparts of the two actions above.
-export async function getDraftJadwalRiwayatForProduksiAction(): Promise<ActionResult<DraftJadwalForProduksi[]>> {
+export async function getKartuPengirimanSelesaiAction(
+  tanggalUsahaISO: string,
+  shift: ShiftNumber
+): Promise<ActionResult<SelesaiMuatJadwalForProduksi[]>> {
   return runAction(async () => {
     await requireProduksiView();
-    return getDraftJadwalRiwayatForProduksi();
+    return getKartuPengirimanSelesaiUntukPeriode(new Date(tanggalUsahaISO), shift);
   });
 }
 
@@ -301,13 +303,6 @@ export async function createKualitasAction(
     const kualitasId = await createKualitas({ ...input, dicatatOlehUserId: session.user.id });
     revalidatePath("/mkesindo/produksi-app");
     return kualitasId;
-  });
-}
-
-export async function getSelesaiMuatJadwalRiwayatForProduksiAction(): Promise<ActionResult<SelesaiMuatJadwalForProduksi[]>> {
-  return runAction(async () => {
-    await requireProduksiView();
-    return getSelesaiMuatJadwalRiwayatForProduksi();
   });
 }
 
