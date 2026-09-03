@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { KartuPengirimanList } from "@/components/produksi-app/kartu-pengiriman-list";
 import { WarehouseView } from "@/components/produksi-app/warehouse-view";
 import { TakeAwayMuatanList } from "@/components/produksi-app/takeaway-muatan-list";
 import { KualitasView } from "@/components/produksi-app/kualitas-view";
@@ -15,9 +14,6 @@ import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import type { OwnProfile } from "@/components/dashboard/account-settings-dialog";
 import {
   getDraftJadwalForProduksiAction,
-  getDraftJadwalRiwayatForProduksiAction,
-  getSelesaiMuatJadwalForProduksiAction,
-  getSelesaiMuatJadwalRiwayatForProduksiAction,
   getWarehouseMapAction,
   getMesinListAction,
   getTakeAwayMuatanPendingAction,
@@ -42,12 +38,10 @@ import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 import type { TimRow, AnggotaTimRow } from "@/lib/queries/tim-produksi";
 
-export type ProduksiTabKey = "kartu-pengiriman" | "riwayat" | "warehouse" | "kualitas" | "bahan-baku" | "aktivitas-produksi";
+export type ProduksiTabKey = "warehouse" | "kualitas" | "bahan-baku" | "aktivitas-produksi";
 
 const TAB_PATHS: Record<ProduksiTabKey, string> = {
-  "kartu-pengiriman": "/mkesindo/produksi-app",
-  riwayat: "/mkesindo/produksi-app/riwayat",
-  warehouse: "/mkesindo/produksi-app/warehouse",
+  warehouse: "/mkesindo/produksi-app",
   kualitas: "/mkesindo/produksi-app/kualitas",
   "bahan-baku": "/mkesindo/produksi-app/bahan-baku",
   "aktivitas-produksi": "/mkesindo/produksi-app/aktivitas-produksi",
@@ -57,8 +51,6 @@ export function ProduksiTabShell({
   initialTab,
   userName,
   profile,
-  initialKartuPengiriman,
-  initialRiwayat,
   initialWarehouse,
   initialMesin,
   initialTakeAwayPending,
@@ -70,8 +62,6 @@ export function ProduksiTabShell({
   initialTab: ProduksiTabKey;
   userName: string;
   profile: OwnProfile | null;
-  initialKartuPengiriman?: DraftJadwalForProduksi[];
-  initialRiwayat?: DraftJadwalForProduksi[];
   initialWarehouse?: PalletPosisiRow[];
   initialMesin?: MesinRow[];
   initialTakeAwayPending?: TakeAwayMuatanPendingRow[];
@@ -96,8 +86,6 @@ export function ProduksiTabShell({
   const [activeTab, setActiveTab] = useState<ProduksiTabKey>(initialTab);
   const [visited, setVisited] = useState<Set<ProduksiTabKey>>(() => new Set([initialTab]));
 
-  const [kartuPengiriman, setKartuPengiriman] = useState<DraftJadwalForProduksi[] | null>(initialKartuPengiriman ?? null);
-  const [riwayat, setRiwayat] = useState<DraftJadwalForProduksi[] | null>(initialRiwayat ?? null);
   const [warehouse, setWarehouse] = useState<PalletPosisiRow[] | null>(initialWarehouse ?? null);
   const [mesin, setMesin] = useState<MesinRow[] | null>(initialMesin ?? null);
   const [takeAwayPending, setTakeAwayPending] = useState<TakeAwayMuatanPendingRow[] | null>(initialTakeAwayPending ?? null);
@@ -115,15 +103,6 @@ export function ProduksiTabShell({
     setActiveTab(tab);
     setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
     window.history.replaceState(null, "", TAB_PATHS[tab]);
-  }
-
-  function refreshKartuPengiriman() {
-    setKartuPengiriman(null);
-    // A card completed from the Riwayat tab (a backlogged card someone
-    // finally loaded) or moving between periods overnight both change
-    // what Riwayat itself should show too, so refresh both lists together
-    // rather than tracking which one actually needs it.
-    setRiwayat(null);
   }
 
   function refreshWarehouse() {
@@ -147,32 +126,6 @@ export function ProduksiTabShell({
     let cancelled = false;
     async function load() {
       setTabError(null);
-      if (activeTab === "kartu-pengiriman" && kartuPengiriman === null) {
-        setLoadingTab("kartu-pengiriman");
-        const result = await getDraftJadwalForProduksiAction();
-        if (cancelled) return;
-        if (!result.success) {
-          setTabError(result.error);
-          setLoadingTab(null);
-          return;
-        }
-        setKartuPengiriman(result.data);
-        setLoadingTab(null);
-        return;
-      }
-      if (activeTab === "riwayat" && riwayat === null) {
-        setLoadingTab("riwayat");
-        const result = await getDraftJadwalRiwayatForProduksiAction();
-        if (cancelled) return;
-        if (!result.success) {
-          setTabError(result.error);
-          setLoadingTab(null);
-          return;
-        }
-        setRiwayat(result.data);
-        setLoadingTab(null);
-        return;
-      }
       if (activeTab === "warehouse" && warehouse === null) {
         setLoadingTab("warehouse");
         const result = await getWarehouseMapAction();
@@ -332,13 +285,13 @@ export function ProduksiTabShell({
     return () => {
       cancelled = true;
     };
-    // kartuPengiriman/warehouse/mesin/kualitas/bahanBaku/aktivitasProduksi are
-    // deliberately in the dependency list, not just activeTab: refreshKartuPengiriman/
-    // refreshWarehouse/refreshBahanBaku/refreshAktivitasProduksi reset the relevant
+    // warehouse/mesin/kualitas/bahanBaku/aktivitasProduksi are
+    // deliberately in the dependency list, not just activeTab: refreshWarehouse/
+    // refreshBahanBaku/refreshAktivitasProduksi reset the relevant
     // state to null WITHOUT changing activeTab (a save action's onAfter callback fires
     // while the user is still on that same tab), and this effect must
     // re-run to refetch in that case, not only when the user switches tabs.
-  }, [activeTab, kartuPengiriman, riwayat, warehouse, mesin, takeAwayPending, warehouseJadwal, kualitas, bahanBaku, aktivitasProduksi]);
+  }, [activeTab, warehouse, mesin, takeAwayPending, warehouseJadwal, kualitas, bahanBaku, aktivitasProduksi]);
 
   return (
     <div className="flex h-dvh flex-col bg-background">
@@ -360,41 +313,13 @@ export function ProduksiTabShell({
             {tabError}
           </p>
         )}
-        {visited.has("kartu-pengiriman") && kartuPengiriman && (
-          <div className={cn("h-full overflow-y-auto", activeTab !== "kartu-pengiriman" && "hidden")}>
-            <KartuPengirimanList
-              initialJadwal={kartuPengiriman}
-              fetchSelesaiList={getSelesaiMuatJadwalForProduksiAction}
-              onAfterMuat={() => {
-                refreshKartuPengiriman();
-                refreshWarehouse();
-              }}
-            />
-          </div>
-        )}
-        {visited.has("riwayat") && riwayat && (
-          <div className={cn("h-full overflow-y-auto", activeTab !== "riwayat" && "hidden")}>
-            <KartuPengirimanList
-              initialJadwal={riwayat}
-              fetchSelesaiList={getSelesaiMuatJadwalRiwayatForProduksiAction}
-              emptyMessage="Tidak ada Kartu Pengiriman periode sebelumnya."
-              onAfterMuat={() => {
-                refreshKartuPengiriman();
-                refreshWarehouse();
-              }}
-            />
-          </div>
-        )}
         {visited.has("warehouse") && warehouse && mesin && takeAwayPending && warehouseJadwal && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "warehouse" && "hidden")}>
             <WarehouseView
               posisi={warehouse}
               jadwal={warehouseJadwal}
               onAfterTambah={refreshWarehouse}
-              onAfterMuat={() => {
-                refreshWarehouse();
-                refreshKartuPengiriman();
-              }}
+              onAfterMuat={refreshWarehouse}
               onMulaiMuatStarted={(jadwalId, jamMulaiMuat) => {
                 setWarehouseJadwal((prev) =>
                   prev ? prev.map((j) => (j.JadwalID === jadwalId ? { ...j, JamMulaiMuat: jamMulaiMuat } : j)) : prev
