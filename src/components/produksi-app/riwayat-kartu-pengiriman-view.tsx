@@ -41,6 +41,7 @@ export function RiwayatKartuPengirimanView({
   const [selesai, setSelesai] = useState(initialSelesai);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   function refetch(tanggal: string, shiftValue: ShiftNumber) {
     setLoading(true);
@@ -61,6 +62,7 @@ export function RiwayatKartuPengirimanView({
       }
       setBelumSelesai(belumResult.data);
       setSelesai(selesaiResult.data);
+      setRefreshVersion((v) => v + 1);
       setLoading(false);
     });
   }
@@ -117,7 +119,7 @@ export function RiwayatKartuPengirimanView({
           </p>
         )}
         <KartuPengirimanList
-          key={`${tanggalUsahaISO}-${shift}`}
+          key={`${tanggalUsahaISO}-${shift}-${refreshVersion}`}
           initialJadwal={belumSelesai}
           fetchSelesaiList={async () => ({ success: true, data: selesai })}
           emptyMessage="Tidak ada Kartu Pengiriman pada periode ini."
