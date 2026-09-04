@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
 import { canAccessAllPT } from "@/lib/require-access";
-import { MARKETING_ROLE_ID } from "@/lib/roles";
+import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { AutoRefresh } from "@/components/dashboard/auto-refresh";
@@ -97,11 +97,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
     listPerusahaanForSwitcher(),
   ]);
 
+  // Mirrors requireSatpamRosterManager()'s exact gate (require-access.ts) —
+  // /mkesindo/keamanan (Roster Shift Satpam) is authorized by role, not by
+  // the generic per-module permissions map AppSidebar otherwise filters on,
+  // so it needs its own boolean here rather than a moduleKey entry in
+  // NAV_ITEMS. canAccessAllPT's broader "direktur" scope is deliberately
+  // NOT used for this — a direktur account isn't necessarily a superadmin
+  // or a wilayah manager, and would hit /akses-ditolak on the actual page.
+  const canAccessKeamanan =
+    !!session?.user && (session.user.isSuperAdmin || WILAYAH_MANAGER_ROLE_IDS.includes(session.user.roleId));
+
   return (
     <SidebarProvider>
       <AppSidebar
         permissions={session?.user?.permissions ?? {}}
         canSwitchPt={groupLevelAccess}
+        canAccessKeamanan={canAccessKeamanan}
         perusahaanList={perusahaanList}
       />
       <SidebarInset>

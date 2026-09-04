@@ -15,6 +15,7 @@ import {
   Megaphone,
   Factory,
   FileSpreadsheet,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -48,13 +49,21 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
   { href: "/mkesindo/laporan", label: "Laporan", icon: FileSpreadsheet, moduleKey: "laporan" },
 ];
 
+// Not part of NAV_ITEMS/the moduleKey permission map above — this route is
+// authorized by role (requireSatpamRosterManager: isSuperAdmin or a wilayah
+// manager RoleID), computed by the layout and passed in directly as
+// canAccessKeamanan, so it's rendered as its own conditional item instead.
+const KEAMANAN_ITEM = { href: "/mkesindo/keamanan", label: "Keamanan", icon: Shield };
+
 export function AppSidebar({
   permissions,
   canSwitchPt,
+  canAccessKeamanan,
   perusahaanList,
 }: {
   permissions: PermissionMap;
   canSwitchPt: boolean;
+  canAccessKeamanan: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
@@ -124,6 +133,18 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {canAccessKeamanan && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href={KEAMANAN_ITEM.href} onClick={closeOnMobile} />}
+                    isActive={pathname.startsWith(KEAMANAN_ITEM.href)}
+                    tooltip={KEAMANAN_ITEM.label}
+                  >
+                    <KEAMANAN_ITEM.icon className="shrink-0" />
+                    <span>{KEAMANAN_ITEM.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
