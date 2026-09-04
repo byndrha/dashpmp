@@ -14,18 +14,24 @@ const TABS: { key: ProduksiTabKey; label: string; icon: typeof Snowflake }[] = [
 export function ProduksiBottomNav({
   activeTab,
   onChange,
+  locked = false,
 }: {
   activeTab: ProduksiTabKey;
   onChange: (tab: ProduksiTabKey) => void;
+  // Dikunci selama sesi Mulai Muat sedang berlangsung di tab Stok Es --
+  // berpindah tab lain mid-alokasi cuma bikin bingung, bukan sesuatu yang
+  // perlu dilakukan saat itu. Lihat WarehouseView.onPickingChange.
+  locked?: boolean;
 }) {
   return (
-    <nav className="flex border-t border-border bg-background">
+    <nav className="relative flex border-t border-border bg-background">
       {TABS.map((tab) => {
         const active = activeTab === tab.key;
         return (
           <button
             key={tab.key}
             type="button"
+            disabled={locked}
             onClick={() => onChange(tab.key)}
             className={cn(
               "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]",
@@ -37,6 +43,7 @@ export function ProduksiBottomNav({
           </button>
         );
       })}
+      {locked && <div className="pointer-events-none absolute inset-0 bg-black/60" />}
     </nav>
   );
 }

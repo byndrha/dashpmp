@@ -98,6 +98,9 @@ export function ProduksiTabShell({
 
   const [loadingTab, setLoadingTab] = useState<ProduksiTabKey | null>(null);
   const [tabError, setTabError] = useState<string | null>(null);
+  // Sesi Mulai Muat sedang berlangsung di tab Stok Es -- lihat
+  // WarehouseView.onPickingChange dan ProduksiBottomNav.locked.
+  const [mulaiMuatActive, setMulaiMuatActive] = useState(false);
 
   function handleChangeTab(tab: ProduksiTabKey) {
     setActiveTab(tab);
@@ -325,6 +328,7 @@ export function ProduksiTabShell({
                   prev ? prev.map((j) => (j.JadwalID === jadwalId ? { ...j, JamMulaiMuat: jamMulaiMuat } : j)) : prev
                 );
               }}
+              onPickingChange={setMulaiMuatActive}
             />
             <TakeAwayMuatanList
               initialPending={takeAwayPending}
@@ -368,7 +372,7 @@ export function ProduksiTabShell({
           </div>
         )}
       </div>
-      <ProduksiBottomNav activeTab={activeTab} onChange={handleChangeTab} />
+      <ProduksiBottomNav activeTab={activeTab} onChange={handleChangeTab} locked={mulaiMuatActive} />
     </div>
   );
 }

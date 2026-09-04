@@ -165,7 +165,16 @@ export function PalletCellAmbilPopover({
 }) {
   const terisi = (row?.JumlahBatchAktif ?? 0) > 0;
   if (!terisi || !row) {
-    return <WarehouseCell kode={kode} row={row} disabled />;
+    // Dark overlay for empty pallets during an active Mulai Muat session --
+    // only pallets that actually have stock stay fully "lit" and clickable
+    // (see WarehouseView/TruckDockColumn for the same treatment applied to
+    // the rest of the screen).
+    return (
+      <div className="relative">
+        <WarehouseCell kode={kode} row={row} disabled />
+        <div className="pointer-events-none absolute inset-0 rounded-md bg-black/60" />
+      </div>
+    );
   }
 
   const posisiId = row.PosisiID;
@@ -183,7 +192,8 @@ export function PalletCellAmbilPopover({
           Pallet {kode}
           {highlighted && <span className="ml-1 text-amber-600">· Paling lama</span>}
         </p>
-        <p className="text-xs text-muted-foreground">Sisa: {max} kantong 10kg</p>
+        {nilai > 0 && <p className="text-xs font-medium text-primary">Dialokasikan: {nilai}</p>}
+        <p className="text-xs text-muted-foreground">Sisa: {max - nilai} kantong 10kg</p>
         <div className="flex items-center gap-2">
           <Input
             type="number"
@@ -213,13 +223,16 @@ export function FloatingAmbilPanel({
   return (
     <div className="sticky bottom-0 left-0 right-0 z-20 flex flex-col gap-2 border-t border-border bg-background p-3 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
       <p className="text-sm font-semibold">{jadwal.ArmadaNama}</p>
-      <p className="text-xs text-muted-foreground">
-        Sudah dialokasikan: {pallet.totalQty10} / {jadwal.Qty10KGDibutuhkan} kantong 10kg
-      </p>
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">Qty 5kg dimuat (tanpa pallet, langsung)</label>
-        <Input type="number" value={pallet.qty5Dimuat} onChange={(e) => pallet.setQty5Dimuat(e.target.value)} className="mt-1 h-8" />
+      <div className="flex items-baseline gap-2">
+        <span className="font-display text-2xl font-bold tabular-nums text-primary">{pallet.totalQty10}</span>
+        <span className="text-sm text-muted-foreground">/ {jadwal.Qty10KGDibutuhkan} kantong 10kg dialokasikan</span>
       </div>
+      {jadwal.Qty5KGDibutuhkan > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Qty 5kg dimuat (tanpa pallet, langsung)</label>
+          <Input type="number" value={pallet.qty5Dimuat} onChange={(e) => pallet.setQty5Dimuat(e.target.value)} className="mt-1 h-8" />
+        </div>
+      )}
       {pallet.error && <p className="text-xs text-destructive">{pallet.error}</p>}
       <div className="flex gap-2">
         <Button variant="outline" size="sm" className="flex-1" onClick={onBatal}>

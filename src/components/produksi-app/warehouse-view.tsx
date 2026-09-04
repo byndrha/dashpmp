@@ -28,6 +28,7 @@ export function WarehouseView({
   onAfterTambah,
   onAfterMuat,
   onMulaiMuatStarted,
+  onPickingChange,
 }: {
   posisi: PalletPosisiRow[];
   // Daftar draft jadwal yang sama seperti yang dipakai tab Pengiriman
@@ -46,6 +47,12 @@ export function WarehouseView({
   // menge-null-kan warehouseJadwal dan membuat WarehouseView ter-unmount di
   // tengah sesi ambil-stok yang baru saja dimulai).
   onMulaiMuatStarted: (jadwalId: number, jamMulaiMuat: Date) => void;
+  // Memberi tahu pemanggil (ProduksiTabShell) kapan sesi Mulai Muat sedang
+  // berlangsung, supaya bottom nav bar (ganti tab Kualitas/Bahan
+  // Baku/Aktivitas) ikut dikunci selama operator fokus mengalokasikan
+  // stok -- lihat juga overlay gelap pada dermaga truk lain & panel
+  // Keberangkatan Mendekat di bawah, treatment yang sama.
+  onPickingChange?: (active: boolean) => void;
 }) {
   const [detailPosisi, setDetailPosisi] = useState<PalletPosisiRow | null>(null);
   const [dialogPosisi, setDialogPosisi] = useState<PalletPosisiRow | null>(null);
@@ -78,6 +85,12 @@ export function WarehouseView({
     setOpenPopoverKode(null);
     onAfterMuat();
   });
+
+  const isPicking = pickingJadwal != null;
+  useEffect(() => {
+    onPickingChange?.(isPicking);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPicking]);
 
   function handleTruckCardClick(j: DraftJadwalForProduksi) {
     if (j.JamMulaiMuat != null) {
@@ -272,7 +285,7 @@ export function WarehouseView({
           </div>
         </div>
 
-        <KartuPengirimanMendekatPanel jadwal={jadwalMendekat} now={now} />
+        <KartuPengirimanMendekatPanel jadwal={jadwalMendekat} now={now} dimmed={isPicking} />
       </div>
 
       {pickingJadwal && (
@@ -351,10 +364,21 @@ export function WarehouseView({
 // jadwal yang sudah difilter oleh pemanggilnya (lihat
 // JAM_AMBANG_MENDEKATI_KEBERANGKATAN) — bukan seluruh kartu pengiriman
 // seperti di tab Pengiriman.
-function KartuPengirimanMendekatPanel({ jadwal, now }: { jadwal: DraftJadwalForProduksi[]; now: Date }) {
+function KartuPengirimanMendekatPanel({
+  jadwal,
+  now,
+  dimmed = false,
+}: {
+  jadwal: DraftJadwalForProduksi[];
+  now: Date;
+  // Diredupkan + tombol Riwayat dinonaktifkan selama sesi Mulai Muat sedang
+  // berlangsung -- navigasi ke halaman lain di tengah alokasi stok cuma
+  // bikin bingung, bukan sesuatu yang perlu diakses saat itu.
+  dimmed?: boolean;
+}) {
   const router = useRouter();
   return (
-    <div className="flex w-full shrink-0 flex-col gap-2 rounded-lg border border-border p-3 lg:w-72">
+    <div className="relative flex w-full shrink-0 flex-col gap-2 rounded-lg border border-border p-3 lg:w-72">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">Keberangkatan Mendekat</p>
         <Button
@@ -362,6 +386,7 @@ function KartuPengirimanMendekatPanel({ jadwal, now }: { jadwal: DraftJadwalForP
           size="sm"
           variant="ghost"
           className="h-7 gap-1 px-2 text-xs"
+          disabled={dimmed}
           onClick={() => router.push("/mkesindo/produksi-app/riwayat")}
         >
           <History className="size-3.5" /> Riwayat
@@ -405,6 +430,7 @@ function KartuPengirimanMendekatPanel({ jadwal, now }: { jadwal: DraftJadwalForP
           })}
         </div>
       )}
+      {dimmed && <div className="pointer-events-none absolute inset-0 rounded-lg bg-black/60" />}
     </div>
   );
 }
@@ -515,6 +541,12 @@ function TruckCard({
       )}
       title={isKosong ? "Belum ada jadwal keberangkatan mendekat" : jadwal.ArmadaNama}
     >
+      {/* disabled here is exactly "sesi Mulai Muat lain sedang aktif dan ini
+          bukan dermaganya" -- true untuk dermaga kosong maupun dermaga lain
+          yang bukan sedang dimuat, sama sekali tidak untuk dermaga aktifnya
+          sendiri, jadi dark overlay-nya persis mengikuti aturan "kecualikan
+          kartu yang sedang Muat". */}
+      {disabled && <div className="pointer-events-none absolute inset-0 rounded-md bg-black/60" />}
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
         {isKosong ? (
           <span className="text-[11px] text-muted-foreground">Area Muat</span>
