@@ -1,7 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Target, TrendingUp, TrendingDown, Minus, CalendarDays, Wallet, Gauge, Rocket } from "lucide-react";
+import {
+  Target,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  CalendarDays,
+  Wallet,
+  Gauge,
+  Rocket,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,11 +28,41 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { formatRupiah, formatDate, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RevenueTarget } from "@/lib/queries/revenue-target";
-import { saveMonthlyTargetAction } from "@/app/mkesindo/(dashboard)/sales/actions";
+import { saveMonthlyTargetAction, getRevenueTargetForMonthAction } from "@/app/mkesindo/(dashboard)/sales/actions";
 
 function formatQtyPlain(value: number | null): string {
   if (value == null) return "-";
   return `${value.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kantong`;
+}
+
+const INDONESIAN_MONTHS = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+];
+
+// Plain string/integer arithmetic, not Date/date-fns — a "YYYY-MM-01" parsed
+// into a Date and read back via local getters can land on the wrong month
+// depending on the host's ambient timezone offset.
+function monthLabel(year: number, month: number): string {
+  return `${INDONESIAN_MONTHS[month - 1]} ${year}`;
+}
+
+function shiftMonthISO(monthISO: string, delta: number): string {
+  const [year, month] = monthISO.split("-").map(Number);
+  const zeroBased = month - 1 + delta;
+  const shiftedYear = year + Math.floor(zeroBased / 12);
+  const shiftedMonth = ((zeroBased % 12) + 12) % 12;
+  return `${shiftedYear}-${String(shiftedMonth + 1).padStart(2, "0")}-01`;
 }
 
 function GrowthBadge({ value, percent }: { value: number | null; percent: number | null }) {
@@ -79,10 +120,29 @@ function StatTile({
   );
 }
 
-export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
+export function RevenueTargetPanel({
+  target: initialTarget,
+  businessTodayISO,
+}: {
+  target: RevenueTarget;
+  businessTodayISO: string;
+}) {
+  const [target, setTarget] = useState(initialTarget);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [navPending, startNavTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const monthISO = `${target.Year}-${String(target.Month).padStart(2, "0")}-01`;
+  const currentMonthISO = businessTodayISO.slice(0, 7) + "-01";
+  const canGoNext = monthISO < currentMonthISO;
+
+  function navigate(nextMonthISO: string) {
+    startNavTransition(async () => {
+      const result = await getRevenueTargetForMonthAction(nextMonthISO);
+      setTarget(result);
+    });
+  }
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -119,23 +179,52 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-2">
         <div>
-          <CardTitle className="font-display">Target Revenue vs Realisasi &mdash; Bulan Berjalan</CardTitle>
+          <CardTitle className="font-display">
+            Target Revenue vs Realisasi &mdash; {monthLabel(target.Year, target.Month)}
+          </CardTitle>
           <CardDescription>
-            Hari ke-{target.CurrentDay} dari {target.DaysInMonth} hari ({formatDate(target.Today)})
+            {target.IsCurrentMonth
+              ? `Hari ke-${target.CurrentDay} dari ${target.DaysInMonth} hari (${formatDate(target.Today)})`
+              : `Bulan penuh — ${target.DaysInMonth} hari`}
           </CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={() => handleOpenChange(true)}>
-          <Target className="size-3.5" />
-          Set Target
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-7"
+              disabled={navPending}
+              onClick={() => navigate(shiftMonthISO(monthISO, -1))}
+            >
+              <ChevronLeft className="size-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-7"
+              disabled={navPending || !canGoNext}
+              onClick={() => canGoNext && navigate(shiftMonthISO(monthISO, 1))}
+            >
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => handleOpenChange(true)}>
+            <Target className="size-3.5" />
+            Set Target
+          </Button>
+        </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {/* Hero: progress s.d. hari ini */}
+      <CardContent className={cn("flex flex-col gap-3", navPending && "opacity-50 transition-opacity")}>
+        {/* Hero: progress s.d. hari ini (bulan berjalan) atau realisasi
+            penuh sebulan (bulan lampau, dipilih lewat tombol navigasi) */}
         <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Realisasi vs Target s.d. Hari ke-{target.CurrentDay}
+                {target.IsCurrentMonth
+                  ? `Realisasi vs Target s.d. Hari ke-${target.CurrentDay}`
+                  : "Realisasi vs Target — Bulan Penuh"}
               </p>
               <p className="font-display text-2xl font-semibold tabular-nums text-primary">
                 {formatRupiah(target.RealisasiNominalToDate)}
@@ -145,6 +234,11 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
                 {formatQtyPlain(target.RealisasiQtyToDate)}
                 {hasTarget && ` dari ${formatQtyPlain(target.TargetQtyToDate)}`}
               </p>
+              {!target.IsCurrentMonth && progressPct != null && (
+                <p className="mt-1 text-xs font-medium text-primary">
+                  {progressPct.toFixed(0)}% capaian bulan tsb
+                </p>
+              )}
             </div>
             <div className="flex flex-col items-end gap-1">
               <GrowthBadge value={target.GrowthNominal} percent={target.GrowthNominalPercent} />
@@ -168,8 +262,8 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
             breakpoints because a viewport breakpoint can't see that the
             sidebar's collapsed/expanded state changes actual content width
             at a fixed viewport size. A `sm:` breakpoint here would squeeze
-            these 4 tiles at the same widths that grid was fixed to avoid. */}
-        <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
+            these tiles at the same widths that grid was fixed to avoid. */}
+        <div className={cn("grid grid-cols-2 gap-3", target.IsCurrentMonth ? "@2xl:grid-cols-4" : "@2xl:grid-cols-3")}>
           <StatTile
             icon={Wallet}
             label="Target Bulanan"
@@ -193,13 +287,15 @@ export function RevenueTargetPanel({ target }: { target: RevenueTarget }) {
             qty={target.GrowthQtyPercent != null ? formatPercentPoints(Math.abs(target.GrowthQtyPercent)) : undefined}
             tone={target.GrowthQty == null ? "default" : target.GrowthQty >= 0 ? "primary" : "destructive"}
           />
-          <StatTile
-            icon={Rocket}
-            label="Target Revenue Besok"
-            nominal={target.TargetNominalBesok != null ? formatRupiah(target.TargetNominalBesok) : "-"}
-            qty={formatQtyPlain(target.TargetQtyBesok)}
-            tone="primary"
-          />
+          {target.IsCurrentMonth && (
+            <StatTile
+              icon={Rocket}
+              label="Target Revenue Besok"
+              nominal={target.TargetNominalBesok != null ? formatRupiah(target.TargetNominalBesok) : "-"}
+              qty={formatQtyPlain(target.TargetQtyBesok)}
+              tone="primary"
+            />
+          )}
         </div>
       </CardContent>
 

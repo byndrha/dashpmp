@@ -45,7 +45,7 @@ export default async function SalesPage({
 
       <SalesOverviewPanels overview={overview} businessTodayISO={businessTodayISO} />
 
-      <RevenueTargetPanel target={revenueTarget} />
+      <RevenueTargetPanel target={revenueTarget} businessTodayISO={businessTodayISO} />
 
       <Card>
         <CardHeader>

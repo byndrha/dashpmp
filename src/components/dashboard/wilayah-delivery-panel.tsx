@@ -154,17 +154,26 @@ export function WilayahDeliveryPanel({
                           offset the button's own padding). */}
                       <div className="-mx-2.5 my-1.5 border-t" />
 
-                      {/* Middle row: "Hari ini:" label above its number (left)
-                          paired with the period total, vertically centered
-                          on the right. A vertical divider separates the two
-                          values so "hari ini" and "periode terpilih" read as
-                          distinct figures instead of running together. */}
+                      {/* Middle row: "Hari ini:"/"Kemarin:" labels above their
+                          numbers (left) paired with the period total,
+                          vertically centered on the right. A vertical divider
+                          separates the day figures from "periode terpilih" so
+                          they read as distinct figures instead of running
+                          together. */}
                       <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-[9px] text-muted-foreground">Hari ini:</p>
-                          <p className="text-sm font-semibold tabular-nums">
-                            {w.TotalKantongHariIni.toLocaleString("id-ID")}
-                          </p>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div className="min-w-0">
+                            <p className="text-[9px] text-muted-foreground">Hari ini:</p>
+                            <p className="text-sm font-semibold tabular-nums">
+                              {w.TotalKantongHariIni.toLocaleString("id-ID")}
+                            </p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] text-muted-foreground">Kemarin:</p>
+                            <p className="text-sm font-semibold tabular-nums text-muted-foreground">
+                              {w.TotalKantongKemarinIni.toLocaleString("id-ID")}
+                            </p>
+                          </div>
                         </div>
                         <div className="h-6 shrink-0 border-l" />
                         <p className="shrink-0 font-display text-sm font-semibold tabular-nums">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { CircleHelp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,16 +21,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getWibTimeHHmm, resolveBusinessDateTime } from "@/lib/business-date";
 import { MitraSelect } from "@/components/dashboard/mitra-select";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { KantongVariant } from "@/lib/queries/sales-order";
 import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
-import { createPemesananAction, createTakeAwayPemesananAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
+import type { MitraPiutangSummary } from "@/lib/queries/mitra-piutang";
+import {
+  createPemesananAction,
+  createTakeAwayPemesananAction,
+  getMitraPiutangSummaryAction,
+} from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 import { checkArmadaConflictAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 
 // Sentinel for "not chosen yet" — Select items can't use an empty string as
@@ -70,6 +78,27 @@ export function PemesananFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; deliveryDateTime: Date; jamJadwal: Date } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [piutangSummary, setPiutangSummary] = useState<MitraPiutangSummary | null>(null);
+  // Derived rather than a separate state slice keyed to businessPartnerId's
+  // OWN identity — a stale summary from the previously selected mitra never
+  // gets treated as "ready" for the newly selected one just because a
+  // network response hasn't landed yet.
+  const piutangLoading = !!businessPartnerId && piutangSummary?.BusinessPartnerID !== businessPartnerId;
+
+  // Fetched on-demand per selected mitra, mirroring SalesTodayPanel's
+  // side-fetch pattern for a comparison figure — this dialog's mitra list
+  // doesn't carry per-row piutang data, so it's a dedicated round-trip per
+  // selection rather than something already in mitraList.
+  useEffect(() => {
+    if (!businessPartnerId) return;
+    let cancelled = false;
+    getMitraPiutangSummaryAction(businessPartnerId).then((result) => {
+      if (!cancelled) setPiutangSummary(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessPartnerId]);
 
   const mitra = useMemo(
     () => mitraList.find((m) => m.BusinessPartnerID === businessPartnerId) ?? null,
@@ -113,6 +142,7 @@ export function PemesananFormDialog({
     setIsTakeAway(false);
     setError(null);
     setConflict(null);
+    setPiutangSummary(null);
   }
 
   function handleOpenChange(next: boolean) {
@@ -195,10 +225,6 @@ export function PemesananFormDialog({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Buat Pemesanan</DialogTitle>
-            <DialogDescription>
-              Pilih mitra, isi jumlah pesanan, lalu jadwalkan pengirimannya. Pesanan langsung tampil sebagai Draft di
-              Papan Pengiriman.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
@@ -232,6 +258,68 @@ export function PemesananFormDialog({
               </div>
             )}
 
+            {mitra && (piutangLoading || piutangSummary) && (
+              <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium text-muted-foreground">Piutang Mitra</p>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <CircleHelp className="size-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Rasio = total piutang berjalan dibagi omzet (SalesInvoice) 3 bulan terakhir mitra ini. Semakin
+                      tinggi rasionya, semakin besar piutang dibanding omzet rutinnya.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                {piutangLoading || !piutangSummary ? (
+                  <p className="text-muted-foreground">Memuat...</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-muted-foreground">Outstanding</p>
+                      <p
+                        className={cn(
+                          "font-medium",
+                          piutangSummary.Outstanding > 0 ? "text-destructive" : "text-foreground"
+                        )}
+                      >
+                        {formatRupiah(piutangSummary.Outstanding)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Rasio vs Omzet</p>
+                      <p
+                        className={cn(
+                          "font-medium",
+                          piutangSummary.RasioPiutangOmzet == null
+                            ? "text-foreground"
+                            : piutangSummary.RasioPiutangOmzet > 1
+                              ? "text-destructive"
+                              : piutangSummary.RasioPiutangOmzet > 0.5
+                                ? "text-warning"
+                                : "text-foreground"
+                        )}
+                      >
+                        {piutangSummary.RasioPiutangOmzet != null
+                          ? `${(piutangSummary.RasioPiutangOmzet * 100).toFixed(0)}%`
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Bayar Terakhir</p>
+                      <p className="font-medium">
+                        {piutangSummary.TerakhirBayarTanggal ? formatDate(piutangSummary.TerakhirBayarTanggal) : "-"}
+                      </p>
+                      {piutangSummary.TerakhirBayarNominal != null && (
+                        <p className="text-muted-foreground">{formatRupiah(piutangSummary.TerakhirBayarNominal)}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {mitra && mitra.PriceLevel == null && (
               <p className="text-xs text-destructive">
                 Mitra ini belum punya Price Level — atur dulu di modul Mitra sebelum bisa dipesankan.
@@ -260,21 +348,21 @@ export function PemesananFormDialog({
                   type="number"
                   min="0"
                   step="1"
-                  placeholder="Qty (kantong)"
+                  placeholder="Kantong"
                   value={qty}
                   onChange={(e) => setQty(e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="bonusQty" className="sr-only">
-                  Bonus (kantong)
+                  Bonus
                 </Label>
                 <Input
                   id="bonusQty"
                   type="number"
                   min="0"
                   step="1"
-                  placeholder="Bonus (kantong)"
+                  placeholder="Bonus"
                   value={bonusQty}
                   onChange={(e) => setBonusQty(e.target.value)}
                 />
@@ -316,8 +404,7 @@ export function PemesananFormDialog({
               <span>
                 <span className="font-medium">TakeAway (Ambil Sendiri)</span>
                 <span className="block text-xs text-muted-foreground">
-                  Mitra ambil sendiri di pabrik — SO langsung terbit tanpa armada/driver. DO, Invoice, dan cetak SI
-                  baru diproses setelah Kepala Produksi menyelesaikan Muat di aplikasi produksi.
+                   DO, SI, dan cetak SI diproses setelah Kepala Produksi menyelesaikan Muat.
                 </span>
               </span>
             </label>

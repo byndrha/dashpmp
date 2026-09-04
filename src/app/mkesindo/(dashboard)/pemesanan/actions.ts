@@ -20,7 +20,15 @@ import {
   type EditableSalesOrderQty,
   type KantongVariant,
 } from "@/lib/queries/sales-order";
+import { getMitraPiutangSummary, type MitraPiutangSummary } from "@/lib/queries/mitra-piutang";
 import { runAction, type ActionResult } from "@/lib/action-result";
+
+// Powers the mitra-info card in the "Buat Pemesanan" dialog — fetched
+// on-demand once an operator picks a mitra, not with the initial page load
+// (this dialog's mitra list can be long, and most selections never need it).
+export async function getMitraPiutangSummaryAction(businessPartnerId: string): Promise<MitraPiutangSummary> {
+  return getMitraPiutangSummary(businessPartnerId);
+}
 
 export async function createPemesananAction(input: CreatePemesananInput): Promise<ActionResult<CreatePemesananResult>> {
   return runAction(async () => {

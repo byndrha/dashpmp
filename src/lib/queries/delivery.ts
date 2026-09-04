@@ -8,6 +8,7 @@ export interface WilayahDeliverySummary {
   Qty5KG: number;
   TotalKantong: number;
   TotalKantongHariIni: number;
+  TotalKantongKemarinIni: number;
   // Sum of Capacity across every active mitra in this wilayah — same Target
   // concept already used per-mitra in mitra-do.ts, aggregated up here.
   // null means no active mitra in this wilayah (as opposed to 0, meaning
@@ -46,7 +47,7 @@ export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promis
     Math.round((new Date(filter.endDate).getTime() - new Date(filter.startDate).getTime()) / 86400000)
   );
 
-  const [periodResult, todayResult, targetResult] = await Promise.all([
+  const [periodResult, todayResult, yesterdayResult, targetResult] = await Promise.all([
     pool
       .request()
       .input("startDate", sql.Date, filter.startDate)
@@ -77,6 +78,20 @@ export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promis
           AND do_.TransDate >= @businessDate AND do_.TransDate < DATEADD(DAY, 1, @businessDate)
         GROUP BY ${WILAYAH_EXPR}
       `),
+    pool
+      .request()
+      .input("businessDate", sql.Date, businessToday)
+      .query(`
+        SELECT
+            ${WILAYAH_EXPR} AS Wilayah,
+            ISNULL(SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivered / 2.0 ELSE dod.Delivered END), 0) AS TotalKantongKemarinIni
+        FROM DeliveryOrder do_
+        JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= DATEADD(DAY, -1, @businessDate) AND do_.TransDate < @businessDate
+        GROUP BY ${WILAYAH_EXPR}
+      `),
     pool.request().query(`
       SELECT
           ${WILAYAH_EXPR} AS Wilayah,
@@ -89,26 +104,35 @@ export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promis
 
   const byWilayah = new Map<
     string,
-    { Qty10KG: number; Qty5KG: number; TotalKantongHariIni: number; TargetHarian: number | null }
+    {
+      Qty10KG: number;
+      Qty5KG: number;
+      TotalKantongHariIni: number;
+      TotalKantongKemarinIni: number;
+      TargetHarian: number | null;
+    }
   >();
+  function ensure(wilayah: string) {
+    let entry = byWilayah.get(wilayah);
+    if (!entry) {
+      entry = { Qty10KG: 0, Qty5KG: 0, TotalKantongHariIni: 0, TotalKantongKemarinIni: 0, TargetHarian: null };
+      byWilayah.set(wilayah, entry);
+    }
+    return entry;
+  }
   for (const r of periodResult.recordset as { Wilayah: string; Qty10KG: number; Qty5KG: number }[]) {
-    byWilayah.set(r.Wilayah, { Qty10KG: r.Qty10KG, Qty5KG: r.Qty5KG, TotalKantongHariIni: 0, TargetHarian: null });
+    const entry = ensure(r.Wilayah);
+    entry.Qty10KG = r.Qty10KG;
+    entry.Qty5KG = r.Qty5KG;
   }
   for (const r of todayResult.recordset as { Wilayah: string; TotalKantongHariIni: number }[]) {
-    const entry = byWilayah.get(r.Wilayah);
-    if (entry) entry.TotalKantongHariIni = r.TotalKantongHariIni;
-    else
-      byWilayah.set(r.Wilayah, {
-        Qty10KG: 0,
-        Qty5KG: 0,
-        TotalKantongHariIni: r.TotalKantongHariIni,
-        TargetHarian: null,
-      });
+    ensure(r.Wilayah).TotalKantongHariIni = r.TotalKantongHariIni;
+  }
+  for (const r of yesterdayResult.recordset as { Wilayah: string; TotalKantongKemarinIni: number }[]) {
+    ensure(r.Wilayah).TotalKantongKemarinIni = r.TotalKantongKemarinIni;
   }
   for (const r of targetResult.recordset as { Wilayah: string; TargetHarian: number }[]) {
-    const entry = byWilayah.get(r.Wilayah);
-    if (entry) entry.TargetHarian = r.TargetHarian;
-    else byWilayah.set(r.Wilayah, { Qty10KG: 0, Qty5KG: 0, TotalKantongHariIni: 0, TargetHarian: r.TargetHarian });
+    ensure(r.Wilayah).TargetHarian = r.TargetHarian;
   }
 
   return [...byWilayah.entries()]
@@ -121,6 +145,7 @@ export async function getWilayahDeliverySummary(filter: DateRangeFilter): Promis
         Qty5KG: v.Qty5KG,
         TotalKantong,
         TotalKantongHariIni: v.TotalKantongHariIni,
+        TotalKantongKemarinIni: v.TotalKantongKemarinIni,
         TargetHarian: v.TargetHarian,
         TargetPeriode,
         PctAchievement: TargetPeriode ? (TotalKantong / TargetPeriode) * 100 : null,

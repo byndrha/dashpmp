@@ -436,6 +436,176 @@ export async function getSalesOverview(): Promise<SalesOverview> {
   };
 }
 
+// Month-comparison + averages for an ARBITRARY reference month — powers the
+// "Bulan Ini" panel's prev/next month navigation (sales-comparison-panel.tsx).
+// Mirrors getSalesOverview()'s own month-comparison block (same buildComparison
+// shape, same query structure) but parameterized by `monthStart` instead of
+// always anchoring on businessToday's own month. Kept as its own standalone
+// function (some duplication with getSalesOverview accepted) rather than
+// refactoring that already-relied-upon function, to avoid risking a
+// regression there for this new, separate navigation feature.
+//
+// When `monthStart` IS businessToday's real current month, "this month"
+// stays month-to-date (partial, capped at businessToday) — identical to
+// getSalesOverview()'s existing behavior. For any earlier month (the panel
+// can never navigate past the current month — see canGoNext in the UI),
+// "this month" means the FULL completed month, and the daily average uses
+// the full day-count of that month rather than clamping to today's
+// day-of-month (which would silently and wrongly shrink a past month's own
+// average every time it's viewed).
+export async function getSalesComparisonForMonth(
+  monthStart: Date,
+  businessToday: Date
+): Promise<{ comparisons: SalesComparison[]; averages: SalesAverages; isCurrentMonth: boolean }> {
+  const pool = await getPool();
+  const isCurrentMonth =
+    monthStart.getUTCFullYear() === businessToday.getUTCFullYear() &&
+    monthStart.getUTCMonth() === businessToday.getUTCMonth();
+  const nextMonthStart = monthBoundary(monthStart, 1);
+  const thisMonthEnd = isCurrentMonth
+    ? new Date(Date.UTC(businessToday.getUTCFullYear(), businessToday.getUTCMonth(), businessToday.getUTCDate() + 1))
+    : nextMonthStart;
+  const lastMonthStart = monthBoundary(monthStart, -1);
+  const lastYearMonthStart = monthBoundary(monthStart, -12);
+  const lastYearMonthEnd = monthBoundary(monthStart, -11);
+  const twoYearsAgoMonthStart = monthBoundary(monthStart, -24);
+  const twoYearsAgoMonthEnd = monthBoundary(monthStart, -23);
+
+  const [netResult, qtyResult, priceResult] = await Promise.all([
+    pool
+      .request()
+      .input("thisMonthStart", sql.Date, monthStart)
+      .input("thisMonthEnd", sql.Date, thisMonthEnd)
+      .input("lastMonthStart", sql.Date, lastMonthStart)
+      .input("lastYearMonthStart", sql.Date, lastYearMonthStart)
+      .input("lastYearMonthEnd", sql.Date, lastYearMonthEnd)
+      .input("twoYearsAgoMonthStart", sql.Date, twoYearsAgoMonthStart)
+      .input("twoYearsAgoMonthEnd", sql.Date, twoYearsAgoMonthEnd)
+      .query(`
+        SELECT
+            ISNULL(SUM(CASE WHEN TransDate >= @thisMonthStart AND TransDate < @thisMonthEnd THEN Netto ELSE 0 END), 0) AS ThisMonthNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @lastMonthStart AND TransDate < @thisMonthStart THEN Netto ELSE 0 END), 0) AS LastMonthNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @lastYearMonthStart AND TransDate < @lastYearMonthEnd THEN Netto ELSE 0 END), 0) AS LastYearMonthNet,
+            ISNULL(SUM(CASE WHEN TransDate >= @twoYearsAgoMonthStart AND TransDate < @twoYearsAgoMonthEnd THEN Netto ELSE 0 END), 0) AS TwoYearsAgoMonthNet
+        FROM SalesInvoice
+        WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
+          AND TransDate >= @twoYearsAgoMonthStart
+      `),
+    pool
+      .request()
+      .input("thisMonthStart", sql.Date, monthStart)
+      .input("thisMonthEnd", sql.Date, thisMonthEnd)
+      .input("lastMonthStart", sql.Date, lastMonthStart)
+      .input("lastYearMonthStart", sql.Date, lastYearMonthStart)
+      .input("lastYearMonthEnd", sql.Date, lastYearMonthEnd)
+      .input("twoYearsAgoMonthStart", sql.Date, twoYearsAgoMonthStart)
+      .input("twoYearsAgoMonthEnd", sql.Date, twoYearsAgoMonthEnd)
+      .query(`
+        SELECT
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @thisMonthStart AND do_.TransDate < @thisMonthEnd THEN dod.Delivered ELSE 0 END), 0) AS ThisMonthQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @lastMonthStart AND do_.TransDate < @thisMonthStart THEN dod.Delivered ELSE 0 END), 0) AS LastMonthQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @lastYearMonthStart AND do_.TransDate < @lastYearMonthEnd THEN dod.Delivered ELSE 0 END), 0) AS LastYearMonthQty,
+            ISNULL(SUM(CASE WHEN do_.TransDate >= @twoYearsAgoMonthStart AND do_.TransDate < @twoYearsAgoMonthEnd THEN dod.Delivered ELSE 0 END), 0) AS TwoYearsAgoMonthQty
+        FROM DeliveryOrder do_
+        JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
+        WHERE do_.IsDeleted = 0
+          AND do_.TransDate >= @twoYearsAgoMonthStart
+      `),
+    pool
+      .request()
+      .input("thisMonthStart", sql.Date, monthStart)
+      .input("thisMonthEnd", sql.Date, thisMonthEnd)
+      .input("lastMonthStart", sql.Date, lastMonthStart)
+      .query(`
+        SELECT
+            ${kemasanCase("sid.Name")} AS Kemasan,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @thisMonthStart AND si.TransDate < @thisMonthEnd THEN sid.Amount ELSE 0 END), 0) AS ThisMonthAmount,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @thisMonthStart AND si.TransDate < @thisMonthEnd THEN sid.Qty ELSE 0 END), 0) AS ThisMonthQty,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @lastMonthStart AND si.TransDate < @thisMonthStart THEN sid.Amount ELSE 0 END), 0) AS LastMonthAmount,
+            ISNULL(SUM(CASE WHEN si.TransDate >= @lastMonthStart AND si.TransDate < @thisMonthStart THEN sid.Qty ELSE 0 END), 0) AS LastMonthQty
+        FROM SalesInvoiceDetail sid
+        JOIN SalesInvoice si ON si.SalesInvoiceID = sid.SalesInvoiceID
+        WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
+          AND si.TransDate >= @lastMonthStart
+        GROUP BY ${kemasanCase("sid.Name")}
+      `),
+  ]);
+
+  const net = netResult.recordset[0] as {
+    ThisMonthNet: number;
+    LastMonthNet: number;
+    LastYearMonthNet: number;
+    TwoYearsAgoMonthNet: number;
+  };
+  const qty = qtyResult.recordset[0] as {
+    ThisMonthQty: number;
+    LastMonthQty: number;
+    LastYearMonthQty: number;
+    TwoYearsAgoMonthQty: number;
+  };
+  const priceRows = priceResult.recordset as {
+    Kemasan: string;
+    ThisMonthAmount: number;
+    ThisMonthQty: number;
+    LastMonthAmount: number;
+    LastMonthQty: number;
+  }[];
+  const price10KG = priceRows.find((r) => r.Kemasan === "10KG");
+  const price5KG = priceRows.find((r) => r.Kemasan === "5KG");
+  const avgHarga10ThisMonth = price10KG?.ThisMonthQty ? price10KG.ThisMonthAmount / price10KG.ThisMonthQty : 0;
+  const avgHarga10LastMonth = price10KG?.LastMonthQty ? price10KG.LastMonthAmount / price10KG.LastMonthQty : 0;
+  const avgHarga5ThisMonth = price5KG?.ThisMonthQty ? price5KG.ThisMonthAmount / price5KG.ThisMonthQty : 0;
+  const avgHarga5LastMonth = price5KG?.LastMonthQty ? price5KG.LastMonthAmount / price5KG.LastMonthQty : 0;
+
+  // Day-count denominator: month-to-date (clamped to today) for the current
+  // month, full month length for any earlier month — see this function's
+  // own doc comment above for why a past month must never use today's
+  // day-of-month as its denominator.
+  const currentDay = isCurrentMonth
+    ? businessToday.getUTCDate()
+    : new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate();
+  const daysInLastMonth = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth(), 0)).getUTCDate();
+  const avgKantongThisMonth = currentDay ? qty.ThisMonthQty / currentDay : 0;
+  const avgKantongLastMonth = daysInLastMonth ? qty.LastMonthQty / daysInLastMonth : 0;
+
+  const averages: SalesAverages = {
+    AvgKantongPerHariThisMonth: avgKantongThisMonth,
+    AvgKantongPerHariLastMonth: avgKantongLastMonth,
+    AvgKantongPerHariPctChange: pctChange(avgKantongThisMonth, avgKantongLastMonth),
+    AvgHarga10KGThisMonth: avgHarga10ThisMonth,
+    AvgHarga10KGLastMonth: avgHarga10LastMonth,
+    AvgHarga10KGPctChange: pctChange(avgHarga10ThisMonth, avgHarga10LastMonth),
+    AvgHarga5KGThisMonth: avgHarga5ThisMonth,
+    AvgHarga5KGLastMonth: avgHarga5LastMonth,
+    AvgHarga5KGPctChange: pctChange(avgHarga5ThisMonth, avgHarga5LastMonth),
+  };
+
+  const thisMonth: SalesPeriodStat = { NetSales: net.ThisMonthNet, DOQty: qty.ThisMonthQty };
+  const buildComparison = (previousLabel: string, previous: SalesPeriodStat): SalesComparison => ({
+    previousLabel,
+    current: thisMonth,
+    previous,
+    NominalPctChange: pctChange(thisMonth.NetSales, previous.NetSales),
+    QtyPctChange: pctChange(thisMonth.DOQty, previous.DOQty),
+  });
+
+  return {
+    comparisons: [
+      buildComparison(yearMonthLabel(lastMonthStart), { NetSales: net.LastMonthNet, DOQty: qty.LastMonthQty }),
+      buildComparison(yearMonthLabel(lastYearMonthStart), {
+        NetSales: net.LastYearMonthNet,
+        DOQty: qty.LastYearMonthQty,
+      }),
+      buildComparison(yearMonthLabel(twoYearsAgoMonthStart), {
+        NetSales: net.TwoYearsAgoMonthNet,
+        DOQty: qty.TwoYearsAgoMonthQty,
+      }),
+    ],
+    averages,
+    isCurrentMonth,
+  };
+}
+
 function buildBucketClauses(
   bounds: { key: string; lo: Date; hi: Date }[],
   column: string

@@ -29,7 +29,12 @@ export function SalesOverviewPanels({
         businessTodayISO={businessTodayISO}
       />
 
-      <SalesComparisonPanel comparisons={comparisons} averages={averages} />
+      <SalesComparisonPanel
+        initialMonthISO={businessTodayISO.slice(0, 7) + "-01"}
+        businessTodayISO={businessTodayISO}
+        comparisons={comparisons}
+        averages={averages}
+      />
 
       {/* Below @4xl, this wrapper is `contents` — it disappears from layout
           so Nominal Penjualan and Total Qty behave as independent grid
