@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,6 +10,12 @@ import {
   deleteBatchAction,
   type RiwayatProduksiRowWithNama,
 } from "@/app/mkesindo/produksi/actions";
+
+function formatPeriodeLabel(windowEnd: Date): string {
+  const windowStart = new Date(windowEnd.getTime() - 24 * 3600000);
+  const fmt = (d: Date) => d.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return `${fmt(windowStart)} — ${fmt(windowEnd)}`;
+}
 
 // Desktop-only counterpart to produksi-app's RiwayatPosisiList (mobile,
 // tambah-produksi-dialog.tsx) — same underlying data (getRiwayatProduksiForPosisiAction),
@@ -117,34 +123,68 @@ function BatchRow({ row, onChanged }: { row: RiwayatProduksiRowWithNama; onChang
 }
 
 export function RiwayatPosisiListDesktop({ posisiId }: { posisiId: number }) {
-  // Paired with the posisiId it was fetched for (not just the raw rows) so
-  // switching pallete mid-load can't briefly show the PREVIOUS pallete's
-  // rows under the new one's heading — same pattern as produksi-app's own
-  // RiwayatPosisiList (tambah-produksi-dialog.tsx).
-  const [state, setState] = useState<{ posisiId: number; rows: RiwayatProduksiRowWithNama[] } | null>(null);
+  // Berapa periode 24-jam ke belakang dari sekarang -- 0 = 24 jam terakhir
+  // s.d. sekarang, 1 = 24 jam sebelum itu, dst. Direset ke 0 tiap kali
+  // pallete yang dilihat berganti (lihat effect di bawah).
+  const [offsetPeriods, setOffsetPeriods] = useState(0);
+  // Paired with the posisiId+offset it was fetched for (not just the raw
+  // rows) so switching pallete or periode mid-load can't briefly show the
+  // PREVIOUS combination's rows under the new heading — same pattern as
+  // produksi-app's own RiwayatPosisiList (tambah-produksi-dialog.tsx).
+  const [state, setState] = useState<{ posisiId: number; offsetPeriods: number; rows: RiwayatProduksiRowWithNama[] } | null>(
+    null
+  );
+
+  const [now] = useState(() => new Date());
+  const windowEnd = new Date(now.getTime() - offsetPeriods * 24 * 3600000);
 
   function load() {
-    getRiwayatProduksiForPosisiAction(posisiId).then((result) => {
-      if (result.success) setState({ posisiId, rows: result.data });
+    getRiwayatProduksiForPosisiAction(posisiId, windowEnd.toISOString()).then((result) => {
+      if (result.success) setState({ posisiId, offsetPeriods, rows: result.data });
     });
   }
 
   useEffect(() => {
     let cancelled = false;
-    getRiwayatProduksiForPosisiAction(posisiId).then((result) => {
+    getRiwayatProduksiForPosisiAction(posisiId, windowEnd.toISOString()).then((result) => {
       if (cancelled) return;
-      if (result.success) setState({ posisiId, rows: result.data });
+      if (result.success) setState({ posisiId, offsetPeriods, rows: result.data });
     });
     return () => {
       cancelled = true;
     };
-  }, [posisiId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posisiId, offsetPeriods]);
 
-  const rows = state && state.posisiId === posisiId ? state.rows : null;
+  const rows = state && state.posisiId === posisiId && state.offsetPeriods === offsetPeriods ? state.rows : null;
 
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/30 p-2.5">
-      <p className="text-xs font-semibold text-muted-foreground">Riwayat &amp; Kelola Stok Pallete Ini</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-muted-foreground">Riwayat &amp; Kelola Stok Pallete Ini</p>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-6"
+            onClick={() => setOffsetPeriods((p) => p + 1)}
+            title="Periode sebelumnya"
+          >
+            <ChevronLeft className="size-3" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-6"
+            disabled={offsetPeriods === 0}
+            onClick={() => setOffsetPeriods((p) => Math.max(0, p - 1))}
+            title="Periode berikutnya"
+          >
+            <ChevronRight className="size-3" />
+          </Button>
+        </div>
+      </div>
+      <p className="text-[10px] text-muted-foreground">{formatPeriodeLabel(windowEnd)}</p>
       {rows === null ? (
         <p className="text-xs text-muted-foreground">Memuat...</p>
       ) : rows.length === 0 ? (

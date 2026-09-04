@@ -29,7 +29,7 @@ import {
   type ProduksiSelesaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
 import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
-import { getJadwalBulan, setJadwalTim, type JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
+import { getJadwalBulan, setJadwalTim, hapusJadwalTim, type JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
 import { getAkunNamaMap, getStafOperasionalOptions, getProduksiAkunOptions, type StafOperasionalOption } from "@/lib/queries/akun";
 import {
   getKualitasRiwayat,
@@ -135,13 +135,17 @@ export async function getRiwayatProduksiAction(): Promise<ActionResult<RiwayatPr
   });
 }
 
-// Riwayat scoped to one Pallete — shown at the top of TambahProduksiDialog.
+// Riwayat scoped to one Pallete — shown at the top of TambahProduksiDialog
+// (mobile, no windowEndISO — top-10 most recent) and the desktop "Riwayat &
+// Kelola Stok Pallete Ini" panel (windowEndISO set — 24-jam window ending
+// at that moment, for its prev/next period buttons).
 export async function getRiwayatProduksiForPosisiAction(
-  posisiId: number
+  posisiId: number,
+  windowEndISO?: string
 ): Promise<ActionResult<RiwayatProduksiRowWithNama[]>> {
   return runAction(async () => {
     await requireProduksiView();
-    const rows = await getRiwayatProduksiForPosisi(posisiId);
+    const rows = await getRiwayatProduksiForPosisi(posisiId, windowEndISO ? { windowEnd: new Date(windowEndISO) } : undefined);
     const namaMap = await getAkunNamaMap(rows.map((r) => r.DicatatOlehAkunID));
     return rows.map((r) => ({ ...r, DicatatOlehNama: namaMap.get(r.DicatatOlehAkunID) ?? "Tidak diketahui" }));
   });
@@ -554,6 +558,14 @@ export async function setJadwalTimAction(tanggalUsaha: string, shift: ShiftNumbe
   return runAction(async () => {
     const session = await requireProduksiAdmin();
     await setJadwalTim(tanggalUsaha, shift, timId, Number(session.user.id));
+    revalidatePath("/mkesindo/produksi");
+  });
+}
+
+export async function hapusJadwalTimAction(tanggalUsaha: string, shift: ShiftNumber): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiAdmin();
+    await hapusJadwalTim(tanggalUsaha, shift);
     revalidatePath("/mkesindo/produksi");
   });
 }

@@ -63,3 +63,15 @@ export async function setJadwalTim(tanggalUsaha: string, shift: ShiftNumber, tim
       WHEN NOT MATCHED THEN INSERT (TanggalUsaha, Shift, TimID, CreatedByAkunID) VALUES (@t, @s, @timId, @akunId);
     `);
 }
+
+// Membatalkan penugasan satu sel kalender (klik sel yang sudah terisi Tim
+// yang sama di tampilan timeline /mkesindo/produksi) -- TimID tidak
+// nullable, jadi "kosongkan" berarti menghapus barisnya, bukan set NULL.
+export async function hapusJadwalTim(tanggalUsaha: string, shift: ShiftNumber): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("t", sql.Date, tanggalUsaha)
+    .input("s", sql.TinyInt, shift)
+    .query(`DELETE FROM DashboardJadwalTimProduksi WHERE TanggalUsaha = @t AND Shift = @s`);
+}

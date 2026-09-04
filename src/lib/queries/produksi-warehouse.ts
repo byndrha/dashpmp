@@ -91,20 +91,35 @@ export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow
 // TambahProduksiDialog / the detail popup so the operator can see every
 // batch (active or already-consumed) ever recorded at this exact slot,
 // including ones stacked alongside a currently-active batch.
-export async function getRiwayatProduksiForPosisi(posisiId: number, limit = 10): Promise<RiwayatProduksiRow[]> {
+// `windowEnd` scopes the result to the 24 hours ending at that moment
+// (never touches/deletes any row — purely a display filter) for the
+// desktop "Riwayat & Kelola Stok Pallete Ini" panel's prev/next period
+// navigation. Omitted entirely, it falls back to the original top-N
+// most-recent behavior the mobile RiwayatPosisiList still relies on.
+export async function getRiwayatProduksiForPosisi(
+  posisiId: number,
+  options?: { limit?: number; windowEnd?: Date }
+): Promise<RiwayatProduksiRow[]> {
   const pool = await getPool();
-  const result = await pool
-    .request()
-    .input("posisiId", sql.Int, posisiId)
-    .input("limit", sql.Int, limit)
-    .query(`
-      SELECT TOP (@limit) b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
+  const request = pool.request().input("posisiId", sql.Int, posisiId);
+  let topClause = "";
+  let windowClause = "";
+  if (options?.windowEnd) {
+    const windowStart = new Date(options.windowEnd.getTime() - 24 * 3600000);
+    request.input("windowStart", sql.DateTime, windowStart).input("windowEnd", sql.DateTime, options.windowEnd);
+    windowClause = "AND b.TanggalProduksi >= @windowStart AND b.TanggalProduksi < @windowEnd";
+  } else {
+    request.input("limit", sql.Int, options?.limit ?? 10);
+    topClause = "TOP (@limit)";
+  }
+  const result = await request.query(`
+      SELECT ${topClause} b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
              b.Qty10KG, b.SisaQty10KG, b.DicatatOlehAkunID,
              b.TanggalLabel, b.Shift, b.JamPanen
       FROM DashboardProduksiBatch b
       JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
       JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
-      WHERE b.IsDeleted = 0 AND b.PosisiID = @posisiId
+      WHERE b.IsDeleted = 0 AND b.PosisiID = @posisiId ${windowClause}
       ORDER BY b.TanggalProduksi DESC
     `);
   return result.recordset;

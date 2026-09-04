@@ -78,7 +78,7 @@ export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) 
 
         {selected && (
           <div className="flex w-full flex-col gap-3 lg:w-72 lg:shrink-0">
-            <RiwayatPosisiListDesktop posisiId={selected.PosisiID} />
+            <RiwayatPosisiListDesktop key={selected.PosisiID} posisiId={selected.PosisiID} />
             <div className="rounded-md border border-border p-3 text-sm">
               <p className="font-semibold">Pallet {selected.Kode}</p>
               <p className="text-muted-foreground">
