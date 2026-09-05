@@ -41,6 +41,13 @@ import {
   type PengajuanRow,
 } from "@/lib/queries/mitra-pengajuan";
 import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
+import {
+  getSisaReturTersedia,
+  jualUlangDalamRute,
+  jualUlangLuarRute,
+  jualUlangRetail,
+  type SisaReturRow,
+} from "@/lib/queries/retur-resale";
 
 async function requireOwnSalesmanId(): Promise<string> {
   const session = await requireDriver();
@@ -328,5 +335,68 @@ export async function getPriceLevelOptionsForDriverAction(): Promise<ActionResul
   return runAction(async () => {
     await requireDriver();
     return getPriceLevelOptions();
+  });
+}
+
+// Jual Ulang Es Retur di Rute — driver (mobile) surface. Same
+// requireOwnSalesmanId() + assertOwnsJadwal/assertOwnsJadwalDetail guard
+// shape as confirmStopDeliveryAction/getDriverJadwalStopsAction above; the
+// three mutating actions additionally call requireDriver() to get
+// session.user.id for DicatatOlehAkunID (akunId). Suffixed "Driver" so these
+// never collide by name with the desktop dispatcher's own
+// getSisaReturTersediaAction/jualUlang*Action in delivery/actions.ts.
+export async function getSisaReturTersediaDriverAction(jadwalId: number): Promise<ActionResult<SisaReturRow[]>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwal(jadwalId, salesmanId);
+    return getSisaReturTersedia(jadwalId);
+  });
+}
+
+export async function jualUlangDalamRuteDriverAction(
+  stopDeliveryItemId: number,
+  targetJadwalDetailId: number,
+  qty: number,
+  jadwalId: number
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwal(jadwalId, salesmanId);
+    const session = await requireDriver();
+    await jualUlangDalamRute(stopDeliveryItemId, targetJadwalDetailId, qty, Number(session.user.id), "DRIVER");
+    revalidatePath("/mkesindo/driver-app");
+  });
+}
+
+export async function jualUlangLuarRuteDriverAction(
+  stopDeliveryItemId: number,
+  businessPartnerId: string,
+  qty: number,
+  jadwalId: number
+): Promise<ActionResult<{ salesOrderId: string }>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwal(jadwalId, salesmanId);
+    const session = await requireDriver();
+    const result = await jualUlangLuarRute(stopDeliveryItemId, businessPartnerId, qty, jadwalId, Number(session.user.id), "DRIVER");
+    revalidatePath("/mkesindo/driver-app");
+    return result;
+  });
+}
+
+export async function jualUlangRetailDriverAction(
+  stopDeliveryItemId: number,
+  qty: number,
+  lokasiLat: number,
+  lokasiLng: number,
+  jadwalId: number
+): Promise<ActionResult<{ salesOrderId: string }>> {
+  return runAction(async () => {
+    const salesmanId = await requireOwnSalesmanId();
+    await assertOwnsJadwal(jadwalId, salesmanId);
+    const session = await requireDriver();
+    const result = await jualUlangRetail(stopDeliveryItemId, qty, lokasiLat, lokasiLng, jadwalId, Number(session.user.id), "DRIVER");
+    revalidatePath("/mkesindo/driver-app");
+    return result;
   });
 }

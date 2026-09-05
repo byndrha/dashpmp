@@ -74,6 +74,13 @@ import {
 } from "@/lib/queries/print-format-settings";
 import { getThermalReceiptData, type ThermalReceiptData } from "@/lib/queries/thermal-receipt";
 import { getInvoiceByToken, type PublicInvoice } from "@/lib/queries/invoice-public";
+import {
+  getSisaReturTersedia,
+  jualUlangDalamRute,
+  jualUlangLuarRute,
+  jualUlangRetail,
+  type SisaReturRow,
+} from "@/lib/queries/retur-resale";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
@@ -503,5 +510,64 @@ export async function getThermalReceiptDataAction(salesInvoiceId: string): Promi
   return runAction(async () => {
     const session = await requireModuleAccess("delivery");
     return getThermalReceiptData(salesInvoiceId, session.user.name ?? "-");
+  });
+}
+
+// Jual Ulang Es Retur di Rute — dispatcher (desktop) surface. Gated with
+// requireModuleAccess("delivery"), the same guard every other
+// mutation/data-writing action in this file already uses (e.g.
+// createArmadaActivityAction, saveDriverProfileAction, createVehicleCheckAction,
+// the print-queue actions below). getStopDeliveryProofAction just above is
+// read-only and, like several other read-only actions in this file
+// (getJadwalDetailAction, getDriverPositionAction, getIstirahatForJadwalAction),
+// carries no explicit gate of its own — but the three jualUlang* actions below
+// create/mutate real SO/DO/SI financial documents, so they follow the
+// requireModuleAccess("delivery") convention used by every other
+// state-changing action here rather than that no-guard read-only pattern.
+export async function getSisaReturTersediaAction(jadwalId: number): Promise<ActionResult<SisaReturRow[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getSisaReturTersedia(jadwalId);
+  });
+}
+
+export async function jualUlangDalamRuteAction(
+  stopDeliveryItemId: number,
+  targetJadwalDetailId: number,
+  qty: number
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("delivery");
+    await jualUlangDalamRute(stopDeliveryItemId, targetJadwalDetailId, qty, Number(session.user.id), "DISPATCHER");
+    revalidatePath("/mkesindo/delivery");
+  });
+}
+
+export async function jualUlangLuarRuteAction(
+  stopDeliveryItemId: number,
+  businessPartnerId: string,
+  qty: number,
+  jadwalId: number
+): Promise<ActionResult<{ salesOrderId: string }>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("delivery");
+    const result = await jualUlangLuarRute(stopDeliveryItemId, businessPartnerId, qty, jadwalId, Number(session.user.id), "DISPATCHER");
+    revalidatePath("/mkesindo/delivery");
+    return result;
+  });
+}
+
+export async function jualUlangRetailAction(
+  stopDeliveryItemId: number,
+  qty: number,
+  lokasiLat: number,
+  lokasiLng: number,
+  jadwalId: number
+): Promise<ActionResult<{ salesOrderId: string }>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("delivery");
+    const result = await jualUlangRetail(stopDeliveryItemId, qty, lokasiLat, lokasiLng, jadwalId, Number(session.user.id), "DISPATCHER");
+    revalidatePath("/mkesindo/delivery");
+    return result;
   });
 }
