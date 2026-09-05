@@ -103,6 +103,12 @@ export interface JadwalCard {
   // estimateTravelMinutesForJadwal (same bulk per-stop query), not a
   // route-order concept — just "how far does this run reach".
   LokasiTerjauh: { Wilayah: string; Kecamatan: string | null } | null;
+  // true kalau ada sisa qty retur berkondisi Baik yang masih tersedia
+  // untuk dijual ulang di mana pun dalam Jadwal ini -- lihat
+  // src/lib/queries/retur-resale.ts. Dihitung EXISTS ringan di sini
+  // (bukan panggil getSisaReturTersedia penuh) karena query ini
+  // menghasilkan puluhan kartu sekaligus untuk seluruh board.
+  AdaReturTersedia: boolean;
 }
 
 // A real DeliveryOrder created directly in the desktop ERP app (not through
@@ -194,7 +200,16 @@ export async function getPengirimanBoard(
             COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop,
             j.JarakKM,
             j.DurasiMenit,
-            ISNULL(sdur.EstimasiDurasiMenit, 0) AS EstimasiDurasiMenit
+            ISNULL(sdur.EstimasiDurasiMenit, 0) AS EstimasiDurasiMenit,
+            CASE WHEN EXISTS (
+                SELECT 1
+                FROM DashboardPengirimanStopDeliveryItem sdi
+                JOIN DashboardPengirimanStopDelivery sd2 ON sd2.StopDeliveryID = sdi.StopDeliveryID
+                JOIN DashboardPengirimanJadwalDetail jd2 ON jd2.JadwalDetailID = sd2.JadwalDetailID
+                WHERE jd2.JadwalID = j.JadwalID
+                  AND sdi.KondisiRetur = 'BAIK'
+                  AND sdi.QtyRetur > ISNULL((SELECT SUM(Qty) FROM DashboardPengirimanReturResale WHERE StopDeliveryItemID = sdi.StopDeliveryItemID), 0)
+            ) THEN 1 ELSE 0 END AS AdaReturTersedia
         FROM DashboardPengirimanJadwal j
         LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
         LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
@@ -321,6 +336,7 @@ export async function getPengirimanBoard(
     EstimasiDurasiMenit: jr.EstimasiDurasiMenit + (travelByJadwalId.get(jr.JadwalID) ?? 0),
     JamKembaliAktual: jamKembaliMap.get(jr.JadwalID) ?? null,
     LokasiTerjauh: farthestByJadwalId.get(jr.JadwalID) ?? null,
+    AdaReturTersedia: Boolean(jr.AdaReturTersedia),
   }));
 
   return { armada, jadwal, externalDeliveries: externalResult.recordset, takeawayOrders: takeawayResult.recordset };

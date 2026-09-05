@@ -578,7 +578,7 @@ function DraggableJadwalCard({
         // Packing tightly from the top instead reclaims the empty space
         // justify-between left above the kantong number, which is what the
         // 3rd line actually needed to stay inside the box.
-        "absolute flex flex-col justify-start gap-0.5 overflow-hidden rounded-md border p-1.5 text-left shadow-sm",
+        "relative absolute flex flex-col justify-start gap-0.5 overflow-hidden rounded-md border p-1.5 text-left shadow-sm",
         isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30 bg-primary/10",
         isDragging && "z-20 opacity-70 shadow-lg"
       )}
@@ -594,6 +594,14 @@ function DraggableJadwalCard({
         transform: CSS.Translate.toString(transform),
       }}
     >
+      {j.AdaReturTersedia && (
+        <span
+          title="Ada retur berkondisi Baik yang masih bisa dijual ulang"
+          className="absolute -right-1 -top-1 z-10 flex size-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white"
+        >
+          !
+        </span>
+      )}
       <div className="flex items-center justify-between gap-1 leading-none">
         <span className="text-[10px] font-semibold tabular-nums">{formatTime(j.JamJadwal)}</span>
         <span
