@@ -355,7 +355,7 @@ export async function jualUlangDalamRute(
           `);
       } else {
         const newQty = sidRow.Qty + qty;
-        const newAmount = newQty * claim.price;
+        const newAmount = newQty * targetSodRow.Price;
         await new sql.Request(transaction)
           .input("id", sql.VarChar(16), sidRow.SalesInvoiceDetailID)
           .input("qty", sql.Decimal(23, 4), newQty)
