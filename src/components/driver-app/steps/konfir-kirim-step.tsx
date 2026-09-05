@@ -61,6 +61,7 @@ export function KonfirKirimStep({
   const [qtyDiterima, setQtyDiterima] = useState<Record<string, number>>({});
   const [returFotoFiles, setReturFotoFiles] = useState<Record<string, File>>({});
   const [keteranganRetur, setKeteranganRetur] = useState<Record<string, string>>({});
+  const [kondisiRetur, setKondisiRetur] = useState<Record<string, "BAIK" | "RUSAK">>({});
   const [returKeteranganOpen, setReturKeteranganOpen] = useState<string | null>(null);
   const [fotoBuktiFiles, setFotoBuktiFiles] = useState<File[]>([]);
   const [fotoBuktiStatus, setFotoBuktiStatus] = useState<Record<number, PhotoUploadStatus>>({});
@@ -102,6 +103,13 @@ export function KonfirKirimStep({
       setError("Foto bukti pengiriman wajib diisi, minimal 1 foto.");
       return;
     }
+    const returTanpaKondisi = items.some(
+      (item) => (qtyDiterima[item.SalesOrderDetailID] ?? item.Qty) < item.Qty && !kondisiRetur[item.SalesOrderDetailID]
+    );
+    if (returTanpaKondisi) {
+      setError("Kondisi retur (Baik/Rusak) wajib dipilih untuk setiap item yang retur.");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -127,6 +135,7 @@ export function KonfirKirimStep({
             qtyDiterima: qtyDiterima[item.SalesOrderDetailID] ?? item.Qty,
             fotoReturUrl,
             keteranganRetur: keteranganRetur[item.SalesOrderDetailID]?.trim() || null,
+            kondisiRetur: kondisiRetur[item.SalesOrderDetailID] ?? null,
           };
         })
       );
@@ -189,6 +198,24 @@ export function KonfirKirimStep({
               </div>
               {retur > 0 && (
                 <div className="mt-2 flex flex-col gap-2 rounded-md bg-destructive/5 p-2">
+                  <div className="flex gap-1.5">
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant={kondisiRetur[item.SalesOrderDetailID] === "BAIK" ? "default" : "outline"}
+                      onClick={() => setKondisiRetur((prev) => ({ ...prev, [item.SalesOrderDetailID]: "BAIK" }))}
+                    >
+                      Baik
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant={kondisiRetur[item.SalesOrderDetailID] === "RUSAK" ? "default" : "outline"}
+                      onClick={() => setKondisiRetur((prev) => ({ ...prev, [item.SalesOrderDetailID]: "RUSAK" }))}
+                    >
+                      Rusak
+                    </Button>
+                  </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-destructive">Retur: {retur}</p>
                     <div className="flex items-center gap-2">

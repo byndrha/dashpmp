@@ -12,7 +12,13 @@ import { BerhasilStep } from "@/components/driver-app/steps/berhasil-step";
 type StepName = "peta" | "konfirKirim" | "konfirTerima" | "pembayaran" | "berhasil";
 
 export interface KonfirKirimResult {
-  items: { salesOrderDetailId: string; qtyDiterima: number; fotoReturUrl: string | null; keteranganRetur: string | null }[];
+  items: {
+    salesOrderDetailId: string;
+    qtyDiterima: number;
+    fotoReturUrl: string | null;
+    keteranganRetur: string | null;
+    kondisiRetur: "BAIK" | "RUSAK" | null;
+  }[];
   // Merged "Bukti Pengiriman" + "Bukti Muatan" into one multi-photo
   // category — the driver captures as many proof photos as needed in one
   // input instead of two separate single-photo-only fields.

@@ -2705,6 +2705,10 @@ export interface StopDeliveryItemInput {
   // Driver's own note on why this item is being returned — shown next to
   // the retur photo on the "Konfirmasi Pengiriman" screen.
   keteranganRetur: string | null;
+  // Wajib diisi ('BAIK' | 'RUSAK') kalau item ini retur (qtyDiterima <
+  // qty yang dimuat); null kalau tidak retur. Divalidasi di
+  // confirmStopDelivery, bukan cuma di UI.
+  kondisiRetur: "BAIK" | "RUSAK" | null;
 }
 
 export interface ConfirmStopDeliveryInput {
@@ -2804,6 +2808,9 @@ export async function confirmStopDelivery(
     if (item.qtyDiterima < 0) throw new AppError(`Kuantitas diterima untuk ${sod.Name} tidak boleh negatif.`);
     if (item.qtyDiterima > sod.Qty) {
       throw new AppError(`Kuantitas diterima untuk ${sod.Name} tidak boleh melebihi kuantitas yang dimuat (${sod.Qty}).`);
+    }
+    if (item.qtyDiterima < sod.Qty && item.kondisiRetur == null) {
+      throw new AppError(`Kondisi retur untuk ${sod.Name} wajib dipilih (Baik atau Rusak).`);
     }
   }
 
@@ -3062,11 +3069,12 @@ export async function confirmStopDelivery(
         .input("qtyDiterima", sql.Decimal(23, 4), item.qtyDiterima)
         .input("qtyRetur", sql.Decimal(23, 4), qtyRetur)
         .input("fotoRetur", sql.VarChar(255), item.fotoReturUrl)
-        .input("keteranganRetur", sql.VarChar(500), item.keteranganRetur).query(`
+        .input("keteranganRetur", sql.VarChar(500), item.keteranganRetur)
+        .input("kondisiRetur", sql.VarChar(10), item.kondisiRetur).query(`
           INSERT INTO DashboardPengirimanStopDeliveryItem
-            (StopDeliveryID, SalesOrderDetailID, ItemID, QtyDimuat, QtyDiterima, QtyRetur, FotoReturUrl, KeteranganRetur)
+            (StopDeliveryID, SalesOrderDetailID, ItemID, QtyDimuat, QtyDiterima, QtyRetur, FotoReturUrl, KeteranganRetur, KondisiRetur)
           VALUES
-            (@stopDeliveryId, @soDetailId, @itemId, @qtyDimuat, @qtyDiterima, @qtyRetur, @fotoRetur, @keteranganRetur)
+            (@stopDeliveryId, @soDetailId, @itemId, @qtyDimuat, @qtyDiterima, @qtyRetur, @fotoRetur, @keteranganRetur, @kondisiRetur)
         `);
     }
 
@@ -3095,6 +3103,10 @@ export async function confirmStopDelivery(
 }
 
 export interface StopDeliveryProofItem {
+  // Underlying DashboardPengirimanStopDeliveryItem.StopDeliveryItemID —
+  // lets a later "jual ulang retur" desktop dialog target this exact row
+  // (not just the SalesOrderDetailID, which isn't unique per stop).
+  stopDeliveryItemId: number;
   itemId: string;
   name: string;
   qtyDimuat: number;
@@ -3102,6 +3114,7 @@ export interface StopDeliveryProofItem {
   qtyRetur: number;
   fotoReturUrl: string | null;
   keteranganRetur: string | null;
+  kondisiRetur: "BAIK" | "RUSAK" | null;
 }
 
 export interface StopDeliveryProof {
@@ -3154,7 +3167,7 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
     pool
       .request()
       .input("stopDeliveryId", sql.Int, stopRow.StopDeliveryID).query(`
-        SELECT sdi.ItemID, sod.Name, sdi.QtyDimuat, sdi.QtyDiterima, sdi.QtyRetur, sdi.FotoReturUrl, sdi.KeteranganRetur
+        SELECT sdi.StopDeliveryItemID, sdi.ItemID, sod.Name, sdi.QtyDimuat, sdi.QtyDiterima, sdi.QtyRetur, sdi.FotoReturUrl, sdi.KeteranganRetur, sdi.KondisiRetur
         FROM DashboardPengirimanStopDeliveryItem sdi
         LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderDetailID = sdi.SalesOrderDetailID
         WHERE sdi.StopDeliveryID = @stopDeliveryId
@@ -3174,6 +3187,7 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
 
   const items = (
     itemsResult.recordset as {
+      StopDeliveryItemID: number;
       ItemID: string;
       Name: string | null;
       QtyDimuat: number;
@@ -3181,8 +3195,10 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
       QtyRetur: number;
       FotoReturUrl: string | null;
       KeteranganRetur: string | null;
+      KondisiRetur: "BAIK" | "RUSAK" | null;
     }[]
   ).map((r) => ({
+    stopDeliveryItemId: r.StopDeliveryItemID,
     itemId: r.ItemID,
     name: r.Name ?? r.ItemID,
     qtyDimuat: r.QtyDimuat,
@@ -3190,6 +3206,7 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
     qtyRetur: r.QtyRetur,
     fotoReturUrl: r.FotoReturUrl,
     keteranganRetur: r.KeteranganRetur,
+    kondisiRetur: r.KondisiRetur,
   }));
 
   const paymentRow = paymentResult?.recordset[0] as { VoucherNo: string; Amount: number; TransDate: Date } | undefined;
