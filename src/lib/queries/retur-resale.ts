@@ -313,7 +313,7 @@ export async function jualUlangDalamRute(
         `);
     } else {
       const newQty = dodRow.Qty + qty;
-      const newAmount = newQty * claim.price;
+      const newAmount = newQty * targetSodRow.Price;
       await new sql.Request(transaction)
         .input("id", sql.VarChar(16), dodRow.DeliveryOrderDetailID)
         .input("qty", sql.Decimal(23, 4), newQty)
