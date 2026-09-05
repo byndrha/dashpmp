@@ -67,6 +67,24 @@ export async function getSisaReturTersedia(jadwalId: number): Promise<SisaReturR
 // tersedia DI DALAM transaksi yang sama (bukan dari state yang sudah
 // di-fetch pemanggil), menolak kalau qty diminta melebihi sisa saat itu.
 // Sama sekali tidak melakukan partial-fill otomatis.
+//
+// WITH (UPDLOCK, HOLDLOCK) pada sdi BUKAN sekadar hint performa: itulah yang
+// membuat guard ini benar-benar aman dari race. Tanpa lock hint, di bawah
+// READ COMMITTED (default SQL Server) dua pemanggil yang genuinely
+// concurrent -- misalnya HP driver dan desktop dispatcher yang sama-sama
+// mencoba menjual ulang StopDeliveryItemID yang sama nyaris berbarengan --
+// bisa sama-sama membaca SisaQty sebelum salah satu commit, sama-sama lolos
+// guard ini, dan sama-sama insert: oversell dari sisa retur fisik yang
+// jumlahnya terbatas. UPDLOCK mengambil update lock pada baris sdi yang
+// match WHERE di bawah, dan HOLDLOCK menahannya sampai transaksi commit
+// atau rollback (setara serializable untuk baris ini saja). Karena UPDLOCK
+// tidak kompatibel dengan UPDLOCK/exclusive lock lain pada baris yang sama,
+// pemanggil kedua terhadap StopDeliveryItemID yang SAMA akan BLOCK di
+// SELECT ini sampai transaksi pertama selesai -- baru kemudian SELECT-nya
+// melihat hasil final (baris DashboardPengirimanReturResale baru kalau
+// commit, atau tidak ada kalau rollback) sebelum menghitung sisa. Dua
+// StopDeliveryItemID yang berbeda tidak saling mengunci, jadi ini tidak
+// membuat resale-resale yang tidak terkait saling menunggu.
 async function claimSisaReturAtauGagal(
   transaction: sql.Transaction,
   stopDeliveryItemId: number,
@@ -77,7 +95,7 @@ async function claimSisaReturAtauGagal(
         sdi.ItemID, sod.Name AS ItemName, sod.Price, sdi.SalesOrderDetailID, sd.SalesReturnID,
         sdi.QtyRetur - ISNULL((SELECT SUM(Qty) FROM DashboardPengirimanReturResale WHERE StopDeliveryItemID = sdi.StopDeliveryItemID), 0) AS SisaQty,
         sdi.KondisiRetur
-    FROM DashboardPengirimanStopDeliveryItem sdi
+    FROM DashboardPengirimanStopDeliveryItem sdi WITH (UPDLOCK, HOLDLOCK)
     JOIN DashboardPengirimanStopDelivery sd ON sd.StopDeliveryID = sdi.StopDeliveryID
     JOIN SalesOrderDetail sod ON sod.SalesOrderDetailID = sdi.SalesOrderDetailID
     WHERE sdi.StopDeliveryItemID = @id
