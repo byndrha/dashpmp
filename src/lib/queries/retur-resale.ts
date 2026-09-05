@@ -1,5 +1,8 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
+import { getNaiveWibTransDate } from "@/lib/business-date";
+import { getPriceLevelOptions } from "@/lib/queries/mitra";
+import { KANTONG_ITEM_ID } from "@/lib/queries/sales-order";
 
 export interface SisaReturRow {
   stopDeliveryItemId: number;
@@ -193,14 +196,15 @@ export { claimSisaReturAtauGagal, kurangiSalesReturDetail, insertReturResale };
 // convention is that every next*Id/next*VoucherSeq helper is unexported and
 // privately duplicated per query-file (sales-order.ts, pengiriman-jadwal.ts
 // and takeaway-muatan.ts each already carry their own separate copies of the
-// DO/SI ones). These three copies also differ from their pengiriman-jadwal.ts
+// DO/SI ones). These copies also differ from their pengiriman-jadwal.ts
 // counterparts in one required way: they take a `sql.Transaction` directly
 // and call `new sql.Request(transaction)` instead of `pool.request()`,
-// because jualUlangDalamRute runs its entire cascade inside one atomic
-// transaction -- looking up a next-ID via a separate, non-transactional
-// pool.request() would read against a different session than the one about
-// to INSERT, reopening the exact kind of race claimSisaReturAtauGagal's
-// UPDLOCK/HOLDLOCK guard above was hardened to close.
+// because jualUlangDalamRute/jualUlangLuarRute/jualUlangRetail each run their
+// entire cascade inside one atomic transaction -- looking up a next-ID via a
+// separate, non-transactional pool.request() would read against a different
+// session than the one about to INSERT, reopening the exact kind of race
+// claimSisaReturAtauGagal's UPDLOCK/HOLDLOCK guard above was hardened to
+// close.
 async function nextSalesOrderDetailId(transaction: sql.Transaction): Promise<string> {
   const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(SalesOrderDetailID AS INT)) AS MaxID FROM SalesOrderDetail`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
@@ -217,6 +221,395 @@ async function nextSalesInvoiceDetailId(transaction: sql.Transaction): Promise<s
   const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(SalesInvoiceDetailID AS INT)) AS MaxID FROM SalesInvoiceDetail`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
+}
+
+// Header-level next*Id/next*VoucherSeq + document constants, added for Jalur
+// (b)/(c) (jualUlangLuarRute/jualUlangRetail) -- these two paths build a
+// brand-new SalesOrder+DeliveryOrder+SalesInvoice from scratch (Jalur (a)
+// above only ever touches an *existing* SO/DO/SI's detail rows, so it never
+// needed these). SQL bodies copied verbatim from sales-order.ts
+// (nextSalesOrderId/BRANCH_ID/DEPARTMENT_ID/DOC_SUFFIX) and
+// pengiriman-jadwal.ts (nextDeliveryOrderId/nextDOVoucherSeq/
+// nextSalesInvoiceId/nextSIVoucherSeq, lines ~1910-1970) -- same
+// transaction-scoped-copy rationale as the three detail-level helpers above.
+const BRANCH_ID = "011";
+const DEPARTMENT_ID = "0110";
+const DOC_SUFFIX = "003/001";
+
+async function nextSalesOrderId(transaction: sql.Transaction): Promise<string> {
+  const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(SalesOrderID AS INT)) AS MaxID FROM SalesOrder`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextSOVoucherSeq(transaction: sql.Transaction, yearMonth: string): Promise<string> {
+  const result = await new sql.Request(transaction)
+    .input("pattern", sql.VarChar(64), `MKE/SO/%/${yearMonth}/${DOC_SUFFIX}`).query(`
+      SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq FROM SalesOrder WHERE VoucherNo LIKE @pattern
+    `);
+  const maxSeq = (result.recordset[0]?.MaxSeq as number | null) ?? 0;
+  return String(maxSeq + 1).padStart(6, "0");
+}
+
+async function nextDeliveryOrderId(transaction: sql.Transaction): Promise<string> {
+  const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(DeliveryOrderID AS INT)) AS MaxID FROM DeliveryOrder`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextDOVoucherSeq(transaction: sql.Transaction, yearMonth: string): Promise<string> {
+  const result = await new sql.Request(transaction)
+    .input("pattern", sql.VarChar(64), `MKE/DO/%/${yearMonth}/${DOC_SUFFIX}`).query(`
+      SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq FROM DeliveryOrder WHERE VoucherNo LIKE @pattern
+    `);
+  const maxSeq = (result.recordset[0]?.MaxSeq as number | null) ?? 0;
+  return String(maxSeq + 1).padStart(6, "0");
+}
+
+async function nextSalesInvoiceId(transaction: sql.Transaction): Promise<string> {
+  const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(SalesInvoiceID AS INT)) AS MaxID FROM SalesInvoice`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextSIVoucherSeq(transaction: sql.Transaction, yearMonth: string): Promise<string> {
+  const result = await new sql.Request(transaction)
+    .input("pattern", sql.VarChar(64), `MKE/SI/%/${yearMonth}/${DOC_SUFFIX}`).query(`
+      SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq FROM SalesInvoice WHERE VoucherNo LIKE @pattern
+    `);
+  const maxSeq = (result.recordset[0]?.MaxSeq as number | null) ?? 0;
+  return String(maxSeq + 1).padStart(6, "0");
+}
+
+interface BuatSoDoSiInput {
+  businessPartnerId: string;
+  itemId: string;
+  itemName: string;
+  qty: number;
+  price: number;
+  jadwalId: number;
+}
+
+// Membuat SalesOrder + SalesOrderDetail + DeliveryOrder + DeliveryOrderDetail
+// + SalesInvoice + SalesInvoiceDetail sekaligus, atomik, dalam SATU transaksi
+// -- dipakai jalur (b)/(c) yang butuh dokumen langsung jadi saat itu juga
+// (barangnya sudah di atas truk, tidak ada "Selesai Muat" susulan seperti
+// TakeAway). Struktur INSERT DO/SI disalin dari takeAwaySelesaiMuat
+// (src/lib/queries/takeaway-muatan.ts) dengan VehicleNo/ExpeditionID/
+// SalesmanID diisi dari armada Jadwal yang sedang berjalan, bukan string
+// kosong / TAKEAWAY_SALESMAN_ID.
+//
+// VehicleNo/ExpeditionID lookup: DashboardArmada punya kolom
+// ExpeditionDetailID langsung (BUKAN lewat tabel junction terpisah seperti
+// draf awal task ini menebak) -- ini JOIN yang SAMA persis dipakai
+// selesaiMuat() di pengiriman-jadwal.ts (baris ~2237-2249) untuk mengisi
+// DeliveryOrder.VehicleNo/ExpeditionID pada jalur Selesai Muat yang normal:
+//   SELECT a.Nama, ed.ExpeditionID, ed.VehicleNo
+//   FROM DashboardArmada a
+//   LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+//   WHERE a.ArmadaID = @armadaId AND a.IsDeleted = 0
+// dengan doVehicleNo = ed.VehicleNo ?? a.Nama (armada nickname jadi fallback
+// kalau belum ditautkan ke ExpeditionDetail) dan doExpeditionId = ed.ExpeditionID ?? "".
+// Disatukan di sini jadi satu query lewat DashboardPengirimanJadwal.ArmadaID
+// (kolom asli, terkonfirmasi dipakai headerRow.ArmadaID di file yang sama).
+async function buatSoDoSiSekaligus(
+  transaction: sql.Transaction,
+  input: BuatSoDoSiInput
+): Promise<{ salesOrderId: string; deliveryOrderId: string; salesInvoiceId: string }> {
+  const jadwalResult = await new sql.Request(transaction).input("jadwalId", sql.Int, input.jadwalId).query(`
+    SELECT j.SalesmanID, a.Nama AS ArmadaNama, ed.ExpeditionID, ed.VehicleNo
+    FROM DashboardPengirimanJadwal j
+    LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
+    LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
+    WHERE j.JadwalID = @jadwalId AND j.IsDeleted = 0
+  `);
+  const jadwalRow = jadwalResult.recordset[0] as
+    | { SalesmanID: string | null; ArmadaNama: string | null; ExpeditionID: string | null; VehicleNo: string | null }
+    | undefined;
+  if (!jadwalRow) throw new AppError("Jadwal tidak ditemukan.");
+  const doVehicleNo = jadwalRow.VehicleNo ?? jadwalRow.ArmadaNama ?? "";
+  const doExpeditionId = jadwalRow.ExpeditionID ?? "";
+
+  const now = new Date();
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const amount = input.qty * input.price;
+  const dueDate = now;
+
+  const salesOrderId = await nextSalesOrderId(transaction);
+  const soVoucherSeq = await nextSOVoucherSeq(transaction, yearMonth);
+  const soVoucherNo = `MKE/SO/${soVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+  await new sql.Request(transaction)
+    .input("id", sql.VarChar(16), salesOrderId)
+    .input("voucherNo", sql.VarChar(128), soVoucherNo)
+    .input("bpId", sql.VarChar(16), input.businessPartnerId)
+    .input("branchId", sql.VarChar(16), BRANCH_ID)
+    .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+    .input("salesmanId", sql.VarChar(16), jadwalRow.SalesmanID ?? "")
+    .input("transDate", sql.DateTime, getNaiveWibTransDate())
+    .input("dueDate", sql.DateTime, dueDate)
+    .input("amount", sql.Decimal(23, 4), amount).query(`
+      INSERT INTO SalesOrder
+        (SalesOrderID, VoucherNo, ReferenceNo, TransDate, DueDate, BranchID, DepartmentID, BusinessPartnerID,
+         TermOfPaymentID, AddressInvoice, AddressDelivery, AddressDeliveryID, CurrencyID, IsClosed, Notes,
+         Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, IsInvoiced, IsDeleted, ModifiedDate, Rate,
+         StatusForm, SalesmanID, ServiceTaxValue, ServiceTax, Visitor, PromotionID, Number, DiscRpBefore,
+         ProjectID, BillOfQuantityID, NotesDelivery, DeliveryMemo, Status)
+      VALUES
+        (@id, @voucherNo, '', @transDate, @dueDate, @branchId, @departmentId, @bpId,
+         '', '', '', '', '', 0, '',
+         @amount, 0, 0, 0, 0, 0, @amount, 0, 0, GETDATE(), 1,
+         1, @salesmanId, 0, 0, 0, '', 1, 0,
+         '', '', '', '', '')
+    `);
+  const soDetailId = await nextSalesOrderDetailId(transaction);
+  await new sql.Request(transaction)
+    .input("id", sql.VarChar(16), soDetailId)
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .input("itemId", sql.VarChar(160), input.itemId)
+    .input("name", sql.VarChar(150), input.itemName)
+    .input("qty", sql.Decimal(23, 4), input.qty)
+    .input("price", sql.Decimal(23, 4), input.price)
+    .input("amount", sql.Decimal(23, 4), amount).query(`
+      INSERT INTO SalesOrderDetail (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp, Ratio, Amount, FlagClosed)
+      VALUES (@id, @soId, @itemId, @name, @qty, 'PCS', @price, 0, 0, 0, 1, @amount, '')
+    `);
+
+  const deliveryOrderId = await nextDeliveryOrderId(transaction);
+  const doVoucherSeq = await nextDOVoucherSeq(transaction, yearMonth);
+  const doVoucherNo = `MKE/DO/${doVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+  await new sql.Request(transaction)
+    .input("id", sql.VarChar(16), deliveryOrderId)
+    .input("voucherNo", sql.VarChar(128), doVoucherNo)
+    .input("branchId", sql.VarChar(16), BRANCH_ID)
+    .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+    .input("bpId", sql.VarChar(16), input.businessPartnerId)
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .input("salesmanId", sql.VarChar(16), jadwalRow.SalesmanID ?? "")
+    .input("expeditionId", sql.VarChar(16), doExpeditionId)
+    .input("vehicleNo", sql.VarChar(50), doVehicleNo)
+    .input("transDate", sql.DateTime, getNaiveWibTransDate())
+    .input("dueDate", sql.DateTime, dueDate).query(`
+      INSERT INTO DeliveryOrder
+        (DeliveryOrderID, VoucherNo, TransDate, BranchID, DepartmentID, BusinessPartnerID, Notes, SalesOrderID,
+         IsClosed, ExpeditionID, VehicleNo, AddressDelivery, IsDeleted, ModifiedDate, PIC, ShippingNo,
+         BusinessPartnerLocationID, IsInvoiced, CurrencyID, Rate, StatusForm, SalesmanID, OverLimit,
+         ReferenceNo, DueDate, ProjectID, AddressDeliveryID, IsDOReturn)
+      VALUES
+        (@id, @voucherNo, @transDate, @branchId, @departmentId, @bpId, '', @soId,
+         0, @expeditionId, @vehicleNo, '', 0, GETDATE(), '', NULL,
+         NULL, 0, '', 1, 1, @salesmanId, 0,
+         '', @dueDate, '', '', NULL)
+    `);
+  const doDetailId = await nextDeliveryOrderDetailId(transaction);
+  await new sql.Request(transaction)
+    .input("id", sql.VarChar(16), doDetailId)
+    .input("doId", sql.VarChar(16), deliveryOrderId)
+    .input("itemId", sql.VarChar(160), input.itemId)
+    .input("name", sql.VarChar(160), input.itemName)
+    .input("qty", sql.Decimal(23, 4), input.qty)
+    .input("price", sql.Decimal(23, 4), input.price)
+    .input("amount", sql.Decimal(23, 4), amount)
+    .input("soDetailId", sql.VarChar(16), soDetailId).query(`
+      INSERT INTO DeliveryOrderDetail
+        (DeliveryOrderDetailID, DeliveryOrderID, ItemID, Qty, Unit, UnitRatio, Ratio, Price, Disc, DiscValue,
+         DiscRp, Amount, Delivered, Name, Outstanding, Description, Cashback, SalesOrderDetailID)
+      VALUES
+        (@id, @doId, @itemId, @qty, 'PCS', @qty, 1, @price, 0, NULL,
+         0, @amount, @qty, @name, @qty, NULL, 0, @soDetailId)
+    `);
+
+  const salesInvoiceId = await nextSalesInvoiceId(transaction);
+  const siVoucherSeq = await nextSIVoucherSeq(transaction, yearMonth);
+  const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+  await new sql.Request(transaction)
+    .input("id", sql.VarChar(16), salesInvoiceId)
+    .input("voucherNo", sql.VarChar(128), siVoucherNo)
+    .input("dueDate", sql.DateTime, dueDate)
+    .input("soId", sql.VarChar(16), salesOrderId)
+    // Wrapped in literal single quotes to match the ERP's own historical
+    // storage convention for SalesInvoice.DeliveryOrderID -- same quirk
+    // documented/fixed identically in takeAwaySelesaiMuat
+    // (takeaway-muatan.ts) and createSalesInvoiceForStop (pengiriman-jadwal.ts).
+    .input("doId", sql.VarChar(16), `'${deliveryOrderId}'`)
+    .input("bpId", sql.VarChar(16), input.businessPartnerId)
+    .input("branchId", sql.VarChar(16), BRANCH_ID)
+    .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+    .input("amount", sql.Decimal(23, 4), amount)
+    .input("transDate", sql.DateTime, getNaiveWibTransDate())
+    .input("salesmanId", sql.VarChar(16), jadwalRow.SalesmanID ?? "").query(`
+      INSERT INTO SalesInvoice
+        (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
+         SalesOrderID, DeliveryOrderID, SalesDepositID, BusinessPartnerID, BranchID, DepartmentID,
+         Amount, Disc, DiscValue, DiscRp, Tax, TaxValue, Netto, BankID, Paid, Deposit, PaidDate,
+         IsClosed, IsDeleted, ModifiedDate, Rate, CurrencyID, IsAccountReceiveable, StatusForm,
+         SalesmanID, ServiceTax, ServiceTaxValue, Visitor, IsTX, PromotionID, IsPerforma,
+         DiscRpBefore, ProjectID, IsExported, BillOfQuantityID)
+      VALUES
+        (@id, @voucherNo, '', '', @transDate, @dueDate, '', '',
+         @soId, @doId, '', @bpId, @branchId, @departmentId,
+         @amount, 0, 0, 0, 0, 0, @amount, '', 0, 0, NULL,
+         0, 0, GETDATE(), 1, '', 0, 1,
+         @salesmanId, 0, 0, 0, 0, '', 0,
+         0, '', 0, '')
+    `);
+  const siDetailId = await nextSalesInvoiceDetailId(transaction);
+  await new sql.Request(transaction)
+    .input("id", sql.VarChar(16), siDetailId)
+    .input("siId", sql.VarChar(16), salesInvoiceId)
+    .input("itemId", sql.VarChar(160), input.itemId)
+    .input("name", sql.VarChar(160), input.itemName)
+    .input("qty", sql.Decimal(23, 4), input.qty)
+    .input("price", sql.Decimal(23, 4), input.price)
+    .input("amount", sql.Decimal(23, 4), amount).query(`
+      INSERT INTO SalesInvoiceDetail
+        (SalesInvoiceDetailID, SalesInvoiceID, ItemID, Qty, Unit, Ratio, UnitRatio, Price, Disc, DiscValue,
+         DiscRp, Amount, Name, Value, Netto, Description, WaiterName, Cashback, Total)
+      VALUES
+        (@id, @siId, @itemId, @qty, 'PCS', 1, 1, @price, 0, 0,
+         0, @amount, @name, @amount, @amount, '', '', 0, NULL)
+    `);
+
+  await new sql.Request(transaction).input("soId", sql.VarChar(16), salesOrderId).query(`UPDATE SalesOrder SET IsClosed = 1, IsInvoiced = 1 WHERE SalesOrderID = @soId`);
+  await new sql.Request(transaction).input("doId", sql.VarChar(16), deliveryOrderId).query(`UPDATE DeliveryOrder SET IsClosed = 1, IsInvoiced = 1 WHERE DeliveryOrderID = @doId`);
+
+  return { salesOrderId, deliveryOrderId, salesInvoiceId };
+}
+
+// Jalur (b): jual ulang ke mitra terdaftar nyata yang TIDAK ada di rute
+// Jadwal ini -- beda dari jualUlangDalamRute, ini membuat SO+DO+SI baru dari
+// nol (via buatSoDoSiSekaligus di atas), bukan menambah qty ke dokumen milik
+// mitra yang sudah ada di rute. Harga diambil dari Price Level mitar target,
+// dengan mekanisme lookup yang SAMA PERSIS dipakai createSalesOrderManual
+// (sales-order.ts): BusinessPartner.PriceLevel (1-8) menentukan kolom
+// Item.UnitPriceN mana yang dipakai lewat getPriceLevelOptions (mitra.ts) --
+// TIDAK ADA tabel "DashboardPriceLevel" terpisah seperti draf awal task ini
+// menebak, itu tidak pernah dibaca langsung dari kode manapun di codebase ini.
+export async function jualUlangLuarRute(
+  stopDeliveryItemId: number,
+  businessPartnerId: string,
+  qty: number,
+  jadwalId: number,
+  akunId: number,
+  via: "DRIVER" | "DISPATCHER"
+): Promise<{ salesOrderId: string }> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const claim = await claimSisaReturAtauGagal(transaction, stopDeliveryItemId, qty);
+
+    const bpResult = await new sql.Request(transaction)
+      .input("bpId", sql.VarChar(16), businessPartnerId)
+      .query(`SELECT PriceLevel FROM BusinessPartner WHERE BusinessPartnerID = @bpId AND ISNULL(IsDeleted, 0) = 0`);
+    const bpRow = bpResult.recordset[0] as { PriceLevel: number | null } | undefined;
+    if (!bpRow) throw new AppError("Mitra tidak ditemukan.");
+    if (bpRow.PriceLevel == null) throw new AppError("Mitra ini belum punya Price Level -- atur dulu di modul Mitra.");
+
+    const priceLevels = await getPriceLevelOptions(claim.itemName);
+    const priceLevelEntry = priceLevels.find((p) => p.Level === bpRow.PriceLevel);
+    if (!priceLevelEntry) {
+      throw new AppError(`Harga untuk item ${claim.itemName} pada Price Level ${bpRow.PriceLevel} belum diatur.`);
+    }
+
+    const { salesOrderId } = await buatSoDoSiSekaligus(transaction, {
+      businessPartnerId,
+      itemId: claim.itemId,
+      itemName: claim.itemName,
+      qty,
+      price: priceLevelEntry.Price,
+      jadwalId,
+    });
+
+    await kurangiSalesReturDetail(transaction, claim.salesReturnId, claim.salesOrderDetailId, qty);
+    await insertReturResale(transaction, {
+      stopDeliveryItemId,
+      jalur: "LUAR_RUTE",
+      qty,
+      targetSalesOrderDetailId: null,
+      salesOrderId,
+      lokasiLat: null,
+      lokasiLng: null,
+      akunId,
+      via,
+    });
+
+    await transaction.commit();
+    return { salesOrderId };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+// Jalur (c): jual ulang ke pembeli walk-up tanpa akun mitra di sistem --
+// selalu dibukukan ke BusinessPartner 'RETAILRETURN' (Task 1: baris minimal,
+// hanya BusinessPartnerID/Name/IsDeleted/Gender terisi -- lihat komentar di
+// bawah kenapa itu tidak masalah untuk jalur ini) dengan harga FIXED per
+// varian kantong (bukan Price Level, mitra ini tidak punya satu pun), dan
+// WAJIB merekam lokasi (LokasiLat/LokasiLng) karena tidak ada jejak identitas
+// pembeli lain yang bisa dipakai audit di kemudian hari.
+const RETAIL_RETURN_BP_ID = "RETAILRETURN";
+const HARGA_RETAIL_RETURN_10KG = 8000;
+const HARGA_RETAIL_RETURN_5KG = 6000;
+
+export async function jualUlangRetail(
+  stopDeliveryItemId: number,
+  qty: number,
+  lokasiLat: number,
+  lokasiLng: number,
+  jadwalId: number,
+  akunId: number,
+  via: "DRIVER" | "DISPATCHER"
+): Promise<{ salesOrderId: string }> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const claim = await claimSisaReturAtauGagal(transaction, stopDeliveryItemId, qty);
+
+    // ItemID untuk 10kg vs 5kg -- dibandingkan lewat KANTONG_ITEM_ID (item
+    // 10kg "Es Tube Jual", ItemID "019", diekspor dari sales-order.ts)
+    // alih-alih menebak/duplikasi string ItemID di sini secara manual.
+    const hargaFixed = claim.itemId === KANTONG_ITEM_ID ? HARGA_RETAIL_RETURN_10KG : HARGA_RETAIL_RETURN_5KG;
+
+    // BusinessPartner 'RETAILRETURN' punya GroupBusinessPartner/
+    // AccountReceivableID/TermOfPaymentID/PriceLevel semua NULL (Task 1) --
+    // tidak masalah di sini karena buatSoDoSiSekaligus TIDAK PERNAH membaca
+    // kolom-kolom itu dari BusinessPartner sama sekali: TermOfPaymentID pada
+    // SalesOrder/SalesInvoice yang dibuatnya selalu string kosong hardcoded
+    // (bukan dibaca dari BusinessPartner.TermOfPaymentID seperti
+    // createSalesOrderManual), dan harga di jalur ini adalah hargaFixed di
+    // atas, bukan dari BusinessPartner.PriceLevel. BusinessPartnerID sendiri
+    // satu-satunya kolom NOT NULL pada tabel BusinessPartner (lihat
+    // create-retur-resale-schema.ts) dan sudah terisi 'RETAILRETURN'.
+    const { salesOrderId } = await buatSoDoSiSekaligus(transaction, {
+      businessPartnerId: RETAIL_RETURN_BP_ID,
+      itemId: claim.itemId,
+      itemName: claim.itemName,
+      qty,
+      price: hargaFixed,
+      jadwalId,
+    });
+
+    await kurangiSalesReturDetail(transaction, claim.salesReturnId, claim.salesOrderDetailId, qty);
+    await insertReturResale(transaction, {
+      stopDeliveryItemId,
+      jalur: "RETAIL",
+      qty,
+      targetSalesOrderDetailId: null,
+      salesOrderId,
+      lokasiLat,
+      lokasiLng,
+      akunId,
+      via,
+    });
+
+    await transaction.commit();
+    return { salesOrderId };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 // Jalur (a): jual ulang ke mitra lain yang MASIH ADA di rute Jadwal yang

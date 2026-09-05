@@ -8,7 +8,7 @@ import { getNaiveWibTransDate } from "@/lib/business-date";
 // price levels from, and is the standard 10KG "kantong" unit (the 5KG
 // variant is a separate, unrelated Item in the ERP — see mitra-do.ts's
 // KANTONG_QTY_EXPR).
-const KANTONG_ITEM_ID = "019";
+export const KANTONG_ITEM_ID = "019";
 const KANTONG_ITEM_NAME = "Es Tube Jual";
 const KANTONG_UNIT = "Kantong";
 
@@ -132,7 +132,7 @@ export async function createSalesOrderFromPengajuan(input: CreateSalesOrderInput
 
 export type KantongVariant = "10kg" | "5kg";
 
-const KANTONG_VARIANTS: Record<KantongVariant, { itemId: string; name: string; unit: string }> = {
+export const KANTONG_VARIANTS: Record<KantongVariant, { itemId: string; name: string; unit: string }> = {
   "10kg": { itemId: KANTONG_ITEM_ID, name: KANTONG_ITEM_NAME, unit: KANTONG_UNIT },
   "5kg": { itemId: "0111", name: "Es Tube Jual 5 KG", unit: KANTONG_UNIT },
 };
