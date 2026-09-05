@@ -62,6 +62,14 @@ export function KonfirKirimStep({
   const [returFotoFiles, setReturFotoFiles] = useState<Record<string, File>>({});
   const [keteranganRetur, setKeteranganRetur] = useState<Record<string, string>>({});
   const [kondisiRetur, setKondisiRetur] = useState<Record<string, "BAIK" | "RUSAK">>({});
+  // Purely a local UI acknowledgment ("catat, saya akan input detailnya
+  // setelah konfirmasi ini tersimpan") — this screen's DashboardPengirimanStopDeliveryItem
+  // row (and its real StopDeliveryItemID) doesn't exist until
+  // confirmStopDeliveryAction actually commits, so nothing here calls a
+  // jualUlang*DriverAction or travels into KonfirKirimResult. The REAL
+  // prompt with a REAL stopDeliveryItemId happens in stop-flow.tsx's
+  // handleKonfirmasiPenerima, after confirmStopDeliveryAction succeeds.
+  const [niatJualUlang, setNiatJualUlang] = useState<Record<string, boolean>>({});
   const [returKeteranganOpen, setReturKeteranganOpen] = useState<string | null>(null);
   const [fotoBuktiFiles, setFotoBuktiFiles] = useState<File[]>([]);
   const [fotoBuktiStatus, setFotoBuktiStatus] = useState<Record<number, PhotoUploadStatus>>({});
@@ -216,6 +224,23 @@ export function KonfirKirimStep({
                       Rusak
                     </Button>
                   </div>
+                  {kondisiRetur[item.SalesOrderDetailID] === "BAIK" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNiatJualUlang((prev) => ({ ...prev, [item.SalesOrderDetailID]: !prev[item.SalesOrderDetailID] }))
+                      }
+                      className={`self-start rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                        niatJualUlang[item.SalesOrderDetailID]
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground"
+                      }`}
+                    >
+                      {niatJualUlang[item.SalesOrderDetailID]
+                        ? "✓ Akan ditanya setelah konfirmasi tersimpan"
+                        : "Ada yang mau beli retur ini sekarang?"}
+                    </button>
+                  )}
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-destructive">Retur: {retur}</p>
                     <div className="flex items-center gap-2">

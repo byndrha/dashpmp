@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Fuel, Siren, Coffee, Phone, MapPin } from "lucide-react";
+import { ArrowLeft, Fuel, Siren, Coffee, Phone, MapPin, RotateCcw, X } from "lucide-react";
 import { formatKemasanQty } from "@/lib/format";
 import { haversineKm } from "@/lib/route-estimate";
 import { SwipeToConfirm } from "@/components/driver-app/swipe-to-confirm";
+import { Button } from "@/components/ui/button";
+import { JualUlangReturSheet } from "@/components/driver-app/jual-ulang-retur-sheet";
 import { PengirimanMap } from "./pengiriman-map";
 import { BbmDialog } from "./bbm-dialog";
 import { KendalaDialog } from "./kendala-dialog";
@@ -15,7 +17,12 @@ import { TerkendalaDialog } from "./terkendala-dialog";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 import type { BbmContext } from "@/components/driver-app/stop-flow";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
-import { recordStopArrivalAction, moveTerkendalaStopAction } from "@/app/mkesindo/driver-app/actions";
+import {
+  recordStopArrivalAction,
+  moveTerkendalaStopAction,
+  getSisaReturTersediaDriverAction,
+} from "@/app/mkesindo/driver-app/actions";
+import type { SisaReturRow } from "@/lib/queries/retur-resale";
 
 // Expanded sheet height as a fraction of the viewport — recomputed on
 // resize; DEFAULT_EXPANDED_HEIGHT is just the value used for the one frame
@@ -66,6 +73,34 @@ export function PengirimanStep({
   // duplicate of that remount and trips the set-state-in-effect lint rule.
   const [hasAttemptedCall, setHasAttemptedCall] = useState(false);
   const [terkendalaOpen, setTerkendalaOpen] = useState(false);
+
+  // "Retur Tersedia" — persistent access to any not-yet-sold retur recorded
+  // at an EARLIER stop on this same route (Task 9 Step 4), separate from
+  // the one-shot sell-now prompt stop-flow.tsx shows right after a stop's
+  // own confirmStopDeliveryAction succeeds. Fetched once on mount (and
+  // again after each sale below) so the header badge count reflects what's
+  // actually left without requiring the driver to open the panel first.
+  const [sisaReturOpen, setSisaReturOpen] = useState(false);
+  const [sisaReturList, setSisaReturList] = useState<SisaReturRow[] | null>(null);
+  const [sisaReturTarget, setSisaReturTarget] = useState<{ stopDeliveryItemId: number; itemName: string; jadwalDetailId: number } | null>(
+    null
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    getSisaReturTersediaDriverAction(jadwalId).then((result) => {
+      if (!cancelled && result.success) setSisaReturList(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [jadwalId]);
+
+  function refetchSisaRetur() {
+    getSisaReturTersediaDriverAction(jadwalId).then((result) => {
+      if (result.success) setSisaReturList(result.data);
+    });
+  }
 
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [route, setRoute] = useState<MultiPointRoute | null>(null);
@@ -300,6 +335,19 @@ export function PengirimanStep({
           >
             <Coffee className="size-4.5" />
           </button>
+          <button
+            type="button"
+            onClick={() => setSisaReturOpen(true)}
+            className="relative flex size-10 items-center justify-center rounded-full bg-card shadow-md"
+            title="Retur Tersedia"
+          >
+            <RotateCcw className="size-4.5" />
+            {sisaReturList != null && sisaReturList.length > 0 && (
+              <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-semibold text-white">
+                {sisaReturList.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -450,6 +498,59 @@ export function PengirimanStep({
         onOpenChange={setTerkendalaOpen}
         jadwalDetailId={activeStop.JadwalDetailID}
         onReported={() => router.refresh()}
+      />
+
+      {sisaReturOpen && (
+        <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/40" onClick={() => setSisaReturOpen(false)}>
+          <div
+            className="max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-border bg-card p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold">Retur Tersedia</h2>
+              <button type="button" onClick={() => setSisaReturOpen(false)} aria-label="Tutup">
+                <X className="size-4 text-muted-foreground" />
+              </button>
+            </div>
+            {(sisaReturList ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">Tidak ada sisa retur dari stop sebelumnya yang tersedia untuk dijual.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {(sisaReturList ?? []).map((row) => (
+                  <div key={row.stopDeliveryItemId} className="flex items-center justify-between gap-2 rounded-lg border border-border p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{row.itemName}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        Dari {row.stopCustomerName} &middot; Sisa {row.sisaQty}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        setSisaReturTarget({ stopDeliveryItemId: row.stopDeliveryItemId, itemName: row.itemName, jadwalDetailId: row.jadwalDetailId })
+                      }
+                    >
+                      Jual
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <JualUlangReturSheet
+        jadwalId={jadwalId}
+        originJadwalDetailId={sisaReturTarget?.jadwalDetailId ?? null}
+        target={sisaReturTarget}
+        onOpenChange={(open) => {
+          if (!open) setSisaReturTarget(null);
+        }}
+        onDone={() => {
+          setSisaReturTarget(null);
+          refetchSisaRetur();
+        }}
       />
     </div>
   );
