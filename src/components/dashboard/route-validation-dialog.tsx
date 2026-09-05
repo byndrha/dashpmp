@@ -1553,7 +1553,11 @@ export function RouteValidationDialog({
             </div>
           </div>
         )}
-        <StopDeliveryProofDialog detail={proofDetail} onOpenChange={(open) => !open && setProofDetail(null)} />
+        <StopDeliveryProofDialog
+          detail={proofDetail}
+          jadwalId={jadwalId}
+          onOpenChange={(open) => !open && setProofDetail(null)}
+        />
         <StopSalesInvoiceDialog detail={siDetail} onOpenChange={(open) => !open && setSiDetail(null)} />
         {conflict && (
           <ArmadaConflictDialog

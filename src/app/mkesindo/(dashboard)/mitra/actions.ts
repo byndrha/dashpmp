@@ -22,7 +22,9 @@ import {
   getMarketingUsers,
   getDriverUserOptions,
   setMitraPemilik,
+  getMitraOptions,
   type MarketingUserOption,
+  type MitraOption,
 } from "@/lib/queries/marketing-wilayah";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
@@ -119,6 +121,22 @@ export async function getMitraDetailAction(businessPartnerId: string): Promise<A
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
     return getMitraDetail(businessPartnerId);
+  });
+}
+
+// Lightweight mitra picker list (BusinessPartnerID/Name/Wilayah only, active
+// mitra only) for MitraSelect — fetched on demand here rather than plumbed
+// through page props, since callers like JualUlangReturDialog
+// (jual-ulang-retur-dialog.tsx, Papan Pengiriman's "Jual Ulang Retur" jalur
+// LUAR_RUTE picker) sit several component layers below a page that doesn't
+// otherwise fetch a mitra list. Same getMitraOptions() query Cakupan Wilayah
+// already uses for its own mitra search.
+export async function getMitraOptionsAction(): Promise<ActionResult<MitraOption[]>> {
+  return runAction(async () => {
+    const session = await auth();
+    if (!session?.user?.id) throw new AppError("Unauthorized");
+
+    return getMitraOptions();
   });
 }
 
