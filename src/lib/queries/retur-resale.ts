@@ -187,3 +187,214 @@ async function insertReturResale(
 }
 
 export { claimSisaReturAtauGagal, kurangiSalesReturDetail, insertReturResale };
+
+// next*Id helpers below are deliberately NOT imported from
+// sales-order.ts/pengiriman-jadwal.ts -- this codebase's established
+// convention is that every next*Id/next*VoucherSeq helper is unexported and
+// privately duplicated per query-file (sales-order.ts, pengiriman-jadwal.ts
+// and takeaway-muatan.ts each already carry their own separate copies of the
+// DO/SI ones). These three copies also differ from their pengiriman-jadwal.ts
+// counterparts in one required way: they take a `sql.Transaction` directly
+// and call `new sql.Request(transaction)` instead of `pool.request()`,
+// because jualUlangDalamRute runs its entire cascade inside one atomic
+// transaction -- looking up a next-ID via a separate, non-transactional
+// pool.request() would read against a different session than the one about
+// to INSERT, reopening the exact kind of race claimSisaReturAtauGagal's
+// UPDLOCK/HOLDLOCK guard above was hardened to close.
+async function nextSalesOrderDetailId(transaction: sql.Transaction): Promise<string> {
+  const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(SalesOrderDetailID AS INT)) AS MaxID FROM SalesOrderDetail`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextDeliveryOrderDetailId(transaction: sql.Transaction): Promise<string> {
+  const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(DeliveryOrderDetailID AS INT)) AS MaxID FROM DeliveryOrderDetail`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+async function nextSalesInvoiceDetailId(transaction: sql.Transaction): Promise<string> {
+  const result = await new sql.Request(transaction).query(`SELECT MAX(TRY_CAST(SalesInvoiceDetailID AS INT)) AS MaxID FROM SalesInvoiceDetail`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+// Jalur (a): jual ulang ke mitra lain yang MASIH ADA di rute Jadwal yang
+// sama, yang stop-nya belum JamSelesai. Tidak membuat dokumen baru sama
+// sekali -- hanya menambah Qty/Amount pada SalesOrder/DeliveryOrder/(kalau
+// sudah terbit) SalesInvoice milik mitra target yang sudah ada, lalu
+// mengurangi SalesReturnDetail retur sumbernya sebesar qty yang sama.
+//
+// Teknik pencocokan DeliveryOrderDetail<->SalesInvoiceDetail SENGAJA BUKAN
+// korespondensi posisi seperti confirmStopDelivery (pengiriman-jadwal.ts)
+// -- lihat komentar di titik pencocokan SalesInvoiceDetail di bawah untuk
+// alasannya.
+export async function jualUlangDalamRute(
+  stopDeliveryItemId: number,
+  targetJadwalDetailId: number,
+  qty: number,
+  akunId: number,
+  via: "DRIVER" | "DISPATCHER"
+): Promise<void> {
+  const pool = await getPool();
+
+  const targetResult = await pool.request().input("id", sql.Int, targetJadwalDetailId).query(`
+    SELECT jd.SalesOrderID, jd.DeliveryOrderID, jd.SalesInvoiceID, sd.JamSelesai
+    FROM DashboardPengirimanJadwalDetail jd
+    LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+    WHERE jd.JadwalDetailID = @id AND jd.IsDeleted = 0
+  `);
+  const target = targetResult.recordset[0] as
+    | { SalesOrderID: string; DeliveryOrderID: string | null; SalesInvoiceID: string | null; JamSelesai: Date | null }
+    | undefined;
+  if (!target) throw new AppError("Stop tujuan tidak ditemukan.");
+  if (target.JamSelesai) throw new AppError("Stop mitra ini sudah selesai, tidak bisa ditambah qty dari sini.");
+  if (!target.DeliveryOrderID) throw new AppError("Stop tujuan belum Selesai Muat, tidak bisa ditambah qty dari sini.");
+
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const claim = await claimSisaReturAtauGagal(transaction, stopDeliveryItemId, qty);
+
+    // Cari baris SalesOrderDetail milik SO target dengan ItemID yang sama.
+    const existingSod = await new sql.Request(transaction)
+      .input("soId", sql.VarChar(16), target.SalesOrderID)
+      .input("itemId", sql.VarChar(160), claim.itemId)
+      .query(`SELECT SalesOrderDetailID, Qty, Price, Name, Unit FROM SalesOrderDetail WHERE SalesOrderID = @soId AND ItemID = @itemId`);
+    let targetSodRow = existingSod.recordset[0] as
+      | { SalesOrderDetailID: string; Qty: number; Price: number; Name: string; Unit: string }
+      | undefined;
+
+    if (!targetSodRow) {
+      // Item ini belum pernah dipesan mitra target hari ini -- insert baris baru.
+      const newSodId = await nextSalesOrderDetailId(transaction);
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), newSodId)
+        .input("soId", sql.VarChar(16), target.SalesOrderID)
+        .input("itemId", sql.VarChar(160), claim.itemId)
+        .input("name", sql.VarChar(150), claim.itemName)
+        .input("qty", sql.Decimal(23, 4), qty)
+        .input("price", sql.Decimal(23, 4), claim.price)
+        .input("amount", sql.Decimal(23, 4), qty * claim.price).query(`
+          INSERT INTO SalesOrderDetail (SalesOrderDetailID, SalesOrderID, ItemID, Name, Qty, Unit, Price, Disc, DiscValue, DiscRp, Ratio, Amount, FlagClosed)
+          VALUES (@id, @soId, @itemId, @name, @qty, 'PCS', @price, 0, 0, 0, 1, @amount, '')
+        `);
+      targetSodRow = { SalesOrderDetailID: newSodId, Qty: 0, Price: claim.price, Name: claim.itemName, Unit: "PCS" };
+    } else {
+      const newQty = targetSodRow.Qty + qty;
+      const newAmount = newQty * targetSodRow.Price;
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), targetSodRow.SalesOrderDetailID)
+        .input("qty", sql.Decimal(23, 4), newQty)
+        .input("amount", sql.Decimal(23, 4), newAmount)
+        .query(`UPDATE SalesOrderDetail SET Qty = @qty, Amount = @amount WHERE SalesOrderDetailID = @id`);
+    }
+
+    // Cascade ke DeliveryOrderDetail, dicocokkan lewat SalesOrderDetailID.
+    const existingDod = await new sql.Request(transaction)
+      .input("doId", sql.VarChar(16), target.DeliveryOrderID)
+      .input("soDetailId", sql.VarChar(16), targetSodRow.SalesOrderDetailID)
+      .query(`SELECT DeliveryOrderDetailID, Qty, Delivered, Amount FROM DeliveryOrderDetail WHERE DeliveryOrderID = @doId AND SalesOrderDetailID = @soDetailId`);
+    const dodRow = existingDod.recordset[0] as { DeliveryOrderDetailID: string; Qty: number; Delivered: number; Amount: number } | undefined;
+
+    if (!dodRow) {
+      const newDodId = await nextDeliveryOrderDetailId(transaction);
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), newDodId)
+        .input("doId", sql.VarChar(16), target.DeliveryOrderID)
+        .input("itemId", sql.VarChar(160), claim.itemId)
+        .input("name", sql.VarChar(160), claim.itemName)
+        .input("qty", sql.Decimal(23, 4), qty)
+        .input("price", sql.Decimal(23, 4), claim.price)
+        .input("amount", sql.Decimal(23, 4), qty * claim.price)
+        .input("soDetailId", sql.VarChar(16), targetSodRow.SalesOrderDetailID).query(`
+          INSERT INTO DeliveryOrderDetail (DeliveryOrderDetailID, DeliveryOrderID, ItemID, Qty, Unit, UnitRatio, Ratio, Price, Disc, DiscValue, DiscRp, Amount, Delivered, Name, Outstanding, Description, Cashback, SalesOrderDetailID)
+          VALUES (@id, @doId, @itemId, @qty, 'PCS', @qty, 1, @price, 0, NULL, 0, @amount, @qty, @name, @qty, NULL, 0, @soDetailId)
+        `);
+    } else {
+      const newQty = dodRow.Qty + qty;
+      const newAmount = newQty * claim.price;
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), dodRow.DeliveryOrderDetailID)
+        .input("qty", sql.Decimal(23, 4), newQty)
+        .input("delivered", sql.Decimal(23, 4), dodRow.Delivered + qty)
+        .input("amount", sql.Decimal(23, 4), newAmount)
+        .query(`UPDATE DeliveryOrderDetail SET Qty = @qty, Delivered = @delivered, Amount = @amount WHERE DeliveryOrderDetailID = @id`);
+    }
+    await new sql.Request(transaction)
+      .input("doId", sql.VarChar(16), target.DeliveryOrderID)
+      .query(`UPDATE DeliveryOrder SET ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
+
+    // Cascade ke SalesInvoiceDetail kalau SI sudah terbit -- dicocokkan
+    // lewat ItemID langsung DI SINI (bukan korespondensi posisi seperti
+    // confirmStopDelivery) karena baris baru yang barusan
+    // di-insert/diupdate di atas TIDAK PUNYA rekan SalesInvoiceDetail yang
+    // "diciptakan di iterasi loop yang sama" seperti asumsi teknik posisi
+    // itu -- di sini cukup ada SATU baris SalesInvoiceDetail per ItemID per
+    // SO (order manual tidak pernah punya dua baris ItemID sama), jadi
+    // pencocokan langsung lewat ItemID aman.
+    if (target.SalesInvoiceID) {
+      const existingSid = await new sql.Request(transaction)
+        .input("siId", sql.VarChar(16), target.SalesInvoiceID)
+        .input("itemId", sql.VarChar(160), claim.itemId)
+        .query(`SELECT SalesInvoiceDetailID, Qty FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId AND ItemID = @itemId`);
+      const sidRow = existingSid.recordset[0] as { SalesInvoiceDetailID: string; Qty: number } | undefined;
+
+      if (!sidRow) {
+        const newSidId = await nextSalesInvoiceDetailId(transaction);
+        await new sql.Request(transaction)
+          .input("id", sql.VarChar(16), newSidId)
+          .input("siId", sql.VarChar(16), target.SalesInvoiceID)
+          .input("itemId", sql.VarChar(160), claim.itemId)
+          .input("name", sql.VarChar(160), claim.itemName)
+          .input("qty", sql.Decimal(23, 4), qty)
+          .input("price", sql.Decimal(23, 4), claim.price)
+          .input("amount", sql.Decimal(23, 4), qty * claim.price).query(`
+            INSERT INTO SalesInvoiceDetail (SalesInvoiceDetailID, SalesInvoiceID, ItemID, Qty, Unit, Ratio, UnitRatio, Price, Disc, DiscValue, DiscRp, Amount, Name, Value, Netto, Description, WaiterName, Cashback, Total)
+            VALUES (@id, @siId, @itemId, @qty, 'PCS', 1, 1, @price, 0, 0, 0, @amount, @name, @amount, @amount, '', '', 0, NULL)
+          `);
+      } else {
+        const newQty = sidRow.Qty + qty;
+        const newAmount = newQty * claim.price;
+        await new sql.Request(transaction)
+          .input("id", sql.VarChar(16), sidRow.SalesInvoiceDetailID)
+          .input("qty", sql.Decimal(23, 4), newQty)
+          .input("amount", sql.Decimal(23, 4), newAmount)
+          .query(`UPDATE SalesInvoiceDetail SET Qty = @qty, Amount = @amount, Netto = @amount, Value = @amount WHERE SalesInvoiceDetailID = @id`);
+      }
+      await new sql.Request(transaction).input("siId", sql.VarChar(16), target.SalesInvoiceID).query(`
+        UPDATE SalesInvoice SET
+          Amount = (SELECT ISNULL(SUM(Amount), 0) FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId),
+          Netto = (SELECT ISNULL(SUM(Amount), 0) FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId)
+        WHERE SalesInvoiceID = @siId
+      `);
+    }
+
+    // Recompute header SalesOrder.
+    await new sql.Request(transaction).input("soId", sql.VarChar(16), target.SalesOrderID).query(`
+      UPDATE SalesOrder SET
+        Amount = (SELECT ISNULL(SUM(Amount), 0) FROM SalesOrderDetail WHERE SalesOrderID = @soId),
+        Netto = (SELECT ISNULL(SUM(Amount), 0) FROM SalesOrderDetail WHERE SalesOrderID = @soId),
+        ModifiedDate = GETDATE()
+      WHERE SalesOrderID = @soId
+    `);
+
+    await kurangiSalesReturDetail(transaction, claim.salesReturnId, claim.salesOrderDetailId, qty);
+    await insertReturResale(transaction, {
+      stopDeliveryItemId,
+      jalur: "DALAM_RUTE",
+      qty,
+      targetSalesOrderDetailId: targetSodRow.SalesOrderDetailID,
+      salesOrderId: null,
+      lokasiLat: null,
+      lokasiLng: null,
+      akunId,
+      via,
+    });
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
