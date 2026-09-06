@@ -342,6 +342,34 @@ export function LaporanShiftDetailView() {
                 })}
               </div>
             )}
+
+            <div className="mt-2 rounded-md border p-2">
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Rekap Total per Driver <span className="font-normal">(seluruh shift hari ini)</span></p>
+              {detail.rekapPerDriver.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Tidak ada driver bertugas hari ini.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Driver</TableHead>
+                      <TableHead className="text-right">Kirim</TableHead>
+                      <TableHead className="text-right">Return</TableHead>
+                      <TableHead className="text-right">Netto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detail.rekapPerDriver.map((r) => (
+                      <TableRow key={r.salesmanId}>
+                        <TableCell>{r.driverName ?? r.salesmanId}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.totalKirim}</TableCell>
+                        <TableCell className="text-right tabular-nums">{r.totalReturn}</TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">{r.netto}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
           </section>
 
           <section id="kas" className="flex flex-col gap-2 rounded-md border p-3">
