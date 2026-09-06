@@ -85,11 +85,15 @@ export function LaporanShiftDetailView() {
 
   function handleSimpanBbm(bbmId: number) {
     startTransition(async () => {
+      const parseField = (s: string): number | null => {
+        const t = s.trim();
+        return t === "" ? null : Number(t);
+      };
       const result = await updateBbmManualAction(
         bbmId,
-        Number(bbmForm.liter) || 0,
-        Number(bbmForm.nominalAsli) || 0,
-        Number(bbmForm.nominalEkstra) || 0
+        parseField(bbmForm.liter),
+        parseField(bbmForm.nominalAsli),
+        parseField(bbmForm.nominalEkstra)
       );
       if (!result.success) {
         setError(result.error);
@@ -403,9 +407,9 @@ export function LaporanShiftDetailView() {
                             onClick={() => {
                               setEditingBbmId(b.bbmId);
                               setBbmForm({
-                                liter: String(b.liter),
-                                nominalAsli: String(b.nominalAsli),
-                                nominalEkstra: String(b.nominalEkstra),
+                                liter: String(b.liter ?? ""),
+                                nominalAsli: String(b.nominalAsli ?? ""),
+                                nominalEkstra: String(b.nominalEkstra ?? ""),
                               });
                             }}
                             className="flex-1 truncate text-left hover:underline"

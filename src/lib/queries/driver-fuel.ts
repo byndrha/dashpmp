@@ -106,8 +106,15 @@ export async function getBbmUntukShift(tanggalUsaha: string, shift: ShiftNumber)
 // column (confirmed via a live INFORMATION_SCHEMA.COLUMNS check: BBMID,
 // JadwalID, SalesmanID, Liter, WaktuIsi, CreatedDate, NominalAsli,
 // NominalEkstra, WaktuMasukSpbu only) -- so it is genuinely unused below.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- akunId kept for signature symmetry, see comment above.
-export async function updateBbmManual(bbmId: number, liter: number, nominalAsli: number, nominalEkstra: number, akunId: number): Promise<void> {
+export async function updateBbmManual(
+  bbmId: number,
+  // null means "not yet filled in" -- a real, distinct final state from 0; completing a NULL row here is a one-way transition (no UI path back to NULL), by design.
+  liter: number | null,
+  nominalAsli: number | null,
+  nominalEkstra: number | null,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- akunId kept for signature symmetry, see comment above.
+  akunId: number
+): Promise<void> {
   const pool = await getPool();
   const result = await pool
     .request()

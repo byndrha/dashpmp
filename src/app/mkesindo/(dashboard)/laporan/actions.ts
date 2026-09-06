@@ -177,14 +177,16 @@ export async function getLaporanShiftDetailAction(tanggalUsaha: string, shift: S
 
 export async function updateBbmManualAction(
   bbmId: number,
-  liter: number,
-  nominalAsli: number,
-  nominalEkstra: number
+  liter: number | null,
+  nominalAsli: number | null,
+  nominalEkstra: number | null
 ): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireModuleAccess("laporan");
     assertCanEditLaporan(session.user);
-    if (liter < 0 || nominalAsli < 0 || nominalEkstra < 0) throw new AppError("Nilai tidak boleh negatif.");
+    if ((liter != null && liter < 0) || (nominalAsli != null && nominalAsli < 0) || (nominalEkstra != null && nominalEkstra < 0)) {
+      throw new AppError("Nilai tidak boleh negatif.");
+    }
     await updateBbmManual(bbmId, liter, nominalAsli, nominalEkstra, Number(session.user.id));
     revalidatePath("/mkesindo/laporan");
   });
