@@ -6,5 +6,7 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { startNotificationScanner } = await import("@/lib/notifications/scanner");
     startNotificationScanner();
+    const { startStokEsSnapshotScanner } = await import("@/lib/laporan-shift-stok-es-scanner");
+    startStokEsSnapshotScanner();
   }
 }
