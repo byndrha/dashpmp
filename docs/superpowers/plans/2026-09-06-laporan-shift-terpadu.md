@@ -705,7 +705,7 @@ git commit -m "feat: add per-shift BBM expense read"
 - Modify: `src/lib/queries/produksi-mesin.ts`
 
 **Interfaces:**
-- Produces: `getMesinCounterUntukShift(tanggalUsaha: string, shift: ShiftNumber): Promise<{ mesinId: number; mesinNama: string; readings: { jamPanen: string; qty10KG: number }[] }[]>` — consumed by Task 7.
+- Produces: `getMesinCounterUntukShift(tanggalUsaha: string, shift: ShiftNumber): Promise<{ mesinId: number; mesinNama: string; readings: { jamPanen: string; qty10KG: number }[] }[]>` — consumed by Task 7. `jamPanen` is a plain `"HH:mm"` clock-time string (from `DashboardProduksiBatch.JamPanen`, `VARCHAR(5)`), NOT an ISO datetime — do not run it through a UTC/WIB datetime formatter.
 
 - [ ] **Step 1: Add the function**
 
@@ -715,7 +715,7 @@ Append to `src/lib/queries/produksi-mesin.ts`:
 import { type ShiftNumber } from "@/lib/report-shift";
 
 export interface MesinCounterReading {
-  jamPanen: string; // ISO
+  jamPanen: string; // "HH:mm" clock-time label, NOT an ISO datetime -- see note below
   qty10KG: number;
 }
 export interface MesinCounterRow {
@@ -730,6 +730,16 @@ export interface MesinCounterRow {
 // (jam | qty per event) the Laporan Shift design references, TanggalLabel/
 // Shift are stored directly on Batch (copied at insert time from Kualitas),
 // same lookup basis getQtyRecapForShift already uses.
+//
+// JamPanen is DashboardProduksiBatch.JamPanen, VARCHAR(5) "HH:mm" (same
+// "Jam field convention" as DriverProfile.JamMulaiKerja/JamSelesaiKerja --
+// see the 2026-08-11 warehouse-ice-stock-redesign plan's own DDL), NOT a
+// SQL datetime column -- the mssql driver returns it as a plain string, so
+// it is passed straight through with NO Date/.toISOString() conversion (an
+// earlier draft of this task's code called .toISOString() on it, which
+// throws TypeError on every real row -- confirmed and fixed during Task 6's
+// own implementation). Nullable for batches recorded before this field
+// existed, coalesced to "" here rather than crashing a downstream renderer.
 export async function getMesinCounterUntukShift(tanggalUsaha: string, shift: ShiftNumber): Promise<MesinCounterRow[]> {
   const pool = await getPool();
   const result = await pool
@@ -743,14 +753,16 @@ export async function getMesinCounterUntukShift(tanggalUsaha: string, shift: Shi
       ORDER BY b.MesinID, b.JamPanen
     `);
   const byMesin = new Map<number, MesinCounterRow>();
-  for (const r of result.recordset as { MesinID: number; MesinNama: string; JamPanen: Date; Qty10KG: number }[]) {
+  for (const r of result.recordset as { MesinID: number; MesinNama: string; JamPanen: string | null; Qty10KG: number }[]) {
     const entry = byMesin.get(r.MesinID) ?? { mesinId: r.MesinID, mesinNama: r.MesinNama, readings: [] };
-    entry.readings.push({ jamPanen: r.JamPanen.toISOString(), qty10KG: r.Qty10KG });
+    entry.readings.push({ jamPanen: r.JamPanen ?? "", qty10KG: r.Qty10KG });
     byMesin.set(r.MesinID, entry);
   }
   return [...byMesin.values()];
 }
 ```
+
+Note (recorded after Task 6's actual implementation and review): `ORDER BY b.MesinID, b.JamPanen` is a lexicographic STRING sort — correct for Shift 1/2, but for Shift 3 (which crosses midnight) a reading at `"00:05"` sorts before one at `"23:12"` even though it happened later chronologically. This is spec-mandated as written (design spec: "urutkan per `MesinID, JamPanen ASC`") and left as-is — a known, low-severity display-ordering quirk for Shift 3's counter list, not a data-correctness bug.
 
 - [ ] **Step 2: Verify**
 
@@ -1180,7 +1192,7 @@ export function LaporanShiftDetailView() {
                     </p>
                     {counter && counter.readings.length > 0 && (
                       <p className="text-muted-foreground">
-                        Counter: {counter.readings.map((r) => `${formatTime(r.jamPanen)}|${r.qty10KG}`).join(", ")}
+                        Counter: {counter.readings.map((r) => `${r.jamPanen || "-"}|${r.qty10KG}`).join(", ")}
                       </p>
                     )}
                   </div>
