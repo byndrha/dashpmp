@@ -2,6 +2,8 @@ import { getPool, sql } from "@/lib/db";
 import { getShiftWindow, type ShiftNumber } from "@/lib/report-shift";
 import { getResaleBreakdownUntukStopItems } from "@/lib/queries/retur-resale";
 import { getMetodePembayaranByKode } from "@/lib/queries/metode-pembayaran";
+import { haversineKm, type LatLng } from "@/lib/route-estimate";
+import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 
 export interface KartuPengirimanItemRow {
   itemId: string;
@@ -19,6 +21,7 @@ export type StatusBayar = "TUNAI" | "QRIS" | "TRANSFER" | "TIDAK_BAYAR" | "BELUM
 export interface KartuPengirimanStopRow {
   jadwalDetailId: number;
   customerName: string;
+  businessPartnerId: string;
   items: KartuPengirimanItemRow[];
   statusBayar: StatusBayar;
   nominalBayar: number | null;
@@ -28,8 +31,69 @@ export interface KartuPengirimanRow {
   jadwalId: number;
   driverName: string | null;
   armadaNama: string | null;
+  vehicleNo: string | null; // real plate when linked to ExpeditionDetail, else armada's own nickname
   jamSelesaiMuat: string; // ISO
+  jamAktualBerangkat: string | null; // ISO, null if not yet departed
+  lokasiTerjauh: { wilayah: string; kecamatan: string | null } | null;
   stops: KartuPengirimanStopRow[];
+}
+
+// Farthest-from-pabrik destination per Jadwal, for the route title format
+// "[JamAktualBerangkat] - Wilayah, Kecamatan". Mirrors the farthest-location
+// half of estimateTravelMinutesForJadwal (pengiriman-jadwal.ts, private,
+// not reusable directly since it also computes travel-time and needs a
+// differently-shaped caller) -- deliberately NOT importing that function,
+// this is a fresh, lighter query scoped to this shift's own small JadwalID
+// list. "Wilayah"/"Kecamatan" are NOT dedicated columns -- they read
+// BusinessPartner.NPWPName/NPWPAddress (repurposed fields), same as the
+// function this mirrors.
+async function getLokasiTerjauhPerJadwal(
+  pool: sql.ConnectionPool,
+  jadwalIds: number[]
+): Promise<Map<number, { wilayah: string; kecamatan: string | null }>> {
+  const result = new Map<number, { wilayah: string; kecamatan: string | null }>();
+  if (jadwalIds.length === 0) return result;
+
+  const pabrik = await getPabrikLocation();
+  const pabrikLatLng: LatLng = { lat: pabrik.latitude, lng: pabrik.longitude };
+
+  const request = pool.request();
+  const placeholders = jadwalIds.map((id, i) => {
+    request.input(`jid${i}`, sql.Int, id);
+    return `@jid${i}`;
+  });
+  const stopsResult = await request.query(`
+    SELECT jd.JadwalID, ml.Latitude, ml.Longitude,
+           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
+           bp.NPWPAddress AS Kecamatan
+    FROM DashboardPengirimanJadwalDetail jd
+    JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+    JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
+    WHERE jd.JadwalID IN (${placeholders.join(",")}) AND jd.IsDeleted = 0
+  `);
+  type StopRow = { JadwalID: number; Latitude: number | null; Longitude: number | null; Wilayah: string; Kecamatan: string | null };
+  const byJadwal = new Map<number, (StopRow & { Latitude: number; Longitude: number })[]>();
+  for (const row of stopsResult.recordset as StopRow[]) {
+    if (row.Latitude == null || row.Longitude == null) continue;
+    const list = byJadwal.get(row.JadwalID) ?? [];
+    list.push(row as StopRow & { Latitude: number; Longitude: number });
+    byJadwal.set(row.JadwalID, list);
+  }
+
+  for (const [jadwalId, stops] of byJadwal) {
+    let farthest: { wilayah: string; kecamatan: string | null } | null = null;
+    let farthestKm = -1;
+    for (const stop of stops) {
+      const km = haversineKm(pabrikLatLng, { lat: stop.Latitude, lng: stop.Longitude });
+      if (km > farthestKm) {
+        farthestKm = km;
+        farthest = { wilayah: stop.Wilayah, kecamatan: stop.Kecamatan };
+      }
+    }
+    if (farthest) result.set(jadwalId, farthest);
+  }
+  return result;
 }
 
 // Kartu Pengiriman untuk satu shift -- satu blok per Jadwal (dikelompokkan
@@ -52,14 +116,23 @@ export async function getKartuPengirimanUntukShift(
     .request()
     .input("start", sql.DateTime, window.start)
     .input("end", sql.DateTime, window.end).query(`
-      SELECT j.JadwalID, sm.Name AS DriverName, a.Nama AS ArmadaNama, j.JamSelesaiMuat
+      SELECT j.JadwalID, sm.Name AS DriverName, a.Nama AS ArmadaNama, j.JamSelesaiMuat, j.JamAktualBerangkat,
+             ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo
       FROM DashboardPengirimanJadwal j
       LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
       LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
+      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
       WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL AND j.JamSelesaiMuat BETWEEN @start AND @end
       ORDER BY j.JamSelesaiMuat
     `);
-  const jadwalRows = jadwalResult.recordset as { JadwalID: number; DriverName: string | null; ArmadaNama: string | null; JamSelesaiMuat: Date }[];
+  const jadwalRows = jadwalResult.recordset as {
+    JadwalID: number;
+    DriverName: string | null;
+    ArmadaNama: string | null;
+    JamSelesaiMuat: Date;
+    JamAktualBerangkat: Date | null;
+    VehicleNo: string | null;
+  }[];
   if (jadwalRows.length === 0) return [];
   const jadwalIds = jadwalRows.map((r) => r.JadwalID);
 
@@ -69,25 +142,39 @@ export async function getKartuPengirimanUntukShift(
   const jadwalPlaceholders = jadwalIds.map((id, i) => `@jid${i}`).join(",");
   const stopRequest = pool.request();
   jadwalIds.forEach((id, i) => stopRequest.input(`jid${i}`, sql.Int, id));
-  const stopResult = await stopRequest.query(`
-    SELECT jd.JadwalDetailID, jd.JadwalID, jd.SalesOrderID, jd.SalesInvoiceID,
-           bp.Name AS CustomerName, sd.StopDeliveryID, sd.TanpaPembayaran
-    FROM DashboardPengirimanJadwalDetail jd
-    JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
-    JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
-    LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
-    WHERE jd.JadwalID IN (${jadwalPlaceholders}) AND jd.IsDeleted = 0
-  `);
+  const [stopResult, lokasiTerjauhMap] = await Promise.all([
+    stopRequest.query(`
+      SELECT jd.JadwalDetailID, jd.JadwalID, jd.SalesOrderID, jd.SalesInvoiceID,
+             bp.Name AS CustomerName, bp.BusinessPartnerID, sd.StopDeliveryID, sd.TanpaPembayaran
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+      JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+      LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+      WHERE jd.JadwalID IN (${jadwalPlaceholders}) AND jd.IsDeleted = 0
+    `),
+    getLokasiTerjauhPerJadwal(pool, jadwalIds),
+  ]);
   const stopRows = stopResult.recordset as {
     JadwalDetailID: number;
     JadwalID: number;
     SalesOrderID: string;
     SalesInvoiceID: string | null;
     CustomerName: string;
+    BusinessPartnerID: string;
     StopDeliveryID: number | null;
     TanpaPembayaran: boolean | null;
   }[];
-  if (stopRows.length === 0) return jadwalRows.map((j) => ({ jadwalId: j.JadwalID, driverName: j.DriverName, armadaNama: j.ArmadaNama, jamSelesaiMuat: j.JamSelesaiMuat.toISOString(), stops: [] }));
+  if (stopRows.length === 0)
+    return jadwalRows.map((j) => ({
+      jadwalId: j.JadwalID,
+      driverName: j.DriverName,
+      armadaNama: j.ArmadaNama,
+      vehicleNo: j.VehicleNo,
+      jamSelesaiMuat: j.JamSelesaiMuat.toISOString(),
+      jamAktualBerangkat: j.JamAktualBerangkat ? j.JamAktualBerangkat.toISOString() : null,
+      lokasiTerjauh: lokasiTerjauhMap.get(j.JadwalID) ?? null,
+      stops: [],
+    }));
 
   // 3. Items ordered per SalesOrderID.
   const soIds = [...new Set(stopRows.map((r) => r.SalesOrderID))];
@@ -198,6 +285,7 @@ export async function getKartuPengirimanUntukShift(
     list.push({
       jadwalDetailId: s.JadwalDetailID,
       customerName: s.CustomerName,
+      businessPartnerId: s.BusinessPartnerID,
       items: itemsBySoId.get(s.SalesOrderID) ?? [],
       statusBayar,
       nominalBayar,
@@ -210,7 +298,10 @@ export async function getKartuPengirimanUntukShift(
     jadwalId: j.JadwalID,
     driverName: j.DriverName,
     armadaNama: j.ArmadaNama,
+    vehicleNo: j.VehicleNo,
     jamSelesaiMuat: j.JamSelesaiMuat.toISOString(),
+    jamAktualBerangkat: j.JamAktualBerangkat ? j.JamAktualBerangkat.toISOString() : null,
+    lokasiTerjauh: lokasiTerjauhMap.get(j.JadwalID) ?? null,
     stops: stopsByJadwalId.get(j.JadwalID) ?? [],
   }));
 }
