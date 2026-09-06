@@ -263,3 +263,12 @@ export async function hapusPengeluaran(pengeluaranId: number): Promise<void> {
     DELETE FROM DashboardKasKecilPengeluaran WHERE PengeluaranID = @pengeluaranId
   `);
 }
+
+// Thin export of the existing private getKasKecilShiftRow, for callers
+// outside this file that don't already have a pool handle (Laporan Shift's
+// getLaporanShiftDetail, Task 7) -- resolves its own pool rather than
+// requiring the caller to pass one.
+export async function getKasKecilShiftForTanggalShift(tanggalUsaha: string, shift: ShiftNumber): Promise<KasKecilShiftRow | null> {
+  const pool = await getPool();
+  return getKasKecilShiftRow(pool, tanggalUsaha, shift);
+}

@@ -193,6 +193,39 @@ async function insertReturResale(
 
 export { claimSisaReturAtauGagal, kurangiSalesReturDetail, insertReturResale };
 
+// Bulk resale breakdown for a batch of StopDeliveryItemID, grouped by
+// Jalur -- used by Laporan Shift (Task 4) to show "qty X dijual ulang lewat
+// jalur Y" per retur item. Deliberately DIFFERENT from getSisaReturTersedia
+// above: that function only returns items with UNSOLD sisa > 0 (it answers
+// "what's still available to sell"), while a shift report needs to show
+// EVERY retur item's resale history including ones that are already fully
+// sold out (sisa = 0) -- so this reads DashboardPengirimanReturResale
+// directly, with no SisaQty filter at all.
+export async function getResaleBreakdownUntukStopItems(
+  stopDeliveryItemIds: number[]
+): Promise<Map<number, { jalur: "DALAM_RUTE" | "LUAR_RUTE" | "RETAIL"; qty: number }[]>> {
+  const map = new Map<number, { jalur: "DALAM_RUTE" | "LUAR_RUTE" | "RETAIL"; qty: number }[]>();
+  if (stopDeliveryItemIds.length === 0) return map;
+  const pool = await getPool();
+  const request = pool.request();
+  const placeholders = stopDeliveryItemIds.map((id, i) => {
+    request.input(`id${i}`, sql.Int, id);
+    return `@id${i}`;
+  });
+  const result = await request.query(`
+    SELECT StopDeliveryItemID, Jalur, SUM(Qty) AS TotalQty
+    FROM DashboardPengirimanReturResale
+    WHERE StopDeliveryItemID IN (${placeholders.join(",")})
+    GROUP BY StopDeliveryItemID, Jalur
+  `);
+  for (const row of result.recordset as { StopDeliveryItemID: number; Jalur: "DALAM_RUTE" | "LUAR_RUTE" | "RETAIL"; TotalQty: number }[]) {
+    const list = map.get(row.StopDeliveryItemID) ?? [];
+    list.push({ jalur: row.Jalur, qty: row.TotalQty });
+    map.set(row.StopDeliveryItemID, list);
+  }
+  return map;
+}
+
 // next*Id helpers below are deliberately NOT imported from
 // sales-order.ts/pengiriman-jadwal.ts -- this codebase's established
 // convention is that every next*Id/next*VoucherSeq helper is unexported and
