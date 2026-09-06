@@ -1119,8 +1119,9 @@ export function LaporanShiftDetailView() {
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">{s.customerName}</span>
                             <span className="text-muted-foreground">
-                              {STATUS_BAYAR_LABEL[s.statusBayar]}
-                              {s.nominalBayar != null && ` — ${formatRupiah(s.nominalBayar)}`}
+                              {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
+                                ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
+                                : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
                             </span>
                           </div>
                           <p className="text-muted-foreground">{s.items.map((i) => `${i.itemName} x${i.qty}`).join(", ")}</p>
@@ -1151,7 +1152,7 @@ export function LaporanShiftDetailView() {
                     <span>
                       BBM — {b.driverName ?? b.salesmanId} ({formatTime(b.waktuIsi)})
                     </span>
-                    <span>{formatRupiah(b.nominalAsli + b.nominalEkstra)}</span>
+                    <span>{formatRupiah((b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0))}</span>
                   </div>
                 ))}
                 {detail.kasKecil?.pengeluaran.map((p) => (
