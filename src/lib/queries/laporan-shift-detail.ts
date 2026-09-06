@@ -1,0 +1,109 @@
+import { getShiftLabel, getPreviousShift, getReportShift, type ShiftNumber } from "@/lib/report-shift";
+import { getAktivitasForShift, getQtyRecapForShift, hitungTotalDenda } from "@/lib/queries/aktivitas-produksi";
+import { getStokBahanBakuHistory, type StokBahanBakuRow } from "@/lib/queries/stok-bahan-baku";
+import { getKasKecilShiftForTanggalShift, type KasKecilShiftRow } from "@/lib/queries/kas-kecil";
+import { getMesinEventsForShift, type MesinEventRow } from "@/lib/queries/produksi-mesin-event";
+import { getMesinList, getMesinCounterUntukShift, type MesinRow, type MesinCounterRow } from "@/lib/queries/produksi-mesin";
+import { getKartuPengirimanUntukShift, type KartuPengirimanRow } from "@/lib/queries/laporan-shift-pengiriman";
+import { getBbmUntukShift, type BbmShiftRow } from "@/lib/queries/driver-fuel";
+import { getSnapshotStokEs, hitungTotalSisaStokEsLive } from "@/lib/queries/laporan-shift-stok-es-snapshot";
+
+export interface StokEsInfo {
+  stokAwal: number | null; // null when the previous shift has no snapshot yet
+  stokAkhir: number;
+  stokAkhirFinal: boolean; // false when this is the currently-running shift (live figure)
+}
+
+export interface LaporanShiftDetail {
+  tanggalUsaha: string;
+  shift: ShiftNumber;
+  shiftLabel: string;
+  timId: number | null;
+  stafOperasionalAkunId: number | null;
+  stokBahanBaku: StokBahanBakuRow[];
+  kartuPengiriman: KartuPengirimanRow[];
+  bbm: BbmShiftRow[];
+  kasKecil: KasKecilShiftRow | null;
+  produksiKantongEkivalen: number;
+  produksiTotalDenda: number;
+  mesinList: MesinRow[];
+  mesinEvents: MesinEventRow[];
+  mesinCounter: MesinCounterRow[];
+  stokEs: StokEsInfo;
+}
+
+// hitungLimitHistori mirrors laporan-ringkasan-lintas-shift.ts's own helper
+// (same reasoning: getStokBahanBakuHistory's `limit` caps a TOP-N window,
+// so a shift far enough in the past needs a correspondingly large limit to
+// guarantee it's still inside that window) -- duplicated here rather than
+// imported since laporan-ringkasan-lintas-shift.ts's version is private
+// (not exported) and this is a handful of lines.
+function hitungLimitHistori(tanggalUsaha: string, maxBarisPerHari: number): number {
+  const targetDate = new Date(`${tanggalUsaha}T00:00:00Z`);
+  const sekarang = new Date();
+  const hariMundur = Math.max(0, Math.ceil((sekarang.getTime() - targetDate.getTime()) / 86_400_000));
+  return (hariMundur + 7) * maxBarisPerHari;
+}
+
+export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNumber, perusahaanId: number): Promise<LaporanShiftDetail> {
+  const previous = getPreviousShift(tanggalUsaha, shift);
+  const { shift: shiftBerjalan, businessDate: businessDateBerjalan } = getReportShift("work");
+  const tanggalUsahaBerjalan = businessDateBerjalan.toISOString().slice(0, 10);
+  const isShiftBerjalan = tanggalUsaha === tanggalUsahaBerjalan && shift === shiftBerjalan;
+  // getMesinEventsForShift takes (businessDate: Date, shift), not
+  // (tanggalUsaha: string, shift) like every other function called below --
+  // matching its existing real signature (produksi-mesin-event.ts).
+  const businessDateUntukMesinEvent = new Date(`${tanggalUsaha}T00:00:00Z`);
+
+  const [
+    stokBahanBakuHistory,
+    kartuPengiriman,
+    bbm,
+    kasKecil,
+    aktivitas,
+    qtyRecap,
+    mesinList,
+    mesinEvents,
+    mesinCounter,
+    snapshotAkhir,
+    snapshotAwal,
+  ] = await Promise.all([
+    getStokBahanBakuHistory(hitungLimitHistori(tanggalUsaha, 9)), // 3 JenisBarang x 3 shift
+    getKartuPengirimanUntukShift(tanggalUsaha, shift, perusahaanId),
+    getBbmUntukShift(tanggalUsaha, shift),
+    getKasKecilShiftForTanggalShift(tanggalUsaha, shift),
+    getAktivitasForShift(tanggalUsaha, shift),
+    getQtyRecapForShift(tanggalUsaha, shift),
+    getMesinList(),
+    getMesinEventsForShift(businessDateUntukMesinEvent, shift),
+    getMesinCounterUntukShift(tanggalUsaha, shift),
+    isShiftBerjalan ? Promise.resolve(null) : getSnapshotStokEs(tanggalUsaha, shift),
+    getSnapshotStokEs(previous.tanggalUsaha, previous.shift),
+  ]);
+
+  const stokBahanBaku = stokBahanBakuHistory.filter((r) => r.tanggalUsaha === tanggalUsaha && r.shift === shift);
+
+  const stokAkhir = isShiftBerjalan ? await hitungTotalSisaStokEsLive() : (snapshotAkhir ?? (await hitungTotalSisaStokEsLive()));
+
+  return {
+    tanggalUsaha,
+    shift,
+    shiftLabel: getShiftLabel(shift, "work"),
+    timId: aktivitas.timId,
+    stafOperasionalAkunId: aktivitas.stafOperasionalAkunId,
+    stokBahanBaku,
+    kartuPengiriman,
+    bbm,
+    kasKecil,
+    produksiKantongEkivalen: qtyRecap.totalKantongEkivalen,
+    produksiTotalDenda: hitungTotalDenda(aktivitas.pecahKemasanQty, aktivitas.esJatuhQty),
+    mesinList,
+    mesinEvents,
+    mesinCounter,
+    stokEs: {
+      stokAwal: snapshotAwal,
+      stokAkhir,
+      stokAkhirFinal: !isShiftBerjalan && snapshotAkhir != null,
+    },
+  };
+}
