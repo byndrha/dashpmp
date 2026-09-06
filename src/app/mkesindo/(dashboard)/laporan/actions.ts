@@ -25,6 +25,7 @@ import {
 } from "@/lib/queries/kas-kecil";
 import { getRingkasanLintasShift, type RingkasanShiftRow } from "@/lib/queries/laporan-ringkasan-lintas-shift";
 import type { ShiftNumber } from "@/lib/report-shift";
+import { getLaporanShiftDetail, type LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
 
 // Bypasses the permission grid for Direktur/Superadmin the same way every
 // other module's canAccessAllPT() checks do, so they can exercise the
@@ -154,5 +155,13 @@ export async function getRingkasanLintasShiftAction(tahun: number, bulan: number
   return runAction(async () => {
     await requireModuleAccess("laporan");
     return getRingkasanLintasShift(tahun, bulan);
+  });
+}
+
+export async function getLaporanShiftDetailAction(tanggalUsaha: string, shift: ShiftNumber): Promise<ActionResult<LaporanShiftDetail>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("laporan");
+    if (!session.user.perusahaanId) throw new AppError("Akun ini tidak terhubung ke PT manapun.");
+    return getLaporanShiftDetail(tanggalUsaha, shift, session.user.perusahaanId);
   });
 }
