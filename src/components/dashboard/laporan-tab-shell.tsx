@@ -8,13 +8,20 @@ import { LaporanAktivitasProduksi } from "@/components/dashboard/laporan-aktivit
 import { LaporanAktivitasMuatanDistribusi } from "@/components/dashboard/laporan-aktivitas-muatan-distribusi";
 import { LaporanKasKecil } from "@/components/dashboard/laporan-kas-kecil";
 import { LaporanRingkasanLintasShift } from "@/components/dashboard/laporan-ringkasan-lintas-shift";
+import { LaporanShiftDetailView } from "@/components/dashboard/laporan-shift-detail";
 import type { StokBahanBakuRow, CurrentShiftInfo, SaldoAwalRow } from "@/lib/queries/stok-bahan-baku";
 import type { AktivitasShiftInfo } from "@/lib/queries/aktivitas-produksi";
 import type { AktivitasMuatanDistribusiRow } from "@/lib/queries/laporan-muatan-distribusi";
 import type { KasKecilShiftRow, CurrentShiftKasKecilInfo } from "@/lib/queries/kas-kecil";
 import type { RingkasanShiftRow } from "@/lib/queries/laporan-ringkasan-lintas-shift";
 
-type LaporanTab = "stok-bahan-baku" | "aktivitas-produksi" | "aktivitas-muatan-distribusi" | "keuangan-operasional" | "ringkasan-lintas-shift";
+type LaporanTab =
+  | "stok-bahan-baku"
+  | "aktivitas-produksi"
+  | "aktivitas-muatan-distribusi"
+  | "keuangan-operasional"
+  | "ringkasan-lintas-shift"
+  | "laporan-shift";
 
 export function LaporanTabShell({
   canEdit,
@@ -81,6 +88,9 @@ export function LaporanTabShell({
         <Button size="sm" variant={tab === "ringkasan-lintas-shift" ? "default" : "outline"} onClick={() => setTab("ringkasan-lintas-shift")}>
           Ringkasan Lintas Shift
         </Button>
+        <Button size="sm" variant={tab === "laporan-shift" ? "default" : "outline"} onClick={() => setTab("laporan-shift")}>
+          Laporan Shift
+        </Button>
       </div>
       <div className={cn(tab !== "stok-bahan-baku" && "hidden")}>
         <LaporanStokBahanBaku
@@ -122,6 +132,9 @@ export function LaporanTabShell({
           namaMap={namaMap}
           timNamaMap={timNamaMap}
         />
+      </div>
+      <div className={cn(tab !== "laporan-shift" && "hidden")}>
+        <LaporanShiftDetailView />
       </div>
     </div>
   );
