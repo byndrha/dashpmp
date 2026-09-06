@@ -48,6 +48,7 @@ export async function updateFuelLog(
 }
 
 export interface BbmShiftRow {
+  bbmId: number;
   salesmanId: string;
   driverName: string | null;
   liter: number;
@@ -69,20 +70,63 @@ export async function getBbmUntukShift(tanggalUsaha: string, shift: ShiftNumber)
     .request()
     .input("start", sql.DateTime, window.start)
     .input("end", sql.DateTime, window.end).query(`
-      SELECT b.SalesmanID, sm.Name AS DriverName, b.Liter, b.NominalAsli, b.NominalEkstra, b.WaktuIsi
+      SELECT b.BBMID, b.SalesmanID, sm.Name AS DriverName, b.Liter, b.NominalAsli, b.NominalEkstra, b.WaktuIsi
       FROM DashboardPengirimanBBM b
       LEFT JOIN Salesman sm ON sm.SalesmanID = b.SalesmanID
       WHERE b.WaktuIsi IS NOT NULL AND b.WaktuIsi BETWEEN @start AND @end
       ORDER BY b.WaktuIsi
     `);
-  return (result.recordset as { SalesmanID: string; DriverName: string | null; Liter: number; NominalAsli: number; NominalEkstra: number; WaktuIsi: Date }[]).map(
-    (r) => ({
-      salesmanId: r.SalesmanID,
-      driverName: r.DriverName,
-      liter: r.Liter,
-      nominalAsli: r.NominalAsli,
-      nominalEkstra: r.NominalEkstra,
-      waktuIsi: r.WaktuIsi.toISOString(),
-    })
-  );
+  return (
+    result.recordset as {
+      BBMID: number;
+      SalesmanID: string;
+      DriverName: string | null;
+      Liter: number;
+      NominalAsli: number;
+      NominalEkstra: number;
+      WaktuIsi: Date;
+    }[]
+  ).map((r) => ({
+    bbmId: r.BBMID,
+    salesmanId: r.SalesmanID,
+    driverName: r.DriverName,
+    liter: r.Liter,
+    nominalAsli: r.NominalAsli,
+    nominalEkstra: r.NominalEkstra,
+    waktuIsi: r.WaktuIsi.toISOString(),
+  }));
+}
+
+// Staff correction from Laporan Shift -- unlike updateFuelLog (the driver's
+// own "Simpan" in the Isi BBM screen), this has NO SalesmanID ownership
+// check: a dispatcher/staff correcting a shift's records is allowed to fix
+// ANY driver's entry, not just their own. akunId is accepted here for
+// interface symmetry with this codebase's other staff-correction write
+// functions, but DashboardPengirimanBBM has no ModifiedByAkunID-style
+// column (confirmed via a live INFORMATION_SCHEMA.COLUMNS check: BBMID,
+// JadwalID, SalesmanID, Liter, WaktuIsi, CreatedDate, NominalAsli,
+// NominalEkstra, WaktuMasukSpbu only) -- so it is genuinely unused below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- akunId kept for signature symmetry, see comment above.
+export async function updateBbmManual(bbmId: number, liter: number, nominalAsli: number, nominalEkstra: number, akunId: number): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("bbmId", sql.Int, bbmId)
+    .input("liter", sql.Decimal(10, 2), liter)
+    .input("nominalAsli", sql.Decimal(18, 2), nominalAsli)
+    .input("nominalEkstra", sql.Decimal(18, 2), nominalEkstra).query(`
+      UPDATE DashboardPengirimanBBM
+      SET Liter = @liter, NominalAsli = @nominalAsli, NominalEkstra = @nominalEkstra
+      WHERE BBMID = @bbmId
+    `);
+  if (result.rowsAffected[0] === 0) throw new AppError("Catatan BBM tidak ditemukan.");
+}
+
+// Hard delete -- confirmed via grep that no other table/column references
+// BBMID anywhere in src/lib/queries, same reasoning already established for
+// hapusPengeluaran in kas-kecil.ts.
+export async function hapusBbmEntry(bbmId: number): Promise<void> {
+  const pool = await getPool();
+  const result = await pool.request().input("bbmId", sql.Int, bbmId).query(`DELETE FROM DashboardPengirimanBBM WHERE BBMID = @bbmId`);
+  if (result.rowsAffected[0] === 0) throw new AppError("Catatan BBM tidak ditemukan.");
 }
