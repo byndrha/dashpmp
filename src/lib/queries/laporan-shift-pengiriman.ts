@@ -305,3 +305,70 @@ export async function getKartuPengirimanUntukShift(
     stops: stopsByJadwalId.get(j.JadwalID) ?? [],
   }));
 }
+
+export interface RekapDriverRow {
+  salesmanId: string;
+  driverName: string | null;
+  totalKirim: number;
+  totalReturn: number;
+  netto: number;
+}
+
+// Kirim/Return/Netto per driver across ALL THREE shifts of one Tanggal
+// Usaha -- deliberately whole-day, unlike every other function in this
+// plan which is scoped to one shift's own window. Kirim = SUM(Qty) ordered
+// (SalesOrderDetail), Return = SUM(QtyRetur) (StopDeliveryItem), Netto =
+// Kirim - Return, all in raw item qty (not kantong-ekivalen -- this report
+// mixes 10kg/5kg items per Jadwal and this recap doesn't need the
+// kantong-ekivalen conversion the rest of this app's production reports
+// use, since it's a delivery/return headcount per driver, not a
+// production-capacity figure).
+export async function getRekapPerDriverUntukHari(tanggalUsaha: string): Promise<RekapDriverRow[]> {
+  const pool = await getPool();
+  const businessDate = new Date(`${tanggalUsaha}T00:00:00Z`);
+  const start = getShiftWindow(businessDate, 2, "work").start;
+  const end = getShiftWindow(businessDate, 1, "work").end;
+
+  const result = await pool
+    .request()
+    .input("start", sql.DateTime, start)
+    .input("end", sql.DateTime, end).query(`
+      WITH JadwalHariIni AS (
+        SELECT j.JadwalID, j.SalesmanID, sm.Name AS DriverName
+        FROM DashboardPengirimanJadwal j
+        LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
+        WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL AND j.JamSelesaiMuat BETWEEN @start AND @end
+      ),
+      KirimPerJadwal AS (
+        SELECT jh.JadwalID, SUM(sod.Qty) AS TotalKirim
+        FROM JadwalHariIni jh
+        JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = jh.JadwalID AND jd.IsDeleted = 0
+        JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
+        GROUP BY jh.JadwalID
+      ),
+      ReturPerJadwal AS (
+        SELECT jh.JadwalID, SUM(sdi.QtyRetur) AS TotalReturn
+        FROM JadwalHariIni jh
+        JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = jh.JadwalID AND jd.IsDeleted = 0
+        JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+        JOIN DashboardPengirimanStopDeliveryItem sdi ON sdi.StopDeliveryID = sd.StopDeliveryID
+        GROUP BY jh.JadwalID
+      )
+      SELECT jh.SalesmanID, jh.DriverName,
+             SUM(ISNULL(k.TotalKirim, 0)) AS TotalKirim,
+             SUM(ISNULL(r.TotalReturn, 0)) AS TotalReturn
+      FROM JadwalHariIni jh
+      LEFT JOIN KirimPerJadwal k ON k.JadwalID = jh.JadwalID
+      LEFT JOIN ReturPerJadwal r ON r.JadwalID = jh.JadwalID
+      WHERE jh.SalesmanID IS NOT NULL
+      GROUP BY jh.SalesmanID, jh.DriverName
+      ORDER BY jh.DriverName
+    `);
+  return (result.recordset as { SalesmanID: string; DriverName: string | null; TotalKirim: number; TotalReturn: number }[]).map((r) => ({
+    salesmanId: r.SalesmanID,
+    driverName: r.DriverName,
+    totalKirim: r.TotalKirim,
+    totalReturn: r.TotalReturn,
+    netto: r.TotalKirim - r.TotalReturn,
+  }));
+}
