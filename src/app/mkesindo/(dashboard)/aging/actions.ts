@@ -7,6 +7,15 @@ import { getOutstandingInvoicesForMitra, recordPayment, type OutstandingInvoice 
 import type { RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
+import { canAccessAllPT } from "@/lib/require-access";
+
+// Bypasses the permission grid for Direktur/Superadmin the same way
+// assertCanEditLaporan does in laporan/actions.ts, so they can record
+// payments too (support/testing), not just view outstanding invoices.
+function assertCanEditAging(user: { isSuperAdmin: boolean; accountScope: string; permissions: { aging?: { canEdit: boolean } } }): void {
+  const canEdit = canAccessAllPT(user) || !!user.permissions.aging?.canEdit;
+  if (!canEdit) throw new AppError("Anda tidak punya izin mengubah data ini.");
+}
 
 export async function saveCollectionTargetAction(input: {
   businessPartnerId: string;
@@ -71,6 +80,7 @@ export async function recordPaymentAction(
   return runAction(async () => {
     const session = await auth();
     if (!session?.user?.id) throw new AppError("Unauthorized");
+    assertCanEditAging(session.user);
 
     // konteks and perusahaanId are pinned here, never trusted from the
     // client — same reasoning as recordDriverPaymentAction's own pin in

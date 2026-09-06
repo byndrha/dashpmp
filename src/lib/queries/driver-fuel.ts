@@ -51,9 +51,12 @@ export interface BbmShiftRow {
   bbmId: number;
   salesmanId: string;
   driverName: string | null;
-  liter: number;
-  nominalAsli: number;
-  nominalEkstra: number;
+  // null means "not yet filled in" -- same real, distinct state as
+  // updateBbmManual's params below (confirmed live: BBMID 4 and 5 have all
+  // three NULL).
+  liter: number | null;
+  nominalAsli: number | null;
+  nominalEkstra: number | null;
   waktuIsi: string; // ISO
 }
 
@@ -81,9 +84,9 @@ export async function getBbmUntukShift(tanggalUsaha: string, shift: ShiftNumber)
       BBMID: number;
       SalesmanID: string;
       DriverName: string | null;
-      Liter: number;
-      NominalAsli: number;
-      NominalEkstra: number;
+      Liter: number | null;
+      NominalAsli: number | null;
+      NominalEkstra: number | null;
       WaktuIsi: Date;
     }[]
   ).map((r) => ({
