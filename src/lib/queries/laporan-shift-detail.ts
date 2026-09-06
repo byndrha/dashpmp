@@ -4,7 +4,7 @@ import { getStokBahanBakuHistory, type StokBahanBakuRow } from "@/lib/queries/st
 import { getKasKecilShiftForTanggalShift, type KasKecilShiftRow } from "@/lib/queries/kas-kecil";
 import { getMesinEventsForShift, type MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import { getMesinList, getMesinCounterUntukShift, type MesinRow, type MesinCounterRow } from "@/lib/queries/produksi-mesin";
-import { getKartuPengirimanUntukShift, type KartuPengirimanRow } from "@/lib/queries/laporan-shift-pengiriman";
+import { getKartuPengirimanUntukShift, getRekapPerDriverUntukHari, type KartuPengirimanRow, type RekapDriverRow } from "@/lib/queries/laporan-shift-pengiriman";
 import { getBbmUntukShift, type BbmShiftRow } from "@/lib/queries/driver-fuel";
 import { getSnapshotStokEs, hitungTotalSisaStokEsLive } from "@/lib/queries/laporan-shift-stok-es-snapshot";
 import { getAllTim } from "@/lib/queries/tim-produksi";
@@ -34,6 +34,8 @@ export interface LaporanShiftDetail {
   mesinEvents: MesinEventRow[];
   mesinCounter: MesinCounterRow[];
   stokEs: StokEsInfo;
+  perusahaanId: number;
+  rekapPerDriver: RekapDriverRow[];
 }
 
 // hitungLimitHistori mirrors laporan-ringkasan-lintas-shift.ts's own helper
@@ -72,6 +74,7 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     snapshotAkhir,
     snapshotAwal,
     timList,
+    rekapPerDriver,
   ] = await Promise.all([
     getStokBahanBakuHistory(hitungLimitHistori(tanggalUsaha, 9)), // 3 JenisBarang x 3 shift
     getKartuPengirimanUntukShift(tanggalUsaha, shift, perusahaanId),
@@ -85,6 +88,7 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     isShiftBerjalan ? Promise.resolve(null) : getSnapshotStokEs(tanggalUsaha, shift),
     getSnapshotStokEs(previous.tanggalUsaha, previous.shift),
     getAllTim(),
+    getRekapPerDriverUntukHari(tanggalUsaha),
   ]);
 
   const stokBahanBaku = stokBahanBakuHistory.filter((r) => r.tanggalUsaha === tanggalUsaha && r.shift === shift);
@@ -120,5 +124,7 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
       stokAkhir,
       stokAkhirFinal: !isShiftBerjalan && snapshotAkhir != null,
     },
+    perusahaanId,
+    rekapPerDriver,
   };
 }
