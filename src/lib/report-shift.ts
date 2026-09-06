@@ -87,3 +87,21 @@ export function getShiftLabel(shift: ShiftNumber, kind: ReportShiftKind): string
   const hour = SHIFT_START_HOUR_LABEL[kind][shift];
   return `Shift ${shift} (${String(hour).padStart(2, "0")}:00)`;
 }
+
+// The (tanggalUsaha, shift) that chronologically immediately precedes the
+// given one, within the same "work" shift-boundary system this whole file
+// implements. Chronological order within one TanggalUsaha is Shift 2 -> 3
+// -> 1 (see getShiftWindow's own comment) — Shift 1's predecessor is Shift
+// 3 of the SAME TanggalUsaha, Shift 3's predecessor is Shift 2 of the SAME
+// TanggalUsaha, and Shift 2's predecessor is Shift 1 of the PREVIOUS
+// TanggalUsaha (the calendar day before). Used by the Stok Es snapshot
+// scanner (Task 2) to find "the shift that just ended" and by
+// getLaporanShiftDetail (Task 7) to find "Stok Awal" (= previous shift's
+// "Stok Akhir").
+export function getPreviousShift(tanggalUsaha: string, shift: ShiftNumber): { tanggalUsaha: string; shift: ShiftNumber } {
+  if (shift === 1) return { tanggalUsaha, shift: 3 };
+  if (shift === 3) return { tanggalUsaha, shift: 2 };
+  const d = new Date(`${tanggalUsaha}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return { tanggalUsaha: d.toISOString().slice(0, 10), shift: 1 };
+}
