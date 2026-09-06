@@ -1,14 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PelunasanDialog } from "@/components/dashboard/pelunasan-dialog";
 import { formatRupiah, formatTime, formatTimeWib, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { getLaporanShiftDetailAction } from "@/app/mkesindo/(dashboard)/laporan/actions";
 import { getReportShift, getShiftLabel, type ShiftNumber } from "@/lib/report-shift";
 import type { LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
-import type { StatusBayar } from "@/lib/queries/laporan-shift-pengiriman";
+import type { StatusBayar, KartuPengirimanRow } from "@/lib/queries/laporan-shift-pengiriman";
 
 const STATUS_BAYAR_LABEL: Record<StatusBayar, string> = {
   TUNAI: "Tunai",
@@ -17,6 +21,27 @@ const STATUS_BAYAR_LABEL: Record<StatusBayar, string> = {
   TIDAK_BAYAR: "Tidak Bayar",
   BELUM_BAYAR: "Belum Bayar",
 };
+
+// Paid methods get a green badge, TIDAK_BAYAR (deliberately no-payment stop)
+// gets red, BELUM_BAYAR (still outstanding, including the "Dibayar (metode
+// belum tercatat)" special case) gets an amber/neutral warning tone.
+const STATUS_BADGE_CLASS: Record<StatusBayar, string> = {
+  TUNAI: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  QRIS: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  TRANSFER: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  TIDAK_BAYAR: "bg-destructive/15 text-destructive",
+  BELUM_BAYAR: "bg-warning/15 text-warning",
+};
+
+// Route title format: "[JamAktualBerangkat] - Wilayah, Kecamatan", degrading
+// to just the time (or "-") when the Jadwal hasn't departed yet or has no
+// resolvable farthest-destination location.
+function formatJudulRute(k: KartuPengirimanRow): string {
+  const jam = k.jamAktualBerangkat ? formatTime(k.jamAktualBerangkat) : "-";
+  if (!k.lokasiTerjauh) return jam;
+  const lokasi = k.lokasiTerjauh.kecamatan ? `${k.lokasiTerjauh.wilayah}, ${k.lokasiTerjauh.kecamatan}` : k.lokasiTerjauh.wilayah;
+  return `${jam} - ${lokasi}`;
+}
 
 const SECTIONS = [
   { id: "stok-bahan-baku", label: "Stok Bahan Baku" },
@@ -37,6 +62,15 @@ export function LaporanShiftDetailView() {
   const [detail, setDetail] = useState<LaporanShiftDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [pelunasanTarget, setPelunasanTarget] = useState<{ businessPartnerId: string; customerName: string } | null>(null);
+  // Per-jadwalId override of the default "only the first card is expanded"
+  // rule -- keyed by jadwalId (not index) so a re-fetch after recording a
+  // payment doesn't reset what the user already toggled open/closed.
+  const [expandedOverrides, setExpandedOverrides] = useState<Record<number, boolean>>({});
+
+  function isJadwalExpanded(jadwalId: number, index: number): boolean {
+    return expandedOverrides[jadwalId] ?? index === 0;
+  }
 
   function handleTampilkan() {
     setError(null);
@@ -133,35 +167,112 @@ export function LaporanShiftDetailView() {
               <p className="text-xs text-muted-foreground">Tidak ada kartu pengiriman pada shift ini.</p>
             ) : (
               <div className="flex flex-col gap-3">
-                {detail.kartuPengiriman.map((k) => (
-                  <div key={k.jadwalId} className="rounded-md border p-2 text-xs">
-                    <p className="mb-1.5 font-medium">
-                      Jadwal #{k.jadwalId} — {k.driverName ?? "-"} ({k.armadaNama ?? "-"})
-                    </p>
-                    <div className="flex flex-col divide-y">
-                      {k.stops.map((s) => (
-                        <div key={s.jadwalDetailId} className="flex flex-col gap-1 py-1.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{s.customerName}</span>
-                            <span className="text-muted-foreground">
-                              {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
-                                ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
-                                : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
-                            </span>
-                          </div>
-                          <p className="text-muted-foreground">{s.items.map((i) => `${i.itemName} x${i.qty}`).join(", ")}</p>
-                          {s.retur.map((r) => (
-                            <p key={r.itemId} className="text-destructive">
-                              Retur {r.itemName}: {r.qtyRetur} ({r.kondisiRetur ?? "-"})
-                              {r.resale.length > 0 &&
-                                ` — dijual ulang: ${r.resale.map((rs) => `${rs.jalur} x${rs.qty}`).join(", ")}`}
-                            </p>
-                          ))}
+                {detail.kartuPengiriman.map((k, index) => {
+                  const expanded = isJadwalExpanded(k.jadwalId, index);
+                  return (
+                    <div key={k.jadwalId} className="rounded-md border text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedOverrides((prev) => ({ ...prev, [k.jadwalId]: !expanded }))}
+                        className="flex w-full items-center gap-2 p-2 text-left hover:bg-muted/50"
+                        aria-expanded={expanded}
+                      >
+                        {expanded ? (
+                          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                        )}
+                        <div className="flex flex-col">
+                          <span className="font-medium">{formatJudulRute(k)}</span>
+                          <span className="text-muted-foreground">
+                            {k.vehicleNo ?? "-"} · {k.driverName ?? "-"}
+                          </span>
                         </div>
-                      ))}
+                      </button>
+                      {expanded && (
+                        <div className="border-t">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Tujuan</TableHead>
+                                <TableHead>Kirim</TableHead>
+                                <TableHead>Return</TableHead>
+                                <TableHead className="text-right">Nominal</TableHead>
+                                <TableHead>Metode</TableHead>
+                                <TableHead>Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {k.stops.map((s) => (
+                                <TableRow key={s.jadwalDetailId}>
+                                  <TableCell className="font-medium whitespace-normal">{s.customerName}</TableCell>
+                                  <TableCell className="whitespace-normal text-muted-foreground">
+                                    {s.items.map((i) => `${i.itemName} x${i.qty}`).join(", ")}
+                                  </TableCell>
+                                  <TableCell className="whitespace-normal">
+                                    {s.retur.length === 0 ? (
+                                      <span className="text-muted-foreground">-</span>
+                                    ) : (
+                                      <div className="flex flex-col gap-0.5">
+                                        {s.retur.map((r) => (
+                                          <span key={r.itemId} className="text-destructive">
+                                            {r.itemName}: {r.qtyRetur} ({r.kondisiRetur ?? "-"})
+                                            {r.resale.length > 0 &&
+                                              ` — dijual ulang: ${r.resale.map((rs) => `${rs.jalur} x${rs.qty}`).join(", ")}`}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums">
+                                    {s.nominalBayar != null ? formatRupiah(s.nominalBayar) : "-"}
+                                  </TableCell>
+                                  <TableCell>
+                                    {s.statusBayar === "TUNAI" || s.statusBayar === "QRIS" || s.statusBayar === "TRANSFER"
+                                      ? STATUS_BAYAR_LABEL[s.statusBayar]
+                                      : "-"}
+                                  </TableCell>
+                                  <TableCell className="whitespace-normal">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span
+                                        className={cn(
+                                          "inline-flex items-center rounded-full px-2 py-0.5 font-medium whitespace-nowrap",
+                                          STATUS_BADGE_CLASS[s.statusBayar]
+                                        )}
+                                      >
+                                        {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
+                                          ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
+                                          : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
+                                      </span>
+                                      {s.statusBayar === "BELUM_BAYAR" && (
+                                        <Button
+                                          size="xs"
+                                          variant="outline"
+                                          onClick={() =>
+                                            setPelunasanTarget({ businessPartnerId: s.businessPartnerId, customerName: s.customerName })
+                                          }
+                                        >
+                                          Catat Pembayaran
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {k.stops.length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="py-4 text-center text-muted-foreground">
+                                    Tidak ada stop.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
@@ -235,6 +346,21 @@ export function LaporanShiftDetailView() {
             </p>
           </section>
         </div>
+      )}
+
+      {detail && (
+        <PelunasanDialog
+          businessPartnerId={pelunasanTarget?.businessPartnerId ?? ""}
+          customerName={pelunasanTarget?.customerName ?? ""}
+          perusahaanId={detail.perusahaanId}
+          open={pelunasanTarget != null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPelunasanTarget(null);
+              handleTampilkan(); // re-fetch this shift's data so the paid stop's status updates immediately
+            }
+          }}
+        />
       )}
     </div>
   );
