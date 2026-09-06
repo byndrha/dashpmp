@@ -6,6 +6,7 @@ import { setCollectionTarget, removeCollectionTarget, setMitraNote } from "@/lib
 import { getOutstandingInvoicesForMitra, recordPayment, type OutstandingInvoice } from "@/lib/queries/pelunasan";
 import type { RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 
 export async function saveCollectionTargetAction(input: {
   businessPartnerId: string;
@@ -70,7 +71,6 @@ export async function recordPaymentAction(
   return runAction(async () => {
     const session = await auth();
     if (!session?.user?.id) throw new AppError("Unauthorized");
-    if (!session.user.perusahaanId) throw new AppError("Akun ini belum ditautkan ke perusahaan, hubungi Admin.");
 
     // konteks and perusahaanId are pinned here, never trusted from the
     // client — same reasoning as recordDriverPaymentAction's own pin in
@@ -78,7 +78,17 @@ export async function recordPaymentAction(
     // surface could claim a different konteks/company and reach a
     // channel not meant for kasir, or another company's metode_pembayaran
     // configuration.
-    const result = await recordPayment({ ...input, konteks: "kasir", perusahaanId: session.user.perusahaanId });
+    //
+    // /mkesindo/aging is unconditionally MKEsindo-scoped (middleware.ts
+    // redirects other-PT-scoped sessions away before they reach this
+    // action), so resolve via getMkesindoPerusahaanId() rather than
+    // session.user.perusahaanId, which is null for every Direktur/superadmin
+    // account by design (they aren't bound to one PT) and would otherwise
+    // reject them outright. Real MKEsindo staff sessions already carry this
+    // same id as their own perusahaanId, so this is a no-op for them —
+    // same fix as getLaporanShiftDetailAction in laporan/actions.ts.
+    const perusahaanId = await getMkesindoPerusahaanId();
+    const result = await recordPayment({ ...input, konteks: "kasir", perusahaanId });
     revalidatePath("/mkesindo/aging");
     revalidatePath("/mkesindo");
     return result;

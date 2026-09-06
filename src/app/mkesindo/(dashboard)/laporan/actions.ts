@@ -27,6 +27,7 @@ import { getRingkasanLintasShift, type RingkasanShiftRow } from "@/lib/queries/l
 import type { ShiftNumber } from "@/lib/report-shift";
 import { getLaporanShiftDetail, type LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
 import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
+import { updateBbmManual, hapusBbmEntry } from "@/lib/queries/driver-fuel";
 
 // Bypasses the permission grid for Direktur/Superadmin the same way every
 // other module's canAccessAllPT() checks do, so they can exercise the
@@ -171,5 +172,29 @@ export async function getLaporanShiftDetailAction(tanggalUsaha: string, shift: S
     // same id as their own perusahaanId, so this is a no-op for them.
     const perusahaanId = await getMkesindoPerusahaanId();
     return getLaporanShiftDetail(tanggalUsaha, shift, perusahaanId);
+  });
+}
+
+export async function updateBbmManualAction(
+  bbmId: number,
+  liter: number,
+  nominalAsli: number,
+  nominalEkstra: number
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("laporan");
+    assertCanEditLaporan(session.user);
+    if (liter < 0 || nominalAsli < 0 || nominalEkstra < 0) throw new AppError("Nilai tidak boleh negatif.");
+    await updateBbmManual(bbmId, liter, nominalAsli, nominalEkstra, Number(session.user.id));
+    revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function hapusBbmEntryAction(bbmId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("laporan");
+    assertCanEditLaporan(session.user);
+    await hapusBbmEntry(bbmId);
+    revalidatePath("/mkesindo/laporan");
   });
 }
