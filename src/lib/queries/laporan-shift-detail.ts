@@ -7,6 +7,8 @@ import { getMesinList, getMesinCounterUntukShift, type MesinRow, type MesinCount
 import { getKartuPengirimanUntukShift, type KartuPengirimanRow } from "@/lib/queries/laporan-shift-pengiriman";
 import { getBbmUntukShift, type BbmShiftRow } from "@/lib/queries/driver-fuel";
 import { getSnapshotStokEs, hitungTotalSisaStokEsLive } from "@/lib/queries/laporan-shift-stok-es-snapshot";
+import { getAllTim } from "@/lib/queries/tim-produksi";
+import { getAkunNamaMap } from "@/lib/queries/akun";
 
 export interface StokEsInfo {
   stokAwal: number | null; // null when the previous shift has no snapshot yet
@@ -19,7 +21,9 @@ export interface LaporanShiftDetail {
   shift: ShiftNumber;
   shiftLabel: string;
   timId: number | null;
+  timNama: string | null;
   stafOperasionalAkunId: number | null;
+  stafOperasionalNama: string | null;
   stokBahanBaku: StokBahanBakuRow[];
   kartuPengiriman: KartuPengirimanRow[];
   bbm: BbmShiftRow[];
@@ -67,6 +71,7 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     mesinCounter,
     snapshotAkhir,
     snapshotAwal,
+    timList,
   ] = await Promise.all([
     getStokBahanBakuHistory(hitungLimitHistori(tanggalUsaha, 9)), // 3 JenisBarang x 3 shift
     getKartuPengirimanUntukShift(tanggalUsaha, shift, perusahaanId),
@@ -79,18 +84,28 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     getMesinCounterUntukShift(tanggalUsaha, shift),
     isShiftBerjalan ? Promise.resolve(null) : getSnapshotStokEs(tanggalUsaha, shift),
     getSnapshotStokEs(previous.tanggalUsaha, previous.shift),
+    getAllTim(),
   ]);
 
   const stokBahanBaku = stokBahanBakuHistory.filter((r) => r.tanggalUsaha === tanggalUsaha && r.shift === shift);
 
   const stokAkhir = isShiftBerjalan ? await hitungTotalSisaStokEsLive() : (snapshotAkhir ?? (await hitungTotalSisaStokEsLive()));
 
+  // Staf-name resolution depends on aktivitas.stafOperasionalAkunId, which
+  // only exists once aktivitas itself has resolved above, so this can't
+  // join the Promise.all batch.
+  const timNama = aktivitas.timId != null ? (timList.find((t) => t.timId === aktivitas.timId)?.nama ?? null) : null;
+  const stafNamaMap = await getAkunNamaMap(aktivitas.stafOperasionalAkunId != null ? [aktivitas.stafOperasionalAkunId] : []);
+  const stafOperasionalNama = aktivitas.stafOperasionalAkunId != null ? (stafNamaMap.get(aktivitas.stafOperasionalAkunId) ?? null) : null;
+
   return {
     tanggalUsaha,
     shift,
     shiftLabel: getShiftLabel(shift, "work"),
     timId: aktivitas.timId,
+    timNama,
     stafOperasionalAkunId: aktivitas.stafOperasionalAkunId,
+    stafOperasionalNama,
     stokBahanBaku,
     kartuPengiriman,
     bbm,

@@ -94,6 +94,9 @@ export function LaporanShiftDetailView() {
             <h2 className="font-display text-lg font-semibold">
               {formatDate(detail.tanggalUsaha)} — {detail.shiftLabel}
             </h2>
+            <p className="text-xs text-muted-foreground">
+              Tim Produksi: {detail.timNama ?? "-"} · Staf Operasional: {detail.stafOperasionalNama ?? "-"}
+            </p>
           </div>
 
           <section id="stok-bahan-baku" className="flex flex-col gap-2 rounded-md border p-3">

@@ -19,6 +19,18 @@ async function hitungTotalSisaStokEsLive(): Promise<number> {
 // exists. Called both by the periodic scanner (Task 2, for "the shift that
 // just ended") and its own startup catch-up sweep — safe to call for the
 // same shift many times in a row.
+//
+// WARNING for future maintainers: the read/write logic in this file always
+// filters "AND IsDeleted = 0", following this codebase's usual soft-delete
+// convention. But the underlying UNIQUE constraint —
+// DashboardLaporanShiftStokEsSnapshot.UQ_LaporanShiftStokEsSnapshot on
+// (TanggalUsaha, Shift) — is NOT IsDeleted-filtered. So if a snapshot for a
+// given shift is ever wrong and needs correcting, do NOT soft-delete the
+// existing row and let this function reinsert on its next tick: the
+// soft-deleted row still occupies the (TanggalUsaha, Shift) slot in the
+// unique index, so every future insert attempt for that same shift will
+// permanently hit a UNIQUE VIOLATION. Fix a bad snapshot with a direct SQL
+// UPDATE of TotalSisaQty10KG on the existing row instead.
 export async function catatSnapshotJikaBelumAda(tanggalUsaha: string, shift: ShiftNumber): Promise<void> {
   const pool = await getPool();
   const existing = await pool

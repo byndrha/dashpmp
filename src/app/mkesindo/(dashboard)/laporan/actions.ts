@@ -26,6 +26,7 @@ import {
 import { getRingkasanLintasShift, type RingkasanShiftRow } from "@/lib/queries/laporan-ringkasan-lintas-shift";
 import type { ShiftNumber } from "@/lib/report-shift";
 import { getLaporanShiftDetail, type LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
+import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 
 // Bypasses the permission grid for Direktur/Superadmin the same way every
 // other module's canAccessAllPT() checks do, so they can exercise the
@@ -160,8 +161,15 @@ export async function getRingkasanLintasShiftAction(tahun: number, bulan: number
 
 export async function getLaporanShiftDetailAction(tanggalUsaha: string, shift: ShiftNumber): Promise<ActionResult<LaporanShiftDetail>> {
   return runAction(async () => {
-    const session = await requireModuleAccess("laporan");
-    if (!session.user.perusahaanId) throw new AppError("Akun ini tidak terhubung ke PT manapun.");
-    return getLaporanShiftDetail(tanggalUsaha, shift, session.user.perusahaanId);
+    await requireModuleAccess("laporan");
+    // /mkesindo/laporan is unconditionally MKEsindo-scoped (middleware.ts
+    // redirects other-PT-scoped sessions away before they reach this
+    // action), so resolve via getMkesindoPerusahaanId() rather than
+    // session.user.perusahaanId, which is null for every Direktur/superadmin
+    // account by design (they aren't bound to one PT) and would otherwise
+    // reject them outright. Real MKEsindo staff sessions already carry this
+    // same id as their own perusahaanId, so this is a no-op for them.
+    const perusahaanId = await getMkesindoPerusahaanId();
+    return getLaporanShiftDetail(tanggalUsaha, shift, perusahaanId);
   });
 }
