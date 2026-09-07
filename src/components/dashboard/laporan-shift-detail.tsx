@@ -230,8 +230,8 @@ export function LaporanShiftDetailView() {
 
           <section id="kartu-pengiriman" className="flex flex-col gap-2 rounded-md border p-3">
             <h3 className="text-sm font-semibold">Kartu Pengiriman</h3>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[3fr_2fr]">
+              <div className="flex min-w-0 flex-col gap-3">
                 {detail.kartuPengiriman.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Tidak ada kartu pengiriman pada shift ini.</p>
                 ) : (
@@ -258,84 +258,56 @@ export function LaporanShiftDetailView() {
                         </div>
                       </button>
                       {expanded && (
-                        <div className="border-t">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Tujuan</TableHead>
-                                <TableHead>Kirim</TableHead>
-                                <TableHead>Return</TableHead>
-                                <TableHead className="text-right">Nominal</TableHead>
-                                <TableHead>Metode</TableHead>
-                                <TableHead>Status</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {k.stops.map((s) => (
-                                <TableRow key={s.jadwalDetailId}>
-                                  <TableCell className="font-medium whitespace-normal">{s.customerName}</TableCell>
-                                  <TableCell className="whitespace-normal text-muted-foreground">
-                                    {s.items.map((i) => `${i.itemName} x${i.qty}`).join(", ")}
-                                  </TableCell>
-                                  <TableCell className="whitespace-normal">
-                                    {s.retur.length === 0 ? (
-                                      <span className="text-muted-foreground">-</span>
-                                    ) : (
-                                      <div className="flex flex-col gap-0.5">
-                                        {s.retur.map((r) => (
-                                          <span key={r.itemId} className="text-destructive">
-                                            {r.itemName}: {r.qtyRetur} ({r.kondisiRetur ?? "-"})
-                                            {r.resale.length > 0 &&
-                                              ` — dijual ulang: ${r.resale.map((rs) => `${rs.jalur} x${rs.qty}`).join(", ")}`}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-right tabular-nums">
-                                    {s.nominalBayar != null ? formatRupiah(s.nominalBayar) : "-"}
-                                  </TableCell>
-                                  <TableCell>
-                                    {s.statusBayar === "TUNAI" || s.statusBayar === "QRIS" || s.statusBayar === "TRANSFER"
-                                      ? STATUS_BAYAR_LABEL[s.statusBayar]
-                                      : "-"}
-                                  </TableCell>
-                                  <TableCell className="whitespace-normal">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <span
-                                        className={cn(
-                                          "inline-flex items-center rounded-full px-2 py-0.5 font-medium whitespace-nowrap",
-                                          STATUS_BADGE_CLASS[s.statusBayar]
-                                        )}
-                                      >
-                                        {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
-                                          ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
-                                          : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
+                        <div className="divide-y border-t">
+                          {k.stops.length === 0 ? (
+                            <p className="p-3 text-center text-muted-foreground">Tidak ada stop.</p>
+                          ) : (
+                            k.stops.map((s) => (
+                              <div key={s.jadwalDetailId} className="flex flex-col gap-1 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="font-medium">{s.customerName}</span>
+                                  {s.nominalBayar != null && (
+                                    <span className="shrink-0 tabular-nums text-muted-foreground">{formatRupiah(s.nominalBayar)}</span>
+                                  )}
+                                </div>
+                                <p className="text-muted-foreground">Kirim: {s.items.map((i) => `${i.itemName} x${i.qty}`).join(", ")}</p>
+                                {s.retur.length > 0 && (
+                                  <div className="flex flex-col gap-0.5">
+                                    {s.retur.map((r) => (
+                                      <span key={r.itemId} className="text-destructive">
+                                        Return: {r.itemName} x{r.qtyRetur} ({r.kondisiRetur ?? "-"})
+                                        {r.resale.length > 0 &&
+                                          ` — dijual ulang: ${r.resale.map((rs) => `${rs.jalur} x${rs.qty}`).join(", ")}`}
                                       </span>
-                                      {s.statusBayar === "BELUM_BAYAR" && (
-                                        <Button
-                                          size="xs"
-                                          variant="outline"
-                                          onClick={() =>
-                                            setPelunasanTarget({ businessPartnerId: s.businessPartnerId, customerName: s.customerName })
-                                          }
-                                        >
-                                          Catat Pembayaran
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                              {k.stops.length === 0 && (
-                                <TableRow>
-                                  <TableCell colSpan={6} className="py-4 text-center text-muted-foreground">
-                                    Tidak ada stop.
-                                  </TableCell>
-                                </TableRow>
-                              )}
-                            </TableBody>
-                          </Table>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                  <span
+                                    className={cn(
+                                      "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
+                                      STATUS_BADGE_CLASS[s.statusBayar]
+                                    )}
+                                  >
+                                    {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
+                                      ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
+                                      : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
+                                  </span>
+                                  {s.statusBayar === "BELUM_BAYAR" && (
+                                    <Button
+                                      size="xs"
+                                      variant="outline"
+                                      onClick={() =>
+                                        setPelunasanTarget({ businessPartnerId: s.businessPartnerId, customerName: s.customerName })
+                                      }
+                                    >
+                                      Catat Pembayaran
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
                         </div>
                       )}
                     </div>
