@@ -15,11 +15,13 @@ import {
   hapusBbmEntryAction,
   tambahPengeluaranAction,
   hapusPengeluaranAction,
+  upsertKasMasukAction,
 } from "@/app/mkesindo/(dashboard)/laporan/actions";
 import { getReportShift, getShiftLabel, getShiftWindow, type ShiftNumber } from "@/lib/report-shift";
 import type { LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
 import type { StatusBayar, KartuPengirimanRow, KartuPengirimanStopRow, KartuPengirimanSisipanEntry } from "@/lib/queries/laporan-shift-pengiriman";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
+import type { BbmShiftRow } from "@/lib/queries/driver-fuel";
 
 const STATUS_BAYAR_LABEL: Record<StatusBayar, string> = {
   TUNAI: "Tunai",
@@ -137,6 +139,23 @@ function getHourGuides(start: Date, end: Date): { pct: number; label: string }[]
   return guides;
 }
 
+// Groups this shift's BBM entries by their own JadwalID -- deliberately NOT
+// by whether that Jadwal appears in `detail.kartuPengiriman` (BBM here is
+// scoped by WaktuIsi's own real-time shift window, which can disagree with
+// a Jadwal's JamSelesaiMuat-based shift; see getBbmUntukShift's own
+// comment), so a group's Jadwal may or may not have a matching Kartu
+// Pengiriman card in THIS shift -- callers fall back to a bare label when
+// it doesn't.
+function groupBbmByJadwal(bbm: BbmShiftRow[]): Map<number, BbmShiftRow[]> {
+  const map = new Map<number, BbmShiftRow[]>();
+  for (const b of bbm) {
+    const list = map.get(b.jadwalId) ?? [];
+    list.push(b);
+    map.set(b.jadwalId, list);
+  }
+  return map;
+}
+
 const SECTIONS = [
   { id: "stok-bahan-baku", label: "Stok Bahan Baku" },
   { id: "kartu-pengiriman", label: "Kartu Pengiriman" },
@@ -164,6 +183,7 @@ export function LaporanShiftDetailView() {
   const [bbmForm, setBbmForm] = useState({ liter: "", nominalAsli: "", nominalEkstra: "" });
   const [manualKeterangan, setManualKeterangan] = useState("");
   const [manualNominal, setManualNominal] = useState("");
+  const [kasMasukInput, setKasMasukInput] = useState("");
 
   function isJadwalExpanded(jadwalId: number, index: number): boolean {
     return expandedOverrides[jadwalId] ?? index === 0;
@@ -235,6 +255,20 @@ export function LaporanShiftDetailView() {
         return;
       }
       setDetail(result.data);
+      setKasMasukInput(String(result.data.kasKecil?.kasMasuk ?? 0));
+    });
+  }
+
+  function handleSimpanKasMasuk() {
+    if (!detail) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await upsertKasMasukAction(detail.tanggalUsaha, detail.shift, Number(kasMasukInput) || 0);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      handleTampilkan();
     });
   }
 
@@ -471,6 +505,20 @@ export function LaporanShiftDetailView() {
                   <span>Top-up Shift Ini</span>
                   <span className="font-medium tabular-nums">{formatRupiah(detail.kasKecil?.kasMasuk ?? 0)}</span>
                 </div>
+                <div className="flex gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Nominal top-up"
+                    value={kasMasukInput}
+                    onChange={(e) => setKasMasukInput(e.target.value)}
+                    disabled={pending}
+                    className="h-7 text-xs"
+                  />
+                  <Button size="xs" disabled={pending} onClick={handleSimpanKasMasuk}>
+                    Simpan
+                  </Button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-2 rounded-md border p-2 text-xs">
@@ -479,72 +527,95 @@ export function LaporanShiftDetailView() {
                   <p className="text-muted-foreground">Belum ada pengeluaran.</p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    {detail.bbm.map((b) =>
-                      editingBbmId === b.bbmId ? (
-                        <div key={b.bbmId} className="flex flex-col gap-1.5 rounded border border-dashed p-1.5">
-                          <span className="font-medium">BBM — {b.driverName ?? b.salesmanId}</span>
-                          <div className="flex gap-1">
-                            <Input
-                              type="number"
-                              min={0}
-                              placeholder="Liter"
-                              value={bbmForm.liter}
-                              onChange={(e) => setBbmForm((f) => ({ ...f, liter: e.target.value }))}
-                              className="h-7 text-xs"
-                            />
-                            <Input
-                              type="number"
-                              min={0}
-                              placeholder="Nominal Asli"
-                              value={bbmForm.nominalAsli}
-                              onChange={(e) => setBbmForm((f) => ({ ...f, nominalAsli: e.target.value }))}
-                              className="h-7 text-xs"
-                            />
-                            <Input
-                              type="number"
-                              min={0}
-                              placeholder="Nominal Ekstra"
-                              value={bbmForm.nominalEkstra}
-                              onChange={(e) => setBbmForm((f) => ({ ...f, nominalEkstra: e.target.value }))}
-                              className="h-7 text-xs"
-                            />
-                          </div>
-                          <div className="flex gap-1">
-                            <Button size="xs" disabled={pending} onClick={() => handleSimpanBbm(b.bbmId)}>
-                              Simpan
-                            </Button>
-                            <Button size="xs" variant="ghost" disabled={pending} onClick={() => setEditingBbmId(null)}>
-                              Batal
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div key={b.bbmId} className="flex items-center justify-between gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingBbmId(b.bbmId);
-                              setBbmForm({
-                                liter: String(b.liter ?? ""),
-                                nominalAsli: String(b.nominalAsli ?? ""),
-                                nominalEkstra: String(b.nominalEkstra ?? ""),
-                              });
-                            }}
-                            className="flex-1 truncate text-left hover:underline"
-                          >
-                            BBM — {b.driverName ?? b.salesmanId} ({formatTime(b.waktuIsi)})
-                          </button>
-                          <span className="shrink-0 tabular-nums">{formatRupiah((b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0))}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleHapusBbm(b.bbmId)}
-                            disabled={pending}
-                            className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <X className="size-3.5" />
-                          </button>
-                        </div>
-                      )
+                    {detail.bbm.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <p className="font-medium text-foreground/70">Biaya BBM per Kartu Pengiriman</p>
+                        {[...groupBbmByJadwal(detail.bbm)].map(([jadwalId, rows]) => {
+                          const kartu = detail.kartuPengiriman.find((k) => k.jadwalId === jadwalId);
+                          const totalJadwal = rows.reduce((sum, b) => sum + (b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0), 0);
+                          return (
+                            <div key={jadwalId} className="flex flex-col gap-1 rounded border p-1.5">
+                              <div className="flex items-center justify-between gap-2 font-medium">
+                                <span className="truncate">
+                                  {kartu ? formatJudulRute(kartu) : `Jadwal #${jadwalId}`}
+                                  {kartu?.driverName ? ` · ${kartu.driverName}` : ""}
+                                </span>
+                                <span className="shrink-0 tabular-nums">{formatRupiah(totalJadwal)}</span>
+                              </div>
+                              {rows.map((b) =>
+                                editingBbmId === b.bbmId ? (
+                                  <div key={b.bbmId} className="flex flex-col gap-1.5 rounded border border-dashed p-1.5">
+                                    <span className="font-medium">BBM — {b.driverName ?? b.salesmanId}</span>
+                                    <div className="flex gap-1">
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        placeholder="Liter"
+                                        value={bbmForm.liter}
+                                        onChange={(e) => setBbmForm((f) => ({ ...f, liter: e.target.value }))}
+                                        className="h-7 text-xs"
+                                      />
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        placeholder="Nominal Asli"
+                                        value={bbmForm.nominalAsli}
+                                        onChange={(e) => setBbmForm((f) => ({ ...f, nominalAsli: e.target.value }))}
+                                        className="h-7 text-xs"
+                                      />
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        placeholder="Nominal Ekstra"
+                                        value={bbmForm.nominalEkstra}
+                                        onChange={(e) => setBbmForm((f) => ({ ...f, nominalEkstra: e.target.value }))}
+                                        className="h-7 text-xs"
+                                      />
+                                    </div>
+                                    <div className="flex gap-1">
+                                      <Button size="xs" disabled={pending} onClick={() => handleSimpanBbm(b.bbmId)}>
+                                        Simpan
+                                      </Button>
+                                      <Button size="xs" variant="ghost" disabled={pending} onClick={() => setEditingBbmId(null)}>
+                                        Batal
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div key={b.bbmId} className="flex items-center justify-between gap-2 pl-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingBbmId(b.bbmId);
+                                        setBbmForm({
+                                          liter: String(b.liter ?? ""),
+                                          nominalAsli: String(b.nominalAsli ?? ""),
+                                          nominalEkstra: String(b.nominalEkstra ?? ""),
+                                        });
+                                      }}
+                                      className="flex-1 truncate text-left text-muted-foreground hover:underline"
+                                    >
+                                      {b.driverName ?? b.salesmanId} ({formatTime(b.waktuIsi)})
+                                      {b.liter != null && ` — ${b.liter} L`}
+                                    </button>
+                                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                                      {formatRupiah((b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0))}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleHapusBbm(b.bbmId)}
+                                      disabled={pending}
+                                      className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <X className="size-3.5" />
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                     {detail.kasKecil?.pengeluaran.map((p) => (
                       <div key={p.pengeluaranId} className="flex items-center justify-between gap-2">

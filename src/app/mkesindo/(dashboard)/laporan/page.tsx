@@ -3,7 +3,7 @@ import { requireModuleAccess, canAccessAllPT } from "@/lib/require-access";
 import { getCurrentShiftRows, getStokBahanBakuHistory, getSaldoAwal } from "@/lib/queries/stok-bahan-baku";
 import { getAktivitasRiwayat } from "@/lib/queries/aktivitas-produksi";
 import { getAktivitasMuatanDistribusi } from "@/lib/queries/laporan-muatan-distribusi";
-import { getSaldoAwalKasKecil, getKasKecilHistory, getCurrentShiftKasKecil } from "@/lib/queries/kas-kecil";
+import { getKasKecilHistory } from "@/lib/queries/kas-kecil";
 import { getRingkasanLintasShift } from "@/lib/queries/laporan-ringkasan-lintas-shift";
 import { getAllTim } from "@/lib/queries/tim-produksi";
 import { getAkunNamaMap } from "@/lib/queries/akun";
@@ -28,9 +28,7 @@ export default async function LaporanPage() {
     history,
     saldoAwal,
     aktivitasRiwayat,
-    kasKecilSaldoAwal,
     kasKecilHistory,
-    kasKecilCurrentShift,
     ringkasanRowsAwal,
     timList,
   ] = await Promise.all([
@@ -38,9 +36,7 @@ export default async function LaporanPage() {
     getStokBahanBakuHistory(),
     getSaldoAwal(),
     getAktivitasRiwayat(),
-    getSaldoAwalKasKecil(),
     getKasKecilHistory(),
-    getCurrentShiftKasKecil(),
     getRingkasanLintasShift(tahunAwal, bulanAwal, muatanDistribusiRowsAwal),
     getAllTim(),
   ]);
@@ -69,10 +65,6 @@ export default async function LaporanPage() {
         muatanDistribusiTahunAwal={tahunAwal}
         muatanDistribusiBulanAwal={bulanAwal}
         muatanDistribusiRowsAwal={muatanDistribusiRowsAwal}
-        kasKecilCurrent={kasKecilCurrentShift.current}
-        kasKecilInitialRow={kasKecilCurrentShift.row}
-        kasKecilInitialHistory={kasKecilHistory}
-        kasKecilInitialSaldoAwal={kasKecilSaldoAwal}
         ringkasanTahunAwal={tahunAwal}
         ringkasanBulanAwal={bulanAwal}
         ringkasanRowsAwal={ringkasanRowsAwal}

@@ -49,6 +49,7 @@ export async function updateFuelLog(
 
 export interface BbmShiftRow {
   bbmId: number;
+  jadwalId: number;
   salesmanId: string;
   driverName: string | null;
   // null means "not yet filled in" -- same real, distinct state as
@@ -73,7 +74,7 @@ export async function getBbmUntukShift(tanggalUsaha: string, shift: ShiftNumber)
     .request()
     .input("start", sql.DateTime, window.start)
     .input("end", sql.DateTime, window.end).query(`
-      SELECT b.BBMID, b.SalesmanID, sm.Name AS DriverName, b.Liter, b.NominalAsli, b.NominalEkstra, b.WaktuIsi
+      SELECT b.BBMID, b.JadwalID, b.SalesmanID, sm.Name AS DriverName, b.Liter, b.NominalAsli, b.NominalEkstra, b.WaktuIsi
       FROM DashboardPengirimanBBM b
       LEFT JOIN Salesman sm ON sm.SalesmanID = b.SalesmanID
       WHERE b.WaktuIsi IS NOT NULL AND b.WaktuIsi BETWEEN @start AND @end
@@ -82,6 +83,7 @@ export async function getBbmUntukShift(tanggalUsaha: string, shift: ShiftNumber)
   return (
     result.recordset as {
       BBMID: number;
+      JadwalID: number;
       SalesmanID: string;
       DriverName: string | null;
       Liter: number | null;
@@ -91,6 +93,7 @@ export async function getBbmUntukShift(tanggalUsaha: string, shift: ShiftNumber)
     }[]
   ).map((r) => ({
     bbmId: r.BBMID,
+    jadwalId: r.JadwalID,
     salesmanId: r.SalesmanID,
     driverName: r.DriverName,
     liter: r.Liter,

@@ -6,20 +6,17 @@ import { Button } from "@/components/ui/button";
 import { LaporanStokBahanBaku } from "@/components/dashboard/laporan-stok-bahan-baku";
 import { LaporanAktivitasProduksi } from "@/components/dashboard/laporan-aktivitas-produksi";
 import { LaporanAktivitasMuatanDistribusi } from "@/components/dashboard/laporan-aktivitas-muatan-distribusi";
-import { LaporanKasKecil } from "@/components/dashboard/laporan-kas-kecil";
 import { LaporanRingkasanLintasShift } from "@/components/dashboard/laporan-ringkasan-lintas-shift";
 import { LaporanShiftDetailView } from "@/components/dashboard/laporan-shift-detail";
 import type { StokBahanBakuRow, CurrentShiftInfo, SaldoAwalRow } from "@/lib/queries/stok-bahan-baku";
 import type { AktivitasShiftInfo } from "@/lib/queries/aktivitas-produksi";
 import type { AktivitasMuatanDistribusiRow } from "@/lib/queries/laporan-muatan-distribusi";
-import type { KasKecilShiftRow, CurrentShiftKasKecilInfo } from "@/lib/queries/kas-kecil";
 import type { RingkasanShiftRow } from "@/lib/queries/laporan-ringkasan-lintas-shift";
 
 type LaporanTab =
   | "stok-bahan-baku"
   | "aktivitas-produksi"
   | "aktivitas-muatan-distribusi"
-  | "keuangan-operasional"
   | "ringkasan-lintas-shift"
   | "laporan-shift";
 
@@ -35,10 +32,6 @@ export function LaporanTabShell({
   muatanDistribusiTahunAwal,
   muatanDistribusiBulanAwal,
   muatanDistribusiRowsAwal,
-  kasKecilCurrent,
-  kasKecilInitialRow,
-  kasKecilInitialHistory,
-  kasKecilInitialSaldoAwal,
   ringkasanTahunAwal,
   ringkasanBulanAwal,
   ringkasanRowsAwal,
@@ -55,10 +48,6 @@ export function LaporanTabShell({
   muatanDistribusiTahunAwal: number;
   muatanDistribusiBulanAwal: number;
   muatanDistribusiRowsAwal: AktivitasMuatanDistribusiRow[];
-  kasKecilCurrent: CurrentShiftKasKecilInfo;
-  kasKecilInitialRow: KasKecilShiftRow;
-  kasKecilInitialHistory: KasKecilShiftRow[];
-  kasKecilInitialSaldoAwal: number;
   ringkasanTahunAwal: number;
   ringkasanBulanAwal: number;
   ringkasanRowsAwal: RingkasanShiftRow[];
@@ -81,9 +70,6 @@ export function LaporanTabShell({
           onClick={() => setTab("aktivitas-muatan-distribusi")}
         >
           Aktivitas Muatan Distribusi
-        </Button>
-        <Button size="sm" variant={tab === "keuangan-operasional" ? "default" : "outline"} onClick={() => setTab("keuangan-operasional")}>
-          Keuangan Operasional
         </Button>
         <Button size="sm" variant={tab === "ringkasan-lintas-shift" ? "default" : "outline"} onClick={() => setTab("ringkasan-lintas-shift")}>
           Ringkasan Lintas Shift
@@ -111,17 +97,6 @@ export function LaporanTabShell({
           tahunAwal={muatanDistribusiTahunAwal}
           bulanAwal={muatanDistribusiBulanAwal}
           rowsAwal={muatanDistribusiRowsAwal}
-        />
-      </div>
-      <div className={cn(tab !== "keuangan-operasional" && "hidden")}>
-        <LaporanKasKecil
-          canEdit={canEdit}
-          canEditSaldoAwal={canEditSaldoAwal}
-          current={kasKecilCurrent}
-          initialRow={kasKecilInitialRow}
-          initialHistory={kasKecilInitialHistory}
-          initialSaldoAwal={kasKecilInitialSaldoAwal}
-          namaMap={namaMap}
         />
       </div>
       <div className={cn(tab !== "ringkasan-lintas-shift" && "hidden")}>
