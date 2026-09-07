@@ -136,16 +136,16 @@ export async function getRiwayatProduksiAction(): Promise<ActionResult<RiwayatPr
 }
 
 // Riwayat scoped to one Pallete — shown at the top of TambahProduksiDialog
-// (mobile, no windowEndISO — top-10 most recent) and the desktop "Riwayat &
-// Kelola Stok Pallete Ini" panel (windowEndISO set — 24-jam window ending
-// at that moment, for its prev/next period buttons).
+// (mobile, no windowEndISO — 4 most recent DISTINCT shifts) and the desktop
+// "Riwayat & Kelola Stok Pallete Ini" panel (windowEndISO set — 24-jam
+// window ending at that moment, for its prev/next period buttons).
 export async function getRiwayatProduksiForPosisiAction(
   posisiId: number,
   windowEndISO?: string
 ): Promise<ActionResult<RiwayatProduksiRowWithNama[]>> {
   return runAction(async () => {
     await requireProduksiView();
-    const rows = await getRiwayatProduksiForPosisi(posisiId, windowEndISO ? { windowEnd: new Date(windowEndISO) } : undefined);
+    const rows = await getRiwayatProduksiForPosisi(posisiId, windowEndISO ? { windowEnd: new Date(windowEndISO) } : { maxShift: 4 });
     const namaMap = await getAkunNamaMap(rows.map((r) => r.DicatatOlehAkunID));
     return rows.map((r) => ({ ...r, DicatatOlehNama: namaMap.get(r.DicatatOlehAkunID) ?? "Tidak diketahui" }));
   });

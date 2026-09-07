@@ -94,13 +94,42 @@ export async function getRiwayatProduksi(limit = 50): Promise<RiwayatProduksiRow
 // `windowEnd` scopes the result to the 24 hours ending at that moment
 // (never touches/deletes any row — purely a display filter) for the
 // desktop "Riwayat & Kelola Stok Pallete Ini" panel's prev/next period
-// navigation. Omitted entirely, it falls back to the original top-N
-// most-recent behavior the mobile RiwayatPosisiList still relies on.
+// navigation. `maxShift` scopes to the N most recent DISTINCT
+// (TanggalLabel, Shift) occurrences (not a flat row count -- one shift can
+// have several batch rows stacked at the same pallet) -- the mobile
+// RiwayatPosisiList's own limit. Omitting both falls back to a flat top-N
+// row limit (the function's original, now-unused-by-any-caller behavior,
+// kept only for callers that might want a simple row cap).
 export async function getRiwayatProduksiForPosisi(
   posisiId: number,
-  options?: { limit?: number; windowEnd?: Date }
+  options?: { limit?: number; windowEnd?: Date; maxShift?: number }
 ): Promise<RiwayatProduksiRow[]> {
   const pool = await getPool();
+  if (options?.maxShift) {
+    const result = await pool
+      .request()
+      .input("posisiId", sql.Int, posisiId)
+      .input("maxShift", sql.Int, options.maxShift).query(`
+        WITH DistinctShifts AS (
+          SELECT TOP (@maxShift) TanggalLabel, Shift, MAX(TanggalProduksi) AS LastActivity
+          FROM DashboardProduksiBatch
+          WHERE IsDeleted = 0 AND PosisiID = @posisiId
+          GROUP BY TanggalLabel, Shift
+          ORDER BY LastActivity DESC
+        )
+        SELECT b.BatchID, p.Kode, m.Nama AS MesinNama, b.TanggalProduksi,
+               b.Qty10KG, b.SisaQty10KG, b.DicatatOlehAkunID,
+               b.TanggalLabel, b.Shift, b.JamPanen
+        FROM DashboardProduksiBatch b
+        JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
+        JOIN DashboardProduksiMesin m ON m.MesinID = b.MesinID
+        JOIN DistinctShifts ds ON ds.TanggalLabel = b.TanggalLabel AND ds.Shift = b.Shift
+        WHERE b.IsDeleted = 0 AND b.PosisiID = @posisiId
+        ORDER BY b.TanggalProduksi DESC
+      `);
+    return result.recordset;
+  }
+
   const request = pool.request().input("posisiId", sql.Int, posisiId);
   let topClause = "";
   let windowClause = "";
