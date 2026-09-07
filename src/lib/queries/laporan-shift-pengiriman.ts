@@ -26,7 +26,18 @@ export interface KartuPengirimanStopRow {
   statusBayar: StatusBayar;
   nominalBayar: number | null;
   retur: KartuPengirimanReturRow[];
+  jamTiba: string | null; // ISO, true-UTC (DashboardPengirimanStopDelivery.JamTiba via GETDATE()) -- null if not yet arrived
 }
+
+// One "in-between" occurrence along a Jadwal's route -- recorded on its own
+// table (Istirahat/BBM/Kendala), each keyed by JadwalID but NOT by a
+// specific stop, so these are shown interleaved among the stop list by
+// timestamp rather than attached to any one destination.
+export type KartuPengirimanSisipanEntry =
+  | { type: "ISTIRAHAT"; waktu: string; keterangan: string; waktuSelesai: string | null }
+  | { type: "BBM"; waktu: string; liter: number | null; nominalAsli: number | null; nominalEkstra: number | null }
+  | { type: "KENDALA"; waktu: string; jenisKendala: string };
+
 export interface KartuPengirimanRow {
   jadwalId: number;
   driverName: string | null;
@@ -35,7 +46,8 @@ export interface KartuPengirimanRow {
   jamSelesaiMuat: string; // ISO
   jamAktualBerangkat: string | null; // ISO, null if not yet departed
   lokasiTerjauh: { wilayah: string; kecamatan: string | null } | null;
-  stops: KartuPengirimanStopRow[];
+  stops: KartuPengirimanStopRow[]; // sorted by jamTiba ascending, not-yet-arrived stops last
+  sisipan: KartuPengirimanSisipanEntry[]; // unsorted; caller interleaves by `waktu` against stops' jamTiba
 }
 
 // Farthest-from-pabrik destination per Jadwal, for the route title format
@@ -142,10 +154,10 @@ export async function getKartuPengirimanUntukShift(
   const jadwalPlaceholders = jadwalIds.map((id, i) => `@jid${i}`).join(",");
   const stopRequest = pool.request();
   jadwalIds.forEach((id, i) => stopRequest.input(`jid${i}`, sql.Int, id));
-  const [stopResult, lokasiTerjauhMap] = await Promise.all([
+  const [stopResult, lokasiTerjauhMap, sisipanMap] = await Promise.all([
     stopRequest.query(`
       SELECT jd.JadwalDetailID, jd.JadwalID, jd.SalesOrderID, jd.SalesInvoiceID,
-             bp.Name AS CustomerName, bp.BusinessPartnerID, sd.StopDeliveryID, sd.TanpaPembayaran
+             bp.Name AS CustomerName, bp.BusinessPartnerID, sd.StopDeliveryID, sd.TanpaPembayaran, sd.JamTiba
       FROM DashboardPengirimanJadwalDetail jd
       JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
       JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
@@ -153,6 +165,7 @@ export async function getKartuPengirimanUntukShift(
       WHERE jd.JadwalID IN (${jadwalPlaceholders}) AND jd.IsDeleted = 0
     `),
     getLokasiTerjauhPerJadwal(pool, jadwalIds),
+    getSisipanUntukJadwal(pool, jadwalIds),
   ]);
   const stopRows = stopResult.recordset as {
     JadwalDetailID: number;
@@ -163,6 +176,7 @@ export async function getKartuPengirimanUntukShift(
     BusinessPartnerID: string;
     StopDeliveryID: number | null;
     TanpaPembayaran: boolean | null;
+    JamTiba: Date | null;
   }[];
   if (stopRows.length === 0)
     return jadwalRows.map((j) => ({
@@ -174,6 +188,7 @@ export async function getKartuPengirimanUntukShift(
       jamAktualBerangkat: j.JamAktualBerangkat ? j.JamAktualBerangkat.toISOString() : null,
       lokasiTerjauh: lokasiTerjauhMap.get(j.JadwalID) ?? null,
       stops: [],
+      sisipan: sisipanMap.get(j.JadwalID) ?? [],
     }));
 
   // 3. Items ordered per SalesOrderID.
@@ -290,8 +305,22 @@ export async function getKartuPengirimanUntukShift(
       statusBayar,
       nominalBayar,
       retur: s.StopDeliveryID != null ? (returByStopDeliveryId.get(s.StopDeliveryID) ?? []) : [],
+      jamTiba: s.JamTiba ? s.JamTiba.toISOString() : null,
     });
     stopsByJadwalId.set(s.JadwalID, list);
+  }
+  // Sorted by real arrival time (not the planned/Urutan sequence) -- this is
+  // a report of what actually happened, and it's also what lets the caller
+  // interleave `sisipan` entries by timestamp against a correctly-ordered
+  // stop list. Not-yet-arrived stops (jamTiba null) sort last, in their
+  // original (arbitrary, no-ORDER-BY) fetch order relative to each other.
+  for (const list of stopsByJadwalId.values()) {
+    list.sort((a, b) => {
+      if (a.jamTiba == null && b.jamTiba == null) return 0;
+      if (a.jamTiba == null) return 1;
+      if (b.jamTiba == null) return -1;
+      return a.jamTiba.localeCompare(b.jamTiba);
+    });
   }
 
   return jadwalRows.map((j) => ({
@@ -303,7 +332,88 @@ export async function getKartuPengirimanUntukShift(
     jamAktualBerangkat: j.JamAktualBerangkat ? j.JamAktualBerangkat.toISOString() : null,
     lokasiTerjauh: lokasiTerjauhMap.get(j.JadwalID) ?? null,
     stops: stopsByJadwalId.get(j.JadwalID) ?? [],
+    sisipan: sisipanMap.get(j.JadwalID) ?? [],
   }));
+}
+
+// Istirahat/BBM/Kendala for this shift's Jadwal set, scoped by JadwalID
+// membership (NOT by each table's own time-window semantics -- e.g. BBM's
+// own getBbmUntukShift in driver-fuel.ts groups by WaktuIsi's real-time
+// shift window for the Kas section's cash-register accounting, which can
+// disagree with the parent Jadwal's JamSelesaiMuat-based shift; this
+// function deliberately groups by JadwalID instead, since these entries are
+// shown attached to a specific Jadwal's own Kartu Pengiriman card here, not
+// aggregated as a shift-wide cash total).
+async function getSisipanUntukJadwal(pool: sql.ConnectionPool, jadwalIds: number[]): Promise<Map<number, KartuPengirimanSisipanEntry[]>> {
+  const result = new Map<number, KartuPengirimanSisipanEntry[]>();
+  if (jadwalIds.length === 0) return result;
+
+  function push(jadwalId: number, entry: KartuPengirimanSisipanEntry) {
+    const list = result.get(jadwalId) ?? [];
+    list.push(entry);
+    result.set(jadwalId, list);
+  }
+
+  function inClause(request: sql.Request, prefix: string): string {
+    return jadwalIds
+      .map((id, i) => {
+        request.input(`${prefix}${i}`, sql.Int, id);
+        return `@${prefix}${i}`;
+      })
+      .join(",");
+  }
+
+  const istirahatRequest = pool.request();
+  const istirahatPlaceholders = inClause(istirahatRequest, "ist");
+  const istirahatResult = await istirahatRequest.query(`
+    SELECT JadwalID, Keterangan, WaktuMulai, WaktuSelesai
+    FROM DashboardPengirimanIstirahat
+    WHERE JadwalID IN (${istirahatPlaceholders})
+  `);
+  for (const r of istirahatResult.recordset as { JadwalID: number; Keterangan: string; WaktuMulai: Date; WaktuSelesai: Date | null }[]) {
+    push(r.JadwalID, {
+      type: "ISTIRAHAT",
+      waktu: r.WaktuMulai.toISOString(),
+      keterangan: r.Keterangan,
+      waktuSelesai: r.WaktuSelesai ? r.WaktuSelesai.toISOString() : null,
+    });
+  }
+
+  const bbmRequest = pool.request();
+  const bbmPlaceholders = inClause(bbmRequest, "bbm");
+  const bbmResult = await bbmRequest.query(`
+    SELECT JadwalID, Liter, NominalAsli, NominalEkstra, WaktuMasukSpbu
+    FROM DashboardPengirimanBBM
+    WHERE JadwalID IN (${bbmPlaceholders}) AND WaktuMasukSpbu IS NOT NULL
+  `);
+  for (const r of bbmResult.recordset as {
+    JadwalID: number;
+    Liter: number | null;
+    NominalAsli: number | null;
+    NominalEkstra: number | null;
+    WaktuMasukSpbu: Date;
+  }[]) {
+    push(r.JadwalID, {
+      type: "BBM",
+      waktu: r.WaktuMasukSpbu.toISOString(),
+      liter: r.Liter,
+      nominalAsli: r.NominalAsli,
+      nominalEkstra: r.NominalEkstra,
+    });
+  }
+
+  const kendalaRequest = pool.request();
+  const kendalaPlaceholders = inClause(kendalaRequest, "ken");
+  const kendalaResult = await kendalaRequest.query(`
+    SELECT JadwalID, JenisKendala, WaktuLapor
+    FROM DashboardPengirimanKendala
+    WHERE JadwalID IN (${kendalaPlaceholders})
+  `);
+  for (const r of kendalaResult.recordset as { JadwalID: number; JenisKendala: string; WaktuLapor: Date }[]) {
+    push(r.JadwalID, { type: "KENDALA", waktu: r.WaktuLapor.toISOString(), jenisKendala: r.JenisKendala });
+  }
+
+  return result;
 }
 
 export interface RekapDriverRow {

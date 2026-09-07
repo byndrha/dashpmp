@@ -18,7 +18,7 @@ import {
 } from "@/app/mkesindo/(dashboard)/laporan/actions";
 import { getReportShift, getShiftLabel, getShiftWindow, type ShiftNumber } from "@/lib/report-shift";
 import type { LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
-import type { StatusBayar, KartuPengirimanRow } from "@/lib/queries/laporan-shift-pengiriman";
+import type { StatusBayar, KartuPengirimanRow, KartuPengirimanStopRow, KartuPengirimanSisipanEntry } from "@/lib/queries/laporan-shift-pengiriman";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 
 const STATUS_BAYAR_LABEL: Record<StatusBayar, string> = {
@@ -48,6 +48,36 @@ function formatJudulRute(k: KartuPengirimanRow): string {
   if (!k.lokasiTerjauh) return jam;
   const lokasi = k.lokasiTerjauh.kecamatan ? `${k.lokasiTerjauh.wilayah}, ${k.lokasiTerjauh.kecamatan}` : k.lokasiTerjauh.wilayah;
   return `${jam} - ${lokasi}`;
+}
+
+type KartuTimelineItem = { kind: "stop"; stop: KartuPengirimanStopRow } | { kind: "sisipan"; entry: KartuPengirimanSisipanEntry };
+
+// Merges a Jadwal's stops (already sorted by jamTiba, not-yet-arrived last
+// -- see laporan-shift-pengiriman.ts) with its sisipan entries (Istirahat/
+// BBM/Kendala, unsorted, each keyed to the Jadwal but not to any one stop)
+// into one timeline ordered by real timestamp. A sisipan entry lands right
+// after the last arrived stop whose jamTiba is <= its own `waktu`; any
+// sisipan after the last arrival, or once stops run out, lands at the end
+// before the not-yet-arrived stops.
+function buildKartuTimeline(stops: KartuPengirimanStopRow[], sisipan: KartuPengirimanSisipanEntry[]): KartuTimelineItem[] {
+  const arrived = stops.filter((s) => s.jamTiba != null);
+  const notArrived = stops.filter((s) => s.jamTiba == null);
+  const sorted = sisipan.slice().sort((a, b) => a.waktu.localeCompare(b.waktu));
+  const items: KartuTimelineItem[] = [];
+  let i = 0;
+  for (const s of arrived) {
+    while (i < sorted.length && sorted[i].waktu <= s.jamTiba!) {
+      items.push({ kind: "sisipan", entry: sorted[i] });
+      i++;
+    }
+    items.push({ kind: "stop", stop: s });
+  }
+  while (i < sorted.length) {
+    items.push({ kind: "sisipan", entry: sorted[i] });
+    i++;
+  }
+  for (const s of notArrived) items.push({ kind: "stop", stop: s });
+  return items;
 }
 
 interface MesinTimelineSegment {
@@ -315,54 +345,84 @@ export function LaporanShiftDetailView() {
                       </button>
                       {expanded && (
                         <div className="divide-y border-t">
-                          {k.stops.length === 0 ? (
+                          {k.stops.length === 0 && k.sisipan.length === 0 ? (
                             <p className="p-3 text-center text-muted-foreground">Tidak ada stop.</p>
                           ) : (
-                            k.stops.map((s) => (
-                              <div key={s.jadwalDetailId} className="flex flex-col gap-1 p-2">
-                                <div className="flex items-start justify-between gap-2">
-                                  <span className="font-medium">{s.customerName}</span>
-                                  {s.nominalBayar != null && (
-                                    <span className="shrink-0 tabular-nums text-muted-foreground">{formatRupiah(s.nominalBayar)}</span>
-                                  )}
-                                </div>
-                                <p className="text-muted-foreground">Kirim: {s.items.map((i) => `${i.itemName} x${i.qty}`).join(", ")}</p>
-                                {s.retur.length > 0 && (
-                                  <div className="flex flex-col gap-0.5">
-                                    {s.retur.map((r) => (
-                                      <span key={r.itemId} className="text-destructive">
-                                        Return: {r.itemName} x{r.qtyRetur} ({r.kondisiRetur ?? "-"})
-                                        {r.resale.length > 0 &&
-                                          ` — dijual ulang: ${r.resale.map((rs) => `${rs.jalur} x${rs.qty}`).join(", ")}`}
+                            buildKartuTimeline(k.stops, k.sisipan).map((item, i) => {
+                              if (item.kind === "sisipan") {
+                                const entry = item.entry;
+                                return (
+                                  <div key={`sisipan-${i}`} className="bg-muted/40 p-2 text-muted-foreground">
+                                    {entry.type === "ISTIRAHAT" && (
+                                      <span>
+                                        Istirahat — {entry.keterangan} ({formatTime(entry.waktu)}
+                                        {entry.waktuSelesai ? ` – ${formatTime(entry.waktuSelesai)}` : ", sedang berlangsung"})
                                       </span>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="flex flex-wrap items-center justify-between gap-1.5">
-                                  <span
-                                    className={cn(
-                                      "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
-                                      STATUS_BADGE_CLASS[s.statusBayar]
                                     )}
-                                  >
-                                    {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
-                                      ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
-                                      : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
-                                  </span>
-                                  {s.statusBayar === "BELUM_BAYAR" && (
-                                    <Button
-                                      size="xs"
-                                      variant="outline"
-                                      onClick={() =>
-                                        setPelunasanTarget({ businessPartnerId: s.businessPartnerId, customerName: s.customerName })
-                                      }
-                                    >
-                                      Catat Pembayaran
-                                    </Button>
+                                    {entry.type === "BBM" && (
+                                      <span>
+                                        Isi BBM — {formatTime(entry.waktu)}
+                                        {entry.liter != null ? `, ${entry.liter} L` : " (belum diisi)"}
+                                        {entry.nominalAsli != null &&
+                                          ` — ${formatRupiah(entry.nominalAsli + (entry.nominalEkstra ?? 0))}`}
+                                      </span>
+                                    )}
+                                    {entry.type === "KENDALA" && (
+                                      <span className="text-destructive">
+                                        Kendala — {entry.jenisKendala} ({formatTime(entry.waktu)})
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              const s = item.stop;
+                              return (
+                                <div key={s.jadwalDetailId} className="flex flex-col gap-1 p-2">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="font-medium">{s.customerName}</span>
+                                    {s.nominalBayar != null && (
+                                      <span className="shrink-0 tabular-nums text-muted-foreground">{formatRupiah(s.nominalBayar)}</span>
+                                    )}
+                                  </div>
+                                  <p className="text-muted-foreground">Tiba: {s.jamTiba ? formatTime(s.jamTiba) : "Belum tiba"}</p>
+                                  <p className="text-muted-foreground">Kirim: {s.items.map((i2) => `${i2.itemName} x${i2.qty}`).join(", ")}</p>
+                                  {s.retur.length > 0 && (
+                                    <div className="flex flex-col gap-0.5">
+                                      {s.retur.map((r) => (
+                                        <span key={r.itemId} className="text-destructive">
+                                          Return: {r.itemName} x{r.qtyRetur} ({r.kondisiRetur ?? "-"})
+                                          {r.resale.length > 0 &&
+                                            ` — dijual ulang: ${r.resale.map((rs) => `${rs.jalur} x${rs.qty}`).join(", ")}`}
+                                        </span>
+                                      ))}
+                                    </div>
                                   )}
+                                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
+                                        STATUS_BADGE_CLASS[s.statusBayar]
+                                      )}
+                                    >
+                                      {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
+                                        ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
+                                        : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
+                                    </span>
+                                    {s.statusBayar === "BELUM_BAYAR" && (
+                                      <Button
+                                        size="xs"
+                                        variant="outline"
+                                        onClick={() =>
+                                          setPelunasanTarget({ businessPartnerId: s.businessPartnerId, customerName: s.customerName })
+                                        }
+                                      >
+                                        Catat Pembayaran
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))
+                              );
+                            })
                           )}
                         </div>
                       )}
