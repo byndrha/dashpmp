@@ -156,7 +156,7 @@ export function LaporanShiftDetailView() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-muted-foreground">Tanggal Usaha</label>
+          <label className="text-xs text-muted-foreground">Tanggal Kerja</label>
           <Input type="date" value={tanggalUsaha} onChange={(e) => setPilihan((p) => ({ ...p, tanggalUsaha: e.target.value }))} />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -166,7 +166,7 @@ export function LaporanShiftDetailView() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[1, 2, 3].map((s) => (
+              {[2, 3, 1].map((s) => (
                 <SelectItem key={s} value={String(s)}>
                   {getShiftLabel(s as ShiftNumber, "work")}
                 </SelectItem>
@@ -230,11 +230,12 @@ export function LaporanShiftDetailView() {
 
           <section id="kartu-pengiriman" className="flex flex-col gap-2 rounded-md border p-3">
             <h3 className="text-sm font-semibold">Kartu Pengiriman</h3>
-            {detail.kartuPengiriman.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Tidak ada kartu pengiriman pada shift ini.</p>
-            ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-3">
-                {detail.kartuPengiriman.map((k, index) => {
+                {detail.kartuPengiriman.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Tidak ada kartu pengiriman pada shift ini.</p>
+                ) : (
+                  detail.kartuPengiriman.map((k, index) => {
                   const expanded = isJadwalExpanded(k.jadwalId, index);
                   return (
                     <div key={k.jadwalId} className="rounded-md border text-xs">
@@ -339,36 +340,37 @@ export function LaporanShiftDetailView() {
                       )}
                     </div>
                   );
-                })}
+                  })
+                )}
               </div>
-            )}
 
-            <div className="mt-2 rounded-md border p-2">
-              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Rekap Total per Driver <span className="font-normal">(seluruh shift hari ini)</span></p>
-              {detail.rekapPerDriver.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Tidak ada driver bertugas hari ini.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Driver</TableHead>
-                      <TableHead className="text-right">Kirim</TableHead>
-                      <TableHead className="text-right">Return</TableHead>
-                      <TableHead className="text-right">Netto</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {detail.rekapPerDriver.map((r) => (
-                      <TableRow key={r.salesmanId}>
-                        <TableCell>{r.driverName ?? r.salesmanId}</TableCell>
-                        <TableCell className="text-right tabular-nums">{r.totalKirim}</TableCell>
-                        <TableCell className="text-right tabular-nums">{r.totalReturn}</TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">{r.netto}</TableCell>
+              <div className="rounded-md border p-2">
+                <p className="mb-1.5 text-xs font-medium text-muted-foreground">Rekap Total per Driver <span className="font-normal">(seluruh shift hari ini)</span></p>
+                {detail.rekapPerDriver.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Tidak ada driver bertugas hari ini.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Driver</TableHead>
+                        <TableHead className="text-right">Kirim</TableHead>
+                        <TableHead className="text-right">Return</TableHead>
+                        <TableHead className="text-right">Netto</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+                    </TableHeader>
+                    <TableBody>
+                      {detail.rekapPerDriver.map((r) => (
+                        <TableRow key={r.salesmanId}>
+                          <TableCell>{r.driverName ?? r.salesmanId}</TableCell>
+                          <TableCell className="text-right tabular-nums">{r.totalKirim}</TableCell>
+                          <TableCell className="text-right tabular-nums">{r.totalReturn}</TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">{r.netto}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
             </div>
           </section>
 
@@ -517,7 +519,7 @@ export function LaporanShiftDetailView() {
 
           <section id="mesin" className="flex flex-col gap-2 rounded-md border p-3">
             <h3 className="text-sm font-semibold">Mesin</h3>
-            <div className="flex flex-col gap-2 text-xs">
+            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
               {detail.mesinList.map((m) => {
                 const events = detail.mesinEvents.filter((e) => e.mesinId === m.MesinID);
                 const counter = detail.mesinCounter.find((c) => c.mesinId === m.MesinID);
