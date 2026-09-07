@@ -6,20 +6,19 @@ import { cn } from "@/lib/utils";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { TugasList } from "@/components/driver-app/tugas-list";
 import { PetaOverviewMap } from "@/components/driver-app/peta-overview-map";
-import { RiwayatList } from "@/components/driver-app/riwayat-list";
-import { ProfilView } from "@/components/driver-app/profil-view";
 import { DriverBottomNav } from "@/components/driver-app/bottom-nav";
+import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
+import { UserMenu } from "@/components/dashboard/user-menu";
 import {
   getDriverJadwalListAction,
   getDriverJadwalStopsAction,
-  getDriverTimelineAction,
   getOwnDriverProfileAction,
   getPabrikLocationForDriverAction,
 } from "@/app/mkesindo/driver-app/actions";
-import type { DriverJadwalCard, DriverStopRow, DriverTimelineEntry } from "@/lib/queries/pengiriman-jadwal";
+import type { DriverJadwalCard, DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 import type { DriverProfileRow } from "@/lib/queries/driver-profile";
 
-export type DriverTabKey = "tugas" | "peta" | "riwayat" | "profil";
+export type DriverTabKey = "tugas" | "peta";
 
 interface TugasData {
   dateISO: string;
@@ -39,8 +38,6 @@ interface PetaData {
 const TAB_PATHS: Record<DriverTabKey, string> = {
   tugas: "/mkesindo/driver-app",
   peta: "/mkesindo/driver-app/peta",
-  riwayat: "/mkesindo/driver-app/riwayat",
-  profil: "/mkesindo/driver-app/profil",
 };
 
 // Keep-alive tab shell: every tab visited so far stays mounted (CSS `hidden`
@@ -51,21 +48,28 @@ const TAB_PATHS: Record<DriverTabKey, string> = {
 // touch Next.js's router; the URL is kept cosmetically in sync via
 // history.replaceState only, so the browser's address bar/back button still
 // reflect the active tab without triggering any navigation.
+//
+// Only 2 tabs now (Tugas, Peta) — Riwayat and Profil are no longer
+// bottom-nav tabs: Riwayat is a plain drill-down route reached via a button
+// on the Tugas screen (see riwayat/page.tsx, riwayat-view.tsx), and Profil
+// is now an inline panel inside the Tugas screen itself (tugas-list.tsx).
 export function DriverTabShell({
   initialTab,
   driverName,
+  driverProfile: initialDriverProfile,
   initialTugas,
   initialPeta,
-  initialRiwayat,
-  initialProfil,
   initialError,
 }: {
   initialTab: DriverTabKey;
   driverName: string;
+  // Only ever passed eagerly by the Tugas page (the usual landing tab) —
+  // undefined here means "not fetched yet", lazily filled in below the
+  // same way `tugas`/`peta` are, for a driver who deep-links straight into
+  // /peta instead.
+  driverProfile?: DriverProfileRow | null;
   initialTugas?: TugasData;
   initialPeta?: PetaData;
-  initialRiwayat?: DriverTimelineEntry[];
-  initialProfil?: DriverProfileRow | null;
   // Set by a page when the account has no linked salesmanId — same message
   // every lazy tab-switch would surface anyway (requireOwnSalesmanId throws
   // it), just shown immediately for the initially-loaded tab instead of
@@ -77,9 +81,8 @@ export function DriverTabShell({
 
   const [tugas, setTugas] = useState<TugasData | null>(initialTugas ?? null);
   const [peta, setPeta] = useState<PetaData | null>(initialPeta ?? null);
-  const [riwayat, setRiwayat] = useState<DriverTimelineEntry[] | null>(initialRiwayat ?? null);
   // undefined = not fetched yet, null = fetched, account has no linked profile.
-  const [profil, setProfil] = useState<DriverProfileRow | null | undefined>(initialProfil);
+  const [driverProfile, setDriverProfile] = useState<DriverProfileRow | null | undefined>(initialDriverProfile);
 
   const [loadingTab, setLoadingTab] = useState<DriverTabKey | null>(null);
   const [tabError, setTabError] = useState<string | null>(initialError ?? null);
@@ -99,17 +102,26 @@ export function DriverTabShell({
     async function load() {
       setTabError(null);
 
-      if (activeTab === "tugas" && tugas === null) {
+      if (activeTab === "tugas" && (tugas === null || driverProfile === undefined)) {
         setLoadingTab("tugas");
         const dateISO = getBusinessDateISO();
-        const result = await getDriverJadwalListAction(dateISO);
+        const [jadwalResult, profileResult] = await Promise.all([
+          tugas === null ? getDriverJadwalListAction(dateISO) : Promise.resolve({ success: true as const, data: tugas.jadwal }),
+          driverProfile === undefined ? getOwnDriverProfileAction() : Promise.resolve({ success: true as const, data: driverProfile }),
+        ]);
         if (cancelled) return;
-        if (!result.success) {
-          setTabError(result.error);
+        if (!jadwalResult.success) {
+          setTabError(jadwalResult.error);
           setLoadingTab(null);
           return;
         }
-        setTugas({ dateISO, jadwal: result.data });
+        if (!profileResult.success) {
+          setTabError(profileResult.error);
+          setLoadingTab(null);
+          return;
+        }
+        setTugas({ dateISO, jadwal: jadwalResult.data });
+        setDriverProfile(profileResult.data);
         setLoadingTab(null);
         return;
       }
@@ -145,33 +157,6 @@ export function DriverTabShell({
         setLoadingTab(null);
         return;
       }
-
-      if (activeTab === "riwayat" && riwayat === null) {
-        setLoadingTab("riwayat");
-        const result = await getDriverTimelineAction();
-        if (cancelled) return;
-        if (!result.success) {
-          setTabError(result.error);
-          setLoadingTab(null);
-          return;
-        }
-        setRiwayat(result.data);
-        setLoadingTab(null);
-        return;
-      }
-
-      if (activeTab === "profil" && profil === undefined) {
-        setLoadingTab("profil");
-        const result = await getOwnDriverProfileAction();
-        if (cancelled) return;
-        if (!result.success) {
-          setTabError(result.error);
-          setLoadingTab(null);
-          return;
-        }
-        setProfil(result.data);
-        setLoadingTab(null);
-      }
     }
 
     load();
@@ -186,6 +171,12 @@ export function DriverTabShell({
 
   return (
     <div className="flex h-dvh flex-col bg-background">
+      {/* No border/divider under the header, deliberately -- just the
+          account button + theme toggle floated to the top-right corner. */}
+      <header className="flex items-center justify-end gap-1 px-3 py-2">
+        <AppearanceMenu />
+        <UserMenu name={driverName} profile={null} />
+      </header>
       <div className="relative min-h-0 flex-1">
         {loadingTab && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">
@@ -198,24 +189,14 @@ export function DriverTabShell({
           </p>
         )}
 
-        {visited.has("tugas") && tugas && (
+        {visited.has("tugas") && tugas && driverProfile !== undefined && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "tugas" && "hidden")}>
-            <TugasList initialJadwal={tugas.jadwal} initialDateISO={tugas.dateISO} />
+            <TugasList initialJadwal={tugas.jadwal} initialDateISO={tugas.dateISO} driverProfile={driverProfile} driverName={driverName} />
           </div>
         )}
         {visited.has("peta") && peta && (
           <div className={cn("h-full", activeTab !== "peta" && "hidden")}>
             <PetaOverviewMap pabrik={peta.pabrik} routes={peta.routes} />
-          </div>
-        )}
-        {visited.has("riwayat") && riwayat && (
-          <div className={cn("h-full overflow-y-auto", activeTab !== "riwayat" && "hidden")}>
-            <RiwayatList entries={riwayat} />
-          </div>
-        )}
-        {visited.has("profil") && profil !== undefined && (
-          <div className={cn("h-full overflow-y-auto", activeTab !== "profil" && "hidden")}>
-            <ProfilView profile={profil} driverName={driverName} />
           </div>
         )}
       </div>

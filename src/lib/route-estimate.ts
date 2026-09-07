@@ -21,7 +21,7 @@ export function haversineKm(a: LatLng, b: LatLng): number {
 // Only meant to be good enough to size a Draft's timeline card and catch
 // armada double-booking before departure, never shown to the user as a
 // precise number.
-const ESTIMATED_AVG_SPEED_KMH = 30;
+export const ESTIMATED_AVG_SPEED_KMH = 30;
 
 // Straight-line pabrik -> stop1 -> stop2 -> ... -> stopN -> pabrik round
 // trip, divided by an assumed average speed — the same round-trip shape
@@ -37,6 +37,21 @@ export function estimateTravelMinutes(pabrik: LatLng, orderedStops: LatLng[]): n
     prev = stop;
   }
   km += haversineKm(prev, pabrik);
+  return (km / ESTIMATED_AVG_SPEED_KMH) * 60;
+}
+
+// One-way pabrik -> stop1 -> ... -> stopN (no return leg) — for an
+// "estimasi sampai" (ETA at the last stop) figure, as opposed to
+// estimateTravelMinutes's round-trip total (used for busy-window sizing).
+// Same speed assumption and straight-line heuristic, just half the shape.
+export function estimateOneWayTravelMinutes(pabrik: LatLng, orderedStops: LatLng[]): number {
+  if (orderedStops.length === 0) return 0;
+  let km = 0;
+  let prev = pabrik;
+  for (const stop of orderedStops) {
+    km += haversineKm(prev, stop);
+    prev = stop;
+  }
   return (km / ESTIMATED_AVG_SPEED_KMH) * 60;
 }
 

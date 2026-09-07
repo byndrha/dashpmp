@@ -5,7 +5,6 @@ import { requireDriver } from "@/lib/require-access";
 import {
   getDriverJadwalList,
   getDriverJadwalStops,
-  getDriverJadwalHistory,
   getDriverTimeline,
   getStopOrderItems,
   recordStopArrival,
@@ -178,13 +177,6 @@ export async function getInvoiceOutstandingAction(
 // fetches a tab's data client-side the first time it's switched to
 // (every tab except whichever route the driver actually landed on still
 // starts with no data at all).
-
-export async function getDriverJadwalHistoryAction(limit?: number): Promise<ActionResult<DriverJadwalCard[]>> {
-  return runAction(async () => {
-    const salesmanId = await requireOwnSalesmanId();
-    return getDriverJadwalHistory(salesmanId, limit);
-  });
-}
 
 export async function getDriverTimelineAction(): Promise<ActionResult<DriverTimelineEntry[]>> {
   return runAction(async () => {

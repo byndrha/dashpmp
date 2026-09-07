@@ -4,7 +4,7 @@ import { getPabrikLocation } from "@/lib/queries/pabrik-location";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { formatDate, formatTime } from "@/lib/format";
 import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
-import { estimateTravelMinutes, estimateTripMinutes, haversineKm, type LatLng } from "@/lib/route-estimate";
+import { estimateTravelMinutes, estimateTripMinutes, estimateOneWayTravelMinutes, haversineKm, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { enqueuePrintJob } from "@/lib/queries/print-queue";
@@ -360,6 +360,16 @@ export interface DriverJadwalCard {
   StopSelesai: number;
   TotalKantong: number;
   IsSelesai: boolean;
+  // Departed but not every stop confirmed yet — the same predicate the
+  // SQL's own ORDER BY already floats to the top; exposed explicitly so
+  // the client can render it sticky rather than re-deriving the same
+  // condition from JamAktualBerangkat + StopSelesai/TotalStop.
+  IsBerjalan: boolean;
+  // (Actual or scheduled departure) + a one-way haversine travel estimate
+  // to the farthest stop (estimateOneWayTravelMinutes) — an indicative
+  // "estimasi sampai", not a precise per-stop ETA. Null when no stop on
+  // this Jadwal has a resolved DashboardMitraLocation to estimate from.
+  EstimasiSampai: string | null;
 }
 
 // dateISO is a 14:00-WIB-rollover business-date label (see ROLLOVER_HOUR
@@ -470,15 +480,81 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
       -- that's the one the driver needs to act on right now, not
       -- necessarily whichever was scheduled earliest. Everything else
       -- (not yet departed, or already fully Selesai) keeps the original
-      -- schedule-time order as the secondary sort.
+      -- schedule-time order as the secondary sort. Secondary sort is
+      -- DESCENDING (most recently/soonest-scheduled departure first) per
+      -- the Tugas screen's own display order -- the in-progress card is
+      -- rendered sticky client-side regardless of where it falls here, so
+      -- this ORDER BY only governs the rest of the list.
       ORDER BY
         CASE WHEN j.JamAktualBerangkat IS NOT NULL AND SUM(sa.IsSelesai) < COUNT(sa.JadwalDetailID) THEN 0 ELSE 1 END,
-        j.JamJadwal
+        j.JamJadwal DESC
     `);
-  return (result.recordset as Omit<DriverJadwalCard, "IsSelesai">[]).map((r) => ({
+  const rows = (result.recordset as Omit<DriverJadwalCard, "IsSelesai" | "IsBerjalan" | "EstimasiSampai">[]).map((r) => ({
     ...r,
     IsSelesai: r.TotalStop > 0 && r.StopSelesai === r.TotalStop,
+    IsBerjalan: r.JamAktualBerangkat != null && r.StopSelesai < r.TotalStop,
   }));
+
+  const estimasiByJadwal = await getEstimasiSampaiPerJadwal(
+    pool,
+    rows.map((r) => r.JadwalID)
+  );
+  return rows.map((r) => ({ ...r, EstimasiSampai: estimasiByJadwal.get(r.JadwalID) ?? null }));
+}
+
+// Bulk one-way "estimasi sampai" (ETA at the farthest stop) for a list of
+// Jadwal — (actual departure if already berangkat, else scheduled
+// JamJadwal) + estimateOneWayTravelMinutes to that Jadwal's own stops, in
+// Urutan order. A haversine heuristic (see route-estimate.ts), not a
+// precise per-stop ETA -- same caveat as EstimasiDurasiMenit on the
+// desktop board, just one-way instead of round-trip. Returns no entry for
+// a Jadwal with zero stops resolved to a DashboardMitraLocation.
+async function getEstimasiSampaiPerJadwal(pool: sql.ConnectionPool, jadwalIds: number[]): Promise<Map<number, string>> {
+  const result = new Map<number, string>();
+  if (jadwalIds.length === 0) return result;
+
+  const stopsRequest = pool.request();
+  const stopsPlaceholders = jadwalIds.map((id, i) => {
+    stopsRequest.input(`jid${i}`, sql.Int, id);
+    return `@jid${i}`;
+  });
+  const headerRequest = pool.request();
+  const headerPlaceholders = jadwalIds.map((id, i) => {
+    headerRequest.input(`hid${i}`, sql.Int, id);
+    return `@hid${i}`;
+  });
+  const [pabrik, stopsResult, headerResult] = await Promise.all([
+    getPabrikLocation(),
+    stopsRequest.query(`
+      SELECT jd.JadwalID, ml.Latitude, ml.Longitude
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+      LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
+      WHERE jd.JadwalID IN (${stopsPlaceholders.join(",")}) AND jd.IsDeleted = 0
+      ORDER BY jd.JadwalID, jd.Urutan
+    `),
+    headerRequest.query(
+      `SELECT JadwalID, JamJadwal, JamAktualBerangkat FROM DashboardPengirimanJadwal WHERE JadwalID IN (${headerPlaceholders.join(",")})`
+    ),
+  ]);
+  const pabrikLatLng: LatLng = { lat: pabrik.latitude, lng: pabrik.longitude };
+
+  const stopsByJadwal = new Map<number, LatLng[]>();
+  for (const row of stopsResult.recordset as { JadwalID: number; Latitude: number | null; Longitude: number | null }[]) {
+    if (row.Latitude == null || row.Longitude == null) continue;
+    const list = stopsByJadwal.get(row.JadwalID) ?? [];
+    list.push({ lat: row.Latitude, lng: row.Longitude });
+    stopsByJadwal.set(row.JadwalID, list);
+  }
+
+  for (const jr of headerResult.recordset as { JadwalID: number; JamJadwal: Date; JamAktualBerangkat: Date | null }[]) {
+    const stops = stopsByJadwal.get(jr.JadwalID);
+    if (!stops || stops.length === 0) continue;
+    const start = jr.JamAktualBerangkat ?? jr.JamJadwal;
+    const minutes = estimateOneWayTravelMinutes(pabrikLatLng, stops);
+    result.set(jr.JadwalID, new Date(start.getTime() + minutes * 60 * 1000).toISOString());
+  }
+  return result;
 }
 
 export interface JadwalHeader {
@@ -516,49 +592,6 @@ export async function getJadwalHeader(jadwalId: number): Promise<JadwalHeader> {
   return row;
 }
 
-// Riwayat tab — every Selesai Jadwal for this driver, most recent first,
-// capped since there's no pagination UI yet (a driver's realistic history
-// depth is small enough that a flat cap is fine for v1). Same StopAgg
-// pre-aggregation as getDriverJadwalList, for the same fan-out reason.
-export async function getDriverJadwalHistory(salesmanId: string, limit = 50): Promise<DriverJadwalCard[]> {
-  const pool = await getPool();
-  const result = await pool
-    .request()
-    .input("salesmanId", sql.VarChar(16), salesmanId)
-    .input("limit", sql.Int, limit).query(`
-      WITH StopAgg AS (
-          SELECT jd.JadwalID, jd.JadwalDetailID,
-                 ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Kantong,
-                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai
-          FROM DashboardPengirimanJadwalDetail jd
-          LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
-          LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
-          WHERE jd.IsDeleted = 0
-          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai
-      )
-      SELECT TOP (@limit)
-          j.JadwalID,
-          a.Nama AS ArmadaNama,
-          ed.VehicleNo,
-          j.JamJadwal,
-          j.Status,
-          j.JamSelesaiMuat,
-          j.JamAktualBerangkat,
-          COUNT(sa.JadwalDetailID) AS TotalStop,
-          SUM(sa.IsSelesai) AS StopSelesai,
-          SUM(sa.Kantong) AS TotalKantong
-      FROM DashboardPengirimanJadwal j
-      JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
-      LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
-      JOIN StopAgg sa ON sa.JadwalID = j.JadwalID
-      WHERE j.SalesmanID = @salesmanId AND j.IsDeleted = 0
-      GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamJadwal, j.Status, j.JamSelesaiMuat, j.JamAktualBerangkat
-      HAVING COUNT(sa.JadwalDetailID) = SUM(sa.IsSelesai)
-      ORDER BY j.JamJadwal DESC
-    `);
-  return (result.recordset as Omit<DriverJadwalCard, "IsSelesai">[]).map((r) => ({ ...r, IsSelesai: true }));
-}
-
 export interface DriverTimelineBBM {
   waktuMasukSpbu: string;
   waktuIsi: string | null;
@@ -581,12 +614,12 @@ export interface DriverTimelineEntry {
   kendala: DriverTimelineKendala[];
 }
 
-// Timeline for driver-app's Riwayat tab — completed Jadwal (same
-// HAVING COUNT(...) = SUM(IsSelesai) filter as getDriverJadwalHistory
-// above, this function's sibling, which stays unmodified) whose actual
-// departure falls in the current 14:00-WIB-rollover business-date window
-// (see ROLLOVER_HOUR in business-date.ts). Unlike getDriverJadwalHistory,
-// scoped to one business day rather than a flat row-count cap, and each
+// Timeline for driver-app's original Riwayat tab (BBM/Kendala detail view,
+// superseded by the redesigned Riwayat screen's getDriverJadwalList-based
+// card list, but kept as its own still-valid data shape) — completed
+// Jadwal (HAVING COUNT(...) = SUM(IsSelesai)) whose actual departure falls
+// in the current 14:00-WIB-rollover business-date window (see
+// ROLLOVER_HOUR in business-date.ts). Each
 // entry carries its own BBM refuel and Kendala report rows (fetched
 // separately below and merged in, the same "fetch flat rows once, group
 // by parent ID in TS" shape as getVehicleChecksForJadwal groups photos) —

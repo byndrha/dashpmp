@@ -1,14 +1,12 @@
 "use client";
 
-import { ClipboardList, Map, History, User } from "lucide-react";
+import { ClipboardList, Map } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DriverTabKey } from "./driver-tab-shell";
 
 const TABS: { key: DriverTabKey; label: string; icon: typeof ClipboardList }[] = [
   { key: "tugas", label: "Tugas", icon: ClipboardList },
   { key: "peta", label: "Peta", icon: Map },
-  { key: "riwayat", label: "Riwayat", icon: History },
-  { key: "profil", label: "Profil", icon: User },
 ];
 
 // Plain buttons, not <Link> — switching tabs is now a client-side state
