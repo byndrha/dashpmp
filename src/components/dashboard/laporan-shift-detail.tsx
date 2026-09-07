@@ -111,9 +111,7 @@ const SECTIONS = [
   { id: "stok-bahan-baku", label: "Stok Bahan Baku" },
   { id: "kartu-pengiriman", label: "Kartu Pengiriman" },
   { id: "kas", label: "Kas" },
-  { id: "produksi", label: "Produksi" },
   { id: "mesin", label: "Mesin" },
-  { id: "stok-es", label: "Stok Es" },
 ] as const;
 
 function todayDefault(): { tanggalUsaha: string; shift: ShiftNumber } {
@@ -541,12 +539,6 @@ export function LaporanShiftDetailView() {
             </div>
           </section>
 
-          <section id="produksi" className="flex flex-col gap-2 rounded-md border p-3">
-            <h3 className="text-sm font-semibold">Data Produksi</h3>
-            <p className="text-xs">Kantong Ekivalen: {detail.produksiKantongEkivalen}</p>
-            <p className="text-xs">Total Denda: {formatRupiah(detail.produksiTotalDenda)}</p>
-          </section>
-
           <section id="mesin" className="flex flex-col gap-2 rounded-md border p-3">
             <h3 className="text-sm font-semibold">Mesin</h3>
 
@@ -636,29 +628,59 @@ export function LaporanShiftDetailView() {
               {detail.mesinList.map((m) => {
                 const events = detail.mesinEvents.filter((e) => e.mesinId === m.MesinID);
                 const counter = detail.mesinCounter.find((c) => c.mesinId === m.MesinID);
+                const totalQty10KG = counter?.readings.reduce((sum, r) => sum + r.qty10KG, 0) ?? 0;
                 return (
-                  <div key={m.MesinID} className="rounded border p-2">
-                    <p className="mb-1 font-medium">{m.Nama}</p>
-                    <p className="text-muted-foreground">
-                      {events.length === 0 ? "Tidak ada event ON/OFF" : events.map((e) => `${e.jenisEvent} ${formatTimeWib(e.waktuEvent)}`).join(", ")}
-                    </p>
-                    {counter && counter.readings.length > 0 && (
-                      <p className="text-muted-foreground">
-                        Counter: {counter.readings.map((r) => `${r.jamPanen || "-"}|${r.qty10KG}`).join(", ")}
-                      </p>
-                    )}
+                  <div key={m.MesinID} className="flex flex-col gap-2 rounded border p-2">
+                    <p className="font-medium">{m.Nama}</p>
+                    <div>
+                      <p className="mb-0.5 font-medium text-foreground/70">On/Off</p>
+                      {events.length === 0 ? (
+                        <p className="text-muted-foreground">Tidak ada event.</p>
+                      ) : (
+                        events.map((e) => (
+                          <p key={e.eventId} className="text-muted-foreground">
+                            {e.jenisEvent} — {formatTimeWib(e.waktuEvent)}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                    <div>
+                      <p className="mb-0.5 font-medium text-foreground/70">Produksi (Panen)</p>
+                      {!counter || counter.readings.length === 0 ? (
+                        <p className="text-muted-foreground">Belum ada panen.</p>
+                      ) : (
+                        <>
+                          {counter.readings.map((r, i) => (
+                            <p key={i} className="text-muted-foreground">
+                              {r.jamPanen || "-"} — {r.qty10KG} (10KG)
+                            </p>
+                          ))}
+                          <p className="mt-0.5 font-medium">Total: {totalQty10KG} (10KG)</p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </section>
 
-          <section id="stok-es" className="flex flex-col gap-2 rounded-md border p-3">
-            <h3 className="text-sm font-semibold">Stok Es</h3>
-            <p className="text-xs">Stok Awal: {detail.stokEs.stokAwal ?? "Belum ada data"}</p>
-            <p className="text-xs">
-              Stok Akhir: {detail.stokEs.stokAkhir} {!detail.stokEs.stokAkhirFinal && "(live, belum final)"}
-            </p>
+            {(detail.kerusakan.pecahKemasanQty > 0 ||
+              detail.kerusakan.esJatuhQty > 0 ||
+              detail.kerusakan.gantiReturnQty > 0 ||
+              detail.kerusakan.sealerJebolQty > 0) && (
+              <div className="rounded-md border p-2 text-xs">
+                <p className="mb-1.5 font-medium text-muted-foreground">
+                  Aktivitas Produksi — Es Rusak <span className="font-normal">(tanggung jawab Staf Operasional/Tim Produksi shift ini)</span>
+                </p>
+                <div className="flex flex-col gap-0.5 text-muted-foreground">
+                  {detail.kerusakan.pecahKemasanQty > 0 && <p>Pecah Kemasan: {detail.kerusakan.pecahKemasanQty}</p>}
+                  {detail.kerusakan.esJatuhQty > 0 && <p>Es Jatuh: {detail.kerusakan.esJatuhQty}</p>}
+                  {detail.kerusakan.gantiReturnQty > 0 && <p>Ganti Retur: {detail.kerusakan.gantiReturnQty}</p>}
+                  {detail.kerusakan.sealerJebolQty > 0 && <p>Sealer Jebol: {detail.kerusakan.sealerJebolQty}</p>}
+                  <p className="mt-1 font-medium text-foreground">Total Denda: {formatRupiah(detail.produksiTotalDenda)}</p>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       )}

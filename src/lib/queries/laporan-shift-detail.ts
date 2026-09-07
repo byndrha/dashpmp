@@ -31,6 +31,17 @@ export interface LaporanShiftDetail {
   produksiKantongEkivalen: number;
   produksiTotalDenda: number;
   produksiTotal5KG: number; // shift-wide Qty5KGDimuat total — NOT attributable to any single mesin, see getQtyRecapForShift's own comment
+  // Kerusakan (pecah kemasan/es jatuh/ganti retur/sealer jebol) and the
+  // denda they produce are recorded ONCE per (TanggalUsaha, Shift) on
+  // DashboardAktivitasProduksiShift -- no MesinID column exists on that
+  // table at all, so this is genuinely a whole-shift/team responsibility
+  // (Staf Operasional + Tim Produksi), never attributable to one mesin.
+  kerusakan: {
+    pecahKemasanQty: number;
+    esJatuhQty: number;
+    gantiReturnQty: number;
+    sealerJebolQty: number;
+  };
   mesinList: MesinRow[];
   mesinEvents: MesinEventRow[];
   mesinCounter: MesinCounterRow[];
@@ -125,6 +136,12 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     produksiKantongEkivalen: qtyRecap.totalKantongEkivalen,
     produksiTotalDenda: hitungTotalDenda(aktivitas.pecahKemasanQty, aktivitas.esJatuhQty),
     produksiTotal5KG: qtyRecap.total5KG,
+    kerusakan: {
+      pecahKemasanQty: aktivitas.pecahKemasanQty,
+      esJatuhQty: aktivitas.esJatuhQty,
+      gantiReturnQty: aktivitas.gantiReturnQty,
+      sealerJebolQty: aktivitas.sealerJebolQty,
+    },
     mesinList,
     mesinEvents,
     mesinCounter,
