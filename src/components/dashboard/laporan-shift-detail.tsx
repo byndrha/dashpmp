@@ -16,9 +16,10 @@ import {
   tambahPengeluaranAction,
   hapusPengeluaranAction,
 } from "@/app/mkesindo/(dashboard)/laporan/actions";
-import { getReportShift, getShiftLabel, type ShiftNumber } from "@/lib/report-shift";
+import { getReportShift, getShiftLabel, getShiftWindow, type ShiftNumber } from "@/lib/report-shift";
 import type { LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
 import type { StatusBayar, KartuPengirimanRow } from "@/lib/queries/laporan-shift-pengiriman";
+import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 
 const STATUS_BAYAR_LABEL: Record<StatusBayar, string> = {
   TUNAI: "Tunai",
@@ -47,6 +48,63 @@ function formatJudulRute(k: KartuPengirimanRow): string {
   if (!k.lokasiTerjauh) return jam;
   const lokasi = k.lokasiTerjauh.kecamatan ? `${k.lokasiTerjauh.wilayah}, ${k.lokasiTerjauh.kecamatan}` : k.lokasiTerjauh.wilayah;
   return `${jam} - ${lokasi}`;
+}
+
+interface MesinTimelineSegment {
+  state: "On" | "Off";
+  startPct: number;
+  widthPct: number;
+}
+
+// Proportional On/Off segments for one mesin across [start, end] (both
+// naive-WIB Dates from getShiftWindow) -- initialState is what the mesin
+// carried INTO the window (LaporanShiftDetail.mesinStateAwalShift), since
+// mesinEvents only ever covers the shift itself and says nothing about
+// state before it.
+function computeMesinTimeline(
+  events: MesinEventRow[],
+  mesinId: number,
+  start: Date,
+  end: Date,
+  initialState: "On" | "Off"
+): MesinTimelineSegment[] {
+  const totalMs = end.getTime() - start.getTime();
+  if (totalMs <= 0) return [];
+  const sorted = events
+    .filter((e) => e.mesinId === mesinId)
+    .slice()
+    .sort((a, b) => a.waktuEvent.getTime() - b.waktuEvent.getTime());
+  const segments: MesinTimelineSegment[] = [];
+  let state: "On" | "Off" = initialState;
+  let cursorMs = start.getTime();
+  for (const e of sorted) {
+    const t = Math.min(Math.max(e.waktuEvent.getTime(), start.getTime()), end.getTime());
+    if (t > cursorMs) {
+      segments.push({ state, startPct: ((cursorMs - start.getTime()) / totalMs) * 100, widthPct: ((t - cursorMs) / totalMs) * 100 });
+      cursorMs = t;
+    }
+    state = e.jenisEvent;
+  }
+  if (cursorMs < end.getTime()) {
+    segments.push({ state, startPct: ((cursorMs - start.getTime()) / totalMs) * 100, widthPct: ((end.getTime() - cursorMs) / totalMs) * 100 });
+  }
+  return segments;
+}
+
+// Vertical hour-mark guide lines across [start, end] -- both naive-WIB
+// Dates, so UTC accessors read the WIB wall-clock hour directly (this
+// file's established convention, e.g. formatJudulRute's jamAktualBerangkat).
+function getHourGuides(start: Date, end: Date): { pct: number; label: string }[] {
+  const totalMs = end.getTime() - start.getTime();
+  if (totalMs <= 0) return [];
+  const guides: { pct: number; label: string }[] = [];
+  const first = new Date(start.getTime());
+  first.setUTCMinutes(0, 0, 0);
+  if (first.getTime() <= start.getTime()) first.setTime(first.getTime() + 3_600_000);
+  for (let t = first.getTime(); t < end.getTime(); t += 3_600_000) {
+    guides.push({ pct: ((t - start.getTime()) / totalMs) * 100, label: `${String(new Date(t).getUTCHours()).padStart(2, "0")}:00` });
+  }
+  return guides;
 }
 
 const SECTIONS = [
@@ -491,6 +549,80 @@ export function LaporanShiftDetailView() {
 
           <section id="mesin" className="flex flex-col gap-2 rounded-md border p-3">
             <h3 className="text-sm font-semibold">Mesin</h3>
+
+            {(() => {
+              const shiftWindow = getShiftWindow(new Date(`${detail.tanggalUsaha}T00:00:00Z`), detail.shift, "work");
+              const hourGuides = getHourGuides(shiftWindow.start, shiftWindow.end);
+              return (
+                <div className="rounded-md border p-2">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">Status Mesin</p>
+                    <span className="text-[10px] text-muted-foreground">On / Off Timeline</span>
+                  </div>
+                  <div className="grid grid-cols-[3.5rem_1fr_2.5rem] items-center gap-x-2 gap-y-1.5 text-xs">
+                    <div />
+                    <div className="relative h-3">
+                      {hourGuides.map((g) => (
+                        <span
+                          key={g.pct}
+                          className="absolute -translate-x-1/2 text-[9px] whitespace-nowrap text-muted-foreground"
+                          style={{ left: `${g.pct}%` }}
+                        >
+                          {g.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div />
+                    {detail.mesinList.map((m) => {
+                      const initialState = detail.mesinStateAwalShift[m.MesinID] ?? "Off";
+                      const segments = computeMesinTimeline(detail.mesinEvents, m.MesinID, shiftWindow.start, shiftWindow.end, initialState);
+                      const counter = detail.mesinCounter.find((c) => c.mesinId === m.MesinID);
+                      const totalQty10KG = counter?.readings.reduce((sum, r) => sum + r.qty10KG, 0) ?? 0;
+                      return (
+                        <div key={m.MesinID} className="contents">
+                          <span className="truncate font-medium">{m.Nama}</span>
+                          <div className="relative h-4 overflow-hidden rounded-full bg-muted">
+                            {segments.map((s, i) => (
+                              <div
+                                key={i}
+                                className={cn("absolute inset-y-0", s.state === "On" ? "bg-emerald-500" : "bg-red-500")}
+                                style={{ left: `${s.startPct}%`, width: `${s.widthPct}%` }}
+                              />
+                            ))}
+                            {hourGuides.map((g) => (
+                              <div key={g.pct} className="absolute inset-y-0 w-px bg-background/50" style={{ left: `${g.pct}%` }} />
+                            ))}
+                          </div>
+                          <span className="text-right tabular-nums text-muted-foreground">{totalQty10KG}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1">
+                        <span className="size-2 rounded-full bg-emerald-500" /> On
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="size-2 rounded-full bg-red-500" /> Off
+                      </span>
+                    </div>
+                    <span>
+                      Stok Es Awal (10 KG): <span className="font-medium text-foreground">{detail.stokEs.stokAwal ?? "-"}</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                    <span>
+                      Qty 5KG Dimuat (shift ini, seluruh mesin): <span className="font-medium text-foreground">{detail.produksiTotal5KG}</span>
+                    </span>
+                    <span>
+                      Kantong Ekivalen (10KG + 5KG/2): <span className="font-medium text-foreground">{detail.produksiKantongEkivalen}</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
               {detail.mesinList.map((m) => {
                 const events = detail.mesinEvents.filter((e) => e.mesinId === m.MesinID);

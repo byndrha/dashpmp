@@ -34,6 +34,30 @@ export async function catatMesinEvent(mesinId: number, jenisEvent: JenisMesinEve
 // getShiftWindow returns naive-WIB bounds, matching WaktuEvent's own
 // naive-WIB storage (getNaiveWibNow) — no cross-convention conversion
 // needed here, unlike the Qty5KG/JamSelesaiMuat query in Task 6.
+// Carried-over On/Off state at the exact instant a shift's window starts,
+// for every mesin that has ANY event before that instant -- a mesin absent
+// from the returned object has no recorded history at all and should be
+// treated as "Off" by the caller (nothing to carry over). Deliberately not
+// filtered to a mesinId list (this app has a handful of machines; a plain
+// per-MesinID correlated MAX avoids an IN-list/table-valued-param dance for
+// no real benefit at this scale).
+export async function getMesinStateAwalShift(start: Date): Promise<Record<number, JenisMesinEvent>> {
+  const pool = await getPool();
+  const result = await pool.request().input("start", sql.DateTime, start).query(`
+    SELECT e.MesinID, e.JenisEvent
+    FROM DashboardProduksiMesinEvent e
+    WHERE e.WaktuEvent < @start
+      AND e.WaktuEvent = (
+        SELECT MAX(e2.WaktuEvent) FROM DashboardProduksiMesinEvent e2 WHERE e2.MesinID = e.MesinID AND e2.WaktuEvent < @start
+      )
+  `);
+  const state: Record<number, JenisMesinEvent> = {};
+  for (const r of result.recordset as { MesinID: number; JenisEvent: JenisMesinEvent }[]) {
+    state[r.MesinID] = r.JenisEvent;
+  }
+  return state;
+}
+
 export async function getMesinEventsForShift(businessDate: Date, shift: ShiftNumber): Promise<MesinEventRow[]> {
   const pool = await getPool();
   const { start, end } = getShiftWindow(businessDate, shift, "work");

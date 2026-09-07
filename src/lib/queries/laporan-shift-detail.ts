@@ -1,8 +1,8 @@
-import { getShiftLabel, getPreviousShift, getReportShift, type ShiftNumber } from "@/lib/report-shift";
+import { getShiftLabel, getShiftWindow, getPreviousShift, getReportShift, type ShiftNumber } from "@/lib/report-shift";
 import { getAktivitasForShift, getQtyRecapForShift, hitungTotalDenda } from "@/lib/queries/aktivitas-produksi";
 import { getStokBahanBakuHistory, type StokBahanBakuRow } from "@/lib/queries/stok-bahan-baku";
 import { getKasKecilShiftForTanggalShift, type KasKecilShiftRow } from "@/lib/queries/kas-kecil";
-import { getMesinEventsForShift, type MesinEventRow } from "@/lib/queries/produksi-mesin-event";
+import { getMesinEventsForShift, getMesinStateAwalShift, type MesinEventRow, type JenisMesinEvent } from "@/lib/queries/produksi-mesin-event";
 import { getMesinList, getMesinCounterUntukShift, type MesinRow, type MesinCounterRow } from "@/lib/queries/produksi-mesin";
 import { getKartuPengirimanUntukShift, getRekapPerDriverUntukHari, type KartuPengirimanRow, type RekapDriverRow } from "@/lib/queries/laporan-shift-pengiriman";
 import { getBbmUntukShift, type BbmShiftRow } from "@/lib/queries/driver-fuel";
@@ -30,9 +30,14 @@ export interface LaporanShiftDetail {
   kasKecil: KasKecilShiftRow | null;
   produksiKantongEkivalen: number;
   produksiTotalDenda: number;
+  produksiTotal5KG: number; // shift-wide Qty5KGDimuat total — NOT attributable to any single mesin, see getQtyRecapForShift's own comment
   mesinList: MesinRow[];
   mesinEvents: MesinEventRow[];
   mesinCounter: MesinCounterRow[];
+  // On/Off state each mesin carried INTO this shift's window start (keyed by
+  // MesinID) — a mesin absent here has no recorded event history at all and
+  // should be treated as "Off". See getMesinStateAwalShift's own comment.
+  mesinStateAwalShift: Record<number, JenisMesinEvent>;
   stokEs: StokEsInfo;
   perusahaanId: number;
   rekapPerDriver: RekapDriverRow[];
@@ -60,6 +65,7 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
   // (tanggalUsaha: string, shift) like every other function called below --
   // matching its existing real signature (produksi-mesin-event.ts).
   const businessDateUntukMesinEvent = new Date(`${tanggalUsaha}T00:00:00Z`);
+  const shiftWindow = getShiftWindow(businessDateUntukMesinEvent, shift, "work");
 
   const [
     stokBahanBakuHistory,
@@ -71,6 +77,7 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     mesinList,
     mesinEvents,
     mesinCounter,
+    mesinStateAwalShift,
     snapshotAkhir,
     snapshotAwal,
     timList,
@@ -85,6 +92,7 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     getMesinList(),
     getMesinEventsForShift(businessDateUntukMesinEvent, shift),
     getMesinCounterUntukShift(tanggalUsaha, shift),
+    getMesinStateAwalShift(shiftWindow.start),
     isShiftBerjalan ? Promise.resolve(null) : getSnapshotStokEs(tanggalUsaha, shift),
     getSnapshotStokEs(previous.tanggalUsaha, previous.shift),
     getAllTim(),
@@ -116,9 +124,11 @@ export async function getLaporanShiftDetail(tanggalUsaha: string, shift: ShiftNu
     kasKecil,
     produksiKantongEkivalen: qtyRecap.totalKantongEkivalen,
     produksiTotalDenda: hitungTotalDenda(aktivitas.pecahKemasanQty, aktivitas.esJatuhQty),
+    produksiTotal5KG: qtyRecap.total5KG,
     mesinList,
     mesinEvents,
     mesinCounter,
+    mesinStateAwalShift,
     stokEs: {
       stokAwal: snapshotAwal,
       stokAkhir,
