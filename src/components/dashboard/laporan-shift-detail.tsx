@@ -607,9 +607,18 @@ export function LaporanShiftDetailView() {
                         <span className="size-2 rounded-full bg-red-500" /> Off
                       </span>
                     </div>
-                    <span>
-                      Stok Es Awal (10 KG): <span className="font-medium text-foreground">{detail.stokEs.stokAwal ?? "-"}</span>
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span>
+                        Stok Es Awal (10 KG): <span className="font-medium text-foreground">{detail.stokEs.stokAwal ?? "-"}</span>
+                      </span>
+                      <span>
+                        Stok Es Akhir Shift (10 KG):{" "}
+                        <span className="font-medium text-foreground">
+                          {detail.stokEs.stokAkhir}
+                          {!detail.stokEs.stokAkhirFinal && " (live, belum final)"}
+                        </span>
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
                     <span>
