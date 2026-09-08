@@ -17,6 +17,9 @@ export interface UseLiveCameraCaptureResult {
   error: string | null;
   retry: () => void;
   handleTap: () => void;
+  torchSupported: boolean;
+  torchOn: boolean;
+  toggleTorch: () => void;
 }
 
 export function useLiveCameraCapture({
@@ -28,12 +31,15 @@ export function useLiveCameraCapture({
 }: UseLiveCameraCaptureOptions): UseLiveCameraCaptureResult {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
   const capturingRef = useRef(false);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const localPreviewUrlRef = useRef<string | null>(null);
   const [retaking, setRetaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   useEffect(() => {
     localPreviewUrlRef.current = localPreviewUrl;
@@ -59,10 +65,15 @@ export function useLiveCameraCapture({
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
+      trackRef.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTorchSupported(false);
+       
+      setTorchOn(false);
       return;
     }
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setError(null);
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "environment" } })
@@ -74,15 +85,13 @@ export function useLiveCameraCapture({
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
         const track = stream.getVideoTracks()[0];
+        trackRef.current = track ?? null;
         const capabilities = track?.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean };
-        if (capabilities?.torch) {
-          track
-            .applyConstraints({ advanced: [{ torch: true } as MediaTrackConstraintSet] })
-            .catch(() => {
-              // Device reported torch support but declined the constraint —
-              // camera still works without flash, so this is not an error.
-            });
-        }
+        setTorchSupported(Boolean(capabilities?.torch));
+        // Off by default -- a manual toggle (see toggleTorch below), not an
+        // automatic flash on every camera open, so a driver isn't surprised
+        // by the flashlight turning on unprompted.
+        setTorchOn(false);
       })
       .catch(() => {
         if (!cancelled) setError("Izin kamera diperlukan untuk mengambil foto.");
@@ -93,8 +102,22 @@ export function useLiveCameraCapture({
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
+      trackRef.current = null;
     };
   }, [showLive, retryCount]);
+
+  function toggleTorch() {
+    const track = trackRef.current;
+    if (!track) return;
+    const next = !torchOn;
+    track
+      .applyConstraints({ advanced: [{ torch: next } as MediaTrackConstraintSet] })
+      .then(() => setTorchOn(next))
+      .catch(() => {
+        // Device reported torch support but declined the constraint --
+        // leave torchOn as-is rather than claiming a state that didn't apply.
+      });
+  }
 
   function handleCapture() {
     const video = videoRef.current;
@@ -143,5 +166,5 @@ export function useLiveCameraCapture({
     setRetryCount((c) => c + 1);
   }
 
-  return { videoRef, displayedPhotoUrl, showLive, error, retry, handleTap };
+  return { videoRef, displayedPhotoUrl, showLive, error, retry, handleTap, torchSupported, torchOn, toggleTorch };
 }

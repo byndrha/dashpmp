@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { Camera, Flashlight, FlashlightOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useLiveCameraCapture } from "@/hooks/use-live-camera-capture";
@@ -25,7 +25,7 @@ export function LiveCameraCaptureField({
   disabled?: boolean;
   status?: PhotoUploadStatus;
 }) {
-  const { videoRef, displayedPhotoUrl, showLive, error, retry, handleTap } = useLiveCameraCapture({
+  const { videoRef, displayedPhotoUrl, showLive, error, retry, handleTap, torchSupported, torchOn, toggleTorch } = useLiveCameraCapture({
     label,
     photoUrl,
     active: size === "main" && active,
@@ -80,7 +80,26 @@ export function LiveCameraCaptureField({
             </Button>
           </div>
         ) : (
-          <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+          <>
+            <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+            {size === "main" && torchSupported && (
+              <button
+                type="button"
+                aria-label={torchOn ? "Matikan senter" : "Nyalakan senter"}
+                title={torchOn ? "Matikan senter" : "Nyalakan senter"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleTorch();
+                }}
+                className={cn(
+                  "absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full shadow-md",
+                  torchOn ? "bg-amber-400 text-amber-950" : "bg-background/80 text-foreground"
+                )}
+              >
+                {torchOn ? <Flashlight className="size-4" /> : <FlashlightOff className="size-4" />}
+              </button>
+            )}
+          </>
         )
       ) : (
         <div className="flex flex-col items-center gap-1 text-muted-foreground">

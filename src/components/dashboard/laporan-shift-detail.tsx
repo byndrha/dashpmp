@@ -19,7 +19,13 @@ import {
 } from "@/app/mkesindo/(dashboard)/laporan/actions";
 import { getReportShift, getShiftLabel, getShiftWindow, type ShiftNumber } from "@/lib/report-shift";
 import type { LaporanShiftDetail } from "@/lib/queries/laporan-shift-detail";
-import type { StatusBayar, KartuPengirimanRow, KartuPengirimanStopRow, KartuPengirimanSisipanEntry } from "@/lib/queries/laporan-shift-pengiriman";
+import type {
+  StatusBayar,
+  KartuPengirimanRow,
+  KartuPengirimanStopRow,
+  KartuPengirimanSisipanEntry,
+  KartuPengirimanItemRow,
+} from "@/lib/queries/laporan-shift-pengiriman";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
 import type { BbmShiftRow } from "@/lib/queries/driver-fuel";
 
@@ -156,6 +162,18 @@ function groupBbmByJadwal(bbm: BbmShiftRow[]): Map<number, BbmShiftRow[]> {
   return map;
 }
 
+// Total item qty ordered across every stop on this Jadwal -- a plain sum,
+// not the kantong-ekivalen conversion used elsewhere in this report (this
+// is a per-Kartu-Pengiriman headline figure, not a production-capacity one).
+function sumQtyKartu(k: KartuPengirimanRow): number {
+  return k.stops.reduce((sum, s) => sum + s.items.reduce((sum2, i) => sum2 + i.qty, 0), 0);
+}
+
+// Total sales value (qty x price) for one stop's ordered items.
+function sumHargaStop(items: KartuPengirimanItemRow[]): number {
+  return items.reduce((sum, i) => sum + i.qty * i.price, 0);
+}
+
 const SECTIONS = [
   { id: "stok-bahan-baku", label: "Stok Bahan Baku" },
   { id: "kartu-pengiriman", label: "Kartu Pengiriman" },
@@ -272,6 +290,20 @@ export function LaporanShiftDetailView() {
     });
   }
 
+  // Computed once per render, shared by the Kartu Pengiriman section's
+  // per-card BBM total and the Kas section's own BBM breakdown, so the two
+  // never disagree on which BBM entries belong to which Jadwal.
+  const bbmByJadwal = detail ? groupBbmByJadwal(detail.bbm) : new Map<number, BbmShiftRow[]>();
+  // Sum of every stop's recorded payment (nominalBayar set whenever a real
+  // SalesPayment exists, regardless of whether its metode resolved -- see
+  // getKartuPengirimanUntukShift's payment-lookup comment) across this
+  // shift's Kartu Pengiriman -- added into Kas Masuk's total alongside the
+  // manual top-up, since customer payments collected mid-shift are cash in
+  // the driver's hand just like a top-up is.
+  const totalPembayaranPelanggan = detail
+    ? detail.kartuPengiriman.flatMap((k) => k.stops).reduce((sum, s) => sum + (s.nominalBayar ?? 0), 0)
+    : 0;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-2">
@@ -357,6 +389,10 @@ export function LaporanShiftDetailView() {
                 ) : (
                   detail.kartuPengiriman.map((k, index) => {
                   const expanded = isJadwalExpanded(k.jadwalId, index);
+                  const bbmTotalKartu = (bbmByJadwal.get(k.jadwalId) ?? []).reduce(
+                    (sum, b) => sum + (b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0),
+                    0
+                  );
                   return (
                     <div key={k.jadwalId} className="rounded-md border text-xs">
                       <button
@@ -374,6 +410,12 @@ export function LaporanShiftDetailView() {
                           <span className="font-medium">{formatJudulRute(k)}</span>
                           <span className="text-muted-foreground">
                             {k.vehicleNo ?? "-"} · {k.driverName ?? "-"}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {k.jarakKM != null ? `${k.jarakKM.toFixed(1)} km` : "Jarak -"} · {sumQtyKartu(k)} qty
+                            {bbmTotalKartu > 0 && (
+                              <> · BBM {formatRupiah(bbmTotalKartu)}{k.jenisBBM ? ` (${k.jenisBBM})` : ""}</>
+                            )}
                           </span>
                         </div>
                       </button>
@@ -410,16 +452,26 @@ export function LaporanShiftDetailView() {
                                 );
                               }
                               const s = item.stop;
+                              const totalHargaStop = sumHargaStop(s.items);
                               return (
                                 <div key={s.jadwalDetailId} className="flex flex-col gap-1 p-2">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="font-medium">{s.customerName}</span>
-                                    {s.nominalBayar != null && (
-                                      <span className="shrink-0 tabular-nums text-muted-foreground">{formatRupiah(s.nominalBayar)}</span>
-                                    )}
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={cn(
+                                        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                        s.jamTiba
+                                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                          : "bg-muted text-muted-foreground"
+                                      )}
+                                    >
+                                      {s.jamTiba ? formatTime(s.jamTiba) : "Belum tiba"}
+                                    </span>
+                                    <span className="min-w-0 flex-1 truncate font-medium">{s.customerName}</span>
                                   </div>
-                                  <p className="text-muted-foreground">Tiba: {s.jamTiba ? formatTime(s.jamTiba) : "Belum tiba"}</p>
-                                  <p className="text-muted-foreground">Kirim: {s.items.map((i2) => `${i2.itemName} x${i2.qty}`).join(", ")}</p>
+                                  <p className="text-muted-foreground">
+                                    Kirim: {s.items.map((i2) => `${i2.itemName} x${i2.qty}`).join(", ")}
+                                    {totalHargaStop > 0 && ` — ${formatRupiah(totalHargaStop)}`}
+                                  </p>
                                   {s.retur.length > 0 && (
                                     <div className="flex flex-col gap-0.5">
                                       {s.retur.map((r) => (
@@ -431,7 +483,7 @@ export function LaporanShiftDetailView() {
                                       ))}
                                     </div>
                                   )}
-                                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                  <div className="flex flex-col items-start gap-1.5">
                                     <span
                                       className={cn(
                                         "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
@@ -505,6 +557,16 @@ export function LaporanShiftDetailView() {
                   <span>Top-up Shift Ini</span>
                   <span className="font-medium tabular-nums">{formatRupiah(detail.kasKecil?.kasMasuk ?? 0)}</span>
                 </div>
+                {totalPembayaranPelanggan > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span>Pembayaran Pelanggan (Tunai/QRIS/Transfer)</span>
+                    <span className="font-medium tabular-nums">{formatRupiah(totalPembayaranPelanggan)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t pt-1 font-medium">
+                  <span>Total Kas Masuk</span>
+                  <span className="tabular-nums">{formatRupiah((detail.kasKecil?.kasMasuk ?? 0) + totalPembayaranPelanggan)}</span>
+                </div>
                 <div className="flex gap-1">
                   <Input
                     type="number"
@@ -530,7 +592,7 @@ export function LaporanShiftDetailView() {
                     {detail.bbm.length > 0 && (
                       <div className="flex flex-col gap-1.5">
                         <p className="font-medium text-foreground/70">Biaya BBM per Kartu Pengiriman</p>
-                        {[...groupBbmByJadwal(detail.bbm)].map(([jadwalId, rows]) => {
+                        {[...bbmByJadwal].map(([jadwalId, rows]) => {
                           const kartu = detail.kartuPengiriman.find((k) => k.jadwalId === jadwalId);
                           const totalJadwal = rows.reduce((sum, b) => sum + (b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0), 0);
                           return (

@@ -4,11 +4,13 @@ import { getResaleBreakdownUntukStopItems } from "@/lib/queries/retur-resale";
 import { getMetodePembayaranByKode } from "@/lib/queries/metode-pembayaran";
 import { haversineKm, type LatLng } from "@/lib/route-estimate";
 import { getPabrikLocation } from "@/lib/queries/pabrik-location";
+import type { FuelType } from "@/lib/armada-fuel";
 
 export interface KartuPengirimanItemRow {
   itemId: string;
   itemName: string;
   qty: number;
+  price: number;
 }
 export interface KartuPengirimanReturRow {
   itemId: string;
@@ -45,6 +47,8 @@ export interface KartuPengirimanRow {
   vehicleNo: string | null; // real plate when linked to ExpeditionDetail, else armada's own nickname
   jamSelesaiMuat: string; // ISO
   jamAktualBerangkat: string | null; // ISO, null if not yet departed
+  jarakKM: number | null; // DashboardPengirimanJadwal.JarakKM, null until resolved (real OSRM distance)
+  jenisBBM: FuelType | null; // this Jadwal's Armada's own fuel type -- constant per vehicle, not per BBM entry
   lokasiTerjauh: { wilayah: string; kecamatan: string | null } | null;
   stops: KartuPengirimanStopRow[]; // sorted by jamTiba ascending, not-yet-arrived stops last
   sisipan: KartuPengirimanSisipanEntry[]; // unsorted; caller interleaves by `waktu` against stops' jamTiba
@@ -129,7 +133,7 @@ export async function getKartuPengirimanUntukShift(
     .input("start", sql.DateTime, window.start)
     .input("end", sql.DateTime, window.end).query(`
       SELECT j.JadwalID, sm.Name AS DriverName, a.Nama AS ArmadaNama, j.JamSelesaiMuat, j.JamAktualBerangkat,
-             ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo
+             j.JarakKM, a.JenisBBM, ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo
       FROM DashboardPengirimanJadwal j
       LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
       LEFT JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
@@ -143,6 +147,8 @@ export async function getKartuPengirimanUntukShift(
     ArmadaNama: string | null;
     JamSelesaiMuat: Date;
     JamAktualBerangkat: Date | null;
+    JarakKM: number | null;
+    JenisBBM: FuelType | null;
     VehicleNo: string | null;
   }[];
   if (jadwalRows.length === 0) return [];
@@ -186,6 +192,8 @@ export async function getKartuPengirimanUntukShift(
       vehicleNo: j.VehicleNo,
       jamSelesaiMuat: j.JamSelesaiMuat.toISOString(),
       jamAktualBerangkat: j.JamAktualBerangkat ? j.JamAktualBerangkat.toISOString() : null,
+      jarakKM: j.JarakKM,
+      jenisBBM: j.JenisBBM,
       lokasiTerjauh: lokasiTerjauhMap.get(j.JadwalID) ?? null,
       stops: [],
       sisipan: sisipanMap.get(j.JadwalID) ?? [],
@@ -199,12 +207,12 @@ export async function getKartuPengirimanUntukShift(
     return `@so${i}`;
   });
   const itemResult = await soRequest.query(`
-    SELECT SalesOrderID, ItemID, Name, Qty FROM SalesOrderDetail WHERE SalesOrderID IN (${soPlaceholders.join(",")})
+    SELECT SalesOrderID, ItemID, Name, Qty, Price FROM SalesOrderDetail WHERE SalesOrderID IN (${soPlaceholders.join(",")})
   `);
   const itemsBySoId = new Map<string, KartuPengirimanItemRow[]>();
-  for (const r of itemResult.recordset as { SalesOrderID: string; ItemID: string; Name: string; Qty: number }[]) {
+  for (const r of itemResult.recordset as { SalesOrderID: string; ItemID: string; Name: string; Qty: number; Price: number }[]) {
     const list = itemsBySoId.get(r.SalesOrderID) ?? [];
-    list.push({ itemId: r.ItemID, itemName: r.Name, qty: r.Qty });
+    list.push({ itemId: r.ItemID, itemName: r.Name, qty: r.Qty, price: r.Price });
     itemsBySoId.set(r.SalesOrderID, list);
   }
 
@@ -330,6 +338,8 @@ export async function getKartuPengirimanUntukShift(
     vehicleNo: j.VehicleNo,
     jamSelesaiMuat: j.JamSelesaiMuat.toISOString(),
     jamAktualBerangkat: j.JamAktualBerangkat ? j.JamAktualBerangkat.toISOString() : null,
+    jarakKM: j.JarakKM,
+    jenisBBM: j.JenisBBM,
     lokasiTerjauh: lokasiTerjauhMap.get(j.JadwalID) ?? null,
     stops: stopsByJadwalId.get(j.JadwalID) ?? [],
     sisipan: sisipanMap.get(j.JadwalID) ?? [],

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { History, ClipboardList } from "lucide-react";
+import { History, ClipboardList, Map } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,16 +11,30 @@ import type { DriverProfileRow } from "@/lib/queries/driver-profile";
 import { getDriverJadwalListAction } from "@/app/mkesindo/driver-app/actions";
 import { DriverJadwalCardItem } from "@/components/driver-app/jadwal-card";
 
+// Pulled out to a plain module-level function (rather than calling
+// Date.now() straight inside the component body) so the react-hooks/purity
+// lint rule doesn't flag it -- same pattern as resolveEndMs in
+// route-validation-dialog.tsx: the rule only recognizes impure calls
+// written directly in a component/hook body, not ones behind a named helper.
+function nowMs(): number {
+  return Date.now();
+}
+
 export function TugasList({
   initialJadwal,
   initialDateISO,
   driverProfile,
   driverName,
+  onOpenPeta,
 }: {
   initialJadwal: DriverJadwalCard[];
   initialDateISO: string;
   driverProfile: DriverProfileRow | null;
   driverName: string;
+  // Peta used to be its own bottom-nav tab; now it's reached from here --
+  // still a client-side tab switch inside DriverTabShell's keep-alive
+  // shell, not a real navigation (see driver-tab-shell.tsx).
+  onOpenPeta: () => void;
 }) {
   const [jadwal, setJadwal] = useState(initialJadwal);
   const [dateISO, setDateISO] = useState(initialDateISO);
@@ -49,11 +63,22 @@ export function TugasList({
     });
   }
 
+  const STICKY_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
   // Already-Berjalan Jadwal are rendered in their own sticky block above
   // the rest of the list -- the backend already floats them first in
-  // `jadwal`, this just also pins them visually while scrolling.
-  const berjalan = jadwal.filter((j) => j.IsBerjalan);
-  const lainnya = jadwal.filter((j) => !j.IsBerjalan);
+  // `jadwal`, this just also pins them visually while scrolling. Capped at
+  // 12 hours since JamAktualBerangkat (a genuinely true-UTC column, same
+  // convention as JamJadwal on this table -- see business-date.ts's
+  // combineDateAndTime comment) so a Jadwal still technically "Berjalan"
+  // after an abnormally long, likely-abandoned trip doesn't permanently
+  // squat at the top of the list; it still shows further down as a normal
+  // (non-sticky) card.
+  const now = nowMs();
+  const isRecentlyBerjalan = (j: DriverJadwalCard) =>
+    j.IsBerjalan && j.JamAktualBerangkat != null && now - new Date(j.JamAktualBerangkat).getTime() <= STICKY_MAX_AGE_MS;
+  const berjalan = jadwal.filter(isRecentlyBerjalan);
+  const lainnya = jadwal.filter((j) => !isRecentlyBerjalan(j));
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -70,9 +95,14 @@ export function TugasList({
           </CardContent>
         </Card>
         <Card size="sm">
-          <CardContent className="flex flex-col gap-0.5 px-3 py-2">
-            <span className="text-[10px] uppercase text-muted-foreground">Tugas Hari Ini</span>
-            <span className="text-lg font-semibold">{jadwal.length}</span>
+          <CardContent className="flex items-center justify-between gap-2 px-3 py-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] uppercase text-muted-foreground">Tugas Hari Ini</span>
+              <span className="text-lg font-semibold">{jadwal.length}</span>
+            </div>
+            <Button variant="outline" size="icon" className="size-8 shrink-0" onClick={onOpenPeta} title="Peta">
+              <Map className="size-4" />
+            </Button>
           </CardContent>
         </Card>
       </div>

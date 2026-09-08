@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { TugasList } from "@/components/driver-app/tugas-list";
 import { PetaOverviewMap } from "@/components/driver-app/peta-overview-map";
-import { DriverBottomNav } from "@/components/driver-app/bottom-nav";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import {
@@ -49,10 +48,13 @@ const TAB_PATHS: Record<DriverTabKey, string> = {
 // history.replaceState only, so the browser's address bar/back button still
 // reflect the active tab without triggering any navigation.
 //
-// Only 2 tabs now (Tugas, Peta) — Riwayat and Profil are no longer
-// bottom-nav tabs: Riwayat is a plain drill-down route reached via a button
-// on the Tugas screen (see riwayat/page.tsx, riwayat-view.tsx), and Profil
-// is now an inline panel inside the Tugas screen itself (tugas-list.tsx).
+// Only 2 tabs now (Tugas, Peta), and neither has a persistent bottom-nav
+// button anymore — Peta is reached via a button inside the Tugas screen's
+// own "Tugas Hari Ini" card (tugas-list.tsx) and returned from via a back
+// arrow in this shell's own header (see the header JSX below), Riwayat is a
+// plain drill-down route reached via a button on the Tugas screen (see
+// riwayat/page.tsx, riwayat-view.tsx), and Profil is an inline panel inside
+// the Tugas screen itself (tugas-list.tsx).
 export function DriverTabShell({
   initialTab,
   driverName,
@@ -171,11 +173,27 @@ export function DriverTabShell({
 
   return (
     <div className="flex h-dvh flex-col bg-background">
-      {/* No border/divider under the header, deliberately -- just the
-          account button + theme toggle floated to the top-right corner. */}
-      <header className="flex items-center justify-end gap-1 px-3 py-2">
-        <AppearanceMenu />
-        <UserMenu name={driverName} profile={null} />
+      {/* No border/divider under the header, deliberately -- the account
+          button + theme toggle stay floated to the top-right corner; a back
+          arrow appears at the top-left only while on Peta (its one way back
+          to Tugas now that there's no persistent bottom nav). */}
+      <header className="flex items-center justify-between gap-1 px-3 py-2">
+        {activeTab === "peta" ? (
+          <button
+            type="button"
+            onClick={() => handleChangeTab("tugas")}
+            aria-label="Kembali ke Tugas"
+            className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-1">
+          <AppearanceMenu />
+          <UserMenu name={driverName} profile={null} />
+        </div>
       </header>
       <div className="relative min-h-0 flex-1">
         {loadingTab && (
@@ -191,7 +209,13 @@ export function DriverTabShell({
 
         {visited.has("tugas") && tugas && driverProfile !== undefined && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "tugas" && "hidden")}>
-            <TugasList initialJadwal={tugas.jadwal} initialDateISO={tugas.dateISO} driverProfile={driverProfile} driverName={driverName} />
+            <TugasList
+              initialJadwal={tugas.jadwal}
+              initialDateISO={tugas.dateISO}
+              driverProfile={driverProfile}
+              driverName={driverName}
+              onOpenPeta={() => handleChangeTab("peta")}
+            />
           </div>
         )}
         {visited.has("peta") && peta && (
@@ -200,7 +224,6 @@ export function DriverTabShell({
           </div>
         )}
       </div>
-      <DriverBottomNav activeTab={activeTab} onChange={handleChangeTab} />
     </div>
   );
 }

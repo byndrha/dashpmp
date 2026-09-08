@@ -147,6 +147,11 @@ export function KonfirKirimStep({
           };
         })
       );
+      // Brief pause so the success checkmark (PhotoStatusOverlay) is
+      // actually visible before this screen unmounts -- without it, the
+      // last file's status flips to "success" and onNext navigates away in
+      // the same tick, so the driver never sees the confirmation.
+      await new Promise((resolve) => setTimeout(resolve, 600));
       onNext({ items: resultItems, fotoBuktiUrls, tanpaPembayaran });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengunggah foto.");
