@@ -2,7 +2,7 @@
 // Pengiriman" feature -- idempotent, safe to re-run.
 // Usage: npx tsx scripts/create-retur-resale-schema.ts
 import "dotenv/config";
-import { getPool } from "../src/lib/db";
+import { getPool, sql } from "../src/lib/db";
 
 async function main() {
   const pool = await getPool();
@@ -42,19 +42,35 @@ async function main() {
   // of this script assumed. BusinessPartnerID is the only NOT NULL column;
   // everything else (including Name, IsDeleted, Gender, SalesmanID) is
   // nullable. Column list below reflects the actual schema.
+  //
+  // FIX 2026-09-08: originally seeded with the literal ID 'RETAILRETURN'
+  // (a non-numeric string), which broke FINAC ERP's own Search Delivery
+  // Order screen the moment a SalesOrder/DeliveryOrder/SalesInvoice carried
+  // it -- every BusinessPartnerID in this schema is, by strict live-verified
+  // convention, a pure-numeric string (same as nextBusinessPartnerId in
+  // mitra.ts: MAX(TRY_CAST(BusinessPartnerID AS INT))+1), and FINAC's own
+  // internal queries rely on that same convention. The bad row + its 3
+  // referencing documents were migrated live to numeric ID "1856" (see
+  // RETAIL_RETURN_BP_ID in src/lib/queries/retur-resale.ts) via a one-off
+  // script, since deleted. This check now looks up that fixed numeric ID
+  // instead, and never re-seeds the old non-numeric literal.
+  const RETAIL_RETURN_BP_ID = "1856";
   const existing = await pool
     .request()
-    .query(`SELECT BusinessPartnerID FROM BusinessPartner WHERE BusinessPartnerID = 'RETAILRETURN'`);
+    .input("id", sql.VarChar(16), RETAIL_RETURN_BP_ID)
+    .query(`SELECT BusinessPartnerID FROM BusinessPartner WHERE BusinessPartnerID = @id`);
   if (existing.recordset.length === 0) {
-    await pool.request().query(`
+    await pool
+      .request()
+      .input("id", sql.VarChar(16), RETAIL_RETURN_BP_ID).query(`
       INSERT INTO BusinessPartner
         (BusinessPartnerID, Name, IsDeleted, Gender, SalesmanID)
       VALUES
-        ('RETAILRETURN', 'Retail Return', 0, 'Other', NULL)
+        (@id, 'Retail Return', 0, 'Other', NULL)
     `);
-    console.log("BusinessPartner 'RETAILRETURN' seeded.");
+    console.log(`BusinessPartner '${RETAIL_RETURN_BP_ID}' seeded.`);
   } else {
-    console.log("BusinessPartner 'RETAILRETURN' already exists, skipped.");
+    console.log(`BusinessPartner '${RETAIL_RETURN_BP_ID}' already exists, skipped.`);
   }
 
   process.exit(0);

@@ -588,13 +588,33 @@ export async function jualUlangLuarRute(
 }
 
 // Jalur (c): jual ulang ke pembeli walk-up tanpa akun mitra di sistem --
-// selalu dibukukan ke BusinessPartner 'RETAILRETURN' (Task 1: baris minimal,
+// selalu dibukukan ke BusinessPartner ID "1856" (Task 1: baris minimal,
 // hanya BusinessPartnerID/Name/IsDeleted/Gender terisi -- lihat komentar di
 // bawah kenapa itu tidak masalah untuk jalur ini) dengan harga FIXED per
 // varian kantong (bukan Price Level, mitra ini tidak punya satu pun), dan
 // WAJIB merekam lokasi (LokasiLat/LokasiLng) karena tidak ada jejak identitas
 // pembeli lain yang bisa dipakai audit di kemudian hari.
-const RETAIL_RETURN_BP_ID = "RETAILRETURN";
+//
+// FIX 2026-09-08: BusinessPartnerID awalnya literal string 'RETAILRETURN'
+// (huruf), yang melanggar konvensi tak-tertulis tapi UNIVERSAL di skema ERP
+// ini -- setiap ID dokumen (SalesOrderID, DeliveryOrderID, SalesInvoiceID,
+// dan BusinessPartnerID sendiri lewat nextBusinessPartnerId di mitra.ts)
+// SELALU berupa string angka murni, dialokasikan via
+// MAX(TRY_CAST(id AS INT))+1. FINAC ERP client (compiled .exe, tanpa source)
+// ternyata mengandalkan konvensi yang sama secara internal: layar Search
+// Delivery Order-nya (dibuka saat membuat Sales Invoice) mem-build lookup
+// lewat MIT.Utility.GetObjects yang men-convert BusinessPartnerID ke INT --
+// begitu ada dokumen SO/DO/SI dengan BusinessPartnerID='RETAILRETURN', FINAC
+// crash dengan "Conversion failed when converting the varchar value
+// 'RETAILRETURN' to data type int." saat form itu dibuka. Diperbaiki via
+// migrasi satu kali (scripts/_fix-retailreturn-bpid.ts, sudah dijalankan
+// dan dihapus) yang memindahkan BusinessPartner + 1 SalesOrder + 1
+// DeliveryOrder + 1 SalesInvoice yang sudah terlanjur dibuat ke ID numerik
+// "1856" (MAX(TRY_CAST(BusinessPartnerID AS INT)) di BusinessPartner saat
+// itu = 1855) -- dikonfirmasi live sebagai satu-satunya BusinessPartnerID
+// non-numerik di seluruh tabel BusinessPartner, dan satu-satunya referensi
+// di antara 55 tabel ERP yang punya kolom BusinessPartnerID.
+const RETAIL_RETURN_BP_ID = "1856";
 const HARGA_RETAIL_RETURN_10KG = 8000;
 const HARGA_RETAIL_RETURN_5KG = 6000;
 
@@ -626,7 +646,7 @@ export async function jualUlangRetail(
     // alih-alih menebak/duplikasi string ItemID di sini secara manual.
     const hargaFixed = claim.itemId === KANTONG_ITEM_ID ? HARGA_RETAIL_RETURN_10KG : HARGA_RETAIL_RETURN_5KG;
 
-    // BusinessPartner 'RETAILRETURN' punya GroupBusinessPartner/
+    // BusinessPartner "1856" (Retail Return) punya GroupBusinessPartner/
     // AccountReceivableID/TermOfPaymentID/PriceLevel semua NULL (Task 1) --
     // tidak masalah di sini karena buatSoDoSiSekaligus TIDAK PERNAH membaca
     // kolom-kolom itu dari BusinessPartner sama sekali: TermOfPaymentID pada
@@ -635,7 +655,8 @@ export async function jualUlangRetail(
     // createSalesOrderManual), dan harga di jalur ini adalah hargaFixed di
     // atas, bukan dari BusinessPartner.PriceLevel. BusinessPartnerID sendiri
     // satu-satunya kolom NOT NULL pada tabel BusinessPartner (lihat
-    // create-retur-resale-schema.ts) dan sudah terisi 'RETAILRETURN'.
+    // create-retur-resale-schema.ts) dan sudah terisi ID numerik ini (lihat
+    // RETAIL_RETURN_BP_ID di atas untuk kenapa harus numerik).
     const { salesOrderId } = await buatSoDoSiSekaligus(transaction, {
       businessPartnerId: RETAIL_RETURN_BP_ID,
       itemId: claim.itemId,
