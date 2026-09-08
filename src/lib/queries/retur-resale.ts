@@ -588,7 +588,7 @@ export async function jualUlangLuarRute(
 }
 
 // Jalur (c): jual ulang ke pembeli walk-up tanpa akun mitra di sistem --
-// selalu dibukukan ke BusinessPartner ID "1856" (Task 1: baris minimal,
+// selalu dibukukan ke BusinessPartner ID "01856" (Task 1: baris minimal,
 // hanya BusinessPartnerID/Name/IsDeleted/Gender terisi -- lihat komentar di
 // bawah kenapa itu tidak masalah untuk jalur ini) dengan harga FIXED per
 // varian kantong (bukan Price Level, mitra ini tidak punya satu pun), dan
@@ -610,11 +610,11 @@ export async function jualUlangLuarRute(
 // migrasi satu kali (scripts/_fix-retailreturn-bpid.ts, sudah dijalankan
 // dan dihapus) yang memindahkan BusinessPartner + 1 SalesOrder + 1
 // DeliveryOrder + 1 SalesInvoice yang sudah terlanjur dibuat ke ID numerik
-// "1856" (MAX(TRY_CAST(BusinessPartnerID AS INT)) di BusinessPartner saat
+// "01856" (MAX(TRY_CAST(BusinessPartnerID AS INT)) di BusinessPartner saat
 // itu = 1855) -- dikonfirmasi live sebagai satu-satunya BusinessPartnerID
 // non-numerik di seluruh tabel BusinessPartner, dan satu-satunya referensi
 // di antara 55 tabel ERP yang punya kolom BusinessPartnerID.
-const RETAIL_RETURN_BP_ID = "1856";
+const RETAIL_RETURN_BP_ID = "01856";
 const HARGA_RETAIL_RETURN_10KG = 8000;
 const HARGA_RETAIL_RETURN_5KG = 6000;
 
@@ -646,7 +646,7 @@ export async function jualUlangRetail(
     // alih-alih menebak/duplikasi string ItemID di sini secara manual.
     const hargaFixed = claim.itemId === KANTONG_ITEM_ID ? HARGA_RETAIL_RETURN_10KG : HARGA_RETAIL_RETURN_5KG;
 
-    // BusinessPartner "1856" (Retail Return) punya GroupBusinessPartner/
+    // BusinessPartner "01856" (Retail Return) punya GroupBusinessPartner/
     // AccountReceivableID/TermOfPaymentID/PriceLevel semua NULL (Task 1) --
     // tidak masalah di sini karena buatSoDoSiSekaligus TIDAK PERNAH membaca
     // kolom-kolom itu dari BusinessPartner sama sekali: TermOfPaymentID pada

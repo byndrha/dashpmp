@@ -50,11 +50,11 @@ async function main() {
   // convention, a pure-numeric string (same as nextBusinessPartnerId in
   // mitra.ts: MAX(TRY_CAST(BusinessPartnerID AS INT))+1), and FINAC's own
   // internal queries rely on that same convention. The bad row + its 3
-  // referencing documents were migrated live to numeric ID "1856" (see
+  // referencing documents were migrated live to numeric ID "01856" (see
   // RETAIL_RETURN_BP_ID in src/lib/queries/retur-resale.ts) via a one-off
   // script, since deleted. This check now looks up that fixed numeric ID
   // instead, and never re-seeds the old non-numeric literal.
-  const RETAIL_RETURN_BP_ID = "1856";
+  const RETAIL_RETURN_BP_ID = "01856";
   const existing = await pool
     .request()
     .input("id", sql.VarChar(16), RETAIL_RETURN_BP_ID)
