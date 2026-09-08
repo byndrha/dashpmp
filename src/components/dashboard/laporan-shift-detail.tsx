@@ -389,10 +389,9 @@ export function LaporanShiftDetailView() {
                 ) : (
                   detail.kartuPengiriman.map((k, index) => {
                   const expanded = isJadwalExpanded(k.jadwalId, index);
-                  const bbmTotalKartu = (bbmByJadwal.get(k.jadwalId) ?? []).reduce(
-                    (sum, b) => sum + (b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0),
-                    0
-                  );
+                  const bbmRowsKartu = bbmByJadwal.get(k.jadwalId) ?? [];
+                  const bbmTotalKartu = bbmRowsKartu.reduce((sum, b) => sum + (b.nominalAsli ?? 0) + (b.nominalEkstra ?? 0), 0);
+                  const bbmTotalLiterKartu = bbmRowsKartu.reduce((sum, b) => sum + (b.liter ?? 0), 0);
                   return (
                     <div key={k.jadwalId} className="rounded-md border text-xs">
                       <button
@@ -406,17 +405,25 @@ export function LaporanShiftDetailView() {
                         ) : (
                           <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                         )}
-                        <div className="flex flex-col">
-                          <span className="font-medium">{formatJudulRute(k)}</span>
-                          <span className="text-muted-foreground">
-                            {k.vehicleNo ?? "-"} · {k.driverName ?? "-"}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {k.jarakKM != null ? `${k.jarakKM.toFixed(1)} km` : "Jarak -"} · {sumQtyKartu(k)} qty
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          {/* Baris 1: [jam berangkat] - lokasi terjauh ........ total qty */}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 truncate font-medium">{formatJudulRute(k)}</span>
+                            <span className="shrink-0 whitespace-nowrap text-muted-foreground">{sumQtyKartu(k)} qty</span>
+                          </div>
+                          {/* Baris 2: plat · driver ........ liter (jenis BBM) nominal */}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 truncate text-muted-foreground">
+                              {k.vehicleNo ?? "-"} · {k.driverName ?? "-"}
+                            </span>
                             {bbmTotalKartu > 0 && (
-                              <> · BBM {formatRupiah(bbmTotalKartu)}{k.jenisBBM ? ` (${k.jenisBBM})` : ""}</>
+                              <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+                                {bbmTotalLiterKartu > 0 && `${bbmTotalLiterKartu.toLocaleString("id-ID", { maximumFractionDigits: 2 })} L `}
+                                {k.jenisBBM && `(${k.jenisBBM}) `}
+                                {formatRupiah(bbmTotalKartu)}
+                              </span>
                             )}
-                          </span>
+                          </div>
                         </div>
                       </button>
                       {expanded && (
@@ -455,23 +462,51 @@ export function LaporanShiftDetailView() {
                               const totalHargaStop = sumHargaStop(s.items);
                               return (
                                 <div key={s.jadwalDetailId} className="flex flex-col gap-1 p-2">
-                                  <div className="flex items-center gap-2">
+                                  {/* Baris 1: [status tiba] Nama Tujuan ........ [status bayar] */}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="flex min-w-0 items-center gap-1.5">
+                                      <span
+                                        className={cn(
+                                          "shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                          s.jamTiba
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                            : "bg-muted text-muted-foreground"
+                                        )}
+                                      >
+                                        {s.jamTiba ? formatTime(s.jamTiba) : "Belum Tiba"}
+                                      </span>
+                                      <span className="min-w-0 truncate font-medium">{s.customerName}</span>
+                                    </span>
                                     <span
                                       className={cn(
-                                        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                                        s.jamTiba
-                                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                          : "bg-muted text-muted-foreground"
+                                        "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                        STATUS_BADGE_CLASS[s.statusBayar]
                                       )}
                                     >
-                                      {s.jamTiba ? formatTime(s.jamTiba) : "Belum tiba"}
+                                      {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
+                                        ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
+                                        : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
                                     </span>
-                                    <span className="min-w-0 flex-1 truncate font-medium">{s.customerName}</span>
                                   </div>
-                                  <p className="text-muted-foreground">
-                                    Kirim: {s.items.map((i2) => `${i2.itemName} x${i2.qty}`).join(", ")}
-                                    {totalHargaStop > 0 && ` — ${formatRupiah(totalHargaStop)}`}
-                                  </p>
+                                  {/* Baris 2: item x qty — harga ........ [Catat Pembayaran] */}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="min-w-0 truncate text-muted-foreground">
+                                      {s.items.map((i2) => `${i2.itemName} x${i2.qty}`).join(", ")}
+                                      {totalHargaStop > 0 && ` — ${formatRupiah(totalHargaStop)}`}
+                                    </p>
+                                    {s.statusBayar === "BELUM_BAYAR" && (
+                                      <Button
+                                        size="xs"
+                                        variant="outline"
+                                        className="shrink-0"
+                                        onClick={() =>
+                                          setPelunasanTarget({ businessPartnerId: s.businessPartnerId, customerName: s.customerName })
+                                        }
+                                      >
+                                        Catat Pembayaran
+                                      </Button>
+                                    )}
+                                  </div>
                                   {s.retur.length > 0 && (
                                     <div className="flex flex-col gap-0.5">
                                       {s.retur.map((r) => (
@@ -483,29 +518,6 @@ export function LaporanShiftDetailView() {
                                       ))}
                                     </div>
                                   )}
-                                  <div className="flex flex-col items-start gap-1.5">
-                                    <span
-                                      className={cn(
-                                        "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
-                                        STATUS_BADGE_CLASS[s.statusBayar]
-                                      )}
-                                    >
-                                      {s.statusBayar === "BELUM_BAYAR" && s.nominalBayar != null
-                                        ? `Dibayar (metode belum tercatat) — ${formatRupiah(s.nominalBayar)}`
-                                        : `${STATUS_BAYAR_LABEL[s.statusBayar]}${s.nominalBayar != null ? ` — ${formatRupiah(s.nominalBayar)}` : ""}`}
-                                    </span>
-                                    {s.statusBayar === "BELUM_BAYAR" && (
-                                      <Button
-                                        size="xs"
-                                        variant="outline"
-                                        onClick={() =>
-                                          setPelunasanTarget({ businessPartnerId: s.businessPartnerId, customerName: s.customerName })
-                                        }
-                                      >
-                                        Catat Pembayaran
-                                      </Button>
-                                    )}
-                                  </div>
                                 </div>
                               );
                             })
