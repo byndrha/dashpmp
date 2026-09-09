@@ -4,7 +4,7 @@ import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerS
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Plus, Wrench, User, Combine } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Wrench, User, Combine, Share2, ChevronDown, Loader2, Image as ImageIcon, List } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,13 +20,20 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ArmadaManager, ArmadaFormDialog, STATUS_BADGE, rowToForm } from "@/components/dashboard/armada-dialog";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { DriverManager } from "@/components/dashboard/driver-manager";
-import { RouteValidationDialog } from "@/components/dashboard/route-validation-dialog";
+import { RouteValidationDialog, type RouteValidationDialogHandle } from "@/components/dashboard/route-validation-dialog";
 import { PrintQueuePoller } from "@/components/dashboard/print-queue-poller";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime, formatTimeWib, formatKemasanQty } from "@/lib/format";
+import { mergeImagesVertically, shareImageBlob, shareTextBlock } from "@/lib/share-image";
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime, naiveWibTransDateToUtcInstant } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
@@ -1454,6 +1461,13 @@ export function PengirimanBoard({
   const [isPending, startTransition] = useTransition();
   const isToday = businessDate === todayISO;
   const [detailJadwalId, setDetailJadwalId] = useState<number | null>(null);
+  // Drives RouteValidationDialog through every Terbit Jadwal in turn for
+  // the batch "Bagikan Semua Rute" toolbar button — see its own handler
+  // below and RouteValidationDialogHandle's comment for why a plain
+  // detailJadwalId swap alone isn't enough to know when each route is
+  // actually ready to capture.
+  const routeDialogRef = useRef<RouteValidationDialogHandle>(null);
+  const [batchSharing, setBatchSharing] = useState<{ current: number; total: number } | null>(null);
   const [createArmadaId, setCreateArmadaId] = useState<number | null>(null);
   const [createActivityArmadaId, setCreateActivityArmadaId] = useState<number | null>(null);
   const [editingActivity, setEditingActivity] = useState<ArmadaActivity | null>(null);
@@ -1576,6 +1590,76 @@ export function PengirimanBoard({
   const openArmada = openJadwal ? armada.find((a) => a.ArmadaID === openJadwal.ArmadaID) : null;
   const createArmada = createArmadaId != null ? armada.find((a) => a.ArmadaID === createArmadaId) : null;
 
+  // Batch "Bagikan Semua Rute" — drives the single RouteValidationDialog
+  // instance through every Terbit Jadwal for this businessDate in turn
+  // (Draft/"Parkir" cards skipped: no confirmed route to validate yet),
+  // reusing whatever share content each one would produce manually.
+  // Per explicit spec: the result is always ONE shared file, never one per
+  // route — "seluruhnya"/"data" stack every route's screenshot into a
+  // single tall image (mergeImagesVertically), "detail" concatenates every
+  // route's plain-text stop list into one text block.
+  async function handleBagikanSemuaRute(mode: "seluruhnya" | "detail" | "data") {
+    if (batchSharing) return;
+    if (detailJadwalId != null) {
+      toast.error("Tutup dulu Validasi Rute yang sedang terbuka.");
+      return;
+    }
+    const targets = [...jadwal]
+      .filter((j) => j.Status === "Terbit")
+      .sort((a, b) => new Date(a.JamJadwal).getTime() - new Date(b.JamJadwal).getTime());
+    if (targets.length === 0) {
+      toast.error("Tidak ada rute Terbit untuk dibagikan pada tanggal ini.");
+      return;
+    }
+
+    const imageParts: { label: string; blob: Blob }[] = [];
+    const textParts: string[] = [];
+    setBatchSharing({ current: 0, total: targets.length });
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const j = targets[i];
+        setBatchSharing({ current: i + 1, total: targets.length });
+        setDetailJadwalId(j.JadwalID);
+        // Lets React commit the prop swap so RouteValidationDialog's own
+        // jadwalId-keyed effect actually starts fetching this route's
+        // detail before captureForBatch/getTextForBatch starts polling it.
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        if (!routeDialogRef.current) continue;
+        const armadaLabel = armada.find((a) => a.ArmadaID === j.ArmadaID)?.Nama ?? "Armada";
+        const label = `${armadaLabel} · ${formatTime(j.JamAktualBerangkat ?? j.JamJadwal)}`;
+        if (mode === "detail") {
+          const text = await routeDialogRef.current.getTextForBatch(j.JadwalID);
+          if (text) textParts.push(text);
+        } else {
+          const blob = await routeDialogRef.current.captureForBatch(j.JadwalID, mode);
+          if (blob) imageParts.push({ label, blob });
+        }
+      }
+    } finally {
+      setDetailJadwalId(null);
+      setBatchSharing(null);
+    }
+
+    if (mode === "detail") {
+      if (textParts.length === 0) {
+        toast.error("Tidak ada rute yang berhasil diproses.");
+        return;
+      }
+      await shareTextBlock(textParts.join("\n\n———\n\n"), `Detail Rute — ${formatDate(businessDate)}`);
+      return;
+    }
+    if (imageParts.length === 0) {
+      toast.error("Tidak ada rute yang berhasil diproses.");
+      return;
+    }
+    try {
+      const merged = await mergeImagesVertically(imageParts);
+      await shareImageBlob(merged, `validasi-rute-${businessDate}.png`, `Validasi Rute — ${formatDate(businessDate)}`);
+    } catch {
+      toast.error("Gagal menggabungkan screenshot rute.");
+    }
+  }
+
   function goToDate(newDate: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("pengirimanDate", newDate);
@@ -1685,6 +1769,27 @@ export function PengirimanBoard({
           <div className="flex flex-wrap items-center gap-2">
             <PrintQueuePoller />
             <ArmadaManager armada={armada} expeditionOptions={expeditionOptions} />
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1.5" disabled={batchSharing != null} />}>
+                {batchSharing ? <Loader2 className="size-3.5 animate-spin" /> : <Share2 className="size-3.5" />}
+                {batchSharing ? `Memproses ${batchSharing.current}/${batchSharing.total}...` : "Bagikan Semua Rute"}
+                {!batchSharing && <ChevronDown className="size-3 opacity-60" />}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => handleBagikanSemuaRute("seluruhnya")}>
+                  <ImageIcon className="size-4" />
+                  Seluruhnya
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBagikanSemuaRute("detail")}>
+                  <List className="size-4" />
+                  Detail Rute
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBagikanSemuaRute("data")}>
+                  <ImageIcon className="size-4" />
+                  Data Rute
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <DriverManager drivers={driverProfiles} />
             <div className="flex items-center gap-1">
               <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
@@ -1807,6 +1912,7 @@ export function PengirimanBoard({
       </CardContent>
 
       <RouteValidationDialog
+        ref={routeDialogRef}
         jadwal={openJadwal}
         businessDate={businessDate}
         todayISO={todayISO}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, useTransition } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -67,6 +67,7 @@ import {
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
+import { shareImageBlob, shareTextBlock } from "@/lib/share-image";
 
 const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((m) => m.RouteMap), {
   ssr: false,
@@ -213,24 +214,25 @@ function SortableStopRow({
   );
 }
 
-export function RouteValidationDialog({
-  jadwal,
-  businessDate,
-  todayISO,
-  drivers,
-  armadaId,
-  armadaNama,
-  armadaPlat,
-  konsumsiBBM,
-  kapasitasMaks,
-  jenisBBM,
-  biayaBBMPerLiter,
-  isSatpam,
-  onOpenChange,
-  onDeleted,
-  onEditSalesOrder,
-  salesOrderEditSignal,
-}: {
+// Imperative API exposed via ref, used only by pengiriman-board.tsx's batch
+// "Bagikan Semua Rute" — it drives this single persistent dialog through
+// every route in turn (by changing which Jadwal's data the `jadwal` prop
+// resolves to) and needs a way to know when THIS Jadwal's async detail fetch
+// has actually landed before capturing/reading it, since a plain prop swap
+// gives no such signal. The manual single-route Bagikan flow doesn't need
+// this at all — it only ever runs once the dialog is already open and idle.
+export interface RouteValidationDialogHandle {
+  // Waits for targetJadwalId's data to finish loading (or times out), then
+  // captures per mode — "data" hides the map first, same as the manual
+  // "Data Rute" share. Returns null on timeout or if the dialog moved on to
+  // a different Jadwal before the wait resolved.
+  captureForBatch(targetJadwalId: number, mode: "seluruhnya" | "data"): Promise<Blob | null>;
+  // Same readiness wait, then returns the plain-text stop list (manual
+  // "Detail Rute" content) for targetJadwalId.
+  getTextForBatch(targetJadwalId: number): Promise<string | null>;
+}
+
+interface RouteValidationDialogProps {
   jadwal: JadwalCardData | null;
   businessDate: string;
   todayISO: string;
@@ -277,7 +279,30 @@ export function RouteValidationDialog({
   // needs an explicit nudge to refetch `order` rather than staying stale
   // until the whole dialog is closed and reopened.
   salesOrderEditSignal: number;
-}) {
+}
+
+export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, RouteValidationDialogProps>(
+  function RouteValidationDialog(
+    {
+      jadwal,
+      businessDate,
+      todayISO,
+      drivers,
+      armadaId,
+      armadaNama,
+      armadaPlat,
+      konsumsiBBM,
+      kapasitasMaks,
+      jenisBBM,
+      biayaBBMPerLiter,
+      isSatpam,
+      onOpenChange,
+      onDeleted,
+      onEditSalesOrder,
+      salesOrderEditSignal,
+    },
+    ref
+  ) {
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<DriverStopRow[]>([]);
   const [vehicleChecks, setVehicleChecks] = useState<VehicleCheckRow[]>([]);
@@ -363,6 +388,12 @@ export function RouteValidationDialog({
   // them would change business behavior, not just avoid a stale paint.
   const jadwalIdRef = useRef<number | null>(jadwalId);
   jadwalIdRef.current = jadwalId;
+  // Mirrors `loading` into a ref for the same reason jadwalIdRef exists —
+  // captureForBatch/getTextForBatch (exposed below) poll this from an async
+  // loop that outlives any single render, so it needs the live value rather
+  // than whatever `loading` this closure happened to capture at call time.
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const totalQty = useMemo(() => order.reduce((sum, o) => sum + o.Qty, 0), [order]);
   const totalBonusQty = useMemo(() => order.reduce((sum, o) => sum + o.BonusQty, 0), [order]);
@@ -1014,48 +1045,6 @@ export function RouteValidationDialog({
     }
   }
 
-  async function shareImageBlob(blob: Blob, filename: string, title: string): Promise<void> {
-    const file = new File([blob], filename, { type: "image/png" });
-
-    // Copy to clipboard FIRST, before calling share() — both APIs need a
-    // live user-activation gesture, and awaiting the OS share sheet can
-    // take arbitrarily long (or hand off to another app entirely), which
-    // risks the activation expiring before a clipboard write attempted
-    // afterward. Doing it up front also means it still happens even when
-    // the user cancels the share sheet, or shares to an app that can't
-    // receive the image directly.
-    let copied = false;
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      copied = true;
-    } catch {
-      // Clipboard image write isn't universally supported (e.g. Firefox) —
-      // proceed to share/download regardless.
-    }
-
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title });
-      } catch {
-        // User cancelled the share sheet — not an error worth surfacing.
-      }
-      if (copied) toast.success("Gambar disalin ke clipboard.");
-      return;
-    }
-
-    if (copied) {
-      toast.success("Gambar disalin ke clipboard.");
-      return;
-    }
-    // Final fallback when neither share nor clipboard write is available.
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   async function handleShareSeluruhnya() {
     const blob = await captureDialogImage();
     if (blob) await shareImageBlob(blob, "validasi-rute.png", "Validasi Rute");
@@ -1064,52 +1053,67 @@ export function RouteValidationDialog({
   async function handleShareDetailRute() {
     const text = buildStopListText();
     if (!text) return;
-
-    // Same ordering rationale as shareImageBlob: copy first, before
-    // calling share(), so it isn't lost to a user-activation timeout while
-    // the OS share sheet is open, and still happens if the user cancels it.
-    let copied = false;
-    try {
-      await navigator.clipboard.writeText(text);
-      copied = true;
-    } catch {
-      // Proceed to share regardless.
-    }
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Detail Rute", text });
-      } catch {
-        // User cancelled the share sheet — not an error worth surfacing.
-      }
-      if (copied) toast.success("Detail rute disalin ke clipboard.");
-      return;
-    }
-
-    if (copied) {
-      toast.success("Detail rute disalin ke clipboard.");
-    } else {
-      toast.error("Gagal menyalin detail rute.");
-    }
+    await shareTextBlock(text, "Detail Rute");
   }
 
-  async function handleShareDataRute() {
-    // Reuses the same map-hiding layout the dialog already has (see
-    // showMap) instead of a separate capture-time DOM filter — guarantees
-    // the config panel reflows to full width exactly like the user-facing
-    // "no map" layout already does, with no leftover gap where the map was.
+  // Reuses the same map-hiding layout the dialog already has (see showMap)
+  // instead of a separate capture-time DOM filter — guarantees the config
+  // panel reflows to full width exactly like the user-facing "no map"
+  // layout already does, with no leftover gap where the map was. Split out
+  // from handleShareDataRute (which just shares whatever this returns) so
+  // captureForBatch below can reuse the same hide-map-then-capture step
+  // without also triggering a share on every route in a batch.
+  async function captureDataRuteImage(): Promise<Blob | null> {
     const wasShowingMap = showMap;
     if (wasShowingMap) {
       setShowMap(false);
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     }
     try {
-      const blob = await captureDialogImage();
-      if (blob) await shareImageBlob(blob, "data-rute.png", "Data Rute");
+      return await captureDialogImage();
     } finally {
       if (wasShowingMap) setShowMap(true);
     }
   }
+
+  async function handleShareDataRute() {
+    const blob = await captureDataRuteImage();
+    if (blob) await shareImageBlob(blob, "data-rute.png", "Data Rute");
+  }
+
+  // Polls jadwalIdRef/loadingRef (both refs, always current regardless of
+  // which render this closure was called from) until targetJadwalId's
+  // detail fetch has landed, or 10s pass — the effect that flips `loading`
+  // false is keyed on jadwalId (see the big effect above), so once this
+  // resolves true, `order`/`jadwal` in THIS render are safe to read for
+  // that target. Used only by captureForBatch/getTextForBatch below.
+  async function waitUntilReadyForBatch(targetJadwalId: number, timeoutMs = 10000): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (jadwalIdRef.current === targetJadwalId && !loadingRef.current) return true;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    return false;
+  }
+
+  // No deps array (deliberate): captureDialogImage/captureDataRuteImage/
+  // buildStopListText close over `order`/`jadwal`/`showMap`/etc. from
+  // whichever render defined them, so the exposed methods must be
+  // refreshed every render to avoid the batch caller ever reading stale
+  // (e.g. initial empty `order`) closures — see loadingRef's comment for
+  // why the readiness wait itself doesn't have this problem.
+  useImperativeHandle(ref, () => ({
+    async captureForBatch(targetJadwalId, mode) {
+      const ready = await waitUntilReadyForBatch(targetJadwalId);
+      if (!ready || jadwalIdRef.current !== targetJadwalId) return null;
+      return mode === "data" ? await captureDataRuteImage() : await captureDialogImage();
+    },
+    async getTextForBatch(targetJadwalId) {
+      const ready = await waitUntilReadyForBatch(targetJadwalId);
+      if (!ready || jadwalIdRef.current !== targetJadwalId) return null;
+      return buildStopListText();
+    },
+  }));
 
   return (
     <Dialog open={jadwalId != null} onOpenChange={onOpenChange}>
@@ -1579,4 +1583,6 @@ export function RouteValidationDialog({
       </DialogContent>
     </Dialog>
   );
-}
+  }
+);
+RouteValidationDialog.displayName = "RouteValidationDialog";
