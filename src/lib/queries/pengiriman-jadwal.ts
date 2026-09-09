@@ -65,6 +65,13 @@ export interface JadwalCard {
   JamAktualBerangkat: string | Date | null;
   Status: JadwalStatus;
   TotalKantong: number;
+  // Raw (un-halved) bag counts underlying TotalKantong — Qty10KG +
+  // Qty5KG/2 == TotalKantong, same JADWAL_KANTONG_10KG_EXPR/
+  // JADWAL_KANTONG_5KG_EXPR split already used elsewhere in this file (see
+  // getDriverJadwalList below). Added for the board header's "10KG/5KG
+  // terpisah" summary.
+  Qty10KG: number;
+  Qty5KG: number;
   // Renamed from TotalDO — during Draft this counts SO lines, not DO
   // documents (there are none yet). Same count either way since one SO
   // becomes exactly one DO, just a more accurate name.
@@ -123,6 +130,8 @@ export interface ExternalDelivery {
   TransDate: string | Date;
   ArmadaID: number;
   TotalKantong: number;
+  Qty10KG: number;
+  Qty5KG: number;
 }
 
 // A Takeaway (Ambil Sendiri) DeliveryOrder — no Armada, no Jadwal, picked up
@@ -197,6 +206,8 @@ export async function getPengirimanBoard(
             j.JamSelesaiMuat,
             j.Status,
             ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS TotalKantong,
+            ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
+            ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG,
             COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop,
             j.JarakKM,
             j.DurasiMenit,
@@ -244,7 +255,10 @@ export async function getPengirimanBoard(
             WHERE a.IsDeleted = 0
         ),
         DoQty AS (
-            SELECT DeliveryOrderID, SUM(CASE WHEN Name LIKE '%5 KG%' THEN Qty / 2.0 ELSE Qty END) AS TotalKantong
+            SELECT DeliveryOrderID,
+                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN Qty / 2.0 ELSE Qty END) AS TotalKantong,
+                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN 0 ELSE Qty END) AS Qty10KG,
+                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN Qty ELSE 0 END) AS Qty5KG
             FROM DeliveryOrderDetail
             GROUP BY DeliveryOrderID
         )
@@ -254,7 +268,9 @@ export async function getPengirimanBoard(
             ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName,
             do_.TransDate,
             vm.ArmadaID,
-            ISNULL(dq.TotalKantong, 0) AS TotalKantong
+            ISNULL(dq.TotalKantong, 0) AS TotalKantong,
+            ISNULL(dq.Qty10KG, 0) AS Qty10KG,
+            ISNULL(dq.Qty5KG, 0) AS Qty5KG
         FROM DeliveryOrder do_
         JOIN VehicleMap vm ON do_.VehicleNo <> '' AND (do_.VehicleNo = vm.Key1 OR do_.VehicleNo = vm.Key2 OR do_.VehicleNo = vm.Key3)
         LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID

@@ -539,6 +539,80 @@ function MergeExternalDialog({
   );
 }
 
+interface CardSegment {
+  label: string;
+  colorClass: string;
+  startPct: number;
+  widthPct: number;
+}
+
+const SEGMENT_COLOR: Record<string, string> = {
+  "Sedang Memuat": "bg-amber-500/70",
+  "Menunggu Keberangkatan": "bg-amber-300/50",
+  "Dalam Perjalanan": "bg-primary/40",
+  "Kembali ke Pabrik": "bg-emerald-500/60",
+};
+
+// Proportional-width status breakdown for one Terbit Jadwal's own card —
+// replaces the old separate floating AutoSegmentCard boxes (Sedang Memuat/
+// Menunggu Keberangkatan/Dalam Perjalanan/Kembali ke Pabrik used to live on
+// their own timeline lanes) with a single striped background painted INSIDE
+// the Jadwal's own reference card, so the card's already-correct width
+// (cardWidthFor — JamJadwal to JamKembaliAktual once known, else the
+// EstimasiDurasiMenit estimate) becomes the one shared timeline the whole
+// status history tiles across, with no separate lane/position to drift out
+// of alignment with it. A Draft ("Parkir") card never reaches here — it has
+// no milestones yet, and keeps its plain dashed styling untouched.
+function computeCardSegments(j: JadwalCardData): CardSegment[] {
+  if (j.Status !== "Terbit") return [];
+  const cardStart = new Date(j.JamJadwal).getTime();
+  const totalMs = j.JamKembaliAktual
+    ? new Date(j.JamKembaliAktual).getTime() - cardStart
+    : j.EstimasiDurasiMenit * 60_000;
+  if (totalMs <= 0) return [];
+
+  // Each breakpoint starts a segment running until the NEXT breakpoint (or
+  // the card's own end) — "Sedang Memuat" deliberately starts at JamJadwal
+  // (the card's own left edge), not JamMulaiMuat, so any gap between the
+  // scheduled and actual loading-start time reads as part of that segment
+  // rather than an unlabeled 5th one nobody asked for.
+  const points: { t: number; label: string }[] = [{ t: cardStart, label: "Sedang Memuat" }];
+  if (j.JamSelesaiMuat) points.push({ t: new Date(j.JamSelesaiMuat).getTime(), label: "Menunggu Keberangkatan" });
+  if (j.JamAktualBerangkat) points.push({ t: new Date(j.JamAktualBerangkat).getTime(), label: "Dalam Perjalanan" });
+
+  const cardEndMs = cardStart + totalMs;
+  const segments: CardSegment[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const start = points[i].t;
+    const end = i + 1 < points.length ? points[i + 1].t : cardEndMs;
+    if (end <= start) continue;
+    segments.push({
+      label: points[i].label,
+      colorClass: SEGMENT_COLOR[points[i].label],
+      startPct: ((start - cardStart) / totalMs) * 100,
+      widthPct: ((end - start) / totalMs) * 100,
+    });
+  }
+
+  // "Kembali ke Pabrik" only once the return is actually confirmed (not the
+  // still-estimated case) — carved as a thin trailing slice out of the last
+  // segment's own tail (capped at 8% of the card, or half that segment if
+  // it's shorter) rather than extending past the card's own end, since
+  // there's no room to: the card's right edge already IS the return moment.
+  const last = segments[segments.length - 1];
+  if (j.JamKembaliAktual && last) {
+    const kembaliWidthPct = Math.min(8, last.widthPct / 2);
+    last.widthPct -= kembaliWidthPct;
+    segments.push({
+      label: "Kembali ke Pabrik",
+      colorClass: SEGMENT_COLOR["Kembali ke Pabrik"],
+      startPct: last.startPct + last.widthPct,
+      widthPct: kembaliWidthPct,
+    });
+  }
+  return segments;
+}
+
 function DraggableJadwalCard({
   jadwal: j,
   hourWidth,
@@ -561,6 +635,7 @@ function DraggableJadwalCard({
   const lokasiTerjauh = j.LokasiTerjauh
     ? `${j.LokasiTerjauh.Wilayah}${j.LokasiTerjauh.Kecamatan ? ` - ${j.LokasiTerjauh.Kecamatan}` : ""}`
     : null;
+  const segments = computeCardSegments(j);
 
   return (
     <button
@@ -571,15 +646,8 @@ function DraggableJadwalCard({
       onClick={() => !isDragging && onCardClick(j.JadwalID)}
       title={lokasiTerjauh ? `Lokasi pengiriman terjauh: ${lokasiTerjauh}` : undefined}
       className={cn(
-        // justify-start + a small explicit gap, not justify-between —
-        // confirmed live (DevTools) that justify-between's auto-distributed
-        // spacing let the "N tujuan" line's own height push past this
-        // card's fixed CARD_HEIGHT, silently clipped by overflow-hidden.
-        // Packing tightly from the top instead reclaims the empty space
-        // justify-between left above the kantong number, which is what the
-        // 3rd line actually needed to stay inside the box.
-        "absolute flex flex-col justify-start gap-0.5 overflow-hidden rounded-md border p-1.5 text-left shadow-sm",
-        isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30 bg-primary/10",
+        "absolute overflow-hidden rounded-md border text-left shadow-sm",
+        isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30",
         isDragging && "z-20 opacity-70 shadow-lg"
       )}
       style={{
@@ -594,6 +662,25 @@ function DraggableJadwalCard({
         transform: CSS.Translate.toString(transform),
       }}
     >
+      {/* Status-history background strip — replaces the old separate
+          floating Sedang Memuat/Menunggu Keberangkatan/Dalam Perjalanan/
+          Kembali ke Pabrik boxes with one striped fill painted behind this
+          same card's own text, tiled exactly across cardWidth (see
+          computeCardSegments). Absent entirely for a Draft ("Parkir") card
+          — nothing to show yet, so it keeps its plain dashed fill above. */}
+      {segments.length > 0 && (
+        <div className="pointer-events-none absolute inset-0">
+          {segments.map((seg) => (
+            <div
+              key={seg.label}
+              title={seg.label}
+              className={cn("absolute inset-y-0", seg.colorClass)}
+              style={{ left: `${seg.startPct}%`, width: `${seg.widthPct}%` }}
+            />
+          ))}
+        </div>
+      )}
+      <div className="relative flex h-full flex-col justify-start gap-0.5 p-1.5">
       {j.AdaReturTersedia && (
         <span
           title="Ada retur berkondisi Baik yang masih bisa dijual ulang"
@@ -649,6 +736,7 @@ function DraggableJadwalCard({
       <p className="truncate text-center text-[9px] leading-none tabular-nums text-muted-foreground">
         {j.TotalStop} tujuan{lokasiTerjauh ? ` · ${lokasiTerjauh}` : ""}
       </p>
+      </div>
     </button>
   );
 }
@@ -695,37 +783,6 @@ function ArmadaActivityCard({
         {formatTime(activity.StartTime)}&ndash;{formatTime(activity.EndTime)}
       </span>
       {activity.Notes && <span className="truncate opacity-70">{activity.Notes}</span>}
-    </button>
-  );
-}
-
-// Auto-derived (never stored) segments for a Terbit Jadwal's own lifecycle
-// — Sedang Memuat (JamMulaiMuat -> JamAktualBerangkat) and Dalam Perjalanan
-// + Kembali ke Pabrik (JamAktualBerangkat -> +DurasiMenit, then a short
-// arrival marker). Read-only visual context, not its own record — clicking
-// one opens the same Validasi Rute the Pengiriman card itself opens, since
-// they describe the same trip.
-function AutoSegmentCard({
-  label,
-  left,
-  width,
-  top,
-  onClick,
-}: {
-  label: string;
-  left: number;
-  width: number;
-  top: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="absolute flex items-center justify-center overflow-hidden rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-1 text-[9px] text-muted-foreground"
-      style={{ left, width, top, height: CARD_HEIGHT }}
-    >
-      <span className="truncate">{label}</span>
     </button>
   );
 }
@@ -974,12 +1031,11 @@ function ArmadaActivityFormDialog({
   );
 }
 
-// Fixed width for the auto-derived segments and the "Kembali ke Pabrik"
-// arrival marker — these don't ride on cardWidth (that's sized for the
+// Fixed minimum width for the ArmadaActivity boxes (Perawatan/Pencucian/
+// Isi BBM/Menganggur) — these don't ride on cardWidth (that's sized for the
 // Jadwal card's own 4 lines of text) since they only need to show a short
-// label, and a real Perjalanan span can be much shorter than a hover slot.
+// label, and a real activity span can be much shorter than a hover slot.
 const MIN_AUTO_WIDTH = 56;
-const RETURN_MARKER_WIDTH = 64;
 
 function ArmadaRowBoard({
   armada,
@@ -1020,16 +1076,16 @@ function ArmadaRowBoard({
 
   const selectedExternalDeliveries = externalDeliveries.filter((d) => selectedExternal.has(d.DeliveryOrderID));
 
-  // Card width now scales with the summed per-stop delivery-time estimate
-  // (see delivery-duration.ts) instead of a fixed hourWidth-derived size —
-  // a Jadwal with more/bigger stops visibly takes longer on the timeline.
+  // Card width scales with the summed per-stop delivery-time estimate (see
+  // delivery-duration.ts) instead of a fixed hourWidth-derived size — a
+  // Jadwal with more/bigger stops visibly takes longer on the timeline.
   // Once a real Cek Datang exists (JamKembaliAktual), the card switches to
   // its real elapsed width (JamJadwal -> JamKembaliAktual) instead of the
-  // pre-departure estimate — same real-over-estimate preference
-  // autoSegments already applies to the separate "Kembali ke Pabrik"
-  // marker below, just applied to the Jadwal's own card this time.
-  // useCallback so the lane-layout useMemo below can depend on it directly
-  // instead of missing-dep warnings from redefining it every render.
+  // pre-departure estimate — computeCardSegments (above DraggableJadwalCard)
+  // mirrors this exact same width so its status strip always tiles the
+  // card's own rendered width with no gap or overflow. useCallback so the
+  // lane-layout useMemo below can depend on it directly instead of
+  // missing-dep warnings from redefining it every render.
   const cardWidthFor = useCallback(
     (j: JadwalCardData) => {
       if (j.JamKembaliAktual) {
@@ -1040,51 +1096,11 @@ function ArmadaRowBoard({
     [hourWidth]
   );
 
-  // Auto-derived Memuat/Perjalanan/Kembali segments — only for Jadwal that
-  // have actually departed (Terbit) with the timestamps needed to compute
-  // them; a Draft has no real duration yet, and older Terbit rows created
-  // before DurasiMenit existed simply skip the Perjalanan/Kembali pair.
-  const autoSegments = useMemo(() => {
-    type AutoSegment = { key: string; jadwalId: number; label: string; start: Date; end: Date };
-    const segments: AutoSegment[] = [];
-    const now = new Date();
-    for (const j of jadwal) {
-      if (j.Status !== "Terbit") continue;
-      if (j.JamMulaiMuat && j.JamSelesaiMuat) {
-        segments.push({
-          key: `memuat-${j.JadwalID}`,
-          jadwalId: j.JadwalID,
-          label: "Sedang Memuat",
-          start: new Date(j.JamMulaiMuat),
-          end: new Date(j.JamSelesaiMuat),
-        });
-      }
-      if (j.JamSelesaiMuat) {
-        segments.push({
-          key: `tunggu-${j.JadwalID}`,
-          jadwalId: j.JadwalID,
-          label: "Menunggu Keberangkatan",
-          start: new Date(j.JamSelesaiMuat),
-          end: j.JamAktualBerangkat ? new Date(j.JamAktualBerangkat) : now,
-        });
-      }
-      if (j.JamAktualBerangkat && j.DurasiMenit != null) {
-        const start = new Date(j.JamAktualBerangkat);
-        const estimatedEnd = new Date(start.getTime() + j.DurasiMenit * 60_000);
-        const end = j.JamKembaliAktual ? new Date(j.JamKembaliAktual) : estimatedEnd;
-        segments.push({ key: `jalan-${j.JadwalID}`, jadwalId: j.JadwalID, label: "Dalam Perjalanan", start, end });
-        segments.push({
-          key: `kembali-${j.JadwalID}`,
-          jadwalId: j.JadwalID,
-          label: "Kembali ke Pabrik",
-          start: end,
-          end: new Date(end.getTime() + 15 * 60_000),
-        });
-      }
-    }
-    return segments;
-  }, [jadwal]);
-
+  // Sedang Memuat/Menunggu Keberangkatan/Dalam Perjalanan/Kembali ke Pabrik
+  // no longer get their own timeline lane -- they're now painted as a
+  // striped background INSIDE each Jadwal's own card (computeCardSegments,
+  // used directly by DraggableJadwalCard), so `blocks` here only needs the
+  // Jadwal card itself, ArmadaActivity boxes, and external DOs.
   const { laneOf, laneCount } = useMemo(() => {
     const blocks: TimelineBlock[] = [
       ...jadwal.map((j) => ({ key: `j-${j.JadwalID}`, left: hourFraction(j.JamJadwal) * hourWidth, width: cardWidthFor(j) })),
@@ -1093,14 +1109,6 @@ function ArmadaRowBoard({
         left: hourFraction(a.StartTime) * hourWidth,
         width: Math.max(MIN_AUTO_WIDTH, durationHours(a.StartTime, a.EndTime) * hourWidth),
       })),
-      ...autoSegments.map((s) => ({
-        key: s.key,
-        left: hourFraction(s.start) * hourWidth,
-        width:
-          s.label === "Kembali ke Pabrik"
-            ? RETURN_MARKER_WIDTH
-            : Math.max(MIN_AUTO_WIDTH, durationHours(s.start, s.end) * hourWidth),
-      })),
       ...externalDeliveries.map((d) => ({
         key: `ext-${d.DeliveryOrderID}`,
         left: hourFractionNaiveWib(d.TransDate) * hourWidth,
@@ -1108,7 +1116,7 @@ function ArmadaRowBoard({
       })),
     ];
     return assignLanes(blocks);
-  }, [jadwal, activities, autoSegments, externalDeliveries, hourWidth, cardWidthFor]);
+  }, [jadwal, activities, externalDeliveries, hourWidth, cardWidthFor]);
 
   // Drag-to-select (marquee) for external DO cards — an alternative to
   // clicking each checkbox one by one when several need selecting at once.
@@ -1367,16 +1375,6 @@ function ArmadaRowBoard({
             onEdit={onEditActivity}
           />
         ))}
-        {autoSegments.map((s) => (
-          <AutoSegmentCard
-            key={s.key}
-            label={s.label}
-            left={hourFraction(s.start) * hourWidth}
-            width={s.label === "Kembali ke Pabrik" ? RETURN_MARKER_WIDTH : Math.max(MIN_AUTO_WIDTH, durationHours(s.start, s.end) * hourWidth)}
-            top={ROW_TOP_PADDING + (laneOf.get(s.key) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
-            onClick={() => onCardClick(s.jadwalId)}
-          />
-        ))}
         {externalDeliveries.map((d) => (
           <ExternalDoCard
             key={d.DeliveryOrderID}
@@ -1559,6 +1557,21 @@ export function PengirimanBoard({
     });
   }, [armada, jadwalByArmada]);
 
+  // Ringkasan kantong hari ini di seluruh papan, dipecah 3 bagian sesuai
+  // permintaan: 10KG dan 5KG (raw, un-halved bag count) untuk jadwal
+  // terjadwal lewat dashboard + DO eksternal dari ERP yang belum
+  // dijadwalkan -- keduanya sama-sama "pengiriman via armada terjadwal",
+  // beda dengan Takeaway (Ambil Sendiri, tidak punya Armada/Jadwal sama
+  // sekali) yang sengaja dipisah sebagai bucket sendiri, bukan ikut dipecah
+  // 10KG/5KG. Total akhir tetap kantong-ekivalen (10KG + 5KG/2), sama
+  // seperti TotalKantong di seluruh app ini.
+  const totalQty10KGTerjadwal =
+    jadwal.reduce((sum, j) => sum + j.Qty10KG, 0) + externalDeliveries.reduce((sum, d) => sum + d.Qty10KG, 0);
+  const totalQty5KGTerjadwal =
+    jadwal.reduce((sum, j) => sum + j.Qty5KG, 0) + externalDeliveries.reduce((sum, d) => sum + d.Qty5KG, 0);
+  const totalKantongTakeaway = takeawayOrders.reduce((sum, o) => sum + o.TotalKantong, 0);
+  const totalKantongSemua = totalQty10KGTerjadwal + totalQty5KGTerjadwal / 2 + totalKantongTakeaway;
+
   const openJadwal = jadwal.find((j) => j.JadwalID === detailJadwalId) ?? null;
   const openArmada = openJadwal ? armada.find((a) => a.ArmadaID === openJadwal.ArmadaID) : null;
   const createArmada = createArmadaId != null ? armada.find((a) => a.ArmadaID === createArmadaId) : null;
@@ -1663,7 +1676,11 @@ export function PengirimanBoard({
             <CardTitle className="font-display">
               Papan Pengiriman {isToday ? "Hari Ini" : formatDate(businessDate)}
             </CardTitle>
-            <CardDescription>{jadwal.length} keberangkatan terjadwal</CardDescription>
+            <CardDescription>
+              {jadwal.length} keberangkatan terjadwal &middot; 10KG: {totalQty10KGTerjadwal} &middot; 5KG: {totalQty5KGTerjadwal}{" "}
+              &middot; Takeaway: {totalKantongTakeaway} kantong ={" "}
+              {totalKantongSemua.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kantong
+            </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <PrintQueuePoller />
