@@ -26,18 +26,27 @@ function isValidRange(range: { start: string; end: string }): boolean {
 
 // Panel admin roster shift Satpam -- form tambah + daftar dikelompokkan per
 // tanggal, ditaruh langsung di halaman /mkesindo/keamanan (bukan di dalam
-// Dialog seperti MarketingWilayahPanel, karena halaman ini SATU-SATUNYA isi
-// halaman itu, bukan fitur tambahan di atas halaman lain yang sudah padat).
+// Dialog seperti MarketingWilayahPanel). Sejak KeamananShiftView (Hasil
+// Inspeksi/Patroli/Tamu) ditambahkan di atas panel ini, halaman ini bukan
+// lagi satu-satunya konten -- tapi rentang tanggal filter roster di bawah
+// ini tetap independen dari picker shift di KeamananShiftView, sesuai
+// permintaan eksplisit.
 export function SatpamRosterPanel({
   initialRows,
   satpamOptions,
   initialRange,
   todayISO,
+  petugasShiftTerpilih,
 }: {
   initialRows: SatpamJadwalDisplayRow[];
   satpamOptions: StafOperasionalOption[];
   initialRange: { start: string; end: string };
   todayISO: string;
+  // Info shift yang sedang dipilih di panel "Shift Keamanan" di atas
+  // (KeamananShiftView) — murni tampilan, dihitung sekali saat halaman
+  // dimuat, tidak reaktif terhadap perubahan picker itu setelahnya. Filter
+  // rentang tanggal panel roster ini sendiri TETAP terpisah, tidak diubah.
+  petugasShiftTerpilih?: { tanggalUsahaISO: string; shiftLabel: string; nama: string[] };
 }) {
   const [rows, setRows] = useState(initialRows);
   const [range, setRange] = useState(initialRange);
@@ -124,6 +133,19 @@ export function SatpamRosterPanel({
 
   return (
     <div className="flex flex-col gap-6">
+      {petugasShiftTerpilih && (
+        <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span className="font-medium">
+            Petugas jaga {new Date(petugasShiftTerpilih.tanggalUsahaISO).toLocaleDateString("id-ID", {
+              weekday: "long",
+              day: "2-digit",
+              month: "long",
+            })}{" "}
+            — {petugasShiftTerpilih.shiftLabel}:
+          </span>{" "}
+          {petugasShiftTerpilih.nama.length > 0 ? petugasShiftTerpilih.nama.join(", ") : "belum ada yang dijadwalkan"}
+        </div>
+      )}
       <div className="flex flex-col gap-3 rounded-lg border bg-secondary/30 p-4">
         <h3 className="text-sm font-semibold">Tambah Jadwal Jaga</h3>
         <div className="flex flex-wrap items-end gap-2">

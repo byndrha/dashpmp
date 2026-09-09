@@ -60,3 +60,26 @@ export function getSatpamOnDutyNow(rows: SatpamJadwalRow[], now: Date = getNaive
     return now >= start && now < end;
   });
 }
+
+// Default (TanggalUsaha, ShiftType) for "the shift happening right now",
+// derived purely from the regular-shift hour boundaries above -- NOT from
+// the roster (a page load shouldn't fail to pick a default just because
+// nobody's been scheduled yet). Only considers SHIFT1/2/3 (the Long Shift
+// variants deliberately overlap the regular ones and are meant to be picked
+// manually, not defaulted into). `now` must be naive-WIB, same requirement
+// as getSatpamShiftWindow/getSatpamOnDutyNow above.
+export function getCurrentSatpamShift(now: Date = getNaiveWibNow()): { tanggalUsaha: Date; shiftType: SatpamShiftType } {
+  const wibHour = now.getUTCHours();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const d = now.getUTCDate();
+  if (wibHour >= 6 && wibHour < 14) {
+    return { tanggalUsaha: new Date(Date.UTC(y, m, d)), shiftType: "SHIFT1" };
+  }
+  if (wibHour >= 14 && wibHour < 22) {
+    return { tanggalUsaha: new Date(Date.UTC(y, m, d)), shiftType: "SHIFT2" };
+  }
+  // wibHour >= 22 belongs to TODAY's Shift 3 (just started); wibHour < 6
+  // belongs to YESTERDAY's Shift 3 (still running past midnight).
+  return { tanggalUsaha: new Date(Date.UTC(y, m, d - (wibHour < 6 ? 1 : 0))), shiftType: "SHIFT3" };
+}

@@ -1,5 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
+import { getSatpamShiftWindow, type SatpamShiftType } from "@/lib/satpam-shift";
+import { naiveWibToUtcInstant } from "@/lib/business-date";
 
 export interface TamuKunjunganRow {
   kunjunganId: number;
@@ -81,6 +83,36 @@ export async function getTamuRiwayat(): Promise<TamuKunjunganRow[]> {
     WHERE WaktuKeluar IS NOT NULL AND IsDeleted = 0
     ORDER BY WaktuKeluar DESC
   `);
+  return (result.recordset as TamuDbRow[]).map(mapTamuRow);
+}
+
+// Tamu untuk satu shift keamanan: yang MASUK dalam jendela shift ini (baik
+// sudah keluar maupun belum), DITAMBAH tamu dari shift-shift sebelumnya yang
+// masih "Belum Keluar" (WaktuKeluar IS NULL) -- supaya tamu yang belum
+// checkout tetap muncul terus di shift berikutnya sampai benar-benar keluar,
+// bukan menghilang begitu shift berganti. WaktuMasuk/WaktuKeluar adalah
+// kolom true-UTC (lihat tamu-panel.tsx yang memakai formatDate/formatTime
+// biasa, bukan varian *Wib) sedangkan getSatpamShiftWindow mengembalikan
+// batas naive-WIB -- harus dikonversi dengan naiveWibToUtcInstant dulu.
+export async function getTamuUntukShift(tanggalUsaha: Date, shiftType: SatpamShiftType): Promise<TamuKunjunganRow[]> {
+  const window = getSatpamShiftWindow(tanggalUsaha, shiftType);
+  const start = naiveWibToUtcInstant(window.start);
+  const end = naiveWibToUtcInstant(window.end);
+
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("start", sql.DateTime, start)
+    .input("end", sql.DateTime, end).query(`
+      SELECT ${SELECT_COLUMNS}
+      FROM DashboardSatpamTamu
+      WHERE IsDeleted = 0
+        AND (
+          (WaktuMasuk >= @start AND WaktuMasuk < @end)
+          OR (WaktuMasuk < @start AND WaktuKeluar IS NULL)
+        )
+      ORDER BY WaktuMasuk DESC
+    `);
   return (result.recordset as TamuDbRow[]).map(mapTamuRow);
 }
 

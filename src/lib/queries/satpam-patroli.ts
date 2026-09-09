@@ -1,5 +1,7 @@
 import { getPool, sql } from "@/lib/db";
-import type { SatpamShiftType } from "@/lib/satpam-shift";
+import { getSatpamShiftWindow, type SatpamShiftType } from "@/lib/satpam-shift";
+import { naiveWibToUtcInstant } from "@/lib/business-date";
+import { getAkunNamaMap } from "@/lib/queries/akun";
 
 // Re-exported for existing server-side consumers (e.g. satpam-app/actions.ts)
 // so their import path stays unchanged -- the real definition moved to a
@@ -130,6 +132,64 @@ export async function getPatroliRiwayat(satpamAkunId: number): Promise<PatroliSe
     mulaiWaktu: r.MulaiWaktu,
     selesaiWaktu: r.SelesaiWaktu as Date,
     jumlahFoto: r.JumlahFoto,
+  }));
+}
+
+export interface PatroliSesiLengkap extends PatroliSesiRow {
+  satpamNama: string;
+  fotos: PatroliFotoRow[];
+}
+
+// Semua sesi patroli (SEMUA satpam, bukan satu akun seperti getPatroliRiwayat
+// di atas -- itu untuk riwayat pribadi di aplikasi mobile) yang MulaiWaktu-nya
+// jatuh dalam jendela satu shift keamanan. MulaiWaktu adalah kolom true-UTC
+// (dikonfirmasi lewat pemakaian formatDate/formatTime biasa, bukan varian
+// *Wib, di patroli-panel.tsx) sedangkan getSatpamShiftWindow mengembalikan
+// batas naive-WIB -- HARUS dikonversi dengan naiveWibToUtcInstant sebelum
+// dibandingkan, kalau tidak akan meleset 7 jam (pola bug yang sama berulang
+// kali ditemukan sepanjang sesi ini untuk kolom true-UTC lainnya).
+export async function getPatroliUntukShift(tanggalUsaha: Date, shiftType: SatpamShiftType): Promise<PatroliSesiLengkap[]> {
+  const window = getSatpamShiftWindow(tanggalUsaha, shiftType);
+  const start = naiveWibToUtcInstant(window.start);
+  const end = naiveWibToUtcInstant(window.end);
+
+  const pool = await getPool();
+  const sesiResult = await pool
+    .request()
+    .input("start", sql.DateTime, start)
+    .input("end", sql.DateTime, end).query(`
+      SELECT SesiID, SatpamAkunID, ShiftType, TanggalUsahaShift, MulaiWaktu, SelesaiWaktu
+      FROM DashboardSatpamPatroliSesi
+      WHERE IsDeleted = 0 AND MulaiWaktu >= @start AND MulaiWaktu < @end
+      ORDER BY MulaiWaktu
+    `);
+  const sesiRows = sesiResult.recordset as SesiDbRow[];
+  if (sesiRows.length === 0) return [];
+
+  const sesiIds = sesiRows.map((r) => r.SesiID);
+  const fotoRequest = pool.request();
+  const fotoPlaceholders = sesiIds.map((id, i) => {
+    fotoRequest.input(`sid${i}`, sql.Int, id);
+    return `@sid${i}`;
+  });
+  const fotoResult = await fotoRequest.query(`
+    SELECT FotoID, SesiID, TitikPatroli, Keterangan, FotoPath, Latitude, Longitude, WaktuFoto
+    FROM DashboardSatpamPatroliFoto
+    WHERE SesiID IN (${fotoPlaceholders.join(",")}) AND IsDeleted = 0
+    ORDER BY WaktuFoto ASC
+  `);
+  const fotosBySesi = new Map<number, PatroliFotoRow[]>();
+  for (const r of fotoResult.recordset as FotoDbRow[]) {
+    const list = fotosBySesi.get(r.SesiID) ?? [];
+    list.push(mapFotoRow(r));
+    fotosBySesi.set(r.SesiID, list);
+  }
+
+  const nameMap = await getAkunNamaMap(sesiRows.map((r) => r.SatpamAkunID));
+  return sesiRows.map((r) => ({
+    ...mapSesiRow(r),
+    satpamNama: nameMap.get(r.SatpamAkunID) ?? "Akun tidak ditemukan",
+    fotos: fotosBySesi.get(r.SesiID) ?? [],
   }));
 }
 

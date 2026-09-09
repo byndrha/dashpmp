@@ -12,6 +12,9 @@ import {
 } from "@/lib/queries/satpam-jadwal-jaga";
 import type { SatpamShiftType } from "@/lib/satpam-shift";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+import { getPatroliUntukShift, type PatroliSesiLengkap } from "@/lib/queries/satpam-patroli";
+import { getTamuUntukShift, type TamuKunjunganRow } from "@/lib/queries/satpam-tamu";
+import { getInspeksiUntukShift, type InspeksiKartuRow } from "@/lib/queries/satpam-inspeksi-shift";
 
 export async function getSatpamJadwalJagaListAction(
   startDateISO: string,
@@ -60,5 +63,35 @@ export async function getSatpamOnDutyNowAction(): Promise<ActionResult<SatpamJad
     const session = await auth();
     if (!session?.user) throw new AppError("Unauthorized");
     return getSatpamOnDutyNowRows();
+  });
+}
+
+export async function getInspeksiUntukShiftAction(
+  tanggalUsahaISO: string,
+  shiftType: SatpamShiftType
+): Promise<ActionResult<InspeksiKartuRow[]>> {
+  return runAction(async () => {
+    await requireSatpamRosterManager();
+    return getInspeksiUntukShift(new Date(tanggalUsahaISO), shiftType);
+  });
+}
+
+export async function getPatroliUntukShiftAction(
+  tanggalUsahaISO: string,
+  shiftType: SatpamShiftType
+): Promise<ActionResult<PatroliSesiLengkap[]>> {
+  return runAction(async () => {
+    await requireSatpamRosterManager();
+    return getPatroliUntukShift(new Date(tanggalUsahaISO), shiftType);
+  });
+}
+
+export async function getTamuUntukShiftAction(
+  tanggalUsahaISO: string,
+  shiftType: SatpamShiftType
+): Promise<ActionResult<TamuKunjunganRow[]>> {
+  return runAction(async () => {
+    await requireSatpamRosterManager();
+    return getTamuUntukShift(new Date(tanggalUsahaISO), shiftType);
   });
 }
