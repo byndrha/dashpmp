@@ -133,16 +133,22 @@ async function kurangiSalesReturDetail(
   salesOrderDetailId: string,
   qty: number
 ): Promise<void> {
+  // Retur (bukan Qty) adalah baseline yang benar -- koreksi retur sisi
+  // desktop-ERP live-terkonfirmasi bisa memperbarui Retur tanpa
+  // menyinkronkan ulang Qty/Amount, meninggalkan Qty di angka klaim lama
+  // (lebih besar). Kalau baseline di sini pakai Qty yang basi, hasilnya
+  // malah menimpa Retur yang tadinya sudah benar dengan angka baru yang
+  // salah (lihat [[papan-pengiriman-open-findings]] pola serupa).
   const result = await new sql.Request(transaction)
     .input("srId", sql.VarChar(16), salesReturnId)
     .input("soDetailId", sql.VarChar(16), salesOrderDetailId)
     .query(
-      `SELECT SalesReturnDetailID, Qty, Price FROM SalesReturnDetail WHERE SalesReturnID = @srId AND SalesOrderDetailID = @soDetailId`
+      `SELECT SalesReturnDetailID, Retur, Price FROM SalesReturnDetail WHERE SalesReturnID = @srId AND SalesOrderDetailID = @soDetailId`
     );
-  const row = result.recordset[0] as { SalesReturnDetailID: string; Qty: number; Price: number } | undefined;
+  const row = result.recordset[0] as { SalesReturnDetailID: string; Retur: number; Price: number } | undefined;
   if (!row) throw new AppError("Baris SalesReturnDetail untuk retur ini tidak ditemukan.");
 
-  const newQty = row.Qty - qty;
+  const newQty = row.Retur - qty;
   const newAmount = newQty * row.Price;
   await new sql.Request(transaction)
     .input("id", sql.VarChar(16), row.SalesReturnDetailID)

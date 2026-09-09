@@ -254,11 +254,15 @@ export async function getPengirimanBoard(
             LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
             WHERE a.IsDeleted = 0
         ),
+        -- Delivered, not Qty -- confirmed live (2026-09-04) that DeliveryOrderDetail.Qty
+        -- can be wildly stale/corrupted for some self-pickup DOs (e.g. Qty=852 vs a real
+        -- Delivered=12), while Delivered always reflects what was actually confirmed
+        -- shipped. Same fix applied to the takeawayResult query below.
         DoQty AS (
             SELECT DeliveryOrderID,
-                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN Qty / 2.0 ELSE Qty END) AS TotalKantong,
-                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN 0 ELSE Qty END) AS Qty10KG,
-                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN Qty ELSE 0 END) AS Qty5KG
+                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN Delivered / 2.0 ELSE Delivered END) AS TotalKantong,
+                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN 0 ELSE Delivered END) AS Qty10KG,
+                   SUM(CASE WHEN Name LIKE '%5 KG%' THEN Delivered ELSE 0 END) AS Qty5KG
             FROM DeliveryOrderDetail
             GROUP BY DeliveryOrderID
         )
@@ -314,7 +318,9 @@ export async function getPengirimanBoard(
             do_.VoucherNo,
             ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName,
             do_.TransDate,
-            ISNULL(SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Qty / 2.0 ELSE dod.Qty END), 0) AS TotalKantong
+            -- Delivered, not Qty -- see the DoQty CTE comment on the externalDeliveries
+            -- query above (same file, same DeliveryOrderDetail.Qty corruption risk).
+            ISNULL(SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivered / 2.0 ELSE dod.Delivered END), 0) AS TotalKantong
         FROM DeliveryOrder do_
         LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
         LEFT JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID

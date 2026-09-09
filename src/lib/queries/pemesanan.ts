@@ -517,20 +517,27 @@ export async function getSalesReturnDetail(salesReturnId: string): Promise<Sales
   const headerResult = await pool
     .request()
     .input("id", sql.VarChar(16), salesReturnId).query(`
-      SELECT sr.SalesReturnID, sr.VoucherNo, sr.TransDate, sr.Amount, ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName
+      SELECT sr.SalesReturnID, sr.VoucherNo, sr.TransDate, ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName
       FROM SalesReturn sr
       LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = sr.BusinessPartnerID
       WHERE sr.SalesReturnID = @id AND sr.IsDeleted = 0
     `);
-  const header = headerResult.recordset[0] as Omit<SalesReturnDetail, "Lines"> | undefined;
+  const header = headerResult.recordset[0] as Omit<SalesReturnDetail, "Amount" | "Lines"> | undefined;
   if (!header) return null;
 
+  // Retur (not Qty/Amount) is the authoritative valid-return quantity —
+  // desktop-ERP-side return corrections have been found live to update
+  // Retur without resyncing Qty/Amount, leaving those two stale at the
+  // original (pre-correction) claim. Dashboard-originated rows always
+  // write Qty = Retur (see confirmStopDelivery in pengiriman-jadwal.ts),
+  // so preferring Retur here is safe for both origins.
   const linesResult = await pool
     .request()
     .input("id", sql.VarChar(16), salesReturnId)
-    .query(`SELECT Name, Qty, Unit, Price, Amount FROM SalesReturnDetail WHERE SalesReturnID = @id`);
+    .query(`SELECT Name, Retur AS Qty, Unit, Price, Retur * Price AS Amount FROM SalesReturnDetail WHERE SalesReturnID = @id`);
+  const lines = linesResult.recordset as SalesReturnDetailLine[];
 
-  return { ...header, Lines: linesResult.recordset as SalesReturnDetailLine[] };
+  return { ...header, Amount: lines.reduce((sum, l) => sum + l.Amount, 0), Lines: lines };
 }
 
 export interface SalesReturnListRow {
@@ -572,7 +579,11 @@ export async function getSalesReturnList(filter: SalesReturnListFilter): Promise
         sr.TransDate,
         ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName,
         ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-        sr.Amount,
+        -- sr.Amount trusts SalesReturnDetail.Qty/Amount, which can be stale
+        -- relative to the authoritative Retur column (same desktop-ERP
+        -- correction quirk documented on getSalesReturnDetail above) --
+        -- recompute from Retur*Price instead of trusting the stored header.
+        ISNULL((SELECT SUM(srd.Retur * srd.Price) FROM SalesReturnDetail srd WHERE srd.SalesReturnID = sr.SalesReturnID), 0) AS Amount,
         do_.VoucherNo AS DeliveryOrderVoucherNo
     FROM SalesReturn sr
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = sr.BusinessPartnerID
