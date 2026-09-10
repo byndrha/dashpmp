@@ -11,10 +11,30 @@ export interface XlsxColumn {
   numFmt?: string;
 }
 
-// Shared by every "Export .xlsx" button in the dashboard — takes whatever
-// rows a panel already has in memory (already filtered/sorted client-side,
-// so the export matches exactly what's on screen) and triggers a browser
-// download. No server round-trip: the data is already here.
+// Shared by every bespoke xlsx export (including exportRowsToXlsx below) —
+// serializes a fully-built workbook and triggers a browser download. No
+// server round-trip: the workbook is already built in memory.
+export async function triggerXlsxDownload(workbook: ExcelJS.Workbook, filename: string): Promise<void> {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// Shared by every plain "Export .xlsx" button in the dashboard — takes
+// whatever rows a panel already has in memory (already filtered/sorted
+// client-side, so the export matches exactly what's on screen) and
+// triggers a browser download. For an export that needs live Excel
+// formulas instead of static values, build the workbook directly with
+// ExcelJS and call triggerXlsxDownload() above instead of this function.
 export async function exportRowsToXlsx({
   filename,
   sheetName,
@@ -48,16 +68,5 @@ export async function exportRowsToXlsx({
 
   sheet.views = [{ state: "frozen", ySplit: 1 }];
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  await triggerXlsxDownload(workbook, filename);
 }

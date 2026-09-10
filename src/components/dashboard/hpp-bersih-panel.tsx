@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { exportHppBersihToXlsx } from "@/lib/hpp-bersih-export";
 import type { HPPBersihData } from "@/lib/queries/hpp-bersih";
 import type { ActionResult } from "@/lib/action-result";
 
@@ -34,6 +36,7 @@ export function HPPBersihPanel({
 }) {
   const [data, setData] = useState(initialData);
   const [pending, startTransition] = useTransition();
+  const [exporting, setExporting] = useState(false);
 
   function navigate(nextYear: number) {
     startTransition(async () => {
@@ -44,6 +47,17 @@ export function HPPBersihPanel({
       // Background navigation refetch — on failure, just leave the
       // currently-displayed year's data in place (no new error UI).
     });
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportHppBersihToXlsx(data, unitLabel);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal membuat file .xlsx.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -57,6 +71,10 @@ export function HPPBersihPanel({
           </CardDescription>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          <Button variant="outline" size="sm" disabled={pending || exporting} onClick={handleExport}>
+            <FileSpreadsheet className="size-3.5" />
+            {exporting ? "Membuat..." : "Export .xlsx"}
+          </Button>
           <Button
             variant="outline"
             size="icon"
