@@ -16,6 +16,7 @@ import { OpenDeliveriesPanel } from "@/components/dashboard/open-deliveries-pane
 import { PengirimanBoard } from "@/components/dashboard/pengiriman-board";
 import { PengirimanTabs } from "@/components/dashboard/pengiriman-tabs";
 import { KendalaReportPanel } from "@/components/dashboard/kendala-report-panel";
+import { PrintQueuePoller } from "@/components/dashboard/print-queue-poller";
 
 export const metadata: Metadata = { title: "Pengiriman" };
 
@@ -52,9 +53,12 @@ export default async function DeliveryPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-xl font-semibold">Pengiriman</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" render={<Link href="/mkesindo/delivery/cetak" />}>
-            <Printer className="size-3.5" /> Manajemen Cetak
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <PrintQueuePoller />
+            <Button variant="outline" size="sm" className="gap-1.5" render={<Link href="/mkesindo/delivery/cetak" />}>
+              <Printer className="size-3.5" /> Manajemen Cetak
+            </Button>
+          </div>
           <FilterBar wilayahList={wilayahList} showDateRange={false} />
         </div>
       </div>

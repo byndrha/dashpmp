@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Printer, Usb, Bluetooth } from "lucide-react";
+import { Printer, Usb, Bluetooth, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { usePrinterConnection } from "@/lib/thermal-printer/use-printer-connection";
 import { buildReceiptBytes } from "@/lib/thermal-printer/receipt-builder";
 import {
@@ -208,14 +214,23 @@ export function PrintQueuePoller() {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <p className="text-xs text-muted-foreground">Printer belum tersambung</p>
-      <Button size="sm" variant="outline" className="gap-1.5" disabled={status === "connecting"} onClick={connectBluetooth}>
-        <Bluetooth className="size-3.5" /> Bluetooth
-      </Button>
-      <Button size="sm" variant="outline" className="gap-1.5" disabled={status === "connecting"} onClick={connectUsb}>
-        <Usb className="size-3.5" /> USB
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button size="sm" variant="ghost" className="h-auto gap-1 px-1 text-xs text-muted-foreground" disabled={status === "connecting"} />}
+      >
+        {status === "connecting" ? "Menyambungkan printer..." : "Printer belum tersambung"}
+        <ChevronDown className="size-3 opacity-60" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={connectBluetooth}>
+          <Bluetooth className="size-4" />
+          Bluetooth
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={connectUsb}>
+          <Usb className="size-4" />
+          USB
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -30,7 +30,6 @@ import { ArmadaManager, ArmadaFormDialog, STATUS_BADGE, rowToForm } from "@/comp
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { DriverManager } from "@/components/dashboard/driver-manager";
 import { RouteValidationDialog, type RouteValidationDialogHandle } from "@/components/dashboard/route-validation-dialog";
-import { PrintQueuePoller } from "@/components/dashboard/print-queue-poller";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime, formatTimeWib, formatKemasanQty } from "@/lib/format";
 import { mergeImagesVertically, shareImageBlob, shareTextBlock } from "@/lib/share-image";
@@ -1755,27 +1754,50 @@ export function PengirimanBoard({
             <div className="h-full w-1/3 animate-indeterminate rounded-full bg-primary" />
           </div>
         )}
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-          <div>
+        <CardHeader className="flex flex-col gap-2">
+          <div className="flex w-full flex-row flex-wrap items-center justify-between gap-2">
             <CardTitle className="font-display">
               Papan Pengiriman {isToday ? "Hari Ini" : formatDate(businessDate)}
             </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <ArmadaManager armada={armada} expeditionOptions={expeditionOptions} />
+              <DriverManager drivers={driverProfiles} />
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Input
+                  type="date"
+                  value={businessDate}
+                  disabled={isPending}
+                  onChange={(e) => e.target.value && goToDate(e.target.value)}
+                  className="h-8 w-40 text-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  disabled={isPending}
+                  onClick={() => shiftDate(1)}
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="flex w-full flex-row flex-wrap items-center justify-between gap-2">
             <CardDescription>
               {jadwal.length} keberangkatan terjadwal &middot; 10KG: {totalQty10KGTerjadwal} &middot; 5KG: {totalQty5KGTerjadwal}{" "}
               &middot; Takeaway: {totalKantongTakeaway} kantong ={" "}
               {totalKantongSemua.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kantong
             </CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <PrintQueuePoller />
-            <ArmadaManager armada={armada} expeditionOptions={expeditionOptions} />
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1.5" disabled={batchSharing != null} />}>
                 {batchSharing ? <Loader2 className="size-3.5 animate-spin" /> : <Share2 className="size-3.5" />}
                 {batchSharing ? `Memproses ${batchSharing.current}/${batchSharing.total}...` : "Bagikan Semua Rute"}
                 {!batchSharing && <ChevronDown className="size-3 opacity-60" />}
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
+              <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => handleBagikanSemuaRute("seluruhnya")}>
                   <ImageIcon className="size-4" />
                   Seluruhnya
@@ -1790,28 +1812,6 @@ export function PengirimanBoard({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <DriverManager drivers={driverProfiles} />
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="icon" className="size-8" disabled={isPending} onClick={() => shiftDate(-1)}>
-                <ChevronLeft className="size-4" />
-              </Button>
-              <Input
-                type="date"
-                value={businessDate}
-                disabled={isPending}
-                onChange={(e) => e.target.value && goToDate(e.target.value)}
-                className="h-8 w-40 text-xs"
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-8"
-                disabled={isPending}
-                onClick={() => shiftDate(1)}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
           </div>
         </CardHeader>
       </div>
