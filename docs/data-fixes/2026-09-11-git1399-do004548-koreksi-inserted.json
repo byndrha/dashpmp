@@ -1,0 +1,32 @@
+[
+  {
+    "ID": "01241002",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/004548/2026-08/003/001",
+    "TransDate": "2026-08-30T12:56:09.000Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 1321.204705,
+    "Credit": 0,
+    "Memo": "Koreksi kekurangan Debit 1399 (backfill 2026-09-11)",
+    "BusinessPartnerID": "01794",
+    "CurrencyID": "",
+    "Rate": 1
+  },
+  {
+    "ID": "01241002",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/004548/2026-08/003/001",
+    "TransDate": "2026-08-30T12:56:09.000Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 1321.204705,
+    "Memo": "Koreksi kekurangan Debit 1399 (backfill 2026-09-11)",
+    "BusinessPartnerID": "01794",
+    "CurrencyID": "",
+    "Rate": 1
+  }
+]

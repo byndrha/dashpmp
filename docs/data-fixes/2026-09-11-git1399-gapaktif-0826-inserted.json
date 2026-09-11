@@ -1,0 +1,1768 @@
+[
+  {
+    "ID": "01240202",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003880/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:45.983Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 660.602353,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01577",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004090/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240202",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003880/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:45.983Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 660.602353,
+    "Memo": "",
+    "BusinessPartnerID": "01577",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004090/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240203",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003866/2026-08/003/001",
+    "TransDate": "2026-08-26T03:33:01.773Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 990.9035289906,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01745",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004076/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240203",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003866/2026-08/003/001",
+    "TransDate": "2026-08-26T03:33:01.773Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 990.9035289906,
+    "Memo": "",
+    "BusinessPartnerID": "01745",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004076/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240204",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003868/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:40.643Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 82905.5952588802,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01267",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004078/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240204",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003868/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:40.643Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 82905.5952588802,
+    "Memo": "",
+    "BusinessPartnerID": "01267",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004078/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240205",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003869/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:41.330Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 6606.023526604,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01324",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004079/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240205",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003869/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:41.330Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 6606.023526604,
+    "Memo": "",
+    "BusinessPartnerID": "01324",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004079/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240206",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003870/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:41.927Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 4954.517644953,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01290",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004080/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240206",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003870/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:41.927Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 4954.517644953,
+    "Memo": "",
+    "BusinessPartnerID": "01290",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004080/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240207",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003871/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:42.543Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01664",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004081/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240207",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003871/2026-08/003/001",
+    "TransDate": "2026-08-26T04:02:42.543Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01664",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004081/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240208",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003872/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:41.247Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 1651.505881651,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01573",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004082/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240208",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003872/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:41.247Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 1651.505881651,
+    "Memo": "",
+    "BusinessPartnerID": "01573",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004082/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240209",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003873/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:41.850Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01117",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004083/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240209",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003873/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:41.850Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01117",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004083/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240210",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003874/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:42.403Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01284",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004084/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240210",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003874/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:42.403Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01284",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004084/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240211",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003875/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:43.037Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 990.9035289906,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01678",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004085/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240211",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003875/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:43.037Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 990.9035289906,
+    "Memo": "",
+    "BusinessPartnerID": "01678",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004085/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240212",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003876/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:43.647Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 13212.047053208,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "0128",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004086/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240212",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003876/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:43.647Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 13212.047053208,
+    "Memo": "",
+    "BusinessPartnerID": "0128",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004086/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240213",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003877/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:44.210Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01605",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004087/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240213",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003877/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:44.210Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01605",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004087/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240214",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003878/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:44.803Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 1981.8070579812,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01442",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004088/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240214",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003878/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:44.803Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 1981.8070579812,
+    "Memo": "",
+    "BusinessPartnerID": "01442",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004088/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240215",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003845/2026-08/003/001",
+    "TransDate": "2026-08-26T01:47:54.077Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004051/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240215",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003845/2026-08/003/001",
+    "TransDate": "2026-08-26T01:47:54.077Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004051/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240216",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003846/2026-08/003/001",
+    "TransDate": "2026-08-26T01:50:00.620Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004052/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240216",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003846/2026-08/003/001",
+    "TransDate": "2026-08-26T01:50:00.620Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004052/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240217",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003847/2026-08/003/001",
+    "TransDate": "2026-08-26T01:51:53.240Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004054/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240217",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003847/2026-08/003/001",
+    "TransDate": "2026-08-26T01:51:53.240Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004054/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240218",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003848/2026-08/003/001",
+    "TransDate": "2026-08-26T01:52:24.713Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004055/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240218",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003848/2026-08/003/001",
+    "TransDate": "2026-08-26T01:52:24.713Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004055/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240219",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003851/2026-08/003/001",
+    "TransDate": "2026-08-26T02:45:36.157Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004060/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240219",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003851/2026-08/003/001",
+    "TransDate": "2026-08-26T02:45:36.157Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004060/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240220",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003852/2026-08/003/001",
+    "TransDate": "2026-08-26T03:24:09.750Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004062/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240220",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003852/2026-08/003/001",
+    "TransDate": "2026-08-26T03:24:09.750Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004062/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240221",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003853/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:53.667Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 330.3011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01769",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004063/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240221",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003853/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:53.667Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 330.3011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01769",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004063/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240222",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003842/2026-08/003/001",
+    "TransDate": "2026-08-26T01:24:56.230Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004049/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240222",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003842/2026-08/003/001",
+    "TransDate": "2026-08-26T01:24:56.230Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004049/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240223",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003854/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:54.483Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 16515.05881651,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "0124",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004064/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240223",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003854/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:54.483Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 16515.05881651,
+    "Memo": "",
+    "BusinessPartnerID": "0124",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004064/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240224",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003855/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:55.020Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 6606.023526604,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01125",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004065/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240224",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003855/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:55.020Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 6606.023526604,
+    "Memo": "",
+    "BusinessPartnerID": "01125",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004065/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240225",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003856/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:55.670Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 4954.517644953,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01392",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004066/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240225",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003856/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:55.670Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 4954.517644953,
+    "Memo": "",
+    "BusinessPartnerID": "01392",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004066/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240226",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003857/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:56.230Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 4954.517644953,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "0119",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004067/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240226",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003857/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:56.230Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 4954.517644953,
+    "Memo": "",
+    "BusinessPartnerID": "0119",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004067/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240227",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003858/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:56.797Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01410",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004068/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240227",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003858/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:56.797Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01410",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004068/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240228",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003859/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:57.370Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 6606.023526604,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01558",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004069/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240228",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003859/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:57.370Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 6606.023526604,
+    "Memo": "",
+    "BusinessPartnerID": "01558",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004069/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240229",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003860/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:58.020Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 6606.023526604,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01565",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004070/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240229",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003860/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:58.020Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 6606.023526604,
+    "Memo": "",
+    "BusinessPartnerID": "01565",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004070/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240230",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003861/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:58.643Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 6606.023526604,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01568",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004071/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240230",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003861/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:58.643Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 6606.023526604,
+    "Memo": "",
+    "BusinessPartnerID": "01568",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004071/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240231",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003862/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:59.210Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 4954.517644953,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01405",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004072/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240231",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003862/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:59.210Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 4954.517644953,
+    "Memo": "",
+    "BusinessPartnerID": "01405",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004072/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240232",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003863/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:59.760Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 1651.505881651,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01661",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004073/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240232",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003863/2026-08/003/001",
+    "TransDate": "2026-08-26T03:32:59.760Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 1651.505881651,
+    "Memo": "",
+    "BusinessPartnerID": "01661",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004073/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240233",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003864/2026-08/003/001",
+    "TransDate": "2026-08-26T03:33:00.347Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01657",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004074/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240233",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003864/2026-08/003/001",
+    "TransDate": "2026-08-26T03:33:00.347Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01657",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004074/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240234",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003865/2026-08/003/001",
+    "TransDate": "2026-08-26T03:33:01.050Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 6606.023526604,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01170",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004075/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240234",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003865/2026-08/003/001",
+    "TransDate": "2026-08-26T03:33:01.050Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 6606.023526604,
+    "Memo": "",
+    "BusinessPartnerID": "01170",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004075/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240235",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003879/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:45.413Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 2642.4094106416,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01598",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004089/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240235",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003879/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:45.413Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 2642.4094106416,
+    "Memo": "",
+    "BusinessPartnerID": "01598",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004089/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240236",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003888/2026-08/003/001",
+    "TransDate": "2026-08-26T06:22:08.280Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004099/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240236",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003888/2026-08/003/001",
+    "TransDate": "2026-08-26T06:22:08.280Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004099/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240237",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003889/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:28.307Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 8257.529408255,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "0124",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004100/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240237",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003889/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:28.307Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 8257.529408255,
+    "Memo": "",
+    "BusinessPartnerID": "0124",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004100/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240238",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003890/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:29.273Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 1651.505881651,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01609",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004101/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240238",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003890/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:29.273Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 1651.505881651,
+    "Memo": "",
+    "BusinessPartnerID": "01609",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004101/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240239",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003891/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:30.530Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 9909.035289906,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01390",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004102/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240239",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003891/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:30.530Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 9909.035289906,
+    "Memo": "",
+    "BusinessPartnerID": "01390",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004102/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240240",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003892/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:31.180Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01722",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004103/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240240",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003892/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:31.180Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01722",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004103/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240241",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003893/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:31.903Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 8589.1404299355,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01557",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004104/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240241",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003893/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:31.903Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 8589.1404299355,
+    "Memo": "",
+    "BusinessPartnerID": "01557",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004104/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240242",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003881/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:46.517Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3634.6227849825,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01639",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004091/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240242",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003881/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:46.517Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3634.6227849825,
+    "Memo": "",
+    "BusinessPartnerID": "01639",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004091/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240243",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003882/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:47.270Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01263",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004092/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240243",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003882/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:47.270Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01263",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004092/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240244",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003883/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:47.870Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 990.9035289906,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01417",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004093/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240244",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003883/2026-08/003/001",
+    "TransDate": "2026-08-26T04:03:47.870Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 990.9035289906,
+    "Memo": "",
+    "BusinessPartnerID": "01417",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004093/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240245",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003884/2026-08/003/001",
+    "TransDate": "2026-08-26T04:24:40.050Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3963.6141159624,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004094/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240245",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003884/2026-08/003/001",
+    "TransDate": "2026-08-26T04:24:40.050Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3963.6141159624,
+    "Memo": "",
+    "BusinessPartnerID": "01383",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004094/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240246",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003896/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:34.090Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 9909.03529,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "0133",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SR/000084/2026-08/003/001",
+      "MKE/SI/004234/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240246",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003896/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:34.090Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 9909.03529,
+    "Memo": "",
+    "BusinessPartnerID": "0133",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SR/000084/2026-08/003/001",
+      "MKE/SI/004234/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240247",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003894/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:32.803Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 4954.517644953,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01672",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004105/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240247",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003894/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:32.803Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 4954.517644953,
+    "Memo": "",
+    "BusinessPartnerID": "01672",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004105/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240248",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003895/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:33.407Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 990.9035289906,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01720",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004106/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240248",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003895/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:33.407Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 990.9035289906,
+    "Memo": "",
+    "BusinessPartnerID": "01720",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004106/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240249",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003897/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:34.683Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 1651.505881651,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01680",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004108/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240249",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003897/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:34.683Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 1651.505881651,
+    "Memo": "",
+    "BusinessPartnerID": "01680",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004108/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240250",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003898/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:35.280Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01129",
+    "Debit": 3303.011763302,
+    "Credit": 0,
+    "Memo": "",
+    "BusinessPartnerID": "01784",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004109/2026-08/003/001"
+    ]
+  },
+  {
+    "ID": "01240250",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/DO/003898/2026-08/003/001",
+    "TransDate": "2026-08-26T06:37:35.280Z",
+    "Type": "DELIVERYORDER",
+    "ChartOfAccountID": "01159",
+    "Debit": 0,
+    "Credit": 3303.011763302,
+    "Memo": "",
+    "BusinessPartnerID": "01784",
+    "CurrencyID": "",
+    "Rate": 1,
+    "PairedVouchers": [
+      "MKE/SI/004109/2026-08/003/001"
+    ]
+  }
+]
