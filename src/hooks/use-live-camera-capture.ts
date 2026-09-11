@@ -8,6 +8,13 @@ export interface UseLiveCameraCaptureOptions {
   active: boolean;
   disabled?: boolean;
   onCapture: (file: File) => void;
+  // Turns the torch on automatically as soon as the camera stream reports
+  // support for it, instead of requiring the manual toggleTorch() call.
+  // Default false — most callers (e.g. a driver's own selfie-style capture)
+  // shouldn't have their flashlight fire unprompted; a satpam's vehicle
+  // inspection (often done at night, checking dim spots) is the case that
+  // needs it on unconditionally.
+  autoTorch?: boolean;
 }
 
 export interface UseLiveCameraCaptureResult {
@@ -28,6 +35,7 @@ export function useLiveCameraCapture({
   active,
   disabled,
   onCapture,
+  autoTorch = false,
 }: UseLiveCameraCaptureOptions): UseLiveCameraCaptureResult {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -87,11 +95,19 @@ export function useLiveCameraCapture({
         const track = stream.getVideoTracks()[0];
         trackRef.current = track ?? null;
         const capabilities = track?.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean };
-        setTorchSupported(Boolean(capabilities?.torch));
-        // Off by default -- a manual toggle (see toggleTorch below), not an
-        // automatic flash on every camera open, so a driver isn't surprised
-        // by the flashlight turning on unprompted.
-        setTorchOn(false);
+        const supported = Boolean(capabilities?.torch);
+        setTorchSupported(supported);
+        if (autoTorch && supported && track) {
+          track
+            .applyConstraints({ advanced: [{ torch: true } as MediaTrackConstraintSet] })
+            .then(() => setTorchOn(true))
+            .catch(() => setTorchOn(false));
+        } else {
+          // Off by default -- a manual toggle (see toggleTorch below), not an
+          // automatic flash on every camera open, so a driver isn't surprised
+          // by the flashlight turning on unprompted.
+          setTorchOn(false);
+        }
       })
       .catch(() => {
         if (!cancelled) setError("Izin kamera diperlukan untuk mengambil foto.");
@@ -104,7 +120,7 @@ export function useLiveCameraCapture({
       }
       trackRef.current = null;
     };
-  }, [showLive, retryCount]);
+  }, [showLive, retryCount, autoTorch]);
 
   function toggleTorch() {
     const track = trackRef.current;

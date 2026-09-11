@@ -51,12 +51,17 @@ function ActiveSlotView({
   // slots — same class of bug fixed earlier for the desktop toggle. Without
   // a fresh hook instance per slot, internal state like `retaking` could
   // carry over from the previously-active slot.
+  // Vehicle inspections often happen at night or in dim corners of the
+  // vehicle (undercarriage, wheel wells) — the flashlight should just be on
+  // for the whole inspection, not something the satpam has to remember to
+  // toggle per photo slot.
   const { videoRef, displayedPhotoUrl, showLive, error, retry, handleTap } = useLiveCameraCapture({
     label: JENIS_FOTO_LABEL[jenisFoto],
     photoUrl,
     active: true,
     disabled,
     onCapture,
+    autoTorch: true,
   });
 
   return (
