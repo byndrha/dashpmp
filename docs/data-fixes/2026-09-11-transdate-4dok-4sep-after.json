@@ -1,0 +1,29 @@
+[
+  {
+    "table": "SalesOrder",
+    "SalesOrderID": "01220186",
+    "VoucherNo": "MKE/SO/000557/2026-09/003/001",
+    "TransDate": "2026-09-04T14:04:52.000Z",
+    "DueDate": "2026-09-03T06:59:00.000Z"
+  },
+  {
+    "table": "DeliveryOrder",
+    "DeliveryOrderID": "01240683",
+    "VoucherNo": "MKE/DO/000543/2026-09/003/001",
+    "TransDate": "2026-09-04T14:09:16.000Z",
+    "DueDate": "2026-09-03T06:59:00.000Z"
+  },
+  {
+    "table": "SalesInvoice",
+    "SalesInvoiceID": "01232757",
+    "VoucherNo": "MKE/SI/000528/2026-09/003/001",
+    "TransDate": "2026-09-04T14:09:16.000Z",
+    "DueDate": "2026-09-03T06:59:00.000Z"
+  },
+  {
+    "table": "SalesPayment",
+    "SalesPaymentID": "01156987",
+    "VoucherNo": "MKE/SP/000927/2026-09/003/001",
+    "TransDate": "2026-09-04T13:34:20.350Z"
+  }
+]
