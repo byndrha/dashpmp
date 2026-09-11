@@ -732,6 +732,15 @@ export function MitraDOPanel({
     [displayedMitra]
   );
 
+  // Average daily sales across the selected date range, for whatever's
+  // currently displayed — same per-elapsed-day convention as each mitra
+  // card's own avgQty (MitraDOCard), just aggregated across the list.
+  const totalQtyDisplayed = useMemo(
+    () => displayedMitra.reduce((sum, m) => sum + m.TotalQty, 0),
+    [displayedMitra]
+  );
+  const avgPenjualanDisplayed = elapsedDays > 0 ? totalQtyDisplayed / elapsedDays : null;
+
   // filteredActive already arrives sorted by TotalQty desc — only the
   // "Pengambilan Terbanyak" mode can skip re-sorting as a no-op.
   const sortedActive = useMemo(() => {
@@ -938,14 +947,19 @@ export function MitraDOPanel({
         <div className="mt-2 flex min-w-0 border-t pt-2">
           <div
             className={cn(
-              "flex shrink-0 items-center justify-between gap-1 self-center pr-3 text-xs font-medium text-muted-foreground",
+              "flex shrink-0 flex-col gap-1 self-center pr-3 text-xs font-medium text-muted-foreground",
               INFO_COL_CLASS
             )}
           >
-            <span>{displayedMitra.length} mitra ditampilkan</span>
-            <span className="flex items-center gap-1 tabular-nums text-foreground">
-              <span className="size-2 shrink-0 rounded-full bg-primary" />
-              {formatQty(totalTargetDisplayed)}
+            <div className="flex items-center justify-between gap-1">
+              <span>{displayedMitra.length} mitra ditampilkan</span>
+              <span className="flex items-center gap-1 tabular-nums text-foreground">
+                <span className="size-2 shrink-0 rounded-full bg-primary" />
+                {formatQty(totalTargetDisplayed)}
+              </span>
+            </div>
+            <span className="w-fit rounded border bg-muted/40 px-1.5 py-0.5 tabular-nums text-foreground">
+              &plusmn;{avgPenjualanDisplayed != null ? formatQty(avgPenjualanDisplayed) : "-"}
             </span>
           </div>
           <div
