@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, ShieldCheck, Building2 } from "lucide-react";
+import { LayoutGrid, ShieldCheck, Building2, Package } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -32,9 +32,11 @@ import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 // not something that belongs inside PT Mitra Kelola Esindo's own sidebar.
 export function GrupSidebar({
   canSwitchPt,
+  canAccessInventaris,
   perusahaanList,
 }: {
   canSwitchPt: boolean;
+  canAccessInventaris: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
@@ -79,6 +81,22 @@ export function GrupSidebar({
                   <span>Ringkasan</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {/* Cross-PT vendor directory — gated by requireInventarisAccess
+                  (Task 2): Direktur/superadmin always see it via
+                  canAccessAllPT(), everyone else needs the per-account
+                  can_akses_inventaris flag (set via /grup/akun, Task 11). */}
+              {canAccessInventaris && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/grup/inventaris" onClick={closeOnMobile} />}
+                    isActive={pathname.startsWith("/grup/inventaris")}
+                    tooltip="Inventaris"
+                  >
+                    <Package className="shrink-0" />
+                    <span>Inventaris</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

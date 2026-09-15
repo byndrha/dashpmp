@@ -14,10 +14,15 @@ export default async function GrupLayout({ children }: { children: React.ReactNo
   await requireGrupAccess();
   const [session, perusahaanList] = await Promise.all([auth(), listPerusahaanForSwitcher()]);
   const canSwitchPt = session?.user ? canAccessAllPT(session.user) : false;
+  // Nav-visibility check only (mirrors requireInventarisAccess's own
+  // condition) — the route itself is still gated server-side by that
+  // function on the /grup/inventaris page, this just decides whether the
+  // link is worth showing.
+  const canAccessInventaris = session?.user ? canSwitchPt || !!session.user.canAksesInventaris : false;
 
   return (
     <SidebarProvider>
-      <GrupSidebar canSwitchPt={canSwitchPt} perusahaanList={perusahaanList} />
+      <GrupSidebar canSwitchPt={canSwitchPt} canAccessInventaris={canAccessInventaris} perusahaanList={perusahaanList} />
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
           <div className="flex items-center gap-2">
