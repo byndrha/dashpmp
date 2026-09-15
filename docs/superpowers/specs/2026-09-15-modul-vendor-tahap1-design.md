@@ -16,8 +16,19 @@ Modul ini berlaku **lintas grup** (MKEsindo, PMPersada, PMPutra) — satu vendor
 
 - Setiap perusahaan (MKEsindo, dan berpotensi PMPersada/PMPutra) punya database ERP MSSQL sendiri dengan tabel `BusinessPartner` yang sudah dipakai untuk mencatat vendor/supplier via kode `Code = 'SUPP' + 5 digit angka` (contoh nyata: `SUPP00139` = "PT. Hotei Poly Mulia", `SUPP00287` = "Pabrik Es Khasanah"). Saat ini ada 20 baris `SUPP%` di database MKEsindo, nomor tertinggi `SUPP00670`.
 - Semua baris `SUPP%` yang ada memakai `GroupBusinessPartner = '0'` sebagai penanda "supplier" (berbeda dari pelanggan yang memakai `1`/`2`/`3`) — dijadikan konvensi baku untuk baris baru.
-- Kolom-kolom akuntansi pada `BusinessPartner` seragam persis di seluruh 20 baris yang ada: `AccountPayableID='0137'`, `AccountReceivableID='019'`, `SalesDiscID='0183'`, `PurchaseDiscID='0114'`, `TaxInID='0122'`, `TaxOutID='0147'`, `PurchaseDepositID='0115'`, `SalesDepositID='0185'`, `PriceLevel=1` (2 pengecualian bernilai 7, diabaikan — pakai 1 sebagai default). Aman dijadikan nilai default tetap untuk baris baru.
-- Hanya `TermOfPaymentID` (bervariasi: `""`, `"012"`, `"013"`, `"014"`) dan `IsSuspended` (aktif/nonaktif) yang benar-benar spesifik per vendor — jadi field yang perlu diisi eksplisit, bukan default tetap.
+- Kolom-kolom akuntansi pada `BusinessPartner` seragam persis di seluruh 20 baris yang ada: `AccountPayableID='0137'`, `AccountReceivableID='019'`, `SalesDiscID='0183'`, `PurchaseDiscID='0114'`, `TaxInID='0122'`, `TaxOutID='0147'`, `PurchaseDepositID='0115'`, `SalesDepositID='0185'`, `PriceLevel=1` (2 pengecualian bernilai 7, diabaikan — pakai 1 sebagai default).
+- **Nilai default BAKU untuk vendor baru dari modul ini** (dikonfirmasi user, sebagian sengaja BEDA dari pola historis di atas — lihat `ChartOfAccountID` masing-masing telah diverifikasi langsung ke `ChartOfAccount.AccountNo`/`Description`):
+  | Field | Nilai default | Akun terverifikasi |
+  |---|---|---|
+  | `GroupBusinessPartner` | `'0'` | (label ERP: "Vendor") |
+  | `TermOfPaymentID` | `'014'` | "Tunai" (`TermOfPayment` table) |
+  | `AccountPayableID` | `'0137'` | AccountNo `2101` — "Hutang Dagang" |
+  | `PurchaseDepositID` | **kosong/NULL** (bukan `'0115'`) | sengaja tidak diisi — beda dari pola historis 20 vendor lama, yang semuanya memakai `'0115'` = AccountNo `1500` "Uang Muka" |
+  | `PurchaseDiscID` | `'0114'` | AccountNo `14012` — "Persediaan - Barang Dagang" |
+  | `TaxInID` | `'0122'` | AccountNo `1606` — "PPN Masukan" |
+  | `AccountReceivableID`, `SalesDiscID`, `TaxOutID`, `SalesDepositID`, `PriceLevel` | sama seperti pola historis (`'019'`, `'0183'`, `'0147'`, `'0185'`, `1`) | tidak diminta berubah, dipertahankan agar baris tetap konsisten dengan supplier lain |
+  | `IsSuspended` | `false` (aktif) | vendor baru dianggap aktif sampai staf menonaktifkan |
+- Field lain yang WAJIB diisi staf saat membuat/link vendor baru (bukan default, input nyata per vendor): **Nama** (`BusinessPartner.Name`), **NPWP** (`BusinessPartner.NPWP`, format berpisah titik ala NPWP Indonesia, mis. `12.345.678.9-012.000`), **Alamat NPWP** (`BusinessPartner.NPWPAddress` — kolom terpisah dari `Address` biasa), dan **PIC utama** (`BusinessPartner.ContactPerson` = nama PIC, `BusinessPartner.MobileNo` = nomor HP PIC).
 - `BusinessPartnerID` adalah `varchar(16)`, bukan auto-increment, dan panjangnya TIDAK seragam di data yang ada (`"0139"`, `"01114"`, `"01679"`, dst). **Peringatan penting**: kolom serupa (`GeneralLedger.ID`) pernah terbukti membuat `MAX(ID)` sebagai string SQL biasa memberi hasil salah (`'048550' > '01238503'` secara leksikal padahal lebih kecil secara angka) — ID baru untuk `BusinessPartnerID` HARUS digenerate dengan `MAX(TRY_CAST(BusinessPartnerID AS BIGINT))` lalu +1, zero-padded mengikuti panjang mayoritas ID terbaru, bukan `MAX(BusinessPartnerID)` polos.
 - Modul lintas-grup yang sudah ada (Akun, Perusahaan) hidup di Postgres (`akun_direktori`), diakses lewat halaman di bawah `/grup/...`, dengan gerbang akses `requireGrupAccess()` (Direktur-scope atau `isSuperAdmin`/`canAccessAllPT()`) — pola inilah yang diikuti modul Vendor.
 - Kontrol akses modul-per-modul yang sudah mapan: `requireModuleAccess(moduleKey: ModuleKey)` di `src/lib/require-access.ts`, memakai `canAccessAllPT()` sebagai bypass otomatis + `canView(session.user.permissions, moduleKey)` untuk staf yang diberi izin lewat editor Peran. `ModuleKey` didefinisikan di `src/lib/permissions.ts` (`MODULE_KEYS`).
@@ -29,9 +40,11 @@ Seluruhnya baru, hidup di **Postgres** (mengikuti pola `akun_direktori`/`perusah
 
 ```
 vendor
-├── id, nama, npwp, catatan, is_aktif
+├── id, nama, npwp (format berpisah titik), npwp_alamat, catatan, is_aktif
 ├── vendor_lokasi[]          — cabang/gudang vendor: nama lokasi, alamat, kota, kontak lokasi
-├── vendor_pic[]             — PIC dari pihak vendor: nama, jabatan, telepon/WA, email (bisa >1)
+├── vendor_pic[]             — PIC dari pihak vendor: nama, jabatan, telepon/WA, email (bisa >1;
+│                              PIC pertama/utama yang dipakai untuk mengisi BusinessPartner.
+│                              ContactPerson & MobileNo saat sinkronisasi)
 ├── vendor_pic_internal[]    — staf PMP Group yang menangani vendor ini, PER perusahaan
 │                              (staf MKEsindo yang pegang vendor X belum tentu staf PMPersada
 │                              yang pegang vendor sama)
@@ -55,12 +68,12 @@ vendor
 
 **Vendor baru** dikaitkan ke suatu perusahaan (mengisi `vendor_perusahaan_link` pertama kali untuk perusahaan itu):
 1. Sistem generate `BusinessPartnerID` baru mengikuti pola ID yang sudah dipakai di tabel `BusinessPartner` perusahaan itu, dan `Code` = `SUPP` + nomor urut berikutnya (query `MAX` dari `Code LIKE 'SUPP%'` milik perusahaan itu, +1, zero-padded 5 digit).
-2. Insert baris `BusinessPartner` baru: `Name`/`Address` dari data vendor (lokasi utama), field akuntansi memakai nilai default tetap yang sudah dikonfirmasi di atas, `TermOfPaymentID` dan `IsSuspended` dari input staf (atau kosong/aktif sebagai default awal), `GroupBusinessPartner='0'`.
+2. Insert baris `BusinessPartner` baru: `Name` dari nama vendor, `Address` dari lokasi utama vendor, `NPWP`/`NPWPAddress` dan `ContactPerson`/`MobileNo` (PIC utama) dari input staf, field akuntansi & `GroupBusinessPartner`/`TermOfPaymentID`/`IsSuspended` memakai nilai default baku yang sudah ditabelkan di atas (staf bisa override `TermOfPaymentID`/`IsSuspended` per vendor bila perlu berbeda dari default).
 3. `BusinessPartnerID` hasil insert disimpan di `vendor_perusahaan_link.business_partner_id`.
 
 **Vendor lama** (salah satu dari 20 yang sudah ada di `BusinessPartner`) di-link: TIDAK ada insert baru — cukup simpan `BusinessPartnerID` yang sudah ada.
 
-**Update berkelanjutan**: Nama/Alamat adalah Postgres-sebagai-sumber-kebenaran — setiap kali diedit di direktori vendor SETELAH sudah ter-link, `BusinessPartner.Name`/`Address` di MSSQL terkait ikut diperbarui otomatis (satu arah, Postgres → MSSQL; tidak ada arah sebaliknya).
+**Update berkelanjutan**: Postgres adalah sumber kebenaran untuk `Name`, `Address`, `NPWP`, `NPWPAddress`, dan PIC utama (`ContactPerson`/`MobileNo`) — setiap kali salah satu field ini diedit di direktori vendor SETELAH sudah ter-link, baris `BusinessPartner` terkait ikut diperbarui otomatis (satu arah, Postgres → MSSQL; tidak ada arah sebaliknya).
 
 ## Asumsi Belum Terverifikasi
 
@@ -68,7 +81,7 @@ Investigasi teknis sejauh ini hanya memeriksa database MKEsindo secara langsung.
 
 ## Migrasi Data Awal
 
-Saat modul ini pertama kali dibuat, script migrasi menarik seluruh baris `BusinessPartner` dengan `Code LIKE 'SUPP%'` dari MKEsindo (dan PMPersada/PMPutra jika strukturnya sama) menjadi baris `vendor` + `vendor_perusahaan_link` awal (Nama, Code/BusinessPartnerID, Address → jadi satu `vendor_lokasi` awal). Field lain (produk, PIC, log pengiriman) mulai kosong — staf melengkapi bertahap.
+Saat modul ini pertama kali dibuat, script migrasi menarik seluruh baris `BusinessPartner` dengan `Code LIKE 'SUPP%'` dari MKEsindo (dan PMPersada/PMPutra jika strukturnya sama) menjadi baris `vendor` + `vendor_perusahaan_link` awal — menarik `Name`, `Code`/`BusinessPartnerID`, `NPWP`, `NPWPAddress` (ke field vendor), `Address` (jadi satu `vendor_lokasi` awal), dan `ContactPerson`/`MobileNo` (jadi satu `vendor_pic` awal) langsung dari data yang sudah ada, bukan kosong — supaya migrasi tidak membuang data yang kebetulan sudah terisi di ERP. Field yang benar-benar belum ada di ERP (produk/brand/model, lokasi kedua dst, PIC internal, log pengiriman) mulai kosong — staf melengkapi bertahap.
 
 ## Kontrol Akses
 
