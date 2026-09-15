@@ -183,6 +183,7 @@ export interface AkunRow {
   peranNama: string | null; // null for Direktur
   salesmanId: string | null;
   isActive: boolean;
+  canAksesInventaris: boolean;
   lastLoginAt: Date | null;
 }
 
@@ -192,7 +193,7 @@ export async function listAkun(): Promise<AkunRow[]> {
     SELECT a.id, a.username, a.nama, a.email, a.nomor_telepon,
            a.perusahaan_id, p.nama AS perusahaan_nama, p.kode AS perusahaan_kode,
            a.peran_id, r.nama AS peran_nama, a.salesman_id,
-           a.is_active, a.last_login_at
+           a.is_active, a.can_akses_inventaris, a.last_login_at
     FROM akun a
     LEFT JOIN perusahaan p ON p.id = a.perusahaan_id
     LEFT JOIN peran r ON r.id = a.peran_id
@@ -211,6 +212,7 @@ export async function listAkun(): Promise<AkunRow[]> {
     peranNama: row.peran_nama,
     salesmanId: row.salesman_id,
     isActive: row.is_active,
+    canAksesInventaris: row.can_akses_inventaris,
     lastLoginAt: row.last_login_at,
   }));
 }

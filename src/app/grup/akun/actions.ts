@@ -10,6 +10,7 @@ import {
   countActiveSuperAdmins,
   listAllPeran,
   listAkun,
+  setAkunCanAksesInventaris,
   type CreateAkunInput,
   type UpdateAkunInput,
 } from "@/lib/queries/akun";
@@ -84,6 +85,18 @@ export async function updateAkunAction(input: UpdateAkunInput): Promise<ActionRe
     }
 
     await updateAkun(input);
+    revalidatePath("/grup/akun");
+  });
+}
+
+// Cross-PT Modul Inventaris access lives on akun itself (see setAkunCanAksesInventaris's
+// own comment in queries/akun.ts) so it gets its own setter action, separate from
+// updateAkunAction, mirroring how setPeranSatpamAction/setPeranDriverAction etc. in
+// grup/akun/peran/actions.ts are their own actions alongside updatePeranAction.
+export async function setAkunCanAksesInventarisAction(akunId: number, value: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    await setAkunCanAksesInventaris(akunId, value);
     revalidatePath("/grup/akun");
   });
 }

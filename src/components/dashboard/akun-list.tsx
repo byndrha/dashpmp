@@ -12,7 +12,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import type { AkunRow, PerusahaanDirektoriOption, PeranRow, CreateAkunInput, UpdateAkunInput } from "@/lib/queries/akun";
 import type { DriverProfileRow } from "@/lib/queries/driver-profile";
-import { createAkunAction, updateAkunAction, resetAkunPasswordAction, deleteAkunAction } from "@/app/grup/akun/actions";
+import {
+  createAkunAction,
+  updateAkunAction,
+  resetAkunPasswordAction,
+  deleteAkunAction,
+  setAkunCanAksesInventarisAction,
+} from "@/app/grup/akun/actions";
 
 const DIREKTUR_FILTER = "direktur";
 const ALL_FILTER = "all";
@@ -124,6 +130,37 @@ function DriverLinkField({
         Wajib diisi agar akun ini dapat login ke Aplikasi Driver dan melihat tugas miliknya sendiri.
       </p>
     </div>
+  );
+}
+
+// Direktur accounts (perusahaanId null) and Super Administrator roles already
+// get full cross-PT access via canAccessAllPT() in require-access.ts, so this
+// manual flag would be a no-op for them — hidden the same way DriverLinkField
+// above hides itself for non-driver roles, rather than showing a toggle that
+// does nothing.
+function InventarisAccessField({
+  perusahaanId,
+  peranList,
+  peranId,
+  checked,
+  onCheckedChange,
+}: {
+  perusahaanId: number | null;
+  peranList: PeranRow[];
+  peranId: number | null;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const isSuperAdminRole = peranId != null && (peranList.find((p) => p.id === peranId)?.isSuperAdmin ?? false);
+  if (perusahaanId == null || isSuperAdminRole) return null;
+  return (
+    <label className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
+      <input type="checkbox" className="accent-primary" checked={checked} onChange={(e) => onCheckedChange(e.target.checked)} />
+      <span>
+        Akses Inventaris
+        <span className="block text-muted-foreground">Mengizinkan akun ini membuka Modul Inventaris (lintas-PT), di luar peran/PT-nya.</span>
+      </span>
+    </label>
   );
 }
 
@@ -244,7 +281,7 @@ function EditDialog({
   peranList: PeranRow[];
   driverProfiles: DriverProfileRow[];
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: UpdateAkunInput) => void;
+  onSubmit: (input: UpdateAkunInput, canAksesInventaris: boolean) => void;
   pending: boolean;
   error: string | null;
 }) {
@@ -252,6 +289,7 @@ function EditDialog({
   const [peranId, setPeranId] = useState<number | null>(akun.peranId);
   const [status, setStatus] = useState(akun.isActive ? "active" : "inactive");
   const [salesmanId, setSalesmanId] = useState<string | null>(akun.salesmanId);
+  const [canAksesInventaris, setCanAksesInventaris] = useState(akun.canAksesInventaris);
 
   // Same reset rule as CreateDialog: drop the driver link the moment the
   // selected Peran is no longer a driver role, so a stale salesmanId from
@@ -264,16 +302,19 @@ function EditDialog({
   }
 
   function handleSubmit(formData: FormData) {
-    onSubmit({
-      id: akun.id,
-      nama: String(formData.get("nama") ?? ""),
-      email: String(formData.get("email") ?? "") || null,
-      nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
-      perusahaanId,
-      peranId,
-      isActive: status === "active",
-      salesmanId,
-    });
+    onSubmit(
+      {
+        id: akun.id,
+        nama: String(formData.get("nama") ?? ""),
+        email: String(formData.get("email") ?? "") || null,
+        nomorTelepon: String(formData.get("nomorTelepon") ?? "") || null,
+        perusahaanId,
+        peranId,
+        isActive: status === "active",
+        salesmanId,
+      },
+      canAksesInventaris
+    );
   }
 
   return (
@@ -310,6 +351,13 @@ function EditDialog({
             peranId={peranId}
             salesmanId={salesmanId}
             onSalesmanIdChange={setSalesmanId}
+          />
+          <InventarisAccessField
+            perusahaanId={perusahaanId}
+            peranList={peranList}
+            peranId={peranId}
+            checked={canAksesInventaris}
+            onCheckedChange={setCanAksesInventaris}
           />
           <div className="flex flex-col gap-1.5">
             <Label>Status</Label>
@@ -424,14 +472,19 @@ export function AkunList({
     });
   }
 
-  function handleUpdate(input: UpdateAkunInput) {
+  function handleUpdate(input: UpdateAkunInput, canAksesInventaris: boolean) {
     const targetId = input.id;
     setError(null);
     startTransition(async () => {
-      const result = await updateAkunAction(input);
+      // canAksesInventaris lives on its own Server Action (see actions.ts's
+      // comment), not inside updateAkunAction — same "one Simpan button,
+      // multiple independent actions" pattern as RoleCard.handleSave in
+      // peran-editor.tsx.
+      const results = await Promise.all([updateAkunAction(input), setAkunCanAksesInventarisAction(targetId, canAksesInventaris)]);
       if (editingIdRef.current !== targetId) return;
-      if (!result.success) {
-        setError(result.error);
+      const failed = results.find((r) => !r.success);
+      if (failed && !failed.success) {
+        setError(failed.error);
         return;
       }
       editingIdRef.current = null;
