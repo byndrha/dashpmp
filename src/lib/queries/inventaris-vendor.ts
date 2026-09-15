@@ -133,10 +133,7 @@ export async function deleteVendorLokasi(id: number): Promise<void> {
 }
 
 // urutan=0 is reserved for the "PIC utama" whose nama/telepon feed
-// BusinessPartner.ContactPerson/MobileNo on sync (see Task 5) — enforced
-// here by always inserting new PICs after the current max urutan, and
-// never letting urutan 0 be deleted while other rows exist (see
-// deleteVendorPic below).
+// BusinessPartner.ContactPerson/MobileNo on sync (see Task 5).
 export async function listVendorPic(vendorId: number): Promise<VendorPicRow[]> {
   const pool = getPgPool();
   const result = await pool.query(
@@ -154,6 +151,10 @@ export async function listVendorPic(vendorId: number): Promise<VendorPicRow[]> {
   }));
 }
 
+// Always assigns the next available urutan (current max + 1, starting at 0)
+// — callers can never set urutan directly (VendorPicInput has no such
+// field), so a fresh PIC only ever becomes urutan=0 when it's the vendor's
+// first one.
 export async function addVendorPic(vendorId: number, input: VendorPicInput): Promise<number> {
   const pool = getPgPool();
   const maxRes = await pool.query(`SELECT COALESCE(MAX(urutan), -1) AS max_urutan FROM vendor_pic WHERE vendor_id = $1`, [vendorId]);
@@ -173,6 +174,16 @@ export async function updateVendorPic(id: number, input: VendorPicInput): Promis
   );
 }
 
+// KNOWN LIMITATION (currently unenforced by design — not a Task 3 concern):
+// this is an unconditional delete with no protection for urutan=0. Deleting
+// the "PIC utama" row is possible and will leave the vendor with no primary
+// PIC until a new one happens to get created (which becomes urutan=0 again
+// only if it's the sole remaining PIC). Task 5's MSSQL sync and Task 8's
+// Server Actions already null-check `picList.find(p => p.urutan === 0)` and
+// handle "no primary PIC found" gracefully, so this degrades acceptably —
+// but any UI (Task 10) or business logic that wants to *prevent* deleting
+// the last/only primary PIC must implement that guard itself; it does not
+// exist at this query layer.
 export async function deleteVendorPic(id: number): Promise<void> {
   const pool = getPgPool();
   await pool.query(`DELETE FROM vendor_pic WHERE id = $1`, [id]);
