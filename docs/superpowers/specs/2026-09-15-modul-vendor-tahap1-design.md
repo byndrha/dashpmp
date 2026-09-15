@@ -1,0 +1,91 @@
+# Modul Vendor — Tahap 1: Direktori Vendor, Produk, PIC & Peringkat
+
+## Latar Belakang & Ruang Lingkup
+
+PMP Group (menaungi MKEsindo, PMPersada, PMPutra) belum punya direktori vendor yang terstruktur — data supplier saat ini hanya berupa baris `BusinessPartner` di masing-masing database ERP MSSQL per perusahaan (kode `SUPPxxxxx`), tanpa data produk yang mereka tawarkan, PIC, lokasi cabang, atau catatan performa historis.
+
+Permintaan awal mencakup tiga bagian yang saling terkait tapi bisa berdiri sendiri; disepakati untuk dikerjakan bertahap:
+
+- **Tahap 1 (spec ini)**: Direktori vendor — data vendor, produk (brand & model) yang mereka tawarkan, lokasi cabang, PIC (vendor & internal), dan sistem peringkat berbasis log pengiriman ringkas.
+- **Tahap 2 (nanti, di luar cakupan spec ini)**: Pencatatan transaksi pembelian (PO) penuh ke vendor.
+- **Tahap 3 (nanti, di luar cakupan spec ini)**: Integrasi ke modul Inventaris/Stok Bahan Baku yang sudah ada.
+
+Modul ini berlaku **lintas grup** (MKEsindo, PMPersada, PMPutra) — satu vendor bisa bertransaksi dengan lebih dari satu perusahaan.
+
+## Temuan Investigasi (fakta yang menjadi dasar desain)
+
+- Setiap perusahaan (MKEsindo, dan berpotensi PMPersada/PMPutra) punya database ERP MSSQL sendiri dengan tabel `BusinessPartner` yang sudah dipakai untuk mencatat vendor/supplier via kode `Code = 'SUPP' + 5 digit angka` (contoh nyata: `SUPP00139` = "PT. Hotei Poly Mulia", `SUPP00287` = "Pabrik Es Khasanah"). Saat ini ada 20 baris `SUPP%` di database MKEsindo, nomor tertinggi `SUPP00670`.
+- Semua baris `SUPP%` yang ada memakai `GroupBusinessPartner = '0'` sebagai penanda "supplier" (berbeda dari pelanggan yang memakai `1`/`2`/`3`) — dijadikan konvensi baku untuk baris baru.
+- Kolom-kolom akuntansi pada `BusinessPartner` seragam persis di seluruh 20 baris yang ada: `AccountPayableID='0137'`, `AccountReceivableID='019'`, `SalesDiscID='0183'`, `PurchaseDiscID='0114'`, `TaxInID='0122'`, `TaxOutID='0147'`, `PurchaseDepositID='0115'`, `SalesDepositID='0185'`, `PriceLevel=1` (2 pengecualian bernilai 7, diabaikan — pakai 1 sebagai default). Aman dijadikan nilai default tetap untuk baris baru.
+- Hanya `TermOfPaymentID` (bervariasi: `""`, `"012"`, `"013"`, `"014"`) dan `IsSuspended` (aktif/nonaktif) yang benar-benar spesifik per vendor — jadi field yang perlu diisi eksplisit, bukan default tetap.
+- `BusinessPartnerID` adalah `varchar(16)`, bukan auto-increment, dan panjangnya TIDAK seragam di data yang ada (`"0139"`, `"01114"`, `"01679"`, dst). **Peringatan penting**: kolom serupa (`GeneralLedger.ID`) pernah terbukti membuat `MAX(ID)` sebagai string SQL biasa memberi hasil salah (`'048550' > '01238503'` secara leksikal padahal lebih kecil secara angka) — ID baru untuk `BusinessPartnerID` HARUS digenerate dengan `MAX(TRY_CAST(BusinessPartnerID AS BIGINT))` lalu +1, zero-padded mengikuti panjang mayoritas ID terbaru, bukan `MAX(BusinessPartnerID)` polos.
+- Modul lintas-grup yang sudah ada (Akun, Perusahaan) hidup di Postgres (`akun_direktori`), diakses lewat halaman di bawah `/grup/...`, dengan gerbang akses `requireGrupAccess()` (Direktur-scope atau `isSuperAdmin`/`canAccessAllPT()`) — pola inilah yang diikuti modul Vendor.
+- Kontrol akses modul-per-modul yang sudah mapan: `requireModuleAccess(moduleKey: ModuleKey)` di `src/lib/require-access.ts`, memakai `canAccessAllPT()` sebagai bypass otomatis + `canView(session.user.permissions, moduleKey)` untuk staf yang diberi izin lewat editor Peran. `ModuleKey` didefinisikan di `src/lib/permissions.ts` (`MODULE_KEYS`).
+- Modul "Stok Bahan Baku" yang sudah ada (`DashboardStokBahanBakuShift`) adalah pelacakan stok internal murni (kantong plastik, ikat kabel) per shift — TIDAK punya konsep vendor/PIC sama sekali, dan sengaja tidak disentuh oleh Tahap 1 ini (integrasinya masuk Tahap 3).
+
+## Model Data
+
+Seluruhnya baru, hidup di **Postgres** (mengikuti pola `akun_direktori`/`perusahaan_koneksi`), kecuali baris cermin di MSSQL `BusinessPartner` per perusahaan.
+
+```
+vendor
+├── id, nama, npwp, catatan, is_aktif
+├── vendor_lokasi[]          — cabang/gudang vendor: nama lokasi, alamat, kota, kontak lokasi
+├── vendor_pic[]             — PIC dari pihak vendor: nama, jabatan, telepon/WA, email (bisa >1)
+├── vendor_pic_internal[]    — staf PMP Group yang menangani vendor ini, PER perusahaan
+│                              (staf MKEsindo yang pegang vendor X belum tentu staf PMPersada
+│                              yang pegang vendor sama)
+├── vendor_kategori (tabel terpisah, dikelola bebas oleh staf — bukan enum tetap di kode)
+├── vendor_produk[]          — kategori (FK ke vendor_kategori) + brand + model + spesifikasi bebas teks
+├── vendor_perusahaan_link[] — satu baris per perusahaan tempat vendor ini transaksi:
+│                              perusahaan_id, business_partner_id (MSSQL), term_of_payment_id,
+│                              is_suspended, tanggal_link_dibuat
+└── vendor_pengiriman[]      — log tiap pengiriman: vendor_perusahaan_link_id (implisit: perusahaan
+                               mana), vendor_produk_id (opsional), tanggal_pesan, tanggal_tiba,
+                               rating_kualitas (1-5), catatan, dicatat_oleh (akun internal)
+```
+
+**Peringkat vendor** dihitung on-the-fly (bukan kolom tersimpan) dari `vendor_pengiriman`:
+- Rata-rata lama kirim = rata-rata `(tanggal_tiba - tanggal_pesan)` dalam hari.
+- Rata-rata rating kualitas = rata-rata `rating_kualitas`.
+- Bisa dilihat gabungan (semua perusahaan) atau difilter per perusahaan tertentu.
+- Vendor tanpa log sama sekali tampil sebagai "belum ada data" — bukan 0 yang menyesatkan.
+
+## Sinkronisasi ke MSSQL `BusinessPartner`
+
+**Vendor baru** dikaitkan ke suatu perusahaan (mengisi `vendor_perusahaan_link` pertama kali untuk perusahaan itu):
+1. Sistem generate `BusinessPartnerID` baru mengikuti pola ID yang sudah dipakai di tabel `BusinessPartner` perusahaan itu, dan `Code` = `SUPP` + nomor urut berikutnya (query `MAX` dari `Code LIKE 'SUPP%'` milik perusahaan itu, +1, zero-padded 5 digit).
+2. Insert baris `BusinessPartner` baru: `Name`/`Address` dari data vendor (lokasi utama), field akuntansi memakai nilai default tetap yang sudah dikonfirmasi di atas, `TermOfPaymentID` dan `IsSuspended` dari input staf (atau kosong/aktif sebagai default awal), `GroupBusinessPartner='0'`.
+3. `BusinessPartnerID` hasil insert disimpan di `vendor_perusahaan_link.business_partner_id`.
+
+**Vendor lama** (salah satu dari 20 yang sudah ada di `BusinessPartner`) di-link: TIDAK ada insert baru — cukup simpan `BusinessPartnerID` yang sudah ada.
+
+**Update berkelanjutan**: Nama/Alamat adalah Postgres-sebagai-sumber-kebenaran — setiap kali diedit di direktori vendor SETELAH sudah ter-link, `BusinessPartner.Name`/`Address` di MSSQL terkait ikut diperbarui otomatis (satu arah, Postgres → MSSQL; tidak ada arah sebaliknya).
+
+## Asumsi Belum Terverifikasi
+
+Investigasi teknis sejauh ini hanya memeriksa database MKEsindo secara langsung. Belum dikonfirmasi apakah PMPersada dan PMPutra benar-benar punya database MSSQL terpisah dengan struktur `BusinessPartner` yang identik (kolom, konvensi `Code`/`GroupBusinessPartner`, dsb) — **ini harus diverifikasi di awal implementasi Task 1** sebelum kode sinkronisasi ditulis untuk ketiga perusahaan. Jika strukturnya berbeda atau salah satu perusahaan tidak punya `BusinessPartner` sama sekali, sinkronisasi MSSQL untuk perusahaan itu perlu didesain ulang (atau untuk sementara di-skip, vendor tetap bisa dipakai read-only di direktori Postgres tanpa link MSSQL).
+
+## Migrasi Data Awal
+
+Saat modul ini pertama kali dibuat, script migrasi menarik seluruh baris `BusinessPartner` dengan `Code LIKE 'SUPP%'` dari MKEsindo (dan PMPersada/PMPutra jika strukturnya sama) menjadi baris `vendor` + `vendor_perusahaan_link` awal (Nama, Code/BusinessPartnerID, Address → jadi satu `vendor_lokasi` awal). Field lain (produk, PIC, log pengiriman) mulai kosong — staf melengkapi bertahap.
+
+## Kontrol Akses
+
+- `ModuleKey` baru: `"vendor"`, ditambahkan ke `MODULE_KEYS`/`MODULE_LABEL` di `src/lib/permissions.ts`.
+- Gerbang akses baru `requireVendorAccess()` di `src/lib/require-access.ts`, mengikuti pola `requireModuleAccess`: `canAccessAllPT()` (Direktur-scope/superadmin) otomatis lolos; staf lain butuh `canView(session.user.permissions, "vendor")` yang diberikan lewat editor Peran yang sudah ada.
+- Halaman hidup di `/grup/vendor` (sejajar `/grup/akun`, `/grup/perusahaan`).
+
+## Halaman & Alur UI (garis besar, detail komponen ditentukan saat perencanaan implementasi)
+
+- `/grup/vendor` — daftar vendor (nama, jumlah lokasi, peringkat ringkas, perusahaan mana saja yang terhubung), pencarian, filter kategori produk.
+- `/grup/vendor/[id]` — detail vendor: tab Lokasi, tab PIC (vendor & internal per perusahaan), tab Produk, tab Log Pengiriman & Peringkat, tab Perusahaan Terhubung (link/unlink ke `BusinessPartner`).
+- Form tambah/edit vendor, lokasi, PIC, produk — dialog sederhana mengikuti pola dialog yang sudah ada di codebase (mis. `MitraEditDialog`).
+- Form catat pengiriman (log ringkas) — dipicu dari halaman detail vendor.
+- Halaman kelola kategori produk (`vendor_kategori`) — CRUD sederhana, tidak dikunci di kode.
+
+## Di Luar Cakupan Tahap 1
+
+- Pencatatan Purchase Order/transaksi pembelian penuh (Tahap 2).
+- Integrasi dengan Stok Bahan Baku / Inventaris (Tahap 3).
+- Perhitungan peringkat otomatis dari histori PO nyata (Tahap 1 memakai log manual ringkas sebagai gantinya, dirancang agar bisa diperluas jadi input Tahap 2 nanti tanpa migrasi ulang skema).
