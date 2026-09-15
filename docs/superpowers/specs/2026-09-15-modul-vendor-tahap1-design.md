@@ -1,14 +1,14 @@
-# Modul Vendor — Tahap 1: Direktori Vendor, Produk, PIC & Peringkat
+# Modul Inventaris — Tahap 1: Vendor, Produk, PIC & Peringkat
 
 ## Latar Belakang & Ruang Lingkup
 
-PMP Group (menaungi MKEsindo, PMPersada, PMPutra) belum punya direktori vendor yang terstruktur — data supplier saat ini hanya berupa baris `BusinessPartner` di masing-masing database ERP MSSQL per perusahaan (kode `SUPPxxxxx`), tanpa data produk yang mereka tawarkan, PIC, lokasi cabang, atau catatan performa historis.
+PMP Group (menaungi MKEsindo, PMPersada, PMPutra) belum punya modul Inventaris lintas-grup. Data supplier saat ini hanya berupa baris `BusinessPartner` di masing-masing database ERP MSSQL per perusahaan (kode `SUPPxxxxx`), tanpa data produk yang mereka tawarkan, PIC, lokasi cabang, atau catatan performa historis — dan modul "Stok Bahan Baku" yang sudah ada (per-MKEsindo, per-shift) tidak mengenal konsep vendor sama sekali.
 
-Permintaan awal mencakup tiga bagian yang saling terkait tapi bisa berdiri sendiri; disepakati untuk dikerjakan bertahap:
+**Modul Inventaris** adalah modul baru lintas-grup yang menaungi semuanya. Dibangun bertahap:
 
-- **Tahap 1 (spec ini)**: Direktori vendor — data vendor, produk (brand & model) yang mereka tawarkan, lokasi cabang, PIC (vendor & internal), dan sistem peringkat berbasis log pengiriman ringkas.
+- **Tahap 1 (spec ini)**: Tab **Vendor** — data vendor, produk (brand & model) yang mereka tawarkan, lokasi cabang, PIC (vendor & internal), dan sistem peringkat berbasis log pengiriman ringkas.
 - **Tahap 2 (nanti, di luar cakupan spec ini)**: Pencatatan transaksi pembelian (PO) penuh ke vendor.
-- **Tahap 3 (nanti, di luar cakupan spec ini)**: Integrasi ke modul Inventaris/Stok Bahan Baku yang sudah ada.
+- **Tahap 3 (nanti, di luar cakupan spec ini)**: Tab **Stok Bahan Baku** — migrasi/integrasi modul Stok Bahan Baku yang sudah ada ke bawah payung modul Inventaris ini, terhubung ke data vendor.
 
 Modul ini berlaku **lintas grup** (MKEsindo, PMPersada, PMPutra) — satu vendor bisa bertransaksi dengan lebih dari satu perusahaan.
 
@@ -85,20 +85,21 @@ Saat modul ini pertama kali dibuat, script migrasi menarik seluruh baris `Busine
 
 ## Kontrol Akses
 
-- `ModuleKey` baru: `"vendor"`, ditambahkan ke `MODULE_KEYS`/`MODULE_LABEL` di `src/lib/permissions.ts`.
-- Gerbang akses baru `requireVendorAccess()` di `src/lib/require-access.ts`, mengikuti pola `requireModuleAccess`: `canAccessAllPT()` (Direktur-scope/superadmin) otomatis lolos; staf lain butuh `canView(session.user.permissions, "vendor")` yang diberikan lewat editor Peran yang sudah ada.
-- Halaman hidup di `/grup/vendor` (sejajar `/grup/akun`, `/grup/perusahaan`).
+- `ModuleKey` baru: `"inventaris"`, ditambahkan ke `MODULE_KEYS`/`MODULE_LABEL` di `src/lib/permissions.ts` — satu izin modul untuk seluruh modul Inventaris (Vendor sekarang, Stok Bahan Baku nanti di Tahap 3), bukan izin terpisah per tab.
+- Gerbang akses baru `requireInventarisAccess()` di `src/lib/require-access.ts`, mengikuti pola `requireModuleAccess`: `canAccessAllPT()` (Direktur-scope/superadmin) otomatis lolos; staf lain butuh `canView(session.user.permissions, "inventaris")` yang diberikan lewat editor Peran yang sudah ada.
+- Halaman hidup di `/grup/inventaris` (sejajar `/grup/akun`, `/grup/perusahaan`).
 
 ## Halaman & Alur UI (garis besar, detail komponen ditentukan saat perencanaan implementasi)
 
-- `/grup/vendor` — daftar vendor (nama, jumlah lokasi, peringkat ringkas, perusahaan mana saja yang terhubung), pencarian, filter kategori produk.
-- `/grup/vendor/[id]` — detail vendor: tab Lokasi, tab PIC (vendor & internal per perusahaan), tab Produk, tab Log Pengiriman & Peringkat, tab Perusahaan Terhubung (link/unlink ke `BusinessPartner`).
+- `/grup/inventaris` — shell modul dengan navigasi tab. Tahap 1 mengisi tab **Vendor** (tab **Stok Bahan Baku** menyusul Tahap 3):
+  - Tab **Vendor** — daftar vendor (nama, jumlah lokasi, peringkat ringkas, perusahaan mana saja yang terhubung), pencarian, filter kategori produk.
+- `/grup/inventaris/vendor/[id]` — detail satu vendor: tab Lokasi, tab PIC (vendor & internal per perusahaan), tab Produk, tab Log Pengiriman & Peringkat, tab Perusahaan Terhubung (link/unlink ke `BusinessPartner`).
 - Form tambah/edit vendor, lokasi, PIC, produk — dialog sederhana mengikuti pola dialog yang sudah ada di codebase (mis. `MitraEditDialog`).
 - Form catat pengiriman (log ringkas) — dipicu dari halaman detail vendor.
-- Halaman kelola kategori produk (`vendor_kategori`) — CRUD sederhana, tidak dikunci di kode.
+- Halaman kelola kategori produk (`vendor_kategori`) — CRUD sederhana, tidak dikunci di kode, dapat diakses dari tab Vendor.
 
 ## Di Luar Cakupan Tahap 1
 
 - Pencatatan Purchase Order/transaksi pembelian penuh (Tahap 2).
-- Integrasi dengan Stok Bahan Baku / Inventaris (Tahap 3).
+- Migrasi tab Stok Bahan Baku ke bawah modul Inventaris ini, dan penghubungannya ke data Vendor (Tahap 3) — modul Stok Bahan Baku yang sudah ada TIDAK disentuh oleh Tahap 1.
 - Perhitungan peringkat otomatis dari histori PO nyata (Tahap 1 memakai log manual ringkas sebagai gantinya, dirancang agar bisa diperluas jadi input Tahap 2 nanti tanpa migrasi ulang skema).
