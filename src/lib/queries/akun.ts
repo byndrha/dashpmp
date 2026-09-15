@@ -21,6 +21,7 @@ export interface AkunAuthRow {
   isDriver: boolean;
   isProduksi: boolean;
   isOperasional: boolean;
+  canAksesInventaris: boolean;
   salesmanId: string | null;
   isActive: boolean;
   failedLoginCount: number;
@@ -36,6 +37,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
             COALESCE(r.is_driver, false) AS is_driver,
             COALESCE(r.is_produksi, false) AS is_produksi,
             COALESCE(r.is_operasional, false) AS is_operasional,
+            a.can_akses_inventaris,
             a.salesman_id,
             a.is_active, a.failed_login_count, a.locked_until
      FROM akun a
@@ -59,6 +61,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
     isDriver: row.is_driver,
     isProduksi: row.is_produksi,
     isOperasional: row.is_operasional,
+    canAksesInventaris: row.can_akses_inventaris,
     salesmanId: row.salesman_id,
     isActive: row.is_active,
     failedLoginCount: row.failed_login_count,
@@ -387,6 +390,14 @@ export async function setPeranProduksi(peranId: number, isProduksi: boolean): Pr
 export async function setPeranOperasional(peranId: number, isOperasional: boolean): Promise<void> {
   const pool = getPgPool();
   await pool.query(`UPDATE peran SET is_operasional = $1 WHERE id = $2`, [isOperasional, peranId]);
+}
+
+// Cross-PT Inventaris access lives on akun itself (not peran) since it must
+// attach to a person regardless of which company-scoped role they hold. See
+// requireInventarisAccess() in require-access.ts for the read side.
+export async function setAkunCanAksesInventaris(akunId: number, value: boolean): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE akun SET can_akses_inventaris = $1 WHERE id = $2`, [value, akunId]);
 }
 
 // ---------- Sesi login aktif (consumed by auth.ts's jwt callback) ----------

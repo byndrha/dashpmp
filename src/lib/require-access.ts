@@ -50,6 +50,20 @@ export async function requireGrupAccess() {
   return session;
 }
 
+// Gerbang /grup/inventaris -- cross-PT, so unlike requireModuleAccess this
+// does NOT check session.user.permissions (that map is scoped to a single
+// company's peran and is never populated for a Direktur account anyway).
+// canAccessAllPT() covers Direktur/superadmin; everyone else needs the
+// per-account can_akses_inventaris flag set via /grup/akun (Task 11).
+export async function requireInventarisAccess() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!canAccessAllPT(session.user) && !session.user.canAksesInventaris) {
+    redirect("/akses-ditolak");
+  }
+  return session;
+}
+
 export async function requirePmputra() {
   const session = await auth();
   if (!session?.user) redirect("/login");
