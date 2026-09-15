@@ -28,7 +28,14 @@ export async function createVendorKategori(nama: string): Promise<number> {
 
 export async function renameVendorKategori(id: number, nama: string): Promise<void> {
   const pool = getPgPool();
-  await pool.query(`UPDATE vendor_kategori SET nama = $1 WHERE id = $2`, [nama, id]);
+  try {
+    await pool.query(`UPDATE vendor_kategori SET nama = $1 WHERE id = $2`, [nama, id]);
+  } catch (err) {
+    if (err instanceof Error && "code" in err && (err as { code?: string }).code === "23505") {
+      throw new AppError(`Kategori "${nama}" sudah ada.`);
+    }
+    throw err;
+  }
 }
 
 export async function deleteVendorKategori(id: number): Promise<void> {
