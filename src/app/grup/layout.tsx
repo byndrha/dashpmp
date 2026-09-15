@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { requireGrupAccess, canAccessAllPT } from "@/lib/require-access";
+import { requireGrupShellAccess, canAccessAllPT } from "@/lib/require-access";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { GrupSidebar } from "@/components/dashboard/grup-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
@@ -7,11 +7,14 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Separator } from "@/components/ui/separator";
 
 // PMP Group (holding) shell — Ringkasan + Administrasi (Akun/Perusahaan/
-// Akun Direktori), deliberately separate from PT Mitra Kelola Esindo's own
-// AppSidebar. See requireGrupAccess for who can reach this (a real
-// Direktur account, or today's MSSQL superadmin bridging in).
+// Akun Direktori) + Inventaris, deliberately separate from PT Mitra Kelola
+// Esindo's own AppSidebar. Gated by requireGrupShellAccess() (a real
+// Direktur/superadmin, OR a canAksesInventaris account reaching for
+// /grup/inventaris) — NOT requireGrupAccess(), which is stricter and stays
+// enforced independently by the Akun/Perusahaan pages and Server Actions
+// themselves. See requireGrupShellAccess's own comment in require-access.ts.
 export default async function GrupLayout({ children }: { children: React.ReactNode }) {
-  await requireGrupAccess();
+  await requireGrupShellAccess();
   const [session, perusahaanList] = await Promise.all([auth(), listPerusahaanForSwitcher()]);
   const canSwitchPt = session?.user ? canAccessAllPT(session.user) : false;
   // Nav-visibility check only (mirrors requireInventarisAccess's own

@@ -50,6 +50,26 @@ export async function requireGrupAccess() {
   return session;
 }
 
+// Gerbang shell /grup/layout.tsx ONLY — deliberately more permissive than
+// requireGrupAccess(). The layout renders the shared sidebar/header for
+// EVERYTHING under /grup/*, including /grup/inventaris, which a
+// canAksesInventaris account (not Direktur, not superadmin) is allowed to
+// reach per requireInventarisAccess() above. Gating the shell on
+// requireGrupAccess()'s stricter Direktur-only condition would redirect
+// such an account to /akses-ditolak before it ever got to the page's own
+// (correct) check. Akun/Perusahaan and their sub-pages/actions still call
+// requireGrupAccess() themselves (defense-in-depth, unchanged by this
+// function), so they stay Direktur/superadmin-only regardless of what the
+// shell lets through.
+export async function requireGrupShellAccess() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!canAccessAllPT(session.user) && !session.user.canAksesInventaris) {
+    redirect("/akses-ditolak");
+  }
+  return session;
+}
+
 // Gerbang /grup/inventaris -- cross-PT, so unlike requireModuleAccess this
 // does NOT check session.user.permissions (that map is scoped to a single
 // company's peran and is never populated for a Direktur account anyway).
