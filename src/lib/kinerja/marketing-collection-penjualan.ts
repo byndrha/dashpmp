@@ -48,6 +48,24 @@ function monthKey(d: Date): string {
   return d.toISOString().slice(0, 7); // "YYYY-MM"
 }
 
+/** Generates a continuous list of "YYYY-MM" keys from startKey through endKey, inclusive. */
+function monthKeyRange(startKey: string, endKey: string): string[] {
+  const [startYear, startMonth] = startKey.split("-").map(Number);
+  const [endYear, endMonth] = endKey.split("-").map(Number);
+  const keys: string[] = [];
+  let y = startYear;
+  let m = startMonth;
+  while (y < endYear || (y === endYear && m <= endMonth)) {
+    keys.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+  return keys;
+}
+
 /**
  * Builds the full monthly history table for every akun that owns at least
  * one mitra under this business rule. Call once per page load — all the
@@ -65,11 +83,14 @@ export async function getHistoriPenjualanSemuaKaryawan(): Promise<Map<string, Hi
   // every (mitra, bulan) qty row and attributing it via the ownership
   // resolved above.
   const qtyByKey = new Map<string, number>();
-  const allMonthKeys = new Set<string>();
-  // Always include the current business month as a column even if it has
-  // zero deliveries so far — the table must reach "today", not stop at
-  // the last month with data.
-  allMonthKeys.add(monthKey(monthBoundary(getBusinessDate())));
+  // Per-owner set of month-keys they actually have quantity data in — used
+  // below to compute each employee's OWN earliest relevant month, rather
+  // than applying one system-wide earliest month to everyone.
+  const akunMonthKeys = new Map<string, Set<string>>();
+  // Current business month is always the fixed upper bound of every
+  // employee's range, even if they have zero data in it — the table must
+  // reach "today", not stop at the last month with data.
+  const currentMonthKey = monthKey(monthBoundary(getBusinessDate()));
 
   for (const row of qtyPerMitraBulan) {
     const ownership = ownershipByMitra.get(row.BusinessPartnerID);
@@ -79,20 +100,41 @@ export async function getHistoriPenjualanSemuaKaryawan(): Promise<Map<string, Hi
     const isNooThisMonth =
       ownership.nooMonthStart != null && rowMonthStart.getTime() === ownership.nooMonthStart.getTime();
     const mk = monthKey(rowMonthStart);
-    allMonthKeys.add(mk);
     const key = `${ownership.ownerAkunId}|${mk}|${isNooThisMonth ? "noo" : "existing"}`;
     qtyByKey.set(key, (qtyByKey.get(key) ?? 0) + row.QtyKantong);
+    let ownerMonthKeys = akunMonthKeys.get(ownership.ownerAkunId);
+    if (!ownerMonthKeys) {
+      ownerMonthKeys = new Set<string>();
+      akunMonthKeys.set(ownership.ownerAkunId, ownerMonthKeys);
+    }
+    ownerMonthKeys.add(mk);
   }
 
-  const sortedMonthKeys = Array.from(allMonthKeys).sort();
   const akunIds = new Set(ownerships.map((o) => o.ownerAkunId));
 
   const result = new Map<string, HistoriPenjualanKaryawan>();
   for (const akunId of akunIds) {
+    // This employee's own earliest relevant month: the minimum across the
+    // nooMonthStart of every mitra they own, and every month-key they have
+    // quantity data in. Falls back to the current month for a brand-new
+    // employee with no data at all (shouldn't normally happen, since
+    // they're only in akunIds because they own at least one mitra).
+    const candidateKeys: string[] = [];
+    for (const o of ownerships) {
+      if (o.ownerAkunId === akunId && o.nooMonthStart !== null) {
+        candidateKeys.push(monthKey(o.nooMonthStart));
+      }
+    }
+    const ownDataKeys = akunMonthKeys.get(akunId);
+    if (ownDataKeys) candidateKeys.push(...ownDataKeys);
+    const earliestMonthKey = candidateKeys.length > 0 ? candidateKeys.sort()[0] : currentMonthKey;
+
+    const employeeMonthKeys = monthKeyRange(earliestMonthKey, currentMonthKey);
+
     const bulanList: BulanPenjualan[] = [];
-    for (let i = 0; i < sortedMonthKeys.length; i++) {
-      const mk = sortedMonthKeys[i];
-      const prevMk = i > 0 ? sortedMonthKeys[i - 1] : null;
+    for (let i = 0; i < employeeMonthKeys.length; i++) {
+      const mk = employeeMonthKeys[i];
+      const prevMk = i > 0 ? employeeMonthKeys[i - 1] : null;
       const rawNoo = qtyByKey.get(`${akunId}|${mk}|noo`) ?? 0;
       const rawExisting = qtyByKey.get(`${akunId}|${mk}|existing`) ?? 0;
       const rawNooPrev = prevMk ? qtyByKey.get(`${akunId}|${prevMk}|noo`) ?? 0 : 0;

@@ -43,6 +43,20 @@ export default async function KinerjaPage() {
     histori: historiByAkunId.get(String(akun.id)) ?? { akunId: String(akun.id), bulanList: [] },
   }));
 
+  // historiByAkunId is sourced independently from MSSQL and never references
+  // the Postgres akun table — if an akun is later hard-deleted but still has
+  // computed history, that history must not silently disappear. A plain
+  // Marketing viewer only ever sees their own (necessarily still-existing)
+  // row, so this only applies to non-plain-Marketing viewers.
+  if (!isPlainMarketing) {
+    const knownAkunIds = new Set(marketingAkunList.map((a) => String(a.id)));
+    for (const [akunId, histori] of historiByAkunId) {
+      if (!knownAkunIds.has(akunId)) {
+        karyawanList.push({ akunId, nama: "Akun tidak ditemukan", histori });
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-xl font-semibold">Kinerja Karyawan</h1>
