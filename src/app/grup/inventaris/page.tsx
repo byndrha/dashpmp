@@ -1,7 +1,7 @@
 // src/app/grup/inventaris/page.tsx
 import type { Metadata } from "next";
 import { requireInventarisAccess } from "@/lib/require-access";
-import { listVendor } from "@/lib/queries/inventaris-vendor";
+import { listVendor, listVendorPerusahaanLinks } from "@/lib/queries/inventaris-vendor";
 import { getVendorRanking } from "@/lib/queries/inventaris-pengiriman";
 import { InventarisVendorList } from "@/components/dashboard/inventaris-vendor-list";
 
@@ -9,9 +9,19 @@ export const metadata: Metadata = { title: "Inventaris" };
 
 export default async function InventarisPage() {
   await requireInventarisAccess();
-  const vendorList = await listVendor();
+  const [vendorList, links] = await Promise.all([listVendor(), listVendorPerusahaanLinks()]);
   const rankings = await Promise.all(vendorList.map((v) => getVendorRanking(v.id)));
-  const vendorWithRanking = vendorList.map((v, i) => ({ ...v, ranking: rankings[i] }));
+  const perusahaanNamesByVendorId = new Map<number, string[]>();
+  for (const link of links) {
+    const names = perusahaanNamesByVendorId.get(link.vendorId) ?? [];
+    names.push(link.perusahaanNama);
+    perusahaanNamesByVendorId.set(link.vendorId, names);
+  }
+  const vendorWithRanking = vendorList.map((v, i) => ({
+    ...v,
+    ranking: rankings[i],
+    perusahaanNames: perusahaanNamesByVendorId.get(v.id) ?? [],
+  }));
 
   return (
     <div className="flex flex-col gap-4">

@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   Shield,
   TrendingUp,
+  Boxes,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,6 +50,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?:
   { href: "/mkesindo/produksi", label: "Produksi", icon: Factory, moduleKey: "produksi" },
   { href: "/mkesindo/laporan", label: "Laporan", icon: FileSpreadsheet, moduleKey: "laporan" },
   { href: "/mkesindo/kinerja", label: "Kinerja", icon: TrendingUp, moduleKey: "kinerja" },
+  { href: "/mkesindo/inventaris", label: "Inventaris", icon: Boxes, moduleKey: "inventaris" },
 ];
 
 // Not part of NAV_ITEMS/the moduleKey permission map above — this route is

@@ -42,6 +42,37 @@ export interface VendorPicRow extends VendorPicInput {
   urutan: number;
 }
 
+export interface VendorPerusahaanLinkRow {
+  vendorId: number;
+  perusahaanId: number;
+  perusahaanNama: string;
+  perusahaanKode: string;
+  businessPartnerId: string;
+}
+
+// All vendor-perusahaan links across every company, in one query — used to
+// show "didaftarkan/terhubung ke perusahaan mana" on the vendor list (both
+// /grup/inventaris and any per-company scoped view), and to let a
+// per-company page filter to only vendors linked to its own perusahaan_id
+// without a second round-trip per vendor.
+export async function listVendorPerusahaanLinks(): Promise<VendorPerusahaanLinkRow[]> {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT vpl.vendor_id, vpl.perusahaan_id, p.nama AS perusahaan_nama, p.kode AS perusahaan_kode,
+            vpl.business_partner_id
+     FROM vendor_perusahaan_link vpl
+     JOIN perusahaan p ON p.id = vpl.perusahaan_id
+     ORDER BY p.nama`
+  );
+  return result.rows.map((r) => ({
+    vendorId: r.vendor_id,
+    perusahaanId: r.perusahaan_id,
+    perusahaanNama: r.perusahaan_nama,
+    perusahaanKode: r.perusahaan_kode,
+    businessPartnerId: r.business_partner_id,
+  }));
+}
+
 export interface VendorPicInternalRow {
   id: number;
   vendorId: number;

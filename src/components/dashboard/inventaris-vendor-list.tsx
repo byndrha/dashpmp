@@ -13,7 +13,7 @@ import { InventarisVendorFormDialog } from "@/components/dashboard/inventaris-ve
 export function InventarisVendorList({
   vendorList,
 }: {
-  vendorList: (VendorRow & { ranking: VendorRanking })[];
+  vendorList: (VendorRow & { ranking: VendorRanking; perusahaanNames: string[] })[];
 }) {
   const [search, setSearch] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -48,6 +48,11 @@ export function InventarisVendorList({
                 <div className="flex flex-col">
                   <span className="font-medium">{v.nama}</span>
                   {v.npwp && <span className="text-xs text-muted-foreground">NPWP {v.npwp}</span>}
+                  <span className="text-xs text-muted-foreground">
+                    {v.perusahaanNames.length > 0
+                      ? `Terdaftar di ${v.perusahaanNames.join(", ")}`
+                      : "Belum terhubung ke perusahaan manapun"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   {v.ranking.jumlahLog > 0 ? (
