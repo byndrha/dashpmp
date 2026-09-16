@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { BulanPenjualan } from "@/lib/kinerja/marketing-collection-penjualan";
+import { KinerjaPenjualanDetailDialog } from "@/components/dashboard/kinerja-penjualan-detail-dialog";
 
 export interface KaryawanPenjualan {
   akunId: string;
@@ -142,33 +143,13 @@ export function KinerjaPenjualanTable({
             </table>
           </div>
 
-          {detailBulan && (
-            <div className="rounded-xl border p-4 text-sm">
-              <p className="mb-2 font-medium">Rincian Perhitungan — {formatBulan(detailBulan.bulanMulai)}</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="font-medium">NOO</p>
-                  <p>QTY sebelumnya: {detailBulan.qtyNooSebelumnya.toLocaleString("id-ID")} {satuan}</p>
-                  <p>QTY berjalan: {detailBulan.qtyNooBerjalan.toLocaleString("id-ID")} {satuan}</p>
-                  <p>Selisih: {formatSigned(detailBulan.deltaNoo)} {satuan}</p>
-                </div>
-                <div>
-                  <p className="font-medium">Existing</p>
-                  <p>QTY sebelumnya: {detailBulan.qtyExistingSebelumnya.toLocaleString("id-ID")} {satuan}</p>
-                  <p>QTY berjalan: {detailBulan.qtyExistingBerjalan.toLocaleString("id-ID")} {satuan}</p>
-                  <p>Selisih: {formatSigned(detailBulan.deltaExisting)} {satuan}</p>
-                </div>
-              </div>
-              <div className="mt-3 border-t pt-2">
-                <p className="font-medium">
-                  Total: {formatSigned(detailBulan.totalQty)} {satuan}
-                </p>
-                <p className="font-medium">
-                  Nilai: {detailBulan.totalQty.toLocaleString("id-ID")} × Rp200 = {formatRupiah(detailBulan.nilaiRupiah)}
-                </p>
-              </div>
-            </div>
-          )}
+          <KinerjaPenjualanDetailDialog
+            bulan={detailBulan}
+            satuan={satuan}
+            onOpenChange={(open) => {
+              if (!open) setDetailBulan(null);
+            }}
+          />
         </>
       )}
     </div>
