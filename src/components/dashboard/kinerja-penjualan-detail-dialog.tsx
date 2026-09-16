@@ -9,9 +9,13 @@ function formatBulan(bulanMulai: string): string {
   return d.toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+// maximumFractionDigits matches formatRaw's precision — keeps the delta
+// line and the QTY lines in this same panel visually consistent instead
+// of the delta defaulting to up to 3 decimal digits.
 function formatSigned(n: number): string {
-  if (n > 0) return `+${n.toLocaleString("id-ID")}`;
-  if (n < 0) return n.toLocaleString("id-ID");
+  const formatted = Math.abs(n).toLocaleString("id-ID", { maximumFractionDigits: 1 });
+  if (n > 0) return `+${formatted}`;
+  if (n < 0) return `-${formatted}`;
   return "0";
 }
 
