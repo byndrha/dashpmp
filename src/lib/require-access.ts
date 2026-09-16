@@ -186,18 +186,3 @@ export async function requireProduksiAdmin() {
   }
   return session;
 }
-
-// Gerbang app mobile /pmpersada/produksi-app — operator lantai produksi
-// PMPersada. Beda dari requireProduksiView() milik MKEsindo: sengaja TIDAK
-// pakai canAccessAllPT() bypass di sini, karena akun Direktur/PMP Group
-// yang mengelola banyak PT tidak otomatis relevan sebagai "operator
-// lantai produksi PMPersada" — mereka melihat data ini lewat dashboard
-// desktop /pmpersada/produksi (requirePmpersada() biasa), bukan app mobile ini.
-export async function requirePmpersadaProduksi() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (!session.user.isProduksi || session.user.accountScope !== "pmpersada") {
-    redirect("/akses-ditolak");
-  }
-  return session;
-}
