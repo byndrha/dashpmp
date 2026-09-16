@@ -184,6 +184,8 @@ export interface AkunRow {
   salesmanId: string | null;
   isActive: boolean;
   canAksesInventaris: boolean;
+  /** ISO date ("YYYY-MM-DD") the employee stopped being active, or null if still active/never set. First consumed by Kinerja Karyawan to stop attributing mitra to a resigned Marketing from this date onward. */
+  nonaktifSejak: string | null;
   lastLoginAt: Date | null;
 }
 
@@ -193,7 +195,7 @@ export async function listAkun(): Promise<AkunRow[]> {
     SELECT a.id, a.username, a.nama, a.email, a.nomor_telepon,
            a.perusahaan_id, p.nama AS perusahaan_nama, p.kode AS perusahaan_kode,
            a.peran_id, r.nama AS peran_nama, a.salesman_id,
-           a.is_active, a.can_akses_inventaris, a.last_login_at
+           a.is_active, a.can_akses_inventaris, a.nonaktif_sejak, a.last_login_at
     FROM akun a
     LEFT JOIN perusahaan p ON p.id = a.perusahaan_id
     LEFT JOIN peran r ON r.id = a.peran_id
@@ -213,6 +215,7 @@ export async function listAkun(): Promise<AkunRow[]> {
     salesmanId: row.salesman_id,
     isActive: row.is_active,
     canAksesInventaris: row.can_akses_inventaris,
+    nonaktifSejak: row.nonaktif_sejak ? new Date(row.nonaktif_sejak).toISOString().slice(0, 10) : null,
     lastLoginAt: row.last_login_at,
   }));
 }
@@ -400,6 +403,14 @@ export async function setPeranOperasional(peranId: number, isOperasional: boolea
 export async function setAkunCanAksesInventaris(akunId: number, value: boolean): Promise<void> {
   const pool = getPgPool();
   await pool.query(`UPDATE akun SET can_akses_inventaris = $1 WHERE id = $2`, [value, akunId]);
+}
+
+// tanggal: "YYYY-MM-DD", or null to clear (mark the employee active again /
+// remove a mistaken entry). Consumed by Kinerja Karyawan's per-day
+// attribution — see marketing-collection-penjualan.ts's resignDateByAkunId.
+export async function setAkunNonaktifSejak(akunId: number, tanggal: string | null): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE akun SET nonaktif_sejak = $1 WHERE id = $2`, [tanggal, akunId]);
 }
 
 // ---------- Sesi login aktif (consumed by auth.ts's jwt callback) ----------

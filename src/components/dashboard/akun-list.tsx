@@ -18,6 +18,7 @@ import {
   resetAkunPasswordAction,
   deleteAkunAction,
   setAkunCanAksesInventarisAction,
+  setAkunNonaktifSejakAction,
 } from "@/app/grup/akun/actions";
 
 const DIREKTUR_FILTER = "direktur";
@@ -281,7 +282,7 @@ function EditDialog({
   peranList: PeranRow[];
   driverProfiles: DriverProfileRow[];
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: UpdateAkunInput, canAksesInventaris: boolean) => void;
+  onSubmit: (input: UpdateAkunInput, canAksesInventaris: boolean, nonaktifSejak: string | null) => void;
   pending: boolean;
   error: string | null;
 }) {
@@ -290,6 +291,7 @@ function EditDialog({
   const [status, setStatus] = useState(akun.isActive ? "active" : "inactive");
   const [salesmanId, setSalesmanId] = useState<string | null>(akun.salesmanId);
   const [canAksesInventaris, setCanAksesInventaris] = useState(akun.canAksesInventaris);
+  const [nonaktifSejak, setNonaktifSejak] = useState(akun.nonaktifSejak ?? "");
 
   // Same reset rule as CreateDialog: drop the driver link the moment the
   // selected Peran is no longer a driver role, so a stale salesmanId from
@@ -313,7 +315,8 @@ function EditDialog({
         isActive: status === "active",
         salesmanId,
       },
-      canAksesInventaris
+      canAksesInventaris,
+      nonaktifSejak || null
     );
   }
 
@@ -370,6 +373,20 @@ function EditDialog({
                 <SelectItem value="inactive">Nonaktif</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="nonaktifSejak">Nonaktif sejak (resign)</Label>
+            <Input
+              id="nonaktifSejak"
+              type="date"
+              value={nonaktifSejak}
+              onChange={(e) => setNonaktifSejak(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Isi hanya jika karyawan sudah resign/tidak menjabat. Untuk Kinerja Karyawan, hari sejak tanggal ini
+              berhenti dihitung sebagai kontribusi akun ini dan masuk ke &ldquo;Tanpa Marketing&rdquo;. Kosongkan
+              untuk membatalkan.
+            </p>
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
@@ -472,15 +489,19 @@ export function AkunList({
     });
   }
 
-  function handleUpdate(input: UpdateAkunInput, canAksesInventaris: boolean) {
+  function handleUpdate(input: UpdateAkunInput, canAksesInventaris: boolean, nonaktifSejak: string | null) {
     const targetId = input.id;
     setError(null);
     startTransition(async () => {
-      // canAksesInventaris lives on its own Server Action (see actions.ts's
-      // comment), not inside updateAkunAction — same "one Simpan button,
-      // multiple independent actions" pattern as RoleCard.handleSave in
-      // peran-editor.tsx.
-      const results = await Promise.all([updateAkunAction(input), setAkunCanAksesInventarisAction(targetId, canAksesInventaris)]);
+      // canAksesInventaris/nonaktifSejak each live on their own Server
+      // Action (see actions.ts's comment), not inside updateAkunAction —
+      // same "one Simpan button, multiple independent actions" pattern as
+      // RoleCard.handleSave in peran-editor.tsx.
+      const results = await Promise.all([
+        updateAkunAction(input),
+        setAkunCanAksesInventarisAction(targetId, canAksesInventaris),
+        setAkunNonaktifSejakAction(targetId, nonaktifSejak),
+      ]);
       if (editingIdRef.current !== targetId) return;
       const failed = results.find((r) => !r.success);
       if (failed && !failed.success) {

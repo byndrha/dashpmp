@@ -3,8 +3,15 @@ import { getPool } from "@/lib/db";
 import { resolveAllMitraOwnership, type MitraOwnership } from "@/lib/kinerja/marketing-collection-attribution";
 import { applyQtyStrategy } from "@/lib/kinerja/qty-strategy";
 import { monthBoundary, getBusinessDate } from "@/lib/business-date";
+import { listAkun } from "@/lib/queries/akun";
 
 const RATE_PER_KANTONG = 200;
+
+// Pseudo-owner id for mitra whose real owner has resigned (akun.nonaktif_sejak
+// set) — never collides with a real akun.id, which is always a plain numeric
+// string. Exported so page.tsx can label this bucket distinctly from both a
+// real employee and a genuinely-orphaned (hard-deleted) akunId.
+export const TANPA_MARKETING_ID = "tanpa_marketing";
 
 export interface BulanPenjualan {
   /** ISO date, first of month, e.g. "2026-07-01". */
@@ -104,12 +111,28 @@ function monthKeyRange(startKey: string, endKey: string): string[] {
  * MSSQL/Postgres work happens inside this one function, not per-employee.
  */
 export async function getHistoriPenjualanSemuaKaryawan(): Promise<Map<string, HistoriPenjualanKaryawan>> {
-  const [ownerships, qtyPerMitraHari] = await Promise.all([
+  const [ownerships, qtyPerMitraHari, allAkun] = await Promise.all([
     resolveAllMitraOwnership(),
     getQtyKantongPerMitraPerHari(),
+    listAkun(),
   ]);
 
   const ownershipByMitra = new Map<string, MitraOwnership>(ownerships.map((o) => [o.businessPartnerId, o]));
+
+  // akun.nonaktif_sejak ("resigned since") is a plain "YYYY-MM-DD" date —
+  // parsed as a UTC-midnight Date so it compares directly against rowDate
+  // (also UTC-midnight-labeled) with no timezone-shift risk. Confirmed with
+  // user 2026-09-16: the resign day itself already counts as "no longer
+  // theirs" (a day is redirected to Tanpa Marketing when
+  // rowDate >= resignDate), matching "nonaktif SEJAK tanggal X" literally.
+  const resignDateByAkunId = new Map<string, Date>();
+  for (const akun of allAkun) {
+    if (akun.nonaktifSejak) {
+      const [y, m, d] = akun.nonaktifSejak.split("-").map(Number);
+      resignDateByAkunId.set(String(akun.id), new Date(Date.UTC(y, m - 1, d)));
+    }
+  }
+  let anyRedirectedToTanpaMarketing = false;
 
   // qtyByKey["akunId|YYYY-MM|noo"] / "...|existing" — built once by walking
   // every (mitra, hari) qty row, deciding NOO-vs-Existing at DAY
@@ -128,12 +151,25 @@ export async function getHistoriPenjualanSemuaKaryawan(): Promise<Map<string, Hi
     if (ownership.nooStartDate && rowDate.getTime() < ownership.nooStartDate.getTime()) continue; // before mitra existed
     const nooWindowEnd = ownership.nooStartDate ? addDays(ownership.nooStartDate, NOO_WINDOW_DAYS) : null;
     const isNoo = nooWindowEnd != null && rowDate.getTime() <= nooWindowEnd.getTime();
+
+    // A resigned owner's days from their resign date onward stop counting
+    // toward them (NOO or Existing alike) and flow into the shared Tanpa
+    // Marketing bucket instead — checked AFTER the NOO/Existing status is
+    // determined so a mitra still mid-NOO-window at the resign date keeps
+    // that status once redirected (Tanpa Marketing gets its own NOO/Existing
+    // split too, computed identically, just under a pseudo-owner id).
+    const resignDate = resignDateByAkunId.get(ownership.ownerAkunId);
+    const effectiveOwnerId =
+      resignDate && rowDate.getTime() >= resignDate.getTime() ? TANPA_MARKETING_ID : ownership.ownerAkunId;
+    if (effectiveOwnerId === TANPA_MARKETING_ID) anyRedirectedToTanpaMarketing = true;
+
     const mk = monthKey(rowDate);
-    const key = `${ownership.ownerAkunId}|${mk}|${isNoo ? "noo" : "existing"}`;
+    const key = `${effectiveOwnerId}|${mk}|${isNoo ? "noo" : "existing"}`;
     qtyByKey.set(key, (qtyByKey.get(key) ?? 0) + row.QtyKantong);
   }
 
   const akunIds = new Set(ownerships.map((o) => o.ownerAkunId));
+  if (anyRedirectedToTanpaMarketing) akunIds.add(TANPA_MARKETING_ID);
 
   // Every employee's table spans the same fixed window — FEATURE_START_MONTH_KEY
   // through the current business month — rather than each employee's own

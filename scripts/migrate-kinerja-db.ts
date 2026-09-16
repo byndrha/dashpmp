@@ -70,7 +70,16 @@ async function main() {
       [jabatanId]
     );
 
-    console.log("Kinerja tables (jabatan, jabatan_peran_map, aspek_kinerja) ready + seeded.");
+    // Employee-wide "resigned since" date, first needed by Kinerja
+    // (2026-09-16): once set, days from this date onward stop being
+    // attributed to this akun in Kinerja and flow into a shared "Tanpa
+    // Marketing" bucket instead — but the column lives on `akun` itself
+    // (not a Kinerja-specific table) since resignation is an employee-wide
+    // fact, matching the precedent of can_akses_inventaris also living
+    // here despite being added by a different module's migration.
+    await client.query(`ALTER TABLE akun ADD COLUMN IF NOT EXISTS nonaktif_sejak DATE`);
+
+    console.log("Kinerja tables (jabatan, jabatan_peran_map, aspek_kinerja) ready + seeded. akun.nonaktif_sejak ready.");
   } finally {
     await client.end();
   }

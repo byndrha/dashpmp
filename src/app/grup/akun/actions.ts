@@ -11,6 +11,7 @@ import {
   listAllPeran,
   listAkun,
   setAkunCanAksesInventaris,
+  setAkunNonaktifSejak,
   type CreateAkunInput,
   type UpdateAkunInput,
 } from "@/lib/queries/akun";
@@ -98,6 +99,18 @@ export async function setAkunCanAksesInventarisAction(akunId: number, value: boo
     await requireGrupAccess();
     await setAkunCanAksesInventaris(akunId, value);
     revalidatePath("/grup/akun");
+  });
+}
+
+// Same "own setter action, separate from updateAkunAction" pattern as
+// canAksesInventaris above — nonaktifSejak also revalidates /mkesindo/kinerja
+// since it's what actually consumes this field, not just /grup/akun.
+export async function setAkunNonaktifSejakAction(akunId: number, tanggal: string | null): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    await setAkunNonaktifSejak(akunId, tanggal);
+    revalidatePath("/grup/akun");
+    revalidatePath("/mkesindo/kinerja");
   });
 }
 
