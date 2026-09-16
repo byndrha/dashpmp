@@ -14,12 +14,17 @@
 // design note), which is the opposite of what THIS feature needs for NOO
 // credit (permanent, tied to whoever actually submitted the winning
 // Pengajuan). It IS reused as the fallback for mitra with no Pengajuan
-// trail (legacy mitra), matching this plan's explicit design decision.
+// trail (legacy mitra), matching this plan's explicit design decision. That
+// fallback resolves overrides via the merged Prioritas + cross-wilayah
+// override map (resolveMitraOverrideSources) — the same canonical merge
+// every other resolveResponsibleMarketing() caller in the codebase uses —
+// so an admin-set per-mitra Pemilik override is honored here too, not just
+// cross-wilayah Pengajuan overrides.
 import { getPool } from "@/lib/db";
 import {
   getMarketingWilayahAssignments,
   getMarketingUsers,
-  getCrossWilayahProposalOverrides,
+  resolveMitraOverrideSources,
   resolveResponsibleMarketing,
 } from "@/lib/queries/marketing-wilayah";
 
@@ -76,7 +81,7 @@ export async function resolveAllMitraOwnership(): Promise<MitraOwnership[]> {
     getMarketingWilayahAssignments(),
     getMarketingUsers(),
   ]);
-  const crossWilayahOverrides = await getCrossWilayahProposalOverrides(assignments);
+  const { merged: mitraOverrides } = await resolveMitraOverrideSources(assignments);
 
   // Nama -> akun.id reverse lookup — see Global Constraints for why this
   // is needed (resolveResponsibleMarketing returns a display name).
@@ -109,7 +114,7 @@ export async function resolveAllMitraOwnership(): Promise<MitraOwnership[]> {
       mitra.Wilayah,
       mitra.Kecamatan,
       assignments,
-      crossWilayahOverrides
+      mitraOverrides
     );
     const ownerAkunId = ownerName ? namaToAkunId.get(ownerName) : undefined;
     if (!ownerAkunId) continue; // unassigned mitra — excluded, matches existing convention
