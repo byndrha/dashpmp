@@ -44,16 +44,23 @@ export default async function KinerjaPage() {
   }));
 
   // historiByAkunId is sourced independently from MSSQL and never references
-  // the Postgres akun table — if an akun is later hard-deleted but still has
-  // computed history, that history must not silently disappear. A plain
-  // Marketing viewer only ever sees their own (necessarily still-existing)
-  // row, so this only applies to non-plain-Marketing viewers.
+  // the Postgres akun table — an akunId can show up here without being in
+  // marketingAkunList for two different reasons, which must be labeled
+  // differently: (a) the akun still exists but its peran changed away from
+  // Marketing (e.g. promoted, or a Manager who personally submitted/was
+  // credited for a Pengajuan) — show their real nama, historical credit
+  // isn't fictional just because their current role changed; (b) the akun
+  // was hard-deleted entirely — genuinely nothing to look up, show the
+  // placeholder. A plain Marketing viewer only ever sees their own
+  // (necessarily still-existing, still-Marketing) row, so this only
+  // applies to non-plain-Marketing viewers.
   if (!isPlainMarketing) {
-    const knownAkunIds = new Set(marketingAkunList.map((a) => String(a.id)));
+    const marketingAkunIds = new Set(marketingAkunList.map((a) => String(a.id)));
+    const allAkunById = new Map(allAkun.map((a) => [String(a.id), a]));
     for (const [akunId, histori] of historiByAkunId) {
-      if (!knownAkunIds.has(akunId)) {
-        karyawanList.push({ akunId, nama: "Akun tidak ditemukan", histori });
-      }
+      if (marketingAkunIds.has(akunId)) continue;
+      const akun = allAkunById.get(akunId);
+      karyawanList.push({ akunId, nama: akun ? akun.nama : "Akun tidak ditemukan", histori });
     }
   }
 
