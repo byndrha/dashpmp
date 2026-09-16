@@ -21,6 +21,7 @@
 // so an admin-set per-mitra Pemilik override is honored here too, not just
 // cross-wilayah Pengajuan overrides.
 import { getPool } from "@/lib/db";
+import { monthBoundary, utcInstantToWibDisplay } from "@/lib/business-date";
 import {
   getMarketingWilayahAssignments,
   getMarketingUsers,
@@ -65,10 +66,6 @@ async function getAllBusinessPartnerBasics(): Promise<
   return result.recordset as { BusinessPartnerID: string; Wilayah: string | null; Kecamatan: string | null }[];
 }
 
-function monthBoundaryUtc(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
 /**
  * Resolves ownership for every BusinessPartner in the ERP. Call once per
  * page load and reuse the resulting array — this does a handful of
@@ -99,10 +96,22 @@ export async function resolveAllMitraOwnership(): Promise<MitraOwnership[]> {
   for (const mitra of allMitra) {
     const pengajuan = pengajuanByMitra.get(mitra.BusinessPartnerID);
     if (pengajuan) {
+      // ReviewedAt is set via GETDATE() in approvePengajuan() — confirmed
+      // live that this server's SQL Server clock is genuinely UTC, so
+      // ReviewedAt is a TRUE UTC instant, unlike TransDate elsewhere in
+      // this codebase (SalesOrder/DeliveryOrder/SalesInvoice/SalesReturn),
+      // which the desktop-ERP client writes as naive-WIB (raw UTC
+      // components already equal the WIB wall-clock value — see
+      // getNaiveWibTransDate's comment in business-date.ts). Extracting
+      // the calendar month directly off ReviewedAt's raw UTC components
+      // would misclassify any approval made 17:00-23:59 UTC (00:00-06:59
+      // WIB) into the previous WIB calendar month, so it must first be
+      // shifted onto its WIB wall-clock reading via utcInstantToWibDisplay
+      // before monthBoundary can read off the correct month.
       ownerships.push({
         businessPartnerId: mitra.BusinessPartnerID,
         ownerAkunId: pengajuan.MarketingUserID,
-        nooMonthStart: monthBoundaryUtc(pengajuan.ReviewedAt),
+        nooMonthStart: monthBoundary(utcInstantToWibDisplay(pengajuan.ReviewedAt)),
       });
       continue;
     }
