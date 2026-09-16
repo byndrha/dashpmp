@@ -48,6 +48,20 @@ function monthKey(d: Date): string {
   return d.toISOString().slice(0, 7); // "YYYY-MM"
 }
 
+// The NOO/Existing tracking system for Marketing and Collection only began
+// being recorded from July 2026 onward (explicit business decision,
+// 2026-09-16) — data from before this month exists in the ERP but was
+// never captured under this Pengajuan-based NOO/Existing rule, so it's
+// excluded from every employee's table rather than producing a misleading
+// mostly-zero history. This is specific to this jabatan/aspek's business
+// rule, not a system-wide constant.
+const FEATURE_START_MONTH_KEY = "2026-07";
+
+function daysInMonthKey(mk: string): number {
+  const [year, month] = mk.split("-").map(Number);
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
 /** Generates a continuous list of "YYYY-MM" keys from startKey through endKey, inclusive. */
 function monthKeyRange(startKey: string, endKey: string): string[] {
   const [startYear, startMonth] = startKey.split("-").map(Number);
@@ -83,10 +97,6 @@ export async function getHistoriPenjualanSemuaKaryawan(): Promise<Map<string, Hi
   // every (mitra, bulan) qty row and attributing it via the ownership
   // resolved above.
   const qtyByKey = new Map<string, number>();
-  // Per-owner set of month-keys they actually have quantity data in — used
-  // below to compute each employee's OWN earliest relevant month, rather
-  // than applying one system-wide earliest month to everyone.
-  const akunMonthKeys = new Map<string, Set<string>>();
   // Current business month is always the fixed upper bound of every
   // employee's range, even if they have zero data in it — the table must
   // reach "today", not stop at the last month with data.
@@ -102,48 +112,32 @@ export async function getHistoriPenjualanSemuaKaryawan(): Promise<Map<string, Hi
     const mk = monthKey(rowMonthStart);
     const key = `${ownership.ownerAkunId}|${mk}|${isNooThisMonth ? "noo" : "existing"}`;
     qtyByKey.set(key, (qtyByKey.get(key) ?? 0) + row.QtyKantong);
-    let ownerMonthKeys = akunMonthKeys.get(ownership.ownerAkunId);
-    if (!ownerMonthKeys) {
-      ownerMonthKeys = new Set<string>();
-      akunMonthKeys.set(ownership.ownerAkunId, ownerMonthKeys);
-    }
-    ownerMonthKeys.add(mk);
   }
 
   const akunIds = new Set(ownerships.map((o) => o.ownerAkunId));
 
+  // Every employee's table spans the same fixed window — FEATURE_START_MONTH_KEY
+  // through the current business month — rather than each employee's own
+  // earliest data month (the NOO/Existing system itself only exists from
+  // that fixed start onward, so an earlier per-employee start would just
+  // surface pre-tracking data the business rule was never meant to cover).
+  const sharedMonthKeys = monthKeyRange(FEATURE_START_MONTH_KEY, currentMonthKey);
+
   const result = new Map<string, HistoriPenjualanKaryawan>();
   for (const akunId of akunIds) {
-    // This employee's own earliest relevant month: the minimum across the
-    // nooMonthStart of every mitra they own, and every month-key they have
-    // quantity data in. Falls back to the current month for a brand-new
-    // employee with no data at all (shouldn't normally happen, since
-    // they're only in akunIds because they own at least one mitra).
-    const candidateKeys: string[] = [];
-    for (const o of ownerships) {
-      if (o.ownerAkunId === akunId && o.nooMonthStart !== null) {
-        candidateKeys.push(monthKey(o.nooMonthStart));
-      }
-    }
-    const ownDataKeys = akunMonthKeys.get(akunId);
-    if (ownDataKeys) candidateKeys.push(...ownDataKeys);
-    const earliestMonthKey = candidateKeys.length > 0 ? candidateKeys.sort()[0] : currentMonthKey;
-
-    const employeeMonthKeys = monthKeyRange(earliestMonthKey, currentMonthKey);
-
     const bulanList: BulanPenjualan[] = [];
-    for (let i = 0; i < employeeMonthKeys.length; i++) {
-      const mk = employeeMonthKeys[i];
-      const prevMk = i > 0 ? employeeMonthKeys[i - 1] : null;
+    for (let i = 0; i < sharedMonthKeys.length; i++) {
+      const mk = sharedMonthKeys[i];
+      const prevMk = i > 0 ? sharedMonthKeys[i - 1] : null;
       const rawNoo = qtyByKey.get(`${akunId}|${mk}|noo`) ?? 0;
       const rawExisting = qtyByKey.get(`${akunId}|${mk}|existing`) ?? 0;
       const rawNooPrev = prevMk ? qtyByKey.get(`${akunId}|${prevMk}|noo`) ?? 0 : 0;
       const rawExistingPrev = prevMk ? qtyByKey.get(`${akunId}|${prevMk}|existing`) ?? 0 : 0;
 
-      const qtyNooBerjalan = applyQtyStrategy(rawNoo, "non_average");
-      const qtyNooSebelumnya = applyQtyStrategy(rawNooPrev, "non_average");
-      const qtyExistingBerjalan = applyQtyStrategy(rawExisting, "average");
-      const qtyExistingSebelumnya = applyQtyStrategy(rawExistingPrev, "average");
+      const qtyNooBerjalan = applyQtyStrategy(rawNoo, "non_average", daysInMonthKey(mk));
+      const qtyNooSebelumnya = prevMk ? applyQtyStrategy(rawNooPrev, "non_average", daysInMonthKey(prevMk)) : 0;
+      const qtyExistingBerjalan = applyQtyStrategy(rawExisting, "average", daysInMonthKey(mk));
+      const qtyExistingSebelumnya = prevMk ? applyQtyStrategy(rawExistingPrev, "average", daysInMonthKey(prevMk)) : 0;
 
       const deltaNoo = qtyNooBerjalan - qtyNooSebelumnya;
       const deltaExisting = qtyExistingBerjalan - qtyExistingSebelumnya;

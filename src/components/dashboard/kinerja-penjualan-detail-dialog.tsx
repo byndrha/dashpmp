@@ -20,6 +20,10 @@ function formatRupiah(n: number): string {
   return `${sign}Rp${Math.abs(n).toLocaleString("id-ID")}`;
 }
 
+function formatRaw(n: number): string {
+  return n.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+}
+
 export function KinerjaPenjualanDetailDialog({
   bulan,
   satuan,
@@ -38,27 +42,27 @@ export function KinerjaPenjualanDetailDialog({
         {bulan && (
           <div className="flex flex-col gap-4 text-sm">
             <div>
-              <p className="font-medium">NOO</p>
+              <p className="font-medium">NOO (Total per bulan)</p>
               <p>
-                QTY sebelumnya: {bulan.qtyNooSebelumnya.toLocaleString("id-ID")} {satuan}
+                Total bulan sebelumnya: {formatRaw(bulan.qtyNooSebelumnya)} {satuan}
               </p>
               <p>
-                QTY berjalan: {bulan.qtyNooBerjalan.toLocaleString("id-ID")} {satuan}
+                Total bulan berjalan: {formatRaw(bulan.qtyNooBerjalan)} {satuan}
               </p>
               <p>
                 Selisih: {formatSigned(bulan.deltaNoo)} {satuan}
               </p>
             </div>
             <div>
-              <p className="font-medium">Existing</p>
+              <p className="font-medium">Existing (Rata-rata per hari)</p>
               <p>
-                QTY sebelumnya: {bulan.qtyExistingSebelumnya.toLocaleString("id-ID")} {satuan}
+                Rata-rata bulan sebelumnya: {formatRaw(bulan.qtyExistingSebelumnya)} {satuan}/hari
               </p>
               <p>
-                QTY berjalan: {bulan.qtyExistingBerjalan.toLocaleString("id-ID")} {satuan}
+                Rata-rata bulan berjalan: {formatRaw(bulan.qtyExistingBerjalan)} {satuan}/hari
               </p>
               <p>
-                Selisih: {formatSigned(bulan.deltaExisting)} {satuan}
+                Selisih: {formatSigned(bulan.deltaExisting)} {satuan}/hari
               </p>
             </div>
             <div className="border-t pt-2">

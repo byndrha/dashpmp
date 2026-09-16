@@ -26,6 +26,10 @@ function formatRupiah(n: number): string {
   return `${sign}Rp${Math.abs(n).toLocaleString("id-ID")}`;
 }
 
+function formatRaw(n: number): string {
+  return n.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+}
+
 export function KinerjaPenjualanTable({
   jabatanNama,
   aspekNama,
@@ -105,7 +109,10 @@ export function KinerjaPenjualanTable({
                       className="cursor-pointer p-2 text-right hover:bg-muted/40"
                       onClick={() => setDetailBulan(b)}
                     >
-                      {formatSigned(b.deltaNoo)}
+                      <div>{formatSigned(b.deltaNoo)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Total: {formatRaw(b.qtyNooBerjalan)} {satuan}
+                      </div>
                     </td>
                   ))}
                 </tr>
@@ -120,7 +127,10 @@ export function KinerjaPenjualanTable({
                       className="cursor-pointer p-2 text-right hover:bg-muted/40"
                       onClick={() => setDetailBulan(b)}
                     >
-                      {formatSigned(b.deltaExisting)}
+                      <div>{formatSigned(b.deltaExisting)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Rata-rata: {formatRaw(b.qtyExistingBerjalan)} {satuan}/hari
+                      </div>
                     </td>
                   ))}
                 </tr>
