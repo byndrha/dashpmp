@@ -7,4 +7,5 @@ export const PT_ROUTES: Record<string, string> = {
   mkesindo: "/mkesindo",
   pmputra: "/pmputra",
   pmpersada: "/pmpersada",
+  pmpakis: "/pmpakis",
 };

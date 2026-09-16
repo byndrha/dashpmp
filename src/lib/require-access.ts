@@ -98,6 +98,13 @@ export async function requirePmpersada() {
   return session;
 }
 
+export async function requirePmpakis() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (session.user.accountScope !== "pmpakis" && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
+  return session;
+}
+
 // requirePmpersada() sendiri hanya cek accountScope company-wide, tanpa
 // cek modul — akun operator produksi PMPersada baru (Task 1 rencana ini)
 // otomatis punya accountScope==="pmpersada" juga (dari perusahaan_id yang

@@ -110,6 +110,9 @@ export const middleware = auth((req) => {
   if (scope === "pmpersada" && !path.startsWith("/pmpersada")) {
     return NextResponse.redirect(new URL("/pmpersada", req.nextUrl));
   }
+  if (scope === "pmpakis" && !path.startsWith("/pmpakis")) {
+    return NextResponse.redirect(new URL("/pmpakis", req.nextUrl));
+  }
   if (scope === "mkesindo" && !path.startsWith("/mkesindo")) {
     return NextResponse.redirect(new URL("/mkesindo", req.nextUrl));
   }
