@@ -9,18 +9,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createVendorAction } from "@/app/grup/inventaris/actions";
+import type { VendorRow } from "@/lib/queries/inventaris-vendor";
+import { createVendorAction, updateVendorAction } from "@/app/grup/inventaris/actions";
 
-// kategoriList is deliberately NOT a prop here — creating a vendor record
-// itself needs no kategori (kategori applies to vendor_produk, added later
-// from the detail page's Produk tab, see QuickAddProduk in
+// kategoriList is deliberately NOT a prop here — creating/editing a vendor
+// record itself needs no kategori (kategori applies to vendor_produk, added
+// later from the detail page's Produk tab, see QuickAddProduk in
 // inventaris-vendor-detail.tsx).
+//
+// Passing vendorToEdit switches the dialog into edit mode: fields prefill
+// from the vendor and Simpan calls updateVendorAction(vendorToEdit.id, ...)
+// instead of createVendorAction(...). updateVendorAction already syncs the
+// edit to every linked company's BusinessPartner server-side.
 export function InventarisVendorFormDialog({
   open,
   onOpenChange,
+  vendorToEdit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  vendorToEdit?: VendorRow | null;
 }) {
   const router = useRouter();
   const [nama, setNama] = useState("");
@@ -30,6 +38,8 @@ export function InventarisVendorFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const isEdit = Boolean(vendorToEdit);
+
   function reset() {
     setNama("");
     setNpwp("");
@@ -38,20 +48,44 @@ export function InventarisVendorFormDialog({
     setError(null);
   }
 
+  // Prefill from vendorToEdit (or clear for a fresh "Tambah Vendor") the
+  // moment `open` flips to true, since this dialog stays mounted across
+  // opens/closes and only receives the "please open now" signal via the
+  // `open` prop, not through its own onOpenChange. Adjusting state during
+  // render (React's documented pattern for "state that depends on a prop
+  // change") instead of in a useEffect avoids the extra
+  // render-then-effect-then-render cascade.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      if (vendorToEdit) {
+        setNama(vendorToEdit.nama);
+        setNpwp(vendorToEdit.npwp ?? "");
+        setNpwpAlamat(vendorToEdit.npwpAlamat ?? "");
+        setCatatan(vendorToEdit.catatan ?? "");
+        setError(null);
+      } else {
+        reset();
+      }
+    }
+  }
+
   function handleSubmit() {
     setError(null);
     startTransition(async () => {
-      const result = await createVendorAction({
+      const input = {
         nama: nama.trim(),
         npwp: npwp.trim() || null,
         npwpAlamat: npwpAlamat.trim() || null,
         catatan: catatan.trim() || null,
-      });
+      };
+      const result = vendorToEdit ? await updateVendorAction(vendorToEdit.id, input) : await createVendorAction(input);
       if (!result.success) {
         setError(result.error);
         return;
       }
-      toast.success("Vendor ditambahkan.");
+      toast.success(vendorToEdit ? "Vendor diperbarui." : "Vendor ditambahkan.");
       reset();
       onOpenChange(false);
       router.refresh();
@@ -62,7 +96,7 @@ export function InventarisVendorFormDialog({
     <Dialog open={open} onOpenChange={(next) => { if (!next) reset(); onOpenChange(next); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Tambah Vendor</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Vendor" : "Tambah Vendor"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">

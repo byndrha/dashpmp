@@ -248,8 +248,13 @@ export async function linkVendorToPerusahaanAction(
 
 export async function addVendorPengirimanAction(input: VendorPengirimanInput): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireInventarisAccess();
-    await addVendorPengiriman(input);
+    const session = await requireInventarisAccess();
+    // This is a directly-invocable Server Action, so a caller could send any
+    // dicatatOlehAkunId they like — override it with the actual signed-in
+    // user's id rather than trusting the client-supplied value (the UI's own
+    // currentAkunId is now harmlessly redundant with this server-side check).
+    const safeInput: VendorPengirimanInput = { ...input, dicatatOlehAkunId: Number(session.user.id) };
+    await addVendorPengiriman(safeInput);
     revalidatePath("/grup/inventaris");
   });
 }

@@ -6,6 +6,7 @@ import { getVendor, listVendorLokasi, listVendorPic, listVendorPicInternal } fro
 import { listVendorProduk, listVendorKategori } from "@/lib/queries/inventaris-produk";
 import { listVendorPengiriman, getVendorRanking } from "@/lib/queries/inventaris-pengiriman";
 import { listPerusahaan } from "@/lib/queries/perusahaan";
+import { listAkun } from "@/lib/queries/akun";
 import { getPgPool } from "@/lib/pg";
 import { InventarisVendorDetail } from "@/components/dashboard/inventaris-vendor-detail";
 
@@ -20,7 +21,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
   const vendor = await getVendor(id);
   if (!vendor) notFound();
 
-  const [lokasiList, picList, picInternalList, produkList, kategoriList, pengirimanList, ranking, perusahaanList, links] =
+  const [lokasiList, picList, picInternalList, produkList, kategoriList, pengirimanList, ranking, perusahaanList, akunList, links] =
     await Promise.all([
       listVendorLokasi(id),
       listVendorPic(id),
@@ -30,6 +31,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
       listVendorPengiriman(id),
       getVendorRanking(id),
       listPerusahaan(),
+      listAkun(),
       getPgPool().query(
         `SELECT vpl.id, vpl.perusahaan_id, p.nama AS perusahaan_nama, vpl.business_partner_id, vpl.term_of_payment_id, vpl.is_suspended
          FROM vendor_perusahaan_link vpl JOIN perusahaan p ON p.id = vpl.perusahaan_id WHERE vpl.vendor_id = $1`,
@@ -59,6 +61,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           isSuspended: r.is_suspended,
         }))}
         currentAkunId={Number(session.user.id)}
+        akunList={akunList}
       />
     </div>
   );

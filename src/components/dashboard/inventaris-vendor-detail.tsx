@@ -1,26 +1,31 @@
 // src/components/dashboard/inventaris-vendor-detail.tsx
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Star } from "lucide-react";
+import { Plus, Trash2, Star, Pencil } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import type { VendorRow, VendorLokasiRow, VendorPicRow, VendorPicInternalRow } from "@/lib/queries/inventaris-vendor";
 import type { VendorProdukRow, VendorKategoriRow } from "@/lib/queries/inventaris-produk";
 import type { VendorPengirimanRow, VendorRanking } from "@/lib/queries/inventaris-pengiriman";
 import type { PerusahaanRow } from "@/lib/queries/perusahaan";
+import type { AkunRow } from "@/lib/queries/akun";
 import {
   addVendorLokasiAction, deleteVendorLokasiAction,
   addVendorPicAction, deleteVendorPicAction,
+  addVendorPicInternalAction, removeVendorPicInternalAction,
   addVendorProdukAction, deleteVendorProdukAction,
   addVendorPengirimanAction, deleteVendorPengirimanAction,
   linkVendorToPerusahaanAction,
+  listVendorKategoriAction, createVendorKategoriAction, renameVendorKategoriAction, deleteVendorKategoriAction,
 } from "@/app/grup/inventaris/actions";
+import { InventarisVendorFormDialog } from "@/components/dashboard/inventaris-vendor-form-dialog";
 
 interface PerusahaanLink {
   id: number;
@@ -45,6 +50,7 @@ export function InventarisVendorDetail({
   perusahaanList,
   perusahaanLinks,
   currentAkunId,
+  akunList,
 }: {
   vendor: VendorRow;
   lokasiList: VendorLokasiRow[];
@@ -57,9 +63,12 @@ export function InventarisVendorDetail({
   perusahaanList: PerusahaanRow[];
   perusahaanLinks: PerusahaanLink[];
   currentAkunId: number;
+  akunList: AkunRow[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("lokasi");
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showKategoriDialog, setShowKategoriDialog] = useState(false);
   const [, startTransition] = useTransition();
 
   function refresh() {
@@ -77,7 +86,7 @@ export function InventarisVendorDetail({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3 rounded-xl border p-3 text-sm">
+      <div className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
         {ranking.jumlahLog > 0 ? (
           <span className="flex items-center gap-1">
             <Star className="size-4 text-warning" />
@@ -87,6 +96,9 @@ export function InventarisVendorDetail({
         ) : (
           <span className="text-muted-foreground">Belum ada data pengiriman untuk menghitung peringkat.</span>
         )}
+        <Button variant="outline" size="sm" onClick={() => setShowEditDialog(true)}>
+          <Pencil className="size-4" /> Edit Vendor
+        </Button>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => typeof v === "string" && setTab(v as Tab)}>
@@ -150,8 +162,21 @@ export function InventarisVendorDetail({
           <div>
             <h3 className="mb-2 text-sm font-semibold">PIC Internal PMP Group</h3>
             {picInternalList.map((p) => (
-              <p key={p.id} className="text-sm">{p.akunNama} — {p.perusahaanNama}</p>
+              <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
+                <p className="text-sm">{p.akunNama} — {p.perusahaanNama}</p>
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={() => startTransition(async () => {
+                    const r = await removeVendorPicInternalAction(p.id, vendor.id);
+                    if (!r.success) { toast.error(r.error); return; }
+                    refresh();
+                  })}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
             ))}
+            <QuickAddPicInternal vendorId={vendor.id} akunList={akunList} onAdded={refresh} />
           </div>
         </div>
       )}
@@ -176,7 +201,12 @@ export function InventarisVendorDetail({
               </Button>
             </div>
           ))}
-          <QuickAddProduk vendorId={vendor.id} kategoriList={kategoriList} onAdded={refresh} />
+          <QuickAddProduk
+            vendorId={vendor.id}
+            kategoriList={kategoriList}
+            onAdded={refresh}
+            onManageKategori={() => setShowKategoriDialog(true)}
+          />
         </div>
       )}
 
@@ -224,6 +254,9 @@ export function InventarisVendorDetail({
           />
         </div>
       )}
+
+      <InventarisVendorFormDialog open={showEditDialog} onOpenChange={setShowEditDialog} vendorToEdit={vendor} />
+      <KelolaKategoriDialog open={showKategoriDialog} onOpenChange={setShowKategoriDialog} onChanged={refresh} />
     </div>
   );
 }
@@ -295,7 +328,54 @@ function QuickAddPic({ vendorId, onAdded }: { vendorId: number; onAdded: () => v
   );
 }
 
-function QuickAddProduk({ vendorId, kategoriList, onAdded }: { vendorId: number; kategoriList: VendorKategoriRow[]; onAdded: () => void }) {
+// Akun with no perusahaanId (Direktur/PMP Group-scoped accounts) can't be
+// recorded as PIC internal — vendor_pic_internal requires a perusahaan_id,
+// and there's no PT to attribute them to.
+function QuickAddPicInternal({
+  vendorId, akunList, onAdded,
+}: { vendorId: number; akunList: AkunRow[]; onAdded: () => void }) {
+  const eligible = akunList.filter((a): a is AkunRow & { perusahaanId: number; perusahaanNama: string } => a.perusahaanId !== null);
+  const [akunKey, setAkunKey] = useState<string>("");
+  const [pending, startTransition] = useTransition();
+
+  if (eligible.length === 0) {
+    return <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">Tidak ada akun yang tersedia untuk dijadikan PIC internal.</p>;
+  }
+
+  return (
+    <div className="flex items-end gap-2 rounded-lg border border-dashed p-3">
+      <div className="flex flex-1 flex-col gap-1">
+        <Label className="text-xs">Akun</Label>
+        <Select value={akunKey} onValueChange={(v) => typeof v === "string" && setAkunKey(v)}>
+          <SelectTrigger><SelectValue placeholder="Pilih akun" /></SelectTrigger>
+          <SelectContent>
+            {eligible.map((a) => (
+              <SelectItem key={a.id} value={String(a.id)}>{a.nama} ({a.perusahaanNama})</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button
+        size="sm" disabled={!akunKey || pending}
+        onClick={() => {
+          const a = eligible.find((x) => String(x.id) === akunKey);
+          if (!a) return;
+          startTransition(async () => {
+            const r = await addVendorPicInternalAction(vendorId, a.perusahaanId, a.id);
+            if (!r.success) { toast.error(r.error); return; }
+            setAkunKey(""); onAdded();
+          });
+        }}
+      >
+        <Plus className="size-4" /> Tambah
+      </Button>
+    </div>
+  );
+}
+
+function QuickAddProduk({
+  vendorId, kategoriList, onAdded, onManageKategori,
+}: { vendorId: number; kategoriList: VendorKategoriRow[]; onAdded: () => void; onManageKategori: () => void }) {
   const [kategoriId, setKategoriId] = useState<string>(kategoriList[0] ? String(kategoriList[0].id) : "");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
@@ -303,7 +383,12 @@ function QuickAddProduk({ vendorId, kategoriList, onAdded }: { vendorId: number;
   return (
     <div className="flex items-end gap-2 rounded-lg border border-dashed p-3">
       <div className="flex flex-1 flex-col gap-1">
-        <Label className="text-xs">Kategori</Label>
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Kategori</Label>
+          <button type="button" onClick={onManageKategori} className="text-xs text-primary hover:underline">
+            Kelola Kategori
+          </button>
+        </div>
         <Select value={kategoriId} onValueChange={(v) => typeof v === "string" && setKategoriId(v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -437,5 +522,120 @@ function QuickLinkPerusahaan({
         Hubungkan
       </Button>
     </div>
+  );
+}
+
+// Reachable from the Produk tab's "Kelola Kategori" link (see QuickAddProduk
+// above). Loads its own list via listVendorKategoriAction() whenever it
+// opens (rather than trusting a prop, which would go stale after any
+// mutation until the parent's router.refresh() lands), and calls onChanged()
+// (the parent's refresh(), i.e. router.refresh()) after every add/rename/
+// delete so the Produk tab's own kategoriList prop — used by QuickAddProduk's
+// Select — is kept in sync too.
+function KelolaKategoriDialog({
+  open, onOpenChange, onChanged,
+}: { open: boolean; onOpenChange: (open: boolean) => void; onChanged: () => void }) {
+  const [items, setItems] = useState<VendorKategoriRow[]>([]);
+  const [newNama, setNewNama] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingNama, setEditingNama] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    listVendorKategoriAction().then((r) => {
+      if (!r.success) { toast.error(r.error); return; }
+      setItems(r.data);
+    });
+  }, [open]);
+
+  async function reload() {
+    const r = await listVendorKategoriAction();
+    if (r.success) setItems(r.data);
+  }
+
+  function handleAdd() {
+    if (!newNama.trim()) return;
+    startTransition(async () => {
+      const r = await createVendorKategoriAction(newNama.trim());
+      if (!r.success) { toast.error(r.error); return; }
+      toast.success("Kategori ditambahkan.");
+      setNewNama("");
+      await reload();
+      onChanged();
+    });
+  }
+
+  function handleRename(id: number) {
+    if (!editingNama.trim()) return;
+    startTransition(async () => {
+      const r = await renameVendorKategoriAction(id, editingNama.trim());
+      if (!r.success) { toast.error(r.error); return; }
+      toast.success("Kategori diperbarui.");
+      setEditingId(null);
+      await reload();
+      onChanged();
+    });
+  }
+
+  function handleDelete(id: number) {
+    startTransition(async () => {
+      const r = await deleteVendorKategoriAction(id);
+      if (!r.success) { toast.error(r.error); return; }
+      toast.success("Kategori dihapus.");
+      await reload();
+      onChanged();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Kelola Kategori Produk</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          {items.length === 0 && <p className="text-sm text-muted-foreground">Belum ada kategori.</p>}
+          {items.map((k) => (
+            <div key={k.id} className="flex items-center gap-2 rounded-lg border p-2">
+              {editingId === k.id ? (
+                <>
+                  <Input
+                    value={editingNama}
+                    onChange={(e) => setEditingNama(e.target.value)}
+                    className="flex-1"
+                    autoFocus
+                  />
+                  <Button size="sm" disabled={!editingNama.trim() || pending} onClick={() => handleRename(k.id)}>Simpan</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Batal</Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm">{k.nama}</span>
+                  <Button variant="ghost" size="icon" onClick={() => { setEditingId(k.id); setEditingNama(k.nama); }}>
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" disabled={pending} onClick={() => handleDelete(k.id)}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+          <div className="flex items-end gap-2 rounded-lg border border-dashed p-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <Label className="text-xs">Kategori Baru</Label>
+              <Input value={newNama} onChange={(e) => setNewNama(e.target.value)} placeholder="Nama kategori" />
+            </div>
+            <Button size="sm" disabled={!newNama.trim() || pending} onClick={handleAdd}>
+              <Plus className="size-4" /> Tambah
+            </Button>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Tutup</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
