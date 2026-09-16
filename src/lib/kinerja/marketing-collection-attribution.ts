@@ -3,9 +3,16 @@
 // Business-rule-specific mitra ownership resolution for the "Marketing
 // and Collection" jabatan's "Penjualan" aspek. Every mitra (BusinessPartner)
 // is attributed to exactly one owning Marketing akun.id, with a status:
-// NOO for exactly the calendar month their Pengajuan was approved, then
+// NOO for a rolling 30-day window starting the WIB business-date their
+// Pengajuan was approved (see NOO_WINDOW_DAYS in
+// marketing-collection-penjualan.ts, which owns the day-level NOO/Existing
+// split — this module only records WHEN the window starts), then
 // permanently Existing afterward — OR permanently Existing from the start
-// if they have no approved Pengajuan at all (legacy mitra).
+// if they have no approved Pengajuan at all (legacy mitra). Confirmed with
+// user 2026-09-16: a mitra approved e.g. 20 Sep can contribute to NOO
+// totals in BOTH September (20-30 Sep) and October (1-20 Oct) if the
+// 30-day window straddles the month boundary — NOO is no longer "the
+// single calendar month of approval."
 //
 // Deliberately NOT reusing resolveResponsibleMarketing() as the sole
 // resolution path: that function's wilayah-based assignment is
@@ -21,7 +28,7 @@
 // so an admin-set per-mitra Pemilik override is honored here too, not just
 // cross-wilayah Pengajuan overrides.
 import { getPool } from "@/lib/db";
-import { monthBoundary, utcInstantToWibDisplay } from "@/lib/business-date";
+import { getBusinessDateWithRollover, ROLLOVER_HOUR } from "@/lib/business-date";
 import {
   getMarketingWilayahAssignments,
   getMarketingUsers,
@@ -33,8 +40,15 @@ export interface MitraOwnership {
   businessPartnerId: string;
   /** akun.id as a string, matching MarketingUserID's/session.user.id's convention. */
   ownerAkunId: string;
-  /** UTC-midnight first-of-month the mitra became NOO, or null if it was never NOO (legacy mitra, permanently Existing). */
-  nooMonthStart: Date | null;
+  /**
+   * UTC-midnight-labeled WIB business-date (14:00 rollover, same labeling
+   * TransDate itself uses) the mitra's Pengajuan was approved — day
+   * granularity, NOT floored to month start. The 30-day NOO window is
+   * [nooStartDate, nooStartDate + 30 days], computed by the caller
+   * (marketing-collection-penjualan.ts owns the window-length constant).
+   * Null if the mitra was never NOO (legacy mitra, permanently Existing).
+   */
+  nooStartDate: Date | null;
 }
 
 interface ApprovedPengajuanRow {
@@ -100,18 +114,18 @@ export async function resolveAllMitraOwnership(): Promise<MitraOwnership[]> {
       // live that this server's SQL Server clock is genuinely UTC, so
       // ReviewedAt is a TRUE UTC instant, unlike TransDate elsewhere in
       // this codebase (SalesOrder/DeliveryOrder/SalesInvoice/SalesReturn),
-      // which the desktop-ERP client writes as naive-WIB (raw UTC
-      // components already equal the WIB wall-clock value — see
-      // getNaiveWibTransDate's comment in business-date.ts). Extracting
-      // the calendar month directly off ReviewedAt's raw UTC components
+      // which the desktop-ERP client writes as naive-WIB. Extracting the
+      // WIB business-date directly off ReviewedAt's raw UTC components
       // would misclassify any approval made 17:00-23:59 UTC (00:00-06:59
-      // WIB) into the previous WIB calendar month, so it must first be
-      // shifted onto its WIB wall-clock reading via utcInstantToWibDisplay
-      // before monthBoundary can read off the correct month.
+      // WIB) into the previous WIB calendar day. getBusinessDateWithRollover
+      // takes the raw true-UTC instant directly (it converts via
+      // Intl.DateTimeFormat internally) and applies the same 14:00 WIB
+      // rollover TransDate's own business-date labels use, so a day-level
+      // comparison against TransDate values downstream is apples-to-apples.
       ownerships.push({
         businessPartnerId: mitra.BusinessPartnerID,
         ownerAkunId: pengajuan.MarketingUserID,
-        nooMonthStart: monthBoundary(utcInstantToWibDisplay(pengajuan.ReviewedAt)),
+        nooStartDate: getBusinessDateWithRollover(ROLLOVER_HOUR, pengajuan.ReviewedAt),
       });
       continue;
     }
@@ -127,7 +141,7 @@ export async function resolveAllMitraOwnership(): Promise<MitraOwnership[]> {
     );
     const ownerAkunId = ownerName ? namaToAkunId.get(ownerName) : undefined;
     if (!ownerAkunId) continue; // unassigned mitra — excluded, matches existing convention
-    ownerships.push({ businessPartnerId: mitra.BusinessPartnerID, ownerAkunId, nooMonthStart: null });
+    ownerships.push({ businessPartnerId: mitra.BusinessPartnerID, ownerAkunId, nooStartDate: null });
   }
   return ownerships;
 }

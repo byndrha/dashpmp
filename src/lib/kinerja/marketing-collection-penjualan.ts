@@ -24,24 +24,30 @@ export interface HistoriPenjualanKaryawan {
   bulanList: BulanPenjualan[];
 }
 
-interface QtyPerMitraBulan {
+interface QtyPerMitraHari {
   BusinessPartnerID: string;
-  BulanMulai: Date;
+  Tanggal: Date;
   QtyKantong: number;
 }
 
-async function getQtyKantongPerMitraPerBulan(): Promise<QtyPerMitraBulan[]> {
+// Day-granularity (not month) because the NOO window is a rolling 30 days
+// from approval, not "the calendar month of approval" — a single month's
+// quantity for one mitra can be split between the NOO and Existing buckets
+// when the window closes mid-month (confirmed with user 2026-09-16, see
+// NOO_WINDOW_DAYS below). Tanggal is TransDate's own naive-WIB business-date
+// label (unchanged, day-truncated) — same convention used in mitra-do.ts.
+async function getQtyKantongPerMitraPerHari(): Promise<QtyPerMitraHari[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT do_.BusinessPartnerID,
-           DATEFROMPARTS(YEAR(do_.TransDate), MONTH(do_.TransDate), 1) AS BulanMulai,
+           CAST(do_.TransDate AS DATE) AS Tanggal,
            SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivered / 2.0 ELSE dod.Delivered END) AS QtyKantong
     FROM DeliveryOrder do_
     JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
     WHERE do_.IsDeleted = 0
-    GROUP BY do_.BusinessPartnerID, DATEFROMPARTS(YEAR(do_.TransDate), MONTH(do_.TransDate), 1)
+    GROUP BY do_.BusinessPartnerID, CAST(do_.TransDate AS DATE)
   `);
-  return result.recordset as QtyPerMitraBulan[];
+  return result.recordset as QtyPerMitraHari[];
 }
 
 function monthKey(d: Date): string {
@@ -60,6 +66,18 @@ const FEATURE_START_MONTH_KEY = "2026-07";
 function daysInMonthKey(mk: string): number {
   const [year, month] = mk.split("-").map(Number);
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+// A mitra counts as NOO for exactly 30 days starting the WIB business-date
+// their Pengajuan was approved (MitraOwnership.nooStartDate) — confirmed
+// with user 2026-09-16 via a worked example (approved 20 Sep -> NOO through
+// 20 Oct inclusive, Existing from 21 Oct onward). This window can straddle
+// a calendar-month boundary, so a mitra can contribute to NOO totals in TWO
+// separate months before becoming permanently Existing.
+const NOO_WINDOW_DAYS = 30;
+
+function addDays(d: Date, days: number): Date {
+  return new Date(d.getTime() + days * 86400000);
 }
 
 /** Generates a continuous list of "YYYY-MM" keys from startKey through endKey, inclusive. */
@@ -86,31 +104,32 @@ function monthKeyRange(startKey: string, endKey: string): string[] {
  * MSSQL/Postgres work happens inside this one function, not per-employee.
  */
 export async function getHistoriPenjualanSemuaKaryawan(): Promise<Map<string, HistoriPenjualanKaryawan>> {
-  const [ownerships, qtyPerMitraBulan] = await Promise.all([
+  const [ownerships, qtyPerMitraHari] = await Promise.all([
     resolveAllMitraOwnership(),
-    getQtyKantongPerMitraPerBulan(),
+    getQtyKantongPerMitraPerHari(),
   ]);
 
   const ownershipByMitra = new Map<string, MitraOwnership>(ownerships.map((o) => [o.businessPartnerId, o]));
 
   // qtyByKey["akunId|YYYY-MM|noo"] / "...|existing" — built once by walking
-  // every (mitra, bulan) qty row and attributing it via the ownership
-  // resolved above.
+  // every (mitra, hari) qty row, deciding NOO-vs-Existing at DAY
+  // granularity (a row's own day compared against that mitra's 30-day NOO
+  // window), then bucketing the result into the row's own calendar month.
   const qtyByKey = new Map<string, number>();
   // Current business month is always the fixed upper bound of every
   // employee's range, even if they have zero data in it — the table must
   // reach "today", not stop at the last month with data.
   const currentMonthKey = monthKey(monthBoundary(getBusinessDate()));
 
-  for (const row of qtyPerMitraBulan) {
+  for (const row of qtyPerMitraHari) {
     const ownership = ownershipByMitra.get(row.BusinessPartnerID);
     if (!ownership) continue; // unattributed mitra — excluded, matches existing convention
-    const rowMonthStart = new Date(Date.UTC(row.BulanMulai.getUTCFullYear(), row.BulanMulai.getUTCMonth(), 1));
-    if (ownership.nooMonthStart && rowMonthStart.getTime() < ownership.nooMonthStart.getTime()) continue; // before mitra existed
-    const isNooThisMonth =
-      ownership.nooMonthStart != null && rowMonthStart.getTime() === ownership.nooMonthStart.getTime();
-    const mk = monthKey(rowMonthStart);
-    const key = `${ownership.ownerAkunId}|${mk}|${isNooThisMonth ? "noo" : "existing"}`;
+    const rowDate = new Date(Date.UTC(row.Tanggal.getUTCFullYear(), row.Tanggal.getUTCMonth(), row.Tanggal.getUTCDate()));
+    if (ownership.nooStartDate && rowDate.getTime() < ownership.nooStartDate.getTime()) continue; // before mitra existed
+    const nooWindowEnd = ownership.nooStartDate ? addDays(ownership.nooStartDate, NOO_WINDOW_DAYS) : null;
+    const isNoo = nooWindowEnd != null && rowDate.getTime() <= nooWindowEnd.getTime();
+    const mk = monthKey(rowDate);
+    const key = `${ownership.ownerAkunId}|${mk}|${isNoo ? "noo" : "existing"}`;
     qtyByKey.set(key, (qtyByKey.get(key) ?? 0) + row.QtyKantong);
   }
 
