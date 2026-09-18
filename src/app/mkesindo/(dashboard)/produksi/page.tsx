@@ -74,6 +74,7 @@ export default async function ProduksiPage() {
           jadwalAwal={jadwalAwal}
           timList={timList}
           produksiAkunOptions={produksiAkunOptions}
+          tanggalUsahaHariIni={tanggalUsaha}
         />
       </section>
       <section>

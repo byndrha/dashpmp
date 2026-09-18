@@ -15,9 +15,6 @@ import type { ShiftNumber } from "@/lib/report-shift";
 const BULAN_NAMA = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const BULAN_SINGKAT = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGU", "SEP", "OKT", "NOV", "DES"];
 const HARI_SINGKAT = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
-// Header kalender Senin-first (bukan Minggu-first), sesuai referensi desain
-// user 2026-09-19.
-const HARI_HEADER = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 const SHIFT_URUTAN: ShiftNumber[] = [1, 2, 3];
 
 // Satu warna per Tim (siklus kalau Tim lebih banyak dari palet) -- dipakai
@@ -216,12 +213,19 @@ export function JadwalTimBulanan({
   jadwalAwal,
   timList,
   produksiAkunOptions,
+  tanggalUsahaHariIni,
 }: {
   tahunAwal: number;
   bulanAwal: number;
   jadwalAwal: JadwalTimRow[];
   timList: TimRow[];
   produksiAkunOptions: StafOperasionalOption[];
+  // TanggalUsaha (bukan tanggal kalender biasa) untuk highlight kotak "hari
+  // ini" -- shift 2 mulai 15:00 WIB sudah masuk TanggalUsaha besok, lihat
+  // report-shift.ts. Dikirim dari page.tsx (getCurrentShift().tanggalUsaha)
+  // bukan dihitung dari `new Date()` di sini, supaya konsisten dengan
+  // rollover WIB yang sama dipakai seluruh sistem shift produksi.
+  tanggalUsahaHariIni: string;
 }) {
   const [tahun, setTahun] = useState(tahunAwal);
   const [bulan, setBulan] = useState(bulanAwal);
@@ -371,13 +375,6 @@ export function JadwalTimBulanan({
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <div className="overflow-hidden rounded-lg border border-border">
-            <div className="grid grid-cols-7 border-b border-border bg-muted/40">
-              {HARI_HEADER.map((h) => (
-                <div key={h} className="p-1.5 text-center text-[11px] font-medium text-muted-foreground">
-                  {h}
-                </div>
-              ))}
-            </div>
             <div className="grid grid-cols-7">
               {cells.map((cell) => {
                 const dayByShift = entryByDayShift.get(cell.tanggalUsaha);
@@ -388,7 +385,8 @@ export function JadwalTimBulanan({
                     key={cell.tanggalUsaha}
                     className={cn(
                       "flex min-h-[76px] items-center justify-between gap-2 border-b border-r border-border p-2 last:border-r-0",
-                      !cell.inMonth && "bg-muted/10"
+                      !cell.inMonth && "bg-muted/10",
+                      cell.tanggalUsaha === tanggalUsahaHariIni && "relative z-10 bg-sky-50 ring-2 ring-inset ring-sky-500 dark:bg-sky-950/40"
                     )}
                   >
                     {/* Blok tanggal+nama hari di kiri -- untuk tanggal luar
