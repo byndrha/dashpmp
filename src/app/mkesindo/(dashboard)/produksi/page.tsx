@@ -7,6 +7,7 @@ import { getAkunNamaMap, getProduksiAkunOptions } from "@/lib/queries/akun";
 import { getJadwalBulan } from "@/lib/queries/jadwal-tim-produksi";
 import { getCurrentShift } from "@/lib/queries/aktivitas-produksi";
 import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-desktop";
+import { KorelasiProduksiPenjualanPanel } from "@/components/produksi/korelasi-produksi-penjualan-panel";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
 import { PanelTimProduksi } from "@/components/produksi/panel-tim-produksi";
 import { RiwayatProduksi } from "@/components/produksi/riwayat-produksi";
@@ -36,7 +37,12 @@ export default async function ProduksiPage() {
       <h1 className="font-display text-xl font-semibold">Produksi</h1>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Peta Warehouse</h2>
-        <PetaWarehouseDesktop posisi={posisi} />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          <div className="min-w-0 flex-1">
+            <PetaWarehouseDesktop posisi={posisi} />
+          </div>
+          <KorelasiProduksiPenjualanPanel tanggalUsahaAwal={tanggalUsaha} />
+        </div>
       </section>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Mesin Produksi</h2>

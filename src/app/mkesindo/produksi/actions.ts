@@ -29,6 +29,7 @@ import {
   type ProduksiSelesaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
 import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
+import { getKorelasiProduksiPenjualan, type KorelasiProduksiPenjualanData } from "@/lib/queries/produksi-korelasi-penjualan";
 import { getJadwalBulan, setJadwalTim, hapusJadwalTim, type JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
 import { getAkunNamaMap, getStafOperasionalOptions, getProduksiAkunOptions, type StafOperasionalOption } from "@/lib/queries/akun";
 import {
@@ -112,6 +113,13 @@ export async function getWarehouseMapAction(): Promise<ActionResult<PalletPosisi
   return runAction(async () => {
     await requireProduksiView();
     return getWarehouseMap();
+  });
+}
+
+export async function getKorelasiProduksiPenjualanAction(tanggalUsaha: string): Promise<ActionResult<KorelasiProduksiPenjualanData>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getKorelasiProduksiPenjualan(tanggalUsaha);
   });
 }
 
