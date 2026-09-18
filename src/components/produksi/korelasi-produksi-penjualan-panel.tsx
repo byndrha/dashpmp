@@ -113,13 +113,25 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
             const totalKerusakan = data.rows.reduce((sum, r) => sum + r.kerusakan, 0);
             const sisaStok = data.stokAwalPeriode + totalProduksi - totalDO - totalRetur - totalKerusakan;
             const penjualanPercent = totalProduksi > 0 ? (totalDO / totalProduksi) * 100 : null;
+            // Literal seperti diminta user 2026-09-19: Total Produksi / Total
+            // Retur x 100% -- BUKAN kebalikannya (Retur/Produksi, dipakai
+            // kolom "Waste" per-shift di tabel bawah). Dua metrik berbeda,
+            // jangan disamakan meski sama-sama melibatkan Retur.
+            const returPercent = totalRetur > 0 ? (totalProduksi / totalRetur) * 100 : null;
 
-            const ringkasan: { label: string; value: string }[] = [
+            const ringkasanBaris1: { label: string; value: string }[] = [
               { label: "Total Produksi", value: formatQty(totalProduksi) },
               { label: "Total DO", value: formatQty(totalDO) },
               { label: "Sisa (Stok)", value: formatQty(sisaStok) },
-              { label: "Penjualan", value: formatWaste(penjualanPercent) },
               { label: "Total Retur", value: formatQty(totalRetur) },
+            ];
+            // "Cost" masih belum ada rumusnya (dikaitkan ke HPP, belum
+            // diputuskan user per 2026-09-19) -- ditampilkan sebagai slot
+            // kosong dulu, bukan angka yang diada-adakan.
+            const ringkasanBaris2: { label: string; value: string }[] = [
+              { label: "Penjualan", value: formatWaste(penjualanPercent) },
+              { label: "Retur", value: formatWaste(returPercent) },
+              { label: "Cost", value: "Belum ditentukan" },
             ];
 
             const periods: PeriodColumn[] = [
@@ -153,13 +165,23 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
 
             return (
               <div className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
-                  {ringkasan.map((r) => (
-                    <div key={r.label} className="flex flex-col gap-0.5">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{r.label}</p>
-                      <p className="text-sm font-semibold tabular-nums">{r.value}</p>
-                    </div>
-                  ))}
+                <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
+                  <div className="grid grid-cols-4 gap-3">
+                    {ringkasanBaris1.map((r) => (
+                      <div key={r.label} className="flex flex-col gap-0.5">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{r.label}</p>
+                        <p className="text-sm font-semibold tabular-nums">{r.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 border-t pt-3">
+                    {ringkasanBaris2.map((r) => (
+                      <div key={r.label} className="flex flex-col gap-0.5">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{r.label}</p>
+                        <p className="text-sm font-semibold tabular-nums">{r.value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <Table>
                   <TableHeader>
