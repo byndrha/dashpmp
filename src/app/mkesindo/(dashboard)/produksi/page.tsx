@@ -9,7 +9,6 @@ import { getCurrentShift } from "@/lib/queries/aktivitas-produksi";
 import { PetaWarehouseDesktop, WarehouseLegend } from "@/components/produksi/peta-warehouse-desktop";
 import { KorelasiProduksiPenjualanPanel } from "@/components/produksi/korelasi-produksi-penjualan-panel";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
-import { PanelTimProduksi } from "@/components/produksi/panel-tim-produksi";
 import { RiwayatProduksi } from "@/components/produksi/riwayat-produksi";
 import { JadwalTimBulanan } from "@/components/produksi/jadwal-tim-bulanan";
 
@@ -63,16 +62,13 @@ export default async function ProduksiPage() {
         </div>
       </div>
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Tim Produksi</h2>
-        <PanelTimProduksi timList={timList} anggotaList={anggotaTimList} produksiAkunOptions={produksiAkunOptions} />
-      </section>
-      <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Jadwal Tim Produksi</h2>
         <JadwalTimBulanan
           tahunAwal={tahunAwal}
           bulanAwal={bulanAwal}
           jadwalAwal={jadwalAwal}
           timList={timList}
+          anggotaList={anggotaTimList}
           produksiAkunOptions={produksiAkunOptions}
           tanggalUsahaHariIni={tanggalUsaha}
         />
