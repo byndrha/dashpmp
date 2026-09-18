@@ -16,6 +16,12 @@ const BULAN_NAMA = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Jul
 const BULAN_SINGKAT = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGU", "SEP", "OKT", "NOV", "DES"];
 const HARI_SINGKAT = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
 const SHIFT_URUTAN: ShiftNumber[] = [1, 2, 3];
+// Urutan tampil kotak Tim DI DALAM tiap sel kalender -- urutan kronologis
+// shift dalam satu TanggalUsaha (Shift 2 mulai duluan, lalu 3, lalu 1),
+// beda dengan SHIFT_URUTAN di atas yang dipakai badge S1/S2/S3 kartu
+// ringkasan. Posisi kotak di sini TETAP per-shift; Tim yang mengisi posisi
+// itu yang berubah-ubah sesuai data, sesuai permintaan user 2026-09-19.
+const SHIFT_URUTAN_KALENDER: ShiftNumber[] = [2, 3, 1];
 
 // Satu warna per Tim (siklus kalau Tim lebih banyak dari palet) -- dipakai
 // bar warna kartu ringkasan & badge shift di kalender, sama sekali tidak
@@ -143,63 +149,61 @@ function TimBadge({
   );
 }
 
-// Badge kosong yang masih bisa diklik untuk mengisi shift Tim ini hari itu
-// -- HANYA menawarkan shift yang hari itu juga masih kosong (tidak ada Tim
-// lain), supaya tidak pernah menimpa penugasan Tim lain secara diam-diam.
-// Untuk menukar shift dua Tim yang SAMA-SAMA sudah terisi, pakai drag & drop
-// (TimBadge), bukan popover ini.
-function BadgeKosongPopover({
+// Badge kosong untuk satu SLOT SHIFT (posisi kotak tetap per-shift) yang
+// masih bisa diklik untuk memilih Tim mana yang mengisi shift itu hari ini
+// -- hanya menawarkan Tim yang hari itu belum punya shift lain, supaya
+// tidak pernah menimpa penugasan Tim lain secara diam-diam. Untuk menukar
+// shift dua Tim yang SAMA-SAMA sudah terisi, pakai drag & drop (TimBadge).
+function BadgeKosongPopoverShift({
   tanggalUsaha,
-  tim,
-  shiftKosong,
+  shift,
+  timTersisa,
   disabled,
   onAssigned,
 }: {
   tanggalUsaha: string;
-  tim: TimRow;
-  shiftKosong: ShiftNumber[];
+  shift: ShiftNumber;
+  timTersisa: TimRow[];
   disabled: boolean;
-  onAssigned: (shift: ShiftNumber, timId: number) => void;
+  onAssigned: (timId: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  function pilih(shift: ShiftNumber) {
+  function pilih(timId: number) {
     startTransition(async () => {
-      const result = await setJadwalTimAction(tanggalUsaha, shift, tim.timId);
+      const result = await setJadwalTimAction(tanggalUsaha, shift, timId);
       if (result.success) {
-        onAssigned(shift, tim.timId);
+        onAssigned(timId);
         setOpen(false);
       }
     });
   }
 
-  if (disabled || shiftKosong.length === 0) {
+  if (disabled || timTersisa.length === 0) {
     return <div className="size-7" />;
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        render={
-          <button type="button" title={`${tim.nama} — belum dijadwalkan, klik untuk isi`} className="flex flex-col items-center gap-0.5" />
-        }
+        render={<button type="button" title={`Shift ${shift} — belum dijadwalkan, klik untuk isi`} className="flex flex-col items-center gap-0.5" />}
       >
         <span className="flex size-7 items-center justify-center rounded border border-dashed border-muted-foreground/40 text-xs text-muted-foreground hover:bg-muted">
           +
         </span>
       </PopoverTrigger>
       <PopoverContent className="w-40 p-1.5">
-        <p className="mb-1 px-1 text-[10px] text-muted-foreground">Jadwalkan {tim.nama} di:</p>
-        {shiftKosong.map((s) => (
+        <p className="mb-1 px-1 text-[10px] text-muted-foreground">Jadwalkan Shift {shift} dengan:</p>
+        {timTersisa.map((t) => (
           <button
-            key={s}
+            key={t.timId}
             type="button"
             disabled={pending}
-            onClick={() => pilih(s)}
+            onClick={() => pilih(t.timId)}
             className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-muted disabled:opacity-50"
           >
-            Shift {s}
+            {t.nama}
           </button>
         ))}
       </PopoverContent>
@@ -379,7 +383,7 @@ export function JadwalTimBulanan({
               {cells.map((cell) => {
                 const dayByShift = entryByDayShift.get(cell.tanggalUsaha);
                 const dayByTim = entryByDayTim.get(cell.tanggalUsaha);
-                const shiftKosong = SHIFT_URUTAN.filter((s) => !dayByShift?.get(s));
+                const timTersisa = timList.filter((t) => !dayByTim?.has(t.timId));
                 return (
                   <div
                     key={cell.tanggalUsaha}
@@ -407,25 +411,27 @@ export function JadwalTimBulanan({
                       <span className="text-xs italic text-muted-foreground/50">{cell.before ? "Lalu" : "Depan"}</span>
                     ) : (
                       <div className="flex shrink-0 gap-1.5">
-                        {timList.map((tim, idx) => {
-                          const entry = dayByTim?.get(tim.timId);
-                          return entry ? (
+                        {SHIFT_URUTAN_KALENDER.map((shift) => {
+                          const entry = dayByShift?.get(shift);
+                          const timIdx = entry ? timList.findIndex((t) => t.timId === entry.timId) : -1;
+                          const tim = timIdx >= 0 ? timList[timIdx] : undefined;
+                          return entry && tim ? (
                             <TimBadge
-                              key={tim.timId}
+                              key={shift}
                               tanggalUsaha={cell.tanggalUsaha}
                               tim={tim}
-                              timIdx={idx}
+                              timIdx={timIdx}
                               entry={entry}
                               disabled={!cell.inMonth}
                             />
                           ) : (
-                            <BadgeKosongPopover
-                              key={tim.timId}
+                            <BadgeKosongPopoverShift
+                              key={shift}
                               tanggalUsaha={cell.tanggalUsaha}
-                              tim={tim}
-                              shiftKosong={shiftKosong}
+                              shift={shift}
+                              timTersisa={timTersisa}
                               disabled={!cell.inMonth}
-                              onAssigned={(s, id) => updateEntry(cell.tanggalUsaha, s, id)}
+                              onAssigned={(id) => updateEntry(cell.tanggalUsaha, shift, id)}
                             />
                           );
                         })}
