@@ -35,27 +35,33 @@ export default async function ProduksiPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="font-display text-xl font-semibold">Produksi</h1>
-      <section>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-          <div className="min-w-0 flex-1">
-            {/* justify-between (bukan center) -- rata kanan tapi tetap
-                terbatas lebar kolom kotak Peta Cold Storage saja (BUKAN
-                lebar penuh section yang juga mencakup panel Korelasi di
-                sebelahnya), supaya ada jarak wajar dari heading tanpa
-                mepet ke tengah. */}
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-muted-foreground">Peta Cold Storage</h2>
-              <WarehouseLegend />
-            </div>
-            <PetaWarehouseDesktop posisi={posisi} />
+      {/* Grid 2-kolom (kolom kiri fleksibel, kolom kanan tetap 440px seperti
+          lebar panel Korelasi) dipakai bersama oleh baris Peta Cold Storage
+          dan section Mesin Produksi -- auto-flow grid menempatkan Mesin
+          Produksi otomatis di baris berikutnya, kolom kiri saja, sehingga
+          lebarnya presis sama dengan kotak Peta Cold Storage di atasnya
+          (bukan melebar penuh seperti section biasa), sesuai permintaan
+          user 2026-09-19. Kolom kanan baris ke-2 sengaja dibiarkan kosong. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_440px] lg:items-start">
+        <div className="min-w-0">
+          {/* justify-between (bukan center) -- rata kanan tapi tetap
+              terbatas lebar kolom kotak Peta Cold Storage saja (BUKAN
+              lebar penuh section yang juga mencakup panel Korelasi di
+              sebelahnya), supaya ada jarak wajar dari heading tanpa
+              mepet ke tengah. */}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-muted-foreground">Peta Cold Storage</h2>
+            <WarehouseLegend />
           </div>
-          <KorelasiProduksiPenjualanPanel tanggalUsahaAwal={tanggalUsaha} />
+          <PetaWarehouseDesktop posisi={posisi} />
         </div>
-      </section>
-      <section>
-        <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Mesin Produksi</h2>
-        <PanelMesin mesinList={mesinList} />
-      </section>
+        <KorelasiProduksiPenjualanPanel tanggalUsahaAwal={tanggalUsaha} />
+
+        <div className="min-w-0">
+          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Mesin Produksi</h2>
+          <PanelMesin mesinList={mesinList} />
+        </div>
+      </div>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Tim Produksi</h2>
         <PanelTimProduksi timList={timList} anggotaList={anggotaTimList} produksiAkunOptions={produksiAkunOptions} />
