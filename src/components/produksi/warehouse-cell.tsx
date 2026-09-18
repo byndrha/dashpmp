@@ -11,9 +11,11 @@ export function ageClass(tanggalLabel: Date | string | null, jamPanen: string | 
   if (!tanggalLabel) return "bg-muted text-muted-foreground";
   const dateOnly = new Date(tanggalLabel).toISOString().slice(0, 10);
   const harvestedAt = new Date(`${dateOnly}T${jamPanen || "00:00"}:00`);
-  const ageDays = (Date.now() - harvestedAt.getTime()) / 86400000;
-  if (ageDays >= 3) return "bg-red-600 text-white";
-  if (ageDays >= 1) return "bg-amber-500 text-white";
+  // Threshold diubah ke jam (bukan hari) 2026-09-19 atas permintaan user:
+  // merah >24 jam, kuning >12 jam, hijau <12 jam.
+  const ageHours = (Date.now() - harvestedAt.getTime()) / 3600000;
+  if (ageHours > 24) return "bg-red-600 text-white";
+  if (ageHours > 12) return "bg-amber-500 text-white";
   return "bg-emerald-600 text-white";
 }
 

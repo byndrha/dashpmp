@@ -15,13 +15,13 @@ export function WarehouseLegend() {
   return (
     <div className="flex flex-wrap gap-3 text-[11px]">
       <span className="flex items-center gap-1">
-        <span className="size-3 rounded-sm bg-red-600" /> Paling lama (&ge;3 hari)
+        <span className="size-3 rounded-sm bg-red-600" /> Paling lama (&gt;24 Jam)
       </span>
       <span className="flex items-center gap-1">
-        <span className="size-3 rounded-sm bg-amber-500" /> Menengah (1-2 hari)
+        <span className="size-3 rounded-sm bg-amber-500" /> Menengah (&gt;12 Jam)
       </span>
       <span className="flex items-center gap-1">
-        <span className="size-3 rounded-sm bg-emerald-600" /> Baru (&lt;1 hari)
+        <span className="size-3 rounded-sm bg-emerald-600" /> Baru (&lt;12 Jam)
       </span>
       <span className="flex items-center gap-1">
         <span className="size-3 rounded-sm bg-muted" /> Kosong
