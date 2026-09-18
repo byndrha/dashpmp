@@ -6,6 +6,7 @@ import { getMesinList } from "@/lib/queries/produksi-mesin";
 import { getAllTim, getSemuaAnggotaTim } from "@/lib/queries/tim-produksi";
 import { getAkunNamaMap, getProduksiAkunOptions } from "@/lib/queries/akun";
 import { getJadwalBulan } from "@/lib/queries/jadwal-tim-produksi";
+import { getValidasiBulanAction } from "@/app/mkesindo/produksi/actions";
 import { getCurrentShift } from "@/lib/queries/aktivitas-produksi";
 import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-desktop";
 import { KorelasiProduksiPenjualanPanel } from "@/components/produksi/korelasi-produksi-penjualan-panel";
@@ -19,7 +20,7 @@ export default async function ProduksiPage() {
   const { tanggalUsaha } = getCurrentShift();
   const tahunAwal = Number(tanggalUsaha.slice(0, 4));
   const bulanAwal = Number(tanggalUsaha.slice(5, 7));
-  const [posisi, mesinList, timList, anggotaTimList, produksiAkunOptions, riwayatGrupRaw, jadwalAwal] = await Promise.all([
+  const [posisi, mesinList, timList, anggotaTimList, produksiAkunOptions, riwayatGrupRaw, jadwalAwal, validasiBulanResult] = await Promise.all([
     getWarehouseMap(),
     getMesinList(),
     getAllTim(),
@@ -27,7 +28,9 @@ export default async function ProduksiPage() {
     getProduksiAkunOptions(),
     getRiwayatProduksiDetail(),
     getJadwalBulan(tahunAwal, bulanAwal),
+    getValidasiBulanAction(tahunAwal, bulanAwal),
   ]);
+  const validasiBulanAwal = validasiBulanResult.success ? validasiBulanResult.data : {};
   // CreatedByUserID Kualitas ada di ruang AkunID Postgres yang sama dengan
   // DicatatOlehAkunID (keduanya diisi dari session.user.id, lihat komentar
   // di produksi-riwayat-detail.ts) -- diresolusi di sini (bukan di query
@@ -72,6 +75,7 @@ export default async function ProduksiPage() {
         produksiAkunOptions={produksiAkunOptions}
         tanggalUsahaHariIni={tanggalUsaha}
         riwayatGrup={riwayatGrup}
+        validasiBulanAwal={validasiBulanAwal}
       />
     </div>
   );

@@ -28,6 +28,7 @@ import type { JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
 import type { AnggotaTimRow, TimRow } from "@/lib/queries/tim-produksi";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 import type { ShiftNumber } from "@/lib/report-shift";
+import type { ValidasiShift } from "@/lib/queries/produksi-validasi-tim";
 
 const UNSET = "__unset__";
 
@@ -117,12 +118,14 @@ function TimBadge({
   timIdx,
   entry,
   disabled,
+  validasi,
 }: {
   tanggalUsaha: string;
   tim: TimRow;
   timIdx: number;
   entry: JadwalTimRow | undefined;
   disabled: boolean;
+  validasi: ValidasiShift | undefined;
 }) {
   const dragId = `${tanggalUsaha}__${tim.timId}`;
   const dragData = { tanggalUsaha, timId: tim.timId, shift: entry?.shift ?? null };
@@ -152,7 +155,7 @@ function TimBadge({
       type="button"
       disabled={disabled}
       title={`${tim.nama} — Shift ${entry.shift}`}
-      className={cn("flex flex-col items-center gap-0.5", isDragging && "z-20 opacity-50")}
+      className={cn("relative flex flex-col items-center gap-0.5", isDragging && "z-20 opacity-50")}
     >
       <span
         className={cn(
@@ -164,6 +167,31 @@ function TimBadge({
         {timLetter(tim.nama)}
       </span>
       <span className={cn("text-[10px] font-semibold", TIM_TEXT_COLORS[timIdx % TIM_TEXT_COLORS.length])}>S{entry.shift}</span>
+      {validasi && (
+        <span className="pointer-events-none absolute -top-1 right-[-2px] flex gap-[3px]">
+          <span
+            title={`Cek Kualitas: ${validasi.kualitas.detail}`}
+            className={cn(
+              "size-[9px] rounded-full ring-[1.5px] ring-background",
+              validasi.kualitas.lengkap ? "bg-emerald-500" : "bg-muted-foreground/40"
+            )}
+          />
+          <span
+            title={`Input Pallet: ${validasi.pallet.detail}`}
+            className={cn(
+              "size-[9px] rounded-full ring-[1.5px] ring-background",
+              validasi.pallet.lengkap ? "bg-emerald-500" : "bg-muted-foreground/40"
+            )}
+          />
+          <span
+            title={`Mulai Muat: ${validasi.muatan.detail}`}
+            className={cn(
+              "size-[9px] rounded-full ring-[1.5px] ring-background",
+              validasi.muatan.lengkap ? "bg-emerald-500" : "bg-muted-foreground/40"
+            )}
+          />
+        </span>
+      )}
     </button>
   );
 }
@@ -514,6 +542,8 @@ export function JadwalTimBulanan({
   tanggalUsahaHariIni,
   tanggalTerpilih = null,
   onTanggalClick,
+  validasiBulan,
+  onBulanBerubah,
 }: {
   tahunAwal: number;
   bulanAwal: number;
@@ -535,6 +565,8 @@ export function JadwalTimBulanan({
   // tanpa filter. Sesuai permintaan user 2026-09-19.
   tanggalTerpilih?: string | null;
   onTanggalClick?: (tanggalUsaha: string) => void;
+  validasiBulan: Record<string, ValidasiShift>;
+  onBulanBerubah?: (tahun: number, bulan: number) => void;
 }) {
   const [tahun, setTahun] = useState(tahunAwal);
   const [bulan, setBulan] = useState(bulanAwal);
@@ -597,6 +629,7 @@ export function JadwalTimBulanan({
     setTahun(nextTahun);
     setBulan(nextBulan);
     setLoading(true);
+    onBulanBerubah?.(nextTahun, nextBulan);
     getJadwalBulanAction(nextTahun, nextBulan).then((result) => {
       if (result.success) setJadwal(result.data);
       setLoading(false);
@@ -823,6 +856,7 @@ export function JadwalTimBulanan({
                                 timIdx={timIdx}
                                 entry={entry}
                                 disabled={!cell.inMonth}
+                                validasi={validasiBulan[`${cell.tanggalUsaha}|${shift}`]}
                               />
                             ) : (
                               <BadgeKosongPopoverShift
