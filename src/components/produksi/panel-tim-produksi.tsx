@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -210,20 +211,53 @@ function WakilKepalaSelect({ tim, produksiAkunOptions }: { tim: TimRow; produksi
   );
 }
 
-export function PanelTimProduksi({
-  timList,
+// Satu warna per Tim (siklus kalau Tim lebih banyak dari palet) -- sama
+// dengan bar warna kartu ringkasan di jadwal-tim-bulanan.tsx.
+const TIM_BORDER_COLORS = ["border-sky-600", "border-emerald-600", "border-amber-600", "border-violet-600", "border-rose-600", "border-cyan-600"];
+
+// Kartu ringkas (bar warna + nama Tim + "KP, Wakil") -- klik untuk membuka
+// dialog berisi pengaturan lengkap (pilih KP/Wakil, daftar & tambah
+// anggota), persis konten yang sebelumnya selalu tampil langsung di kartu.
+function TimCard({
+  tim,
+  timIdx,
   anggotaList,
+  timList,
   produksiAkunOptions,
 }: {
-  timList: TimRow[];
+  tim: TimRow;
+  timIdx: number;
   anggotaList: AnggotaTimRow[];
+  timList: TimRow[];
   produksiAkunOptions: StafOperasionalOption[];
 }) {
+  const [open, setOpen] = useState(false);
+  const kepalaNama = produksiAkunOptions.find((o) => o.akunId === tim.kepalaAkunId)?.nama ?? null;
+  const wakilNama = produksiAkunOptions.find((o) => o.akunId === tim.wakilKepalaAkunId)?.nama ?? null;
+
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      {timList.map((tim) => (
-        <div key={tim.timId} className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <p className="text-sm font-semibold">{tim.nama}</p>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "flex w-full flex-col gap-1 rounded-lg border-l-4 border-y border-r border-border bg-muted/20 p-3 text-left hover:bg-muted/40",
+              TIM_BORDER_COLORS[timIdx % TIM_BORDER_COLORS.length]
+            )}
+          />
+        }
+      >
+        <p className="text-sm font-semibold">{tim.nama}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {kepalaNama || wakilNama ? [kepalaNama, wakilNama].filter(Boolean).join(", ") : "Belum ditentukan"}
+        </p>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Pengaturan {tim.nama}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
           <div>
             <Label className="text-xs">Kepala Produksi</Label>
             <KepalaSelect tim={tim} produksiAkunOptions={produksiAkunOptions} />
@@ -239,6 +273,31 @@ export function PanelTimProduksi({
             ))}
           <TambahAnggotaDialog tim={tim} />
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function PanelTimProduksi({
+  timList,
+  anggotaList,
+  produksiAkunOptions,
+}: {
+  timList: TimRow[];
+  anggotaList: AnggotaTimRow[];
+  produksiAkunOptions: StafOperasionalOption[];
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {timList.map((tim, idx) => (
+        <TimCard
+          key={tim.timId}
+          tim={tim}
+          timIdx={idx}
+          anggotaList={anggotaList}
+          timList={timList}
+          produksiAkunOptions={produksiAkunOptions}
+        />
       ))}
     </div>
   );

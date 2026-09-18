@@ -578,6 +578,27 @@ export async function hapusJadwalTimAction(tanggalUsaha: string, shift: ShiftNum
   });
 }
 
+// Tukar-tempat drag & drop di kalender bulanan (jadwal-tim-bulanan.tsx) --
+// HANYA dalam satu TanggalUsaha yang sama (dikonfirmasi user 2026-09-19).
+// Klien sudah tahu kedua TimID (state jadwal bulan berjalan sudah dimuat),
+// jadi cukup dua kali setJadwalTim (UPSERT per (tanggal,shift), aman
+// dipanggil berurutan) tanpa perlu baca ulang dari DB dulu.
+export async function swapJadwalTimAction(
+  tanggalUsaha: string,
+  shiftA: ShiftNumber,
+  timIdA: number,
+  shiftB: ShiftNumber,
+  timIdB: number
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiAdmin();
+    const akunId = Number(session.user.id);
+    await setJadwalTim(tanggalUsaha, shiftA, timIdA, akunId);
+    await setJadwalTim(tanggalUsaha, shiftB, timIdB, akunId);
+    revalidatePath("/mkesindo/produksi");
+  });
+}
+
 export async function setTimBertugasAction(tanggalUsaha: string, shift: ShiftNumber, timId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireProduksiView();

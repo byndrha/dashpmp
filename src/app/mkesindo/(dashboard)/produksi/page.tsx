@@ -68,7 +68,13 @@ export default async function ProduksiPage() {
       </section>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Jadwal Tim Produksi</h2>
-        <JadwalTimBulanan tahunAwal={tahunAwal} bulanAwal={bulanAwal} jadwalAwal={jadwalAwal} timList={timList} />
+        <JadwalTimBulanan
+          tahunAwal={tahunAwal}
+          bulanAwal={bulanAwal}
+          jadwalAwal={jadwalAwal}
+          timList={timList}
+          produksiAkunOptions={produksiAkunOptions}
+        />
       </section>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Riwayat Produksi</h2>
