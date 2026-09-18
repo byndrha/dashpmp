@@ -23,8 +23,12 @@ export async function allocateTakeAwayStock(
   // WITH (UPDLOCK, HOLDLOCK) mengunci baris yang dibaca sampai transaksi
   // ini commit/rollback -- dua TakeAway konkuren tidak bisa berebut sisa
   // yang sama, pola sama seperti lock di createBatch (produksi-warehouse.ts).
+  // TOP N membatasi jumlah baris yang di-UPDLOCK dan jumlah round-trip
+  // INSERT sekuensial di loop bawah -- tanpa batas ini, qty besar bisa
+  // mengunci ribuan baris selama beberapa menit (insiden 2026-09-18, lihat
+  // ledger SDD).
   const kualitasResult = await new sql.Request(transaction).input("variant", sql.VarChar(8), variant).query(`
-    SELECT k.KualitasID, k.Qty10KG,
+    SELECT TOP 50 k.KualitasID, k.Qty10KG,
            k.Qty10KG
              - ISNULL((SELECT SUM(b.Qty10KG) FROM DashboardProduksiBatch b WITH (UPDLOCK, HOLDLOCK) WHERE b.KualitasID = k.KualitasID AND b.IsDeleted = 0), 0)
              - ISNULL((SELECT SUM(ta.Qty) FROM DashboardTakeAwayAlokasi ta WITH (UPDLOCK, HOLDLOCK) WHERE ta.KualitasID = k.KualitasID AND ta.SumberTipe = 'KUALITAS'), 0)
@@ -51,8 +55,12 @@ export async function allocateTakeAwayStock(
 
   // Sumber 2: HANYA varian 10kg, kalau masih kurang -- Pallet, tertua dulu.
   if (sisaDibutuhkan > 0 && variant === "10kg") {
+    // TOP N membatasi jumlah baris yang di-UPDLOCK dan jumlah round-trip
+    // UPDATE+INSERT sekuensial di loop bawah -- sama seperti alasan TOP 50
+    // di Sumber 1 (insiden 2026-09-18, lihat ledger SDD); Cold Storage
+    // hanya punya ~42 slot pallet fisik jadi 100 sudah lebih dari cukup.
     const batchResult = await new sql.Request(transaction).query(`
-      SELECT BatchID, SisaQty10KG
+      SELECT TOP 100 BatchID, SisaQty10KG
       FROM DashboardProduksiBatch WITH (UPDLOCK, HOLDLOCK)
       WHERE IsDeleted = 0 AND SisaQty10KG > 0
       ORDER BY TanggalLabel ASC, JamPanen ASC
