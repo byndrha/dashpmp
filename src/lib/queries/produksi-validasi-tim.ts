@@ -49,13 +49,13 @@ export async function getValidasiBulan(tahun: number, bulan: number): Promise<Re
       .request()
       .input("start", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan - 1, 1, 0, 0, 0))))
       .input("end", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan, 2, 0, 0, 0)))).query(`
-        SELECT JamSelesaiMuat FROM DashboardPengirimanJadwal WHERE JamSelesaiMuat BETWEEN @start AND @end
+        SELECT JamSelesaiMuat FROM DashboardPengirimanJadwal WHERE IsDeleted = 0 AND JamSelesaiMuat IS NOT NULL AND JamSelesaiMuat BETWEEN @start AND @end
       `),
     pool
       .request()
       .input("start", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan - 1, 1, 0, 0, 0))))
       .input("end", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan, 2, 0, 0, 0)))).query(`
-        SELECT JamSelesaiMuat FROM DashboardTakeAwayMuatan WHERE JamSelesaiMuat BETWEEN @start AND @end
+        SELECT JamSelesaiMuat FROM DashboardTakeAwayMuatan WHERE IsDeleted = 0 AND JamSelesaiMuat IS NOT NULL AND JamSelesaiMuat BETWEEN @start AND @end
       `),
   ]);
 
