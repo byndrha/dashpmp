@@ -14,6 +14,7 @@ Modul `penjualan` dan `piutang` untuk kedua PT masih placeholder ("Belum ada dat
 - Jumlah **kantong** (`BalokKecilRealisasi`/`BalokBesarRealisasi`) di `PMP_Pemesanan` **valid secara fisik** — ini persis yang sudah dipakai fitur HPP Bersih (`getMonthlyBalokRealisasi`, filter `Status='3' AND IsVoid=0 AND IsDeleted=0`).
 - `ChartOfAccount` di keempat database punya akun bertipe "Piutang" dengan saldo GL riil (bukan nol) — lihat bagian Akun Piutang di bawah.
 - Kedua database (`utama` dan `logistik`) di kedua PT sama-sama punya data `PMP_Pemesanan`/`PMP_Agen` aktif sampai hari ini — bukan cuma `utama` yang relevan.
+- **Temuan penting (18 Sep 2026, dikonfirmasi accounting PMPutra & PMPersada):** database `pmpersada/logistik` (`FINAC_PMP_LOGISTIC`) **dipakai bersama** dengan perusahaan lain, "PMPakis" (PT Panen Mutiara Pakis / "Prama Pakis" secara informal), dipisahkan lewat kolom `GeneralLedger.BranchID` — `'012'` = PMPersada (Prama Tuban), `'011'` = PMPakis. Ketiga database lainnya (`pmputra/utama`, `pmputra/logistik`, `pmpersada/utama`) masing-masing 100% satu `BranchID` saja — bersih, tidak perlu filter tambahan. **Setiap query terhadap `pmpersada`+`logistik` WAJIB menambahkan `AND gl.BranchID = '012'`** supaya tidak ikut menghitung transaksi PMPakis (dikonfirmasi live: akun Piutang `1111` dan Pendapatan `4001` di database ini sama-sama dipakai oleh kedua perusahaan, bukan eksklusif milik PMPersada).
 
 ## Cakupan
 
@@ -37,18 +38,31 @@ Modul `penjualan` dan `piutang` untuk kedua PT masih placeholder ("Belum ada dat
 
 Keduanya menerima `kode` (`"pmputra"` | `"pmpersada"`) sebagai parameter, memanggil `getCompanyPool(kode, label)` untuk `label` `"utama"` dan `"logistik"`, dijalankan paralel via `Promise.all`.
 
-Satu konstanta konfigurasi per (kode, label) untuk akun Piutang yang dihitung (pola sama seperti `HPP_BERSIH_ACCOUNTS`):
+Dua konstanta konfigurasi per (kode, label): satu untuk akun Piutang, satu untuk akun Pendapatan/Penjualan (pola sama seperti `HPP_BERSIH_ACCOUNTS`). Baris `pmpersada`+`logistik` di kedua konstanta **wajib difilter `BranchID='012'`** di query-nya (lihat Latar Belakang) — field `requiresBranchFilter` menandai baris mana yang butuh ini, supaya implementer tidak lupa:
 
 ```ts
-const PIUTANG_ACCOUNTS: { kode: string; label: CompanyKoneksiLabel; accountNo: string; displayName: string }[] = [
+const PIUTANG_ACCOUNTS: { kode: string; label: CompanyKoneksiLabel; accountNo: string; displayName: string; requiresBranchFilter?: boolean }[] = [
   { kode: "pmputra", label: "utama", accountNo: "1115", displayName: "Piutang Agen" },
   { kode: "pmputra", label: "logistik", accountNo: "1111", displayName: "Piutang Jasa Usaha" },
   { kode: "pmpersada", label: "utama", accountNo: "1115", displayName: "Piutang Agen" },
-  { kode: "pmpersada", label: "logistik", accountNo: "1111", displayName: "Piutang Reguler" },
+  { kode: "pmpersada", label: "logistik", accountNo: "1111", displayName: "Piutang Reguler", requiresBranchFilter: true },
+];
+
+const PENJUALAN_ACCOUNTS: { kode: string; label: CompanyKoneksiLabel; accountNo: string; displayName: string; requiresBranchFilter?: boolean }[] = [
+  { kode: "pmputra", label: "utama", accountNo: "4001", displayName: "Pendapatan Balok Kecil" },
+  { kode: "pmputra", label: "utama", accountNo: "4002", displayName: "Pendapatan Balok Besar" },
+  { kode: "pmputra", label: "logistik", accountNo: "4001", displayName: "Pendapatan Reguler" },
+  { kode: "pmpersada", label: "utama", accountNo: "4004", displayName: "Pendapatan Balok Kecil" },
+  { kode: "pmpersada", label: "utama", accountNo: "4005", displayName: "Pendapatan Balok Besar" },
+  { kode: "pmpersada", label: "logistik", accountNo: "4001", displayName: "Pendapatan Reguler", requiresBranchFilter: true },
 ];
 ```
 
-**Catatan/asumsi kerja yang perlu dikonfirmasi user:** nomor akun di atas dipilih dari akun "Piutang..." dengan saldo GL terbesar/paling relevan per (PT, label) — hasil eksplorasi live, BUKAN konfirmasi eksplisit dari user. Contoh saldo saat eksplorasi (18 Agu 2026): pmputra/utama 1115 "Piutang Agen" = Rp 263.981.437; pmputra/logistik 1111 "Piutang Jasa Usaha" = Rp 99.550.633; pmpersada/utama 1115 "Piutang Agen" = Rp 425.898.859; pmpersada/logistik 1111 "Piutang Reguler" = Rp 634.578.510 (ada kandidat kedua di logistik pmpersada, "Piutang Logistik" 1112 = Rp 41.612.500, saat ini tidak diikutkan — lebih kecil, kemungkinan bukan akun utama). Kalau ternyata salah pilih akun, ini titik yang perlu dikoreksi paling dulu.
+**Semua nomor akun di atas SUDAH dikonfirmasi live via cross-check dengan accounting PMPutra dan PMPersada (17-18 Sep 2026)** — bukan lagi asumsi kerja. Ringkasan verifikasi:
+
+- **Piutang**: setiap akun di atas dikonfirmasi 100% terhubung ke transaksi `PMP_PEMESANAN` (order es riil), bukan jurnal manual. Akun `1114 "Piutang Lainnya"` (pmpersada/logistik) dikonfirmasi **BUKAN** piutang pelanggan sama sekali — itu piutang antar-perusahaan (PMPutra ↔ PMPersada) — dikecualikan total dari perhitungan.
+- **Pendapatan/Penjualan**: akun-akun di atas 100% terhubung ke `PMP_PEMESANAN`. Akun "Jasa Logistik"/"Jasa Logistik Luar" (di database `logistik` kedua PT) dikonfirmasi terhubung ke `PMP_PENJADWALAN` (penjadwalan armada) + jurnal manual — pendapatan sewa-angkut pihak luar, **bukan penjualan es** — dikecualikan. Akun "Potongan Penjualan"/"Potongan Pendapatan" dikonfirmasi diskon riil ke Agen (kalau nanti dibutuhkan sebagai pengurang, gunakan akun ini secara terpisah — TIDAK termasuk dalam `PENJUALAN_ACCOUNTS` di atas karena cakupan modul ini hanya tren kantong+Rp kotor, bukan breakdown diskon). Akun "Pendapatan Lain Lain" dikonfirmasi di luar operasional inti — dikecualikan.
+- **BranchID**: hanya `pmpersada`+`logistik` yang perlu filter (akun `1111` dan `4001` di database itu dikonfirmasi dipakai bersama oleh PMPersada `BranchID='012'` dan PMPakis `BranchID='011'` — tanpa filter ini, angka PMPersada akan ikut menghitung transaksi PMPakis, ~6-9% dari total).
 
 ## Data Model
 
@@ -80,9 +94,9 @@ export interface PiutangSummaryData {
 }
 ```
 
-**Query Penjualan** (per label, lalu digabung): kantong dari `PMP_Pemesanan` (`WHERE Status='3' AND ISNULL(IsVoid,0)=0 AND ISNULL(IsDeleted,0)=0`, `GROUP BY MONTH/YEAR(Tanggal)`) — pola identik `getMonthlyBalokRealisasi` yang sudah ada di `hpp-bersih-pmputra.ts`. Pendapatan Rupiah dari `GeneralLedger` × `ChartOfAccount` filter prefix akun `4` (Pendapatan) — pola identik `pnl-pmputra.ts`.
+**Query Penjualan** (per label, lalu digabung): kantong dari `PMP_Pemesanan` (`WHERE Status='3' AND ISNULL(IsVoid,0)=0 AND ISNULL(IsDeleted,0)=0`, `GROUP BY MONTH/YEAR(Tanggal)`) — pola identik `getMonthlyBalokRealisasi` yang sudah ada di `hpp-bersih-pmputra.ts`. Pendapatan Rupiah dari `GeneralLedger` × `ChartOfAccount` **filter eksplisit ke `PENJUALAN_ACCOUNTS`** (bukan prefix akun `4` mentah — itu akan ikut menghitung pendapatan Jasa Logistik yang bukan penjualan es). Baris dengan `requiresBranchFilter: true` WAJIB menambahkan `AND gl.BranchID = '012'` di WHERE clause-nya.
 
-**Query Piutang**: saldo saat ini = `SUM(Debit) - SUM(Credit)` dari `GeneralLedger` untuk `ChartOfAccountID` yang cocok `PIUTANG_ACCOUNTS`, tanpa batas tanggal (s/d hari ini) — pola identik `balance-sheet-pmputra.ts`. Tren bulanan = `SUM(Debit)`/`SUM(Credit)` per bulan untuk akun yang sama, 12 bulan terakhir.
+**Query Piutang**: saldo saat ini = `SUM(Debit) - SUM(Credit)` dari `GeneralLedger` untuk `ChartOfAccountID` yang cocok `PIUTANG_ACCOUNTS`, tanpa batas tanggal (s/d hari ini) — pola identik `balance-sheet-pmputra.ts`. Tren bulanan = `SUM(Debit)`/`SUM(Credit)` per bulan untuk akun yang sama, 12 bulan terakhir. Sama seperti Penjualan, baris `requiresBranchFilter: true` (saat ini hanya pmpersada/logistik) WAJIB menambahkan `AND gl.BranchID = '012'`.
 
 ## Halaman & Routing
 
@@ -98,4 +112,4 @@ Tidak ada form, tombol simpan, atau server action penulis data — murni pembaca
 
 ## Testing
 
-Tidak ada test runner di proyek ini. Verifikasi: `npx tsc --noEmit`, `npx eslint`, dan live check di browser untuk kedua PT — angka kantong tren Penjualan cocok manual-check terhadap `PMP_Pemesanan` (query langsung), angka Pendapatan cocok dengan yang sudah tampil di halaman Keuangan untuk periode yang sama, total Piutang cocok dengan saldo GL akun yang dipilih (query langsung terhadap `ChartOfAccount`/`GeneralLedger`). Pastikan halaman Keuangan pmputra/pmpersada tidak berubah (regresi check).
+Tidak ada test runner di proyek ini. Verifikasi: `npx tsc --noEmit`, `npx eslint`, dan live check di browser untuk kedua PT — angka kantong tren Penjualan cocok manual-check terhadap `PMP_Pemesanan` (query langsung), total Piutang & Pendapatan `pmpersada`/`logistik` HARUS lebih kecil dari saldo akun `1111`/`4001` mentah (tanpa filter `BranchID`) — kalau sama persis berarti filter `BranchID='012'` tidak terpasang/tidak jalan. Pastikan halaman Keuangan pmputra/pmpersada tidak berubah (regresi check) — halaman Keuangan sendiri TIDAK perlu filter `BranchID` karena hitungannya dari prefix akun `4`/`1`-`3` secara keseluruhan (pola lama, di luar cakupan pekerjaan ini), bukan dari `PENJUALAN_ACCOUNTS`/`PIUTANG_ACCOUNTS`.
