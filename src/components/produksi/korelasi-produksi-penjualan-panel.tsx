@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { getKorelasiProduksiPenjualanAction } from "@/app/mkesindo/produksi/actions";
 import type { KorelasiProduksiPenjualanData, KorelasiShiftRow } from "@/lib/queries/produksi-korelasi-penjualan";
@@ -12,6 +13,16 @@ import type { KorelasiProduksiPenjualanData, KorelasiShiftRow } from "@/lib/quer
 // Roman-numeral shift labels matching the user's own table example (Shift
 // II -> III -> I), rather than getShiftLabel's "Shift 2 (15:00)" form.
 const SHIFT_ROMAN: Record<KorelasiShiftRow["shift"], string> = { 1: "I", 2: "II", 3: "III" };
+
+// Periode jadi KOLOM, metrik jadi BARIS -- tabel aslinya (periode per baris,
+// 7 metrik per kolom) meluber ke samping dan perlu scroll horizontal;
+// ditranspose 2026-09-19 atas permintaan user supaya memanjang ke bawah
+// saja (5 kolom -- label + 4 periode -- selalu muat di lebar kartu ini).
+interface PeriodColumn {
+  key: string;
+  label: string;
+  row: KorelasiShiftRow | null; // null untuk kolom "Stok Awal"
+}
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
@@ -55,7 +66,7 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
   }, [tanggalUsaha]);
 
   return (
-    <Card className="w-full lg:w-[480px] lg:shrink-0">
+    <Card className="w-full lg:w-[440px] lg:shrink-0">
       <CardHeader className="gap-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold">Korelasi Produksi &ndash; Penjualan</CardTitle>
@@ -90,49 +101,63 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : data ? (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Periode</TableHead>
-                  <TableHead className="text-right">Produksi</TableHead>
-                  <TableHead className="text-right">DO</TableHead>
-                  <TableHead className="text-right">Sisa Produksi</TableHead>
-                  <TableHead className="text-right">ColdStorage</TableHead>
-                  <TableHead className="text-right">Return</TableHead>
-                  <TableHead className="text-right">Waste</TableHead>
-                  <TableHead className="text-right">Kerusakan</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow className="bg-muted/30">
-                  <TableCell className="font-medium">Stok Awal (sisa)</TableCell>
-                  <TableCell className="text-right text-muted-foreground" colSpan={3}>
-                    &mdash;
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">{formatQty(data.stokAwalPeriode)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground" colSpan={3}>
-                    &mdash;
-                  </TableCell>
-                </TableRow>
-                {data.rows.map((row) => (
-                  <TableRow key={row.shift}>
-                    <TableCell className="font-medium">Shift {SHIFT_ROMAN[row.shift]}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatQty(row.totalProduksi)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatQty(row.totalDO)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{formatQty(row.sisaProduksi)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatQty(row.coldStorage)}
-                      {!row.coldStorageFinal && <span className="ml-1 text-[10px] text-muted-foreground">(live)</span>}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatQty(row.retur)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatWaste(row.wastePercent)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatQty(row.kerusakan)}</TableCell>
+          (() => {
+            const periods: PeriodColumn[] = [
+              { key: "awal", label: "Stok Awal", row: null },
+              ...data.rows.map((row) => ({ key: String(row.shift), label: `Shift ${SHIFT_ROMAN[row.shift]}`, row })),
+            ];
+            const metrics: { label: string; emphasize?: boolean; render: (p: PeriodColumn) => ReactNode }[] = [
+              { label: "Produksi", render: (p) => (p.row ? formatQty(p.row.totalProduksi) : "—") },
+              { label: "DO", render: (p) => (p.row ? formatQty(p.row.totalDO) : "—") },
+              {
+                label: "Sisa Produksi",
+                emphasize: true,
+                render: (p) => (p.row ? formatQty(p.row.sisaProduksi) : "—"),
+              },
+              {
+                label: "ColdStorage",
+                render: (p) =>
+                  p.row ? (
+                    <>
+                      {formatQty(p.row.coldStorage)}
+                      {!p.row.coldStorageFinal && <span className="ml-1 text-[10px] text-muted-foreground">(live)</span>}
+                    </>
+                  ) : (
+                    formatQty(data.stokAwalPeriode)
+                  ),
+              },
+              { label: "Return", render: (p) => (p.row ? formatQty(p.row.retur) : "—") },
+              { label: "Waste", render: (p) => (p.row ? formatWaste(p.row.wastePercent) : "—") },
+              { label: "Kerusakan", render: (p) => (p.row ? formatQty(p.row.kerusakan) : "—") },
+            ];
+
+            return (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Metrik</TableHead>
+                    {periods.map((p) => (
+                      <TableHead key={p.key} className="text-right">
+                        {p.label}
+                      </TableHead>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {metrics.map((m) => (
+                    <TableRow key={m.label}>
+                      <TableCell className="text-muted-foreground">{m.label}</TableCell>
+                      {periods.map((p) => (
+                        <TableCell key={p.key} className={cn("text-right tabular-nums", m.emphasize && "font-semibold")}>
+                          {m.render(p)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            );
+          })()
         ) : null}
       </CardContent>
     </Card>
