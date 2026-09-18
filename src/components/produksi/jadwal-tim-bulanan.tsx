@@ -23,6 +23,14 @@ const SHIFT_URUTAN: ShiftNumber[] = [1, 2, 3];
 // menyimpan makna bisnis apa pun.
 const TIM_COLORS = ["bg-sky-600", "bg-emerald-600", "bg-amber-600", "bg-violet-600", "bg-rose-600", "bg-cyan-600"];
 const TIM_BORDER_COLORS = ["border-sky-600", "border-emerald-600", "border-amber-600", "border-violet-600", "border-rose-600", "border-cyan-600"];
+// Warna badge S1/S2/S3 di kartu ringkasan -- per NOMOR SHIFT (bukan per
+// Tim, warna Tim sendiri sudah dipakai bar kiri kartu), sesuai referensi
+// desain user: S1 biru, S2 hijau, S3 oranye.
+const SHIFT_BADGE_COLORS: Record<ShiftNumber, string> = {
+  1: "bg-sky-500/15 text-sky-400",
+  2: "bg-emerald-500/15 text-emerald-400",
+  3: "bg-amber-500/15 text-amber-400",
+};
 
 // Label pendek badge kalender ("A"/"B"/"C") -- ambil kata terakhir nama Tim
 // kalau berpola "Tim X", fallback ke huruf pertama nama untuk Tim yang
@@ -323,7 +331,7 @@ export function JadwalTimBulanan({
               </div>
               <div className="flex shrink-0 gap-1">
                 {SHIFT_URUTAN.map((s) => (
-                  <span key={s} className="rounded bg-background px-1.5 py-1 text-[10px] font-medium">
+                  <span key={s} className={cn("rounded px-1.5 py-1 text-[10px] font-medium", SHIFT_BADGE_COLORS[s])}>
                     S{s}: {stats[s]}
                   </span>
                 ))}
