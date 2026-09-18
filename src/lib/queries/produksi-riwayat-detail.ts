@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { getPreviousShift, getReportShift, type ShiftNumber } from "@/lib/report-shift";
 import { getTotalDOForShift, getReturForShift, getColdStorageForShift } from "@/lib/queries/produksi-korelasi-penjualan";
+import type { KantongVariant } from "@/lib/queries/sales-order";
 
 // Urutan kronologis shift dalam satu TanggalUsaha, sama seperti seluruh
 // modul produksi lain (Jadwal Tim, Korelasi Produksi-Penjualan): Shift 2
@@ -30,6 +31,7 @@ export interface RiwayatKualitasEntry {
   cekKejernihan: boolean;
   cekUkuranBentuk: boolean;
   qty10KG: number | null;
+  variant: KantongVariant;
   diameterDalamMm: number | null;
   catatan: string | null;
   fotoPath: string | null;
@@ -93,7 +95,7 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
   const [kualitasResult, jadwalResult] = await Promise.all([
     pool.request().input("minTanggal", sql.Date, minTanggal).query(`
       SELECT k.KualitasID, k.TanggalLabel, k.Waktu, k.Shift, m.Nama AS MesinNama,
-             k.CekKejernihan, k.CekUkuranBentuk, k.Qty10KG, k.DiameterDalamMm, k.Catatan,
+             k.CekKejernihan, k.CekUkuranBentuk, k.Qty10KG, k.Variant, k.DiameterDalamMm, k.Catatan,
              k.FotoPath, k.FotoBeratKemasanPath, k.CreatedByUserID, k.CreatedDate
       FROM DashboardProduksiKualitas k
       LEFT JOIN DashboardProduksiMesin m ON m.MesinID = k.MesinID
@@ -117,6 +119,7 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
     CekKejernihan: boolean;
     CekUkuranBentuk: boolean;
     Qty10KG: number | null;
+    Variant: KantongVariant;
     DiameterDalamMm: number | null;
     Catatan: string | null;
     FotoPath: string | null;
@@ -143,6 +146,19 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
     }
   }
 
+  const takeAwayByKualitasId = new Map<number, number>();
+  if (kualitasIds.length > 0) {
+    const takeAwayResult = await pool.request().query(`
+      SELECT KualitasID, SUM(Qty) AS TotalQty
+      FROM DashboardTakeAwayAlokasi
+      WHERE SumberTipe = 'KUALITAS' AND KualitasID IN (${kualitasIds.join(",")})
+      GROUP BY KualitasID
+    `);
+    for (const r of takeAwayResult.recordset as { KualitasID: number; TotalQty: number }[]) {
+      takeAwayByKualitasId.set(r.KualitasID, r.TotalQty);
+    }
+  }
+
   const timByTanggalShift = new Map<string, { timId: number; timNama: string }>();
   for (const r of jadwalResult.recordset as { TanggalUsaha: Date; Shift: ShiftNumber; TimID: number; TimNama: string }[]) {
     timByTanggalShift.set(`${r.TanggalUsaha.toISOString().slice(0, 10)}|${r.Shift}`, { timId: r.TimID, timNama: r.TimNama });
@@ -159,7 +175,8 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
       groupByKey.set(key, group);
     }
     const alokasiPallet = alokasiByKualitasId.get(r.KualitasID) ?? [];
-    const totalTeralokasi = alokasiPallet.reduce((sum, a) => sum + a.qty10KG, 0);
+    const totalTeralokasi =
+      alokasiPallet.reduce((sum, a) => sum + a.qty10KG, 0) + (takeAwayByKualitasId.get(r.KualitasID) ?? 0);
     group.entries.push({
       kualitasId: r.KualitasID,
       waktu: r.Waktu,
@@ -167,6 +184,7 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
       cekKejernihan: r.CekKejernihan,
       cekUkuranBentuk: r.CekUkuranBentuk,
       qty10KG: r.Qty10KG,
+      variant: r.Variant,
       diameterDalamMm: r.DiameterDalamMm,
       catatan: r.Catatan,
       fotoPath: r.FotoPath,
