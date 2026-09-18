@@ -20,7 +20,8 @@
 - Kantong queries against `PMP_Pemesanan` always filter `Status = '3' AND ISNULL(IsVoid,0) = 0 AND ISNULL(IsDeleted,0) = 0` — same filter the existing `getMonthlyBalokRealisasi` (`hpp-bersih-pmputra.ts`) already uses.
 - All Rupiah figures (Pendapatan, Piutang) come from `GeneralLedger`/`ChartOfAccount`, the same source the Keuangan module already trusts — never from `PMP_Pemesanan` or `PMP_Agen`.
 - `PMP_Agen.PiutangSaatIni`/`TabunganSaatIni` are dead columns (confirmed: 0 across all 774 Agen rows in all 4 databases) — never read them for anything.
-- **`PIUTANG_ACCOUNTS` account numbers are a working assumption**, not explicitly user-confirmed (picked as the largest-balance "Piutang..." account per PT+label during live exploration — see spec's Arsitektur section for the exact candidates and balances found). Task 7's live verification must re-surface these numbers and their live balances to the user for confirmation; treat this as the single most likely-to-be-wrong part of this plan.
+- **`PIUTANG_ACCOUNTS` and `PENJUALAN_ACCOUNTS` account numbers are confirmed** (cross-checked live with accounting at both PTs, 17-18 Sep 2026 — see spec's Arsitektur section). Do not use a naive `LEFT(coa.AccountNo,1) = '4'` prefix scan for Pendapatan — that silently includes "Jasa Logistik"/"Jasa Logistik Luar" revenue (armada scheduling, not ice sales), confirmed via `PMP_PENJADWALAN`-tagged GL rows.
+- **`pmpersada`+`logistik` (`FINAC_PMP_LOGISTIC`) is shared with a third company, PMPakis**, split by `GeneralLedger.BranchID` (`'012'` = PMPersada's own, `'011'` = PMPakis). Every query against this one (kode,label) combo — both `getPendapatanByMonth` and the Piutang functions — MUST add `AND gl.BranchID = '012'`, or totals will silently include PMPakis's transactions on the same accounts (confirmed live: both the Piutang account `1111` and the Pendapatan account `4001` in this database are posted to by both companies). The other three (kode,label) combos (`pmputra`/utama, `pmputra`/logistik, `pmpersada`/utama) are each single-branch and need no such filter.
 - Reuse `getCompanyPool(kode, label)` (`src/lib/db-company.ts`) for every ERP database connection — never open a new connection mechanism.
 - `months` arrays throughout are a **rolling 12-month window ending at the current month** (computed from `new Date()` at request time), not a fixed calendar year — do not reuse `HPPBersihPanel`'s year-navigation pattern, this module has no navigation UI at all.
 
@@ -33,7 +34,7 @@
 
 **Interfaces:**
 - Consumes: `getCompanyPool(kode, label)` / `CompanyKoneksiLabel` from `@/lib/db-company` (unchanged, already used by every `-pmputra.ts`/`-pmpersada.ts` query file).
-- Produces: `PenjualanTrendMonth`, `PenjualanTrendData` types; `getPenjualanTrend(kode: string): Promise<PenjualanTrendData>`; module-private `monthsWindow()` helper — Task 2 (same file) reuses `monthsWindow()`, Task 5 imports `getPenjualanTrend` + `PenjualanTrendData`.
+- Produces: `PenjualanTrendMonth`, `PenjualanTrendData` types; `getPenjualanTrend(kode: string): Promise<PenjualanTrendData>`; module-private `monthsWindow()` helper and `PMPERSADA_OWN_BRANCH_ID` constant — Task 2 (same file) reuses both `monthsWindow()` and `PMPERSADA_OWN_BRANCH_ID`, Task 5 imports `getPenjualanTrend` + `PenjualanTrendData`.
 
 - [ ] **Step 1: Create the file with the Penjualan half**
 
@@ -106,9 +107,44 @@ async function getKantongByMonth(
   return map;
 }
 
-// Pendapatan (revenue, prefix-4 accounts) from GeneralLedger -- same source
-// and Credit-Debit sign convention pnl.ts/pnl-pmputra.ts already use for
-// this exact category (revenue accounts are credit-normal).
+// PMPersada's own branch code inside its shared "logistik" database
+// (FINAC_PMP_LOGISTIC) -- that one database is also used by PMPakis
+// (BranchID "011"), confirmed live 18 Sep 2026 via accounting cross-check.
+// Every query against pmpersada+logistik must filter to this branch or its
+// totals silently include PMPakis's own transactions too.
+const PMPERSADA_OWN_BRANCH_ID = "012";
+
+interface PenjualanAccountConfig {
+  kode: string;
+  label: CompanyKoneksiLabel;
+  accountNo: string;
+  requiresBranchFilter?: boolean;
+}
+
+// Confirmed live with accounting at both PTs (17-18 Sep 2026) -- each row is
+// 100% traceable to PMP_PEMESANAN (real ice-sales orders). Deliberately NOT
+// a `LEFT(AccountNo,1) = '4'` prefix scan: that would also sum "Jasa
+// Logistik"/"Jasa Logistik Luar" (armada-scheduling revenue, PMP_PENJADWALAN
+// -tagged, unrelated to ice sales) and "Pendapatan Lain Lain" (non-core).
+const PENJUALAN_ACCOUNTS: PenjualanAccountConfig[] = [
+  { kode: "pmputra", label: "utama", accountNo: "4001" }, // "Pendapatan Balok Kecil"
+  { kode: "pmputra", label: "utama", accountNo: "4002" }, // "Pendapatan Balok Besar"
+  { kode: "pmputra", label: "logistik", accountNo: "4001" }, // "Pendapatan Reguler"
+  { kode: "pmpersada", label: "utama", accountNo: "4004" }, // "Pendapatan Balok Kecil"
+  { kode: "pmpersada", label: "utama", accountNo: "4005" }, // "Pendapatan Balok Besar"
+  { kode: "pmpersada", label: "logistik", accountNo: "4001", requiresBranchFilter: true }, // "Pendapatan Reguler"
+];
+
+function getPenjualanAccounts(kode: string, label: CompanyKoneksiLabel): PenjualanAccountConfig[] {
+  const entries = PENJUALAN_ACCOUNTS.filter((a) => a.kode === kode && a.label === label);
+  if (entries.length === 0) throw new Error(`No Penjualan account configured for kode="${kode}" label="${label}"`);
+  return entries;
+}
+
+// Pendapatan (revenue) from GeneralLedger, filtered to the exact
+// PENJUALAN_ACCOUNTS whitelist for this (kode,label) -- same Credit-Debit
+// sign convention pnl.ts/pnl-pmputra.ts already use for revenue accounts
+// (credit-normal).
 async function getPendapatanByMonth(
   kode: string,
   label: CompanyKoneksiLabel,
@@ -116,19 +152,27 @@ async function getPendapatanByMonth(
   end: Date
 ): Promise<Map<string, number>> {
   const pool = await getCompanyPool(kode, label);
-  const result = await pool
-    .request()
-    .input("start", sql.DateTime, start)
-    .input("end", sql.DateTime, end)
-    .query(`
-      SELECT CONVERT(varchar(7), gl.TransDate, 120) AS Bulan,
-             SUM(gl.Credit - gl.Debit) AS Pendapatan
-      FROM GeneralLedger gl
-      JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
-      WHERE LEFT(coa.AccountNo, 1) = '4'
-        AND gl.TransDate >= @start AND gl.TransDate < @end
-      GROUP BY CONVERT(varchar(7), gl.TransDate, 120)
-    `);
+  const accounts = getPenjualanAccounts(kode, label);
+  const requiresBranchFilter = accounts.some((a) => a.requiresBranchFilter);
+
+  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+  const accountParams = accounts.map((a, i) => {
+    const paramName = `acc${i}`;
+    request.input(paramName, sql.VarChar(16), a.accountNo);
+    return `@${paramName}`;
+  });
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+
+  const result = await request.query(`
+    SELECT CONVERT(varchar(7), gl.TransDate, 120) AS Bulan,
+           SUM(gl.Credit - gl.Debit) AS Pendapatan
+    FROM GeneralLedger gl
+    JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
+    WHERE coa.AccountNo IN (${accountParams.join(", ")})
+      AND gl.TransDate >= @start AND gl.TransDate < @end
+      ${requiresBranchFilter ? "AND gl.BranchID = @branchId" : ""}
+    GROUP BY CONVERT(varchar(7), gl.TransDate, 120)
+  `);
   const map = new Map<string, number>();
   for (const r of result.recordset as { Bulan: string; Pendapatan: number }[]) {
     map.set(r.Bulan, r.Pendapatan);
@@ -186,7 +230,7 @@ git commit -m "feat: add getPenjualanTrend query for Es Balok Penjualan module"
 - Modify: `src/lib/queries/penjualan-piutang.ts` (append to the file Task 1 created)
 
 **Interfaces:**
-- Consumes: `monthsWindow()`, `getCompanyPool`/`CompanyKoneksiLabel` (Task 1, same file).
+- Consumes: `monthsWindow()`, `PMPERSADA_OWN_BRANCH_ID`, `getCompanyPool`/`CompanyKoneksiLabel` (Task 1, same file).
 - Produces: `PiutangTrendMonth`, `PiutangSummaryData` types; `getPiutangSummary(kode: string): Promise<PiutangSummaryData>` — consumed by Task 6.
 
 - [ ] **Step 1: Append the Piutang half to the same file**
@@ -208,32 +252,47 @@ export interface PiutangSummaryData {
   months: PiutangTrendMonth[];
 }
 
-// Working assumption from live-DB exploration (largest-balance "Piutang..."
-// account per kode+label) -- NOT explicitly user-confirmed. See plan Global
-// Constraints: Task 7 must re-surface these for confirmation.
-const PIUTANG_ACCOUNTS: { kode: string; label: CompanyKoneksiLabel; accountNo: string }[] = [
+interface PiutangAccountConfig {
+  kode: string;
+  label: CompanyKoneksiLabel;
+  accountNo: string;
+  requiresBranchFilter?: boolean;
+}
+
+// Confirmed live with accounting at both PTs (17-18 Sep 2026) -- each row is
+// 100% traceable to PMP_PEMESANAN. The pmpersada+logistik row needs
+// requiresBranchFilter: this database is shared with PMPakis (see
+// PMPERSADA_OWN_BRANCH_ID above, defined earlier in this file by Task 1) --
+// without it, this account's balance also includes PMPakis's own piutang.
+// Account "1114 Piutang Lainnya" (pmpersada/logistik) is deliberately
+// excluded -- confirmed by accounting to be an inter-company (PMPutra <->
+// PMPersada) receivable, not a customer/Agen receivable.
+const PIUTANG_ACCOUNTS: PiutangAccountConfig[] = [
   { kode: "pmputra", label: "utama", accountNo: "1115" }, // "Piutang Agen"
   { kode: "pmputra", label: "logistik", accountNo: "1111" }, // "Piutang Jasa Usaha"
   { kode: "pmpersada", label: "utama", accountNo: "1115" }, // "Piutang Agen"
-  { kode: "pmpersada", label: "logistik", accountNo: "1111" }, // "Piutang Reguler"
+  { kode: "pmpersada", label: "logistik", accountNo: "1111", requiresBranchFilter: true }, // "Piutang Reguler"
 ];
 
-function getPiutangAccountNo(kode: string, label: CompanyKoneksiLabel): string {
+function getPiutangAccount(kode: string, label: CompanyKoneksiLabel): PiutangAccountConfig {
   const entry = PIUTANG_ACCOUNTS.find((a) => a.kode === kode && a.label === label);
   if (!entry) throw new Error(`No Piutang account configured for kode="${kode}" label="${label}"`);
-  return entry.accountNo;
+  return entry;
 }
 
 // Current balance (Debit-normal asset account) -- no date filter, matches
 // balance-sheet-pmputra.ts's own "as of today" pattern for AsetLancar.
 async function getPiutangBalance(kode: string, label: CompanyKoneksiLabel): Promise<number> {
   const pool = await getCompanyPool(kode, label);
-  const accountNo = getPiutangAccountNo(kode, label);
-  const result = await pool.request().input("accountNo", sql.VarChar(16), accountNo).query(`
+  const account = getPiutangAccount(kode, label);
+  const request = pool.request().input("accountNo", sql.VarChar(16), account.accountNo);
+  if (account.requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
     SELECT ISNULL(SUM(gl.Debit),0) AS TotalDebit, ISNULL(SUM(gl.Credit),0) AS TotalCredit
     FROM GeneralLedger gl
     JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
     WHERE coa.AccountNo = @accountNo
+      ${account.requiresBranchFilter ? "AND gl.BranchID = @branchId" : ""}
   `);
   const r = result.recordset[0] as { TotalDebit: number; TotalCredit: number };
   return r.TotalDebit - r.TotalCredit;
@@ -246,19 +305,21 @@ async function getPiutangMovementByMonth(
   end: Date
 ): Promise<Map<string, { baru: number; tertagih: number }>> {
   const pool = await getCompanyPool(kode, label);
-  const accountNo = getPiutangAccountNo(kode, label);
-  const result = await pool
+  const account = getPiutangAccount(kode, label);
+  const request = pool
     .request()
-    .input("accountNo", sql.VarChar(16), accountNo)
+    .input("accountNo", sql.VarChar(16), account.accountNo)
     .input("start", sql.DateTime, start)
-    .input("end", sql.DateTime, end)
-    .query(`
+    .input("end", sql.DateTime, end);
+  if (account.requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
       SELECT CONVERT(varchar(7), gl.TransDate, 120) AS Bulan,
              SUM(gl.Debit) AS Baru, SUM(gl.Credit) AS Tertagih
       FROM GeneralLedger gl
       JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
       WHERE coa.AccountNo = @accountNo
         AND gl.TransDate >= @start AND gl.TransDate < @end
+        ${account.requiresBranchFilter ? "AND gl.BranchID = @branchId" : ""}
       GROUP BY CONVERT(varchar(7), gl.TransDate, 120)
     `);
   const map = new Map<string, { baru: number; tertagih: number }>();
@@ -669,9 +730,11 @@ Expected: no errors anywhere in the project.
 Run: `npx eslint src/lib/queries/penjualan-piutang.ts src/components/dashboard/penjualan-trend-panel.tsx src/components/dashboard/piutang-summary-panel.tsx src/app/pmputra/penjualan/page.tsx src/app/pmputra/piutang/page.tsx "src/app/pmpersada/(dashboard)/penjualan/page.tsx" "src/app/pmpersada/(dashboard)/piutang/page.tsx"`
 Expected: no errors.
 
-- [ ] **Step 2: Cross-check the PIUTANG_ACCOUNTS assumption live**
+- [ ] **Step 2: Cross-check the PIUTANG_ACCOUNTS/PENJUALAN_ACCOUNTS filters live, especially the BranchID filter**
 
-Write a disposable script (scratchpad dir, `npx tsx -r dotenv/config <script>.ts`) that imports `getCompanyPool` and, for each of the 4 `PIUTANG_ACCOUNTS` rows, queries `ChartOfAccount`/`GeneralLedger` directly for that `accountNo`'s `Description` and current balance (`SUM(Debit)-SUM(Credit)`, no date filter). Compare the output against `getPiutangSummary("pmputra")`/`getPiutangSummary("pmpersada")`'s `totalPiutangUtama`/`totalPiutangLogistik` — they must match exactly (same query, just independently re-run). This does not validate that "1115"/"1111" are the *correct* accounts to represent Piutang (that needs the user's confirmation — surface the account descriptions and balances in your report), only that the query layer computes what it claims to.
+Write a disposable script (scratchpad dir, `npx tsx -r dotenv/config <script>.ts`) that imports `getCompanyPool` and, for each of the 4 `PIUTANG_ACCOUNTS` rows, queries `ChartOfAccount`/`GeneralLedger` directly for that `accountNo`'s `Description` and current balance (`SUM(Debit)-SUM(Credit)`, no date filter, plus `AND gl.BranchID = '012'` for the pmpersada+logistik row). Compare the output against `getPiutangSummary("pmputra")`/`getPiutangSummary("pmpersada")`'s `totalPiutangUtama`/`totalPiutangLogistik` — they must match exactly (same query, just independently re-run).
+
+Then, specifically for `pmpersada`+`logistik`'s Piutang account (`1111`) and Penjualan account (`4001`), also run the SAME query WITHOUT the `BranchID` filter and confirm the unfiltered number is LARGER than the filtered one (by roughly the PMPakis share found during spec verification: ~171 juta more on Piutang, ~6,57 miliar more on Pendapatan across the account's full history) — if the two numbers are identical, the `BranchID` filter isn't actually being applied and PMPakis's data is still leaking in.
 
 - [ ] **Step 3: Cross-check Penjualan kantong and Pendapatan against known-good sources**
 
