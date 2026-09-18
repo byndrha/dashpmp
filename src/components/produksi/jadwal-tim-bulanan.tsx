@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, Plus, BarChart3, Share2, Loader2 } from "lucide-react";
 import { DndContext, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,11 @@ import {
   hapusAnggotaTimAction,
   updateTimKepalaAction,
   updateTimWakilKepalaAction,
+  getKorelasiRingkasanBulanAction,
 } from "@/app/mkesindo/produksi/actions";
+import { formatQty, formatWaste, type KorelasiRingkasan } from "@/lib/korelasi-format";
+import { formatRupiah } from "@/lib/format";
+import { shareImageBlob } from "@/lib/share-image";
 import type { JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
 import type { AnggotaTimRow, TimRow } from "@/lib/queries/tim-produksi";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
@@ -455,7 +459,7 @@ function TimRingkasanCard({
           <button
             type="button"
             className={cn(
-              "flex items-center gap-3 rounded-lg border-l-4 border-y border-r border-border bg-muted/20 p-3 text-left hover:bg-muted/40",
+              "flex items-center gap-3 rounded-lg border-l-4 border-y border-r border-border bg-muted/20 p-2 text-left hover:bg-muted/40",
               TIM_BORDER_COLORS[timIdx % TIM_BORDER_COLORS.length]
             )}
           />
@@ -508,6 +512,8 @@ export function JadwalTimBulanan({
   anggotaList,
   produksiAkunOptions,
   tanggalUsahaHariIni,
+  tanggalTerpilih = null,
+  onTanggalClick,
 }: {
   tahunAwal: number;
   bulanAwal: number;
@@ -521,6 +527,14 @@ export function JadwalTimBulanan({
   // bukan dihitung dari `new Date()` di sini, supaya konsisten dengan
   // rollover WIB yang sama dipakai seluruh sistem shift produksi.
   tanggalUsahaHariIni: string;
+  // Filter Riwayat Produksi (dikelola di komponen pembungkus, lihat
+  // jadwal-dan-riwayat-produksi.tsx) -- tanggalTerpilih dipakai untuk
+  // highlight visual kotak yang sedang dipakai sebagai filter, onTanggalClick
+  // dipanggil saat blok tanggal (bukan badge shift) di klik. Keduanya
+  // opsional supaya JadwalTimBulanan tetap bisa dipakai berdiri sendiri
+  // tanpa filter. Sesuai permintaan user 2026-09-19.
+  tanggalTerpilih?: string | null;
+  onTanggalClick?: (tanggalUsaha: string) => void;
 }) {
   const [tahun, setTahun] = useState(tahunAwal);
   const [bulan, setBulan] = useState(bulanAwal);
@@ -529,6 +543,53 @@ export function JadwalTimBulanan({
   // Sama seperti pengiriman-board.tsx/route-validation-dialog.tsx -- tanpa
   // sensor eksplisit ini drag & drop dnd-kit tidak konsisten terpicu.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // Toggle "Ringkasan Korelasi Produksi - Penjualan" per kotak tanggal --
+  // dimuat sekali per (tahun, bulan) begitu toggle dinyalakan (bukan
+  // default tampil, query per-hari cukup berat -- lihat komentar
+  // getKorelasiRingkasanBulan), dan dimuat ulang tiap ganti bulan selama
+  // toggle masih menyala. Sesuai permintaan user 2026-09-19.
+  const [showRingkasan, setShowRingkasan] = useState(false);
+  const [ringkasanBulan, setRingkasanBulan] = useState<Record<string, KorelasiRingkasan> | null>(null);
+  const [loadingRingkasan, setLoadingRingkasan] = useState(false);
+
+  useEffect(() => {
+    if (!showRingkasan) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoadingRingkasan(true);
+    getKorelasiRingkasanBulanAction(tahun, bulan).then((result) => {
+      if (cancelled) return;
+      if (result.success) setRingkasanBulan(result.data);
+      setLoadingRingkasan(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showRingkasan, tahun, bulan]);
+
+  // Capture seluruh section (kartu ringkasan Tim + kalender) untuk tombol
+  // Bagikan -- pola sama seperti route-validation-dialog.tsx: html-to-image
+  // toBlob lalu shareImageBlob (clipboard dulu, baru share sheet/fallback
+  // download). Tombol aksi (toggle/Bagikan/nav bulan) ditandai
+  // data-capture-hide supaya tidak ikut ke gambar.
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [sharing, setSharing] = useState(false);
+
+  async function handleBagikan() {
+    if (!captureRef.current) return;
+    setSharing(true);
+    try {
+      const { toBlob } = await import("html-to-image");
+      const blob = await toBlob(captureRef.current, {
+        pixelRatio: 2,
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.captureHide === "true"),
+      });
+      if (blob) await shareImageBlob(blob, "jadwal-tim-produksi.png", "Jadwal Tim Produksi");
+    } finally {
+      setSharing(false);
+    }
+  }
 
   const akunNamaById = useMemo(() => new Map(produksiAkunOptions.map((o) => [o.akunId, o.nama])), [produksiAkunOptions]);
 
@@ -616,7 +677,16 @@ export function JadwalTimBulanan({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    // bg-background WAJIB di root capture -- html-to-image hanya merender
+    // subtree ini sendirian (terisolasi dari ancestor halaman), jadi tanpa
+    // warna latar eksplisit di sini hasil PNG-nya transparan walau di
+    // tampilan biasa terlihat solid (warna solid itu sebenarnya berasal
+    // dari bg halaman DI LUAR subtree ini). Kotak kalender & kartu Tim
+    // sendiri tidak perlu bg tambahan -- keduanya sudah transparan/semi-
+    // transparan (bg-muted/20 dst) dan akan otomatis tampil benar begitu
+    // mereka punya lapisan solid ini di baliknya. Sesuai laporan user
+    // 2026-09-19 (hasil unduhan Bagikan transparan).
+    <div ref={captureRef} className="flex flex-col gap-4 bg-background">
       {/* Kartu ringkasan per Tim + navigasi periode -- referensi desain
           user 2026-09-19. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -638,19 +708,41 @@ export function JadwalTimBulanan({
             />
           );
         })}
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-3">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Periode Roster</p>
-            <p className="text-sm font-semibold">
-              {BULAN_NAMA[bulan - 1]} {tahun}
-            </p>
+        {/* 2 tombol ikon sejajar VERTIKAL di sebelah kanan kotak Periode
+            Roster (bukan di dalamnya) -- toggle Ringkasan Korelasi
+            Produksi-Penjualan per kotak tanggal, dan Bagikan (salin
+            screenshot kalender ke clipboard). Keduanya data-capture-hide
+            supaya tidak ikut ke gambar hasil Bagikan. Sesuai permintaan
+            user 2026-09-19. */}
+        <div className="flex items-stretch gap-2">
+          <div className="flex flex-1 items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Periode Roster</p>
+              <p className="text-sm font-semibold">
+                {BULAN_NAMA[bulan - 1]} {tahun}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1" data-capture-hide="true">
+              <Button variant="outline" size="icon" className="size-7" disabled={loading} onClick={() => gantiBulan(-1)}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="size-7" disabled={loading} onClick={() => gantiBulan(1)}>
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
           </div>
-          <div className="flex shrink-0 gap-1">
-            <Button variant="outline" size="icon" className="size-7" disabled={loading} onClick={() => gantiBulan(-1)}>
-              <ChevronLeft className="size-4" />
+          <div className="flex flex-col gap-1" data-capture-hide="true">
+            <Button
+              variant={showRingkasan ? "default" : "outline"}
+              size="icon"
+              className="size-7"
+              title="Tampilkan Ringkasan Korelasi Produksi – Penjualan per tanggal"
+              onClick={() => setShowRingkasan((v) => !v)}
+            >
+              {loadingRingkasan ? <Loader2 className="size-4 animate-spin" /> : <BarChart3 className="size-4" />}
             </Button>
-            <Button variant="outline" size="icon" className="size-7" disabled={loading} onClick={() => gantiBulan(1)}>
-              <ChevronRight className="size-4" />
+            <Button variant="outline" size="icon" className="size-7" title="Bagikan" disabled={sharing} onClick={handleBagikan}>
+              {sharing ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
             </Button>
           </div>
         </div>
@@ -668,57 +760,100 @@ export function JadwalTimBulanan({
                 const dayByShift = entryByDayShift.get(cell.tanggalUsaha);
                 const dayByTim = entryByDayTim.get(cell.tanggalUsaha);
                 const timTersisa = timList.filter((t) => !dayByTim?.has(t.timId));
+                const ringkasan = cell.inMonth ? (ringkasanBulan?.[cell.tanggalUsaha] ?? null) : null;
+                // Tanggal setelah hari ini (TanggalUsaha) belum berjalan --
+                // jadwalnya boleh sudah ditetapkan di muka, tapi belum ada
+                // data riil apa pun. Diredupkan (bukan tanggal 1-19 yang
+                // dihardcode -- itu cuma kebetulan tanggal hari ini saat
+                // diminta) supaya visual mengikuti tanggal berjalan yang
+                // sesungguhnya di bulan mana pun. Sesuai permintaan user
+                // 2026-09-19.
+                const isFuture = cell.inMonth && cell.tanggalUsaha > tanggalUsahaHariIni;
                 return (
                   <div
                     key={cell.tanggalUsaha}
                     className={cn(
-                      "flex min-h-[76px] items-center justify-between gap-2 border-b border-r border-border p-2 last:border-r-0",
+                      "flex flex-col border-b border-r border-border p-1.5 last:border-r-0",
                       !cell.inMonth && "bg-muted/10",
-                      cell.tanggalUsaha === tanggalUsahaHariIni && "relative z-10 bg-sky-50 ring-2 ring-inset ring-sky-500 dark:bg-sky-950/40"
+                      cell.tanggalUsaha === tanggalTerpilih
+                        ? "relative z-10 bg-violet-50 ring-2 ring-inset ring-violet-500 dark:bg-violet-950/40"
+                        : cell.tanggalUsaha === tanggalUsahaHariIni && "relative z-10 bg-sky-50 ring-2 ring-inset ring-sky-500 dark:bg-sky-950/40"
                     )}
                   >
-                    {/* Blok tanggal+nama hari di kiri -- untuk tanggal luar
-                        bulan, sub-label menunjukkan BULAN asalnya (mis.
-                        "AGU"), bukan nama hari, supaya jelas ini luapan dari
-                        bulan lain; label "Lalu"/"Depan" menggantikan posisi
-                        badge Tim di kanan (tanggal luar bulan tidak
-                        menampilkan/bisa diedit jadwalnya di sini). */}
-                    <div className="flex shrink-0 flex-col">
-                      <span className={cn("text-xl font-bold leading-none", !cell.inMonth && "text-muted-foreground/40")}>
-                        {cell.date.getUTCDate()}
-                      </span>
-                      <span className="mt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                        {cell.inMonth ? HARI_SINGKAT[cell.date.getUTCDay()] : BULAN_SINGKAT[cell.date.getUTCMonth()]}
-                      </span>
+                    <div className={cn("flex min-h-[58px] items-center justify-between gap-2", isFuture && "opacity-40")}>
+                      {/* Blok tanggal+nama hari di kiri -- untuk tanggal
+                          luar bulan, sub-label menunjukkan BULAN asalnya
+                          (mis. "AGU"), bukan nama hari, supaya jelas ini
+                          luapan dari bulan lain; label "Lalu"/"Depan"
+                          menggantikan posisi badge Tim di kanan (tanggal
+                          luar bulan tidak menampilkan/bisa diedit
+                          jadwalnya di sini). Diklik untuk filter Riwayat
+                          Produksi ke tanggal ini saja (klik lagi untuk
+                          reset) -- hanya aktif untuk tanggal dalam bulan
+                          berjalan, sesuai permintaan user 2026-09-19. */}
+                      <button
+                        type="button"
+                        disabled={!cell.inMonth || !onTanggalClick}
+                        onClick={() => onTanggalClick?.(cell.tanggalUsaha)}
+                        className={cn(
+                          "flex shrink-0 flex-col text-left",
+                          cell.inMonth && onTanggalClick && "cursor-pointer rounded hover:bg-muted/60"
+                        )}
+                      >
+                        <span className={cn("text-xl font-bold leading-none", !cell.inMonth && "text-muted-foreground/40")}>
+                          {cell.date.getUTCDate()}
+                        </span>
+                        <span className="mt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                          {cell.inMonth ? HARI_SINGKAT[cell.date.getUTCDay()] : BULAN_SINGKAT[cell.date.getUTCMonth()]}
+                        </span>
+                      </button>
+                      {!cell.inMonth ? (
+                        <span className="text-xs italic text-muted-foreground/50">{cell.before ? "Lalu" : "Depan"}</span>
+                      ) : (
+                        <div className="flex shrink-0 gap-1.5">
+                          {SHIFT_URUTAN_KALENDER.map((shift) => {
+                            const entry = dayByShift?.get(shift);
+                            const timIdx = entry ? timList.findIndex((t) => t.timId === entry.timId) : -1;
+                            const tim = timIdx >= 0 ? timList[timIdx] : undefined;
+                            return entry && tim ? (
+                              <TimBadge
+                                key={shift}
+                                tanggalUsaha={cell.tanggalUsaha}
+                                tim={tim}
+                                timIdx={timIdx}
+                                entry={entry}
+                                disabled={!cell.inMonth}
+                              />
+                            ) : (
+                              <BadgeKosongPopoverShift
+                                key={shift}
+                                tanggalUsaha={cell.tanggalUsaha}
+                                shift={shift}
+                                timTersisa={timTersisa}
+                                disabled={!cell.inMonth}
+                                onAssigned={(id) => updateEntry(cell.tanggalUsaha, shift, id)}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    {!cell.inMonth ? (
-                      <span className="text-xs italic text-muted-foreground/50">{cell.before ? "Lalu" : "Depan"}</span>
-                    ) : (
-                      <div className="flex shrink-0 gap-1.5">
-                        {SHIFT_URUTAN_KALENDER.map((shift) => {
-                          const entry = dayByShift?.get(shift);
-                          const timIdx = entry ? timList.findIndex((t) => t.timId === entry.timId) : -1;
-                          const tim = timIdx >= 0 ? timList[timIdx] : undefined;
-                          return entry && tim ? (
-                            <TimBadge
-                              key={shift}
-                              tanggalUsaha={cell.tanggalUsaha}
-                              tim={tim}
-                              timIdx={timIdx}
-                              entry={entry}
-                              disabled={!cell.inMonth}
-                            />
-                          ) : (
-                            <BadgeKosongPopoverShift
-                              key={shift}
-                              tanggalUsaha={cell.tanggalUsaha}
-                              shift={shift}
-                              timTersisa={timTersisa}
-                              disabled={!cell.inMonth}
-                              onAssigned={(id) => updateEntry(cell.tanggalUsaha, shift, id)}
-                            />
-                          );
-                        })}
+                    {/* Ringkasan Korelasi Produksi-Penjualan, ditata vertikal
+                        (satu metrik per baris) -- hanya tampil kalau toggle
+                        menyala DAN datanya sudah termuat untuk tanggal ini.
+                        Tanggal masa depan (isFuture) sengaja TIDAK
+                        ditampilkan sama sekali (bukan placeholder nol/kosong)
+                        karena belum ada data riil apa pun. Sesuai permintaan
+                        user 2026-09-19. */}
+                    {showRingkasan && !isFuture && ringkasan && (
+                      <div className="mt-1 flex flex-col gap-0.5 border-t border-dashed border-border/60 pt-1 text-[9px] leading-tight text-muted-foreground">
+                        <span>Produksi: {formatQty(ringkasan.totalProduksi)}</span>
+                        <span>Terkirim: {formatQty(ringkasan.totalDO)}</span>
+                        <span>Sisa (Stok): {formatQty(ringkasan.sisaStok)}</span>
+                        <span>Retur: {formatQty(ringkasan.totalRetur)}</span>
+                        <span>Penjualan: {formatWaste(ringkasan.penjualanPercent)}</span>
+                        <span>Indeks Retur: {formatWaste(ringkasan.returPercent)}</span>
+                        <span>Cost: {formatRupiah(ringkasan.costEstimasi)}</span>
                       </div>
                     )}
                   </div>

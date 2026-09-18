@@ -3,6 +3,7 @@ import { getShiftWindow, getPreviousShift, getShiftLabel, getReportShift, type S
 import { getQtyRecapForShift, getAktivitasForShift } from "@/lib/queries/aktivitas-produksi";
 import { getSnapshotStokEs, hitungTotalSisaStokEsLive } from "@/lib/queries/laporan-shift-stok-es-snapshot";
 import { getHPPBersih } from "@/lib/queries/hpp-bersih";
+import { computeKorelasiRingkasan, type KorelasiRingkasan } from "@/lib/korelasi-format";
 
 // Chronological order within one TanggalUsaha, same as report-shift.ts's own
 // getPreviousShift/getShiftWindow convention: Shift 2 -> 3 -> 1.
@@ -42,7 +43,12 @@ export interface KorelasiProduksiPenjualanData {
 // directly against getShiftWindow's own naive-WIB bounds -- no UTC
 // conversion here, unlike the true-UTC JamSelesaiMuat columns elsewhere in
 // this codebase.
-async function getTotalDOForShift(tanggalUsaha: string, shift: ShiftNumber): Promise<number> {
+// Diekspor (bukan lagi private ke modul ini) supaya bisa dipakai ulang oleh
+// produksi-riwayat-detail.ts untuk statistik header Riwayat Produksi
+// (Stok Awal/Terkirim/Retur/Sisa Stok Akhir per shift) -- sumber kebenaran
+// yang sama persis dengan panel Korelasi Produksi-Penjualan, sesuai
+// permintaan user 2026-09-19.
+export async function getTotalDOForShift(tanggalUsaha: string, shift: ShiftNumber): Promise<number> {
   const pool = await getPool();
   const businessDate = new Date(`${tanggalUsaha}T00:00:00Z`);
   const window = getShiftWindow(businessDate, shift, "work");
@@ -63,7 +69,7 @@ async function getTotalDOForShift(tanggalUsaha: string, shift: ShiftNumber): Pro
 // -- confirmed with user 2026-09-19 this is genuine logistics-side retur
 // (barang balik dari rute), not the production-side "Ganti Return" quality
 // category recorded in DashboardAktivitasProduksiShift.
-async function getReturForShift(tanggalUsaha: string, shift: ShiftNumber): Promise<number> {
+export async function getReturForShift(tanggalUsaha: string, shift: ShiftNumber): Promise<number> {
   const pool = await getPool();
   const businessDate = new Date(`${tanggalUsaha}T00:00:00Z`);
   const window = getShiftWindow(businessDate, shift, "work");
@@ -84,7 +90,7 @@ async function getReturForShift(tanggalUsaha: string, shift: ShiftNumber): Promi
 // getLaporanShiftDetail already uses for its own stokAkhir, duplicated here
 // rather than imported since that function returns a much larger object
 // this module doesn't need.
-async function getColdStorageForShift(
+export async function getColdStorageForShift(
   tanggalUsaha: string,
   shift: ShiftNumber,
   isShiftBerjalan: boolean
@@ -155,4 +161,27 @@ export async function getKorelasiProduksiPenjualan(tanggalUsaha: string): Promis
   }
 
   return { tanggalUsaha, stokAwalPeriode, rows, hppBersihRatePerKantong };
+}
+
+// Ringkasan (Produksi/Terkirim/Sisa/Retur/Penjualan%/IndeksRetur/Cost) untuk
+// SETIAP tanggal dalam satu bulan kalender -- dipakai toggle "Ringkasan
+// Korelasi Produksi-Penjualan" di kotak tanggal Jadwal Tim Produksi
+// (jadwal-tim-bulanan.tsx), sesuai permintaan user 2026-09-19.
+//
+// Perf: masing-masing getKorelasiProduksiPenjualan sudah melakukan banyak
+// round-trip DB sendiri (loop 3 shift, tiap shift 5 query paralel + rantai
+// stok awal ke shift sebelumnya) -- memanggilnya untuk 28-31 hari sekaligus
+// via Promise.all TIDAK dibatasi konkurensi secara eksplisit di sini, tapi
+// aman karena getPool() connection pool sendiri sudah dibatasi max:10 (lihat
+// lib/db.ts) sehingga otomatis mengantre, bukan membanjiri SQL Server. Fitur
+// ini sengaja opt-in (toggle, bukan default tampil) karena itu.
+export async function getKorelasiRingkasanBulan(tahun: number, bulan: number): Promise<Record<string, KorelasiRingkasan>> {
+  const daysInMonth = new Date(Date.UTC(tahun, bulan, 0)).getUTCDate();
+  const tanggalList = Array.from({ length: daysInMonth }, (_, i) => new Date(Date.UTC(tahun, bulan - 1, i + 1)).toISOString().slice(0, 10));
+
+  const results = await Promise.all(tanggalList.map((tanggalUsaha) => getKorelasiProduksiPenjualan(tanggalUsaha)));
+
+  const ringkasanByTanggal: Record<string, KorelasiRingkasan> = {};
+  for (const data of results) ringkasanByTanggal[data.tanggalUsaha] = computeKorelasiRingkasan(data);
+  return ringkasanByTanggal;
 }

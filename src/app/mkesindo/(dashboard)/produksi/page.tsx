@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import { requireProduksiView } from "@/lib/require-access";
-import { getWarehouseMap, getRiwayatProduksi } from "@/lib/queries/produksi-warehouse";
+import { getWarehouseMap } from "@/lib/queries/produksi-warehouse";
+import { getRiwayatProduksiDetail } from "@/lib/queries/produksi-riwayat-detail";
 import { getMesinList } from "@/lib/queries/produksi-mesin";
 import { getAllTim, getSemuaAnggotaTim } from "@/lib/queries/tim-produksi";
 import { getAkunNamaMap, getProduksiAkunOptions } from "@/lib/queries/akun";
 import { getJadwalBulan } from "@/lib/queries/jadwal-tim-produksi";
 import { getCurrentShift } from "@/lib/queries/aktivitas-produksi";
-import { PetaWarehouseDesktop, WarehouseLegend } from "@/components/produksi/peta-warehouse-desktop";
+import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-desktop";
 import { KorelasiProduksiPenjualanPanel } from "@/components/produksi/korelasi-produksi-penjualan-panel";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
-import { RiwayatProduksi } from "@/components/produksi/riwayat-produksi";
-import { JadwalTimBulanan } from "@/components/produksi/jadwal-tim-bulanan";
+import { JadwalDanRiwayatProduksi } from "@/components/produksi/jadwal-dan-riwayat-produksi";
 
 export const metadata: Metadata = { title: "Produksi" };
 
@@ -19,64 +19,60 @@ export default async function ProduksiPage() {
   const { tanggalUsaha } = getCurrentShift();
   const tahunAwal = Number(tanggalUsaha.slice(0, 4));
   const bulanAwal = Number(tanggalUsaha.slice(5, 7));
-  const [posisi, mesinList, timList, anggotaTimList, produksiAkunOptions, riwayatRaw, jadwalAwal] = await Promise.all([
+  const [posisi, mesinList, timList, anggotaTimList, produksiAkunOptions, riwayatGrupRaw, jadwalAwal] = await Promise.all([
     getWarehouseMap(),
     getMesinList(),
     getAllTim(),
     getSemuaAnggotaTim(),
     getProduksiAkunOptions(),
-    getRiwayatProduksi(),
+    getRiwayatProduksiDetail(),
     getJadwalBulan(tahunAwal, bulanAwal),
   ]);
-  const namaMap = await getAkunNamaMap(riwayatRaw.map((r) => r.DicatatOlehAkunID));
-  const riwayat = riwayatRaw.map((r) => ({ ...r, DicatatOlehNama: namaMap.get(r.DicatatOlehAkunID) ?? "Tidak diketahui" }));
+  // CreatedByUserID Kualitas ada di ruang AkunID Postgres yang sama dengan
+  // DicatatOlehAkunID (keduanya diisi dari session.user.id, lihat komentar
+  // di produksi-riwayat-detail.ts) -- diresolusi di sini (bukan di query
+  // file MSSQL-nya) karena getAkunNamaMap baca dari Postgres, DB yang beda.
+  const riwayatAkunIds = riwayatGrupRaw.flatMap((g) => g.entries.map((e) => e.dicatatOlehAkunId));
+  const riwayatNamaMap = await getAkunNamaMap(riwayatAkunIds);
+  const riwayatGrup = riwayatGrupRaw.map((g) => ({
+    ...g,
+    entries: g.entries.map((e) => ({ ...e, dicatatOlehNama: riwayatNamaMap.get(e.dicatatOlehAkunId) ?? "Tidak diketahui" })),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="font-display text-xl font-semibold">Produksi</h1>
       {/* Grid 2-kolom (kolom kiri fleksibel, kolom kanan tetap 440px seperti
-          lebar panel Korelasi) dipakai bersama oleh baris Peta Cold Storage
-          dan section Mesin Produksi -- auto-flow grid menempatkan Mesin
-          Produksi otomatis di baris berikutnya, kolom kiri saja, sehingga
-          lebarnya presis sama dengan kotak Peta Cold Storage di atasnya
-          (bukan melebar penuh seperti section biasa), sesuai permintaan
-          user 2026-09-19. Kolom kanan baris ke-2 sengaja dibiarkan kosong. */}
+          lebar panel Korelasi). Kartu Mesin Produksi diposisikan absolute,
+          "menggantung" separuh di dalam - separuh di luar tepi bawah kotak
+          Peta Cold Storage -- translate-y-1/2 menggeser turun setengah
+          TINGGINYA SENDIRI, sehingga titik tengahnya presis di garis tepi
+          bawah kotak peta berapa pun tinggi kartunya (rentang horizontal
+          Msn 3/2/1 mulai dari kiri, TIDAK sampai ke kanan). Legenda dirender
+          INTERNAL oleh PetaWarehouseDesktop sendiri (bukan di sini lagi) --
+          posisinya diukur dari DOM supaya selalu presis di tengah "Pintu
+          Geser" berapa pun lebar layar, lihat peta-warehouse-desktop.tsx.
+          mb-16 di container relatif tetap menyediakan ruang supaya separuh
+          Msn yang menonjol ke bawah tidak bertabrakan dengan section
+          "Jadwal Tim Produksi" di bawahnya. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_440px] lg:items-start">
-        <div className="min-w-0">
-          {/* justify-between (bukan center) -- rata kanan tapi tetap
-              terbatas lebar kolom kotak Peta Cold Storage saja (BUKAN
-              lebar penuh section yang juga mencakup panel Korelasi di
-              sebelahnya), supaya ada jarak wajar dari heading tanpa
-              mepet ke tengah. */}
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-muted-foreground">Peta Cold Storage</h2>
-            <WarehouseLegend />
-          </div>
+        <div className="relative mb-16 min-w-0">
           <PetaWarehouseDesktop posisi={posisi} />
+          <div className="absolute inset-x-4 bottom-0 z-10 translate-y-1/2">
+            <PanelMesin mesinList={mesinList} />
+          </div>
         </div>
         <KorelasiProduksiPenjualanPanel tanggalUsahaAwal={tanggalUsaha} />
-
-        <div className="min-w-0">
-          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Mesin Produksi</h2>
-          <PanelMesin mesinList={mesinList} />
-        </div>
       </div>
-      <section>
-        <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Jadwal Tim Produksi</h2>
-        <JadwalTimBulanan
-          tahunAwal={tahunAwal}
-          bulanAwal={bulanAwal}
-          jadwalAwal={jadwalAwal}
-          timList={timList}
-          anggotaList={anggotaTimList}
-          produksiAkunOptions={produksiAkunOptions}
-          tanggalUsahaHariIni={tanggalUsaha}
-        />
-      </section>
-      <section>
-        <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Riwayat Produksi</h2>
-        <RiwayatProduksi riwayat={riwayat} />
-      </section>
+      <JadwalDanRiwayatProduksi
+        tahunAwal={tahunAwal}
+        bulanAwal={bulanAwal}
+        jadwalAwal={jadwalAwal}
+        timList={timList}
+        anggotaList={anggotaTimList}
+        produksiAkunOptions={produksiAkunOptions}
+        tanggalUsahaHariIni={tanggalUsaha}
+        riwayatGrup={riwayatGrup}
+      />
     </div>
   );
 }

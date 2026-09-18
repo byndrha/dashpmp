@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Coins, Package, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah } from "@/lib/format";
 import { getKorelasiProduksiPenjualanAction } from "@/app/mkesindo/produksi/actions";
 import type { KorelasiProduksiPenjualanData, KorelasiShiftRow } from "@/lib/queries/produksi-korelasi-penjualan";
+import { formatQty, formatWaste } from "@/lib/korelasi-format";
 
 // Roman-numeral shift labels matching the user's own table example (Shift
 // II -> III -> I), rather than getShiftLabel's "Shift 2 (15:00)" form.
@@ -23,15 +24,6 @@ interface PeriodColumn {
   key: string;
   label: string;
   row: KorelasiShiftRow | null; // null untuk kolom "Stok Awal"
-}
-
-function formatQty(value: number): string {
-  return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
-}
-
-function formatWaste(value: number | null): string {
-  if (value == null) return "-";
-  return `${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`;
 }
 
 // Yesterday/tomorrow relative to a "YYYY-MM-DD" TanggalUsaha label, done via
@@ -132,13 +124,46 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
               { label: "Sisa (Stok)", value: formatQty(sisaStok) },
               { label: "Retur", value: formatQty(totalRetur) },
             ];
-            const ringkasanBaris2: { label: string; value: ReactNode; tooltip?: string }[] = [
+            const ringkasanBaris2: { label: string; value: ReactNode; tooltip?: ReactNode }[] = [
               { label: "Penjualan", value: formatWaste(penjualanPercent) },
               { label: "Indeks Retur", value: formatWaste(returPercent) },
               {
                 label: "Cost",
                 value: formatRupiah(costEstimasi),
-                tooltip: `Estimasi, bukan biaya riil periode ini: rate HPP Bersih bulan ${formatDate(tanggalUsaha)} (${formatRupiah(data.hppBersihRatePerKantong)}/kantong, dari modul HPP Bersih) × Produksi periode ini (${formatQty(totalProduksi)} kantong) = ${formatRupiah(costEstimasi)}. HPP Bersih adalah rata-rata bulanan seluruh perusahaan (sewa, listrik, gaji, dll) -- tidak bisa dipecah per-shift secara akurat.`,
+                // Kotak "kartu rumus" (rate x kantong = cost) menggantikan
+                // tooltip satu paragraf panjang sesuai permintaan user
+                // 2026-09-19 -- warna teks pakai opacity dari text-background
+                // (bukan text-muted-foreground/text-primary biasa) karena
+                // TooltipContent memakai skema warna terbalik (bg-foreground
+                // text-background), bukan warna halaman biasa.
+                tooltip: (
+                  <div className="flex w-64 flex-col gap-2 text-left">
+                    <p className="text-[11px] font-semibold">Estimasi Cost Produksi</p>
+                    <div className="flex items-center justify-between gap-1.5 rounded-md bg-background/10 p-2">
+                      <div className="flex flex-col items-center gap-1">
+                        <Coins className="size-4" />
+                        <span className="text-xs font-semibold tabular-nums">{formatRupiah(data.hppBersihRatePerKantong)}</span>
+                        <span className="text-center text-[9px] leading-tight text-background/70">Rate HPP Bersih/kantong</span>
+                      </div>
+                      <span className="text-background/50">&times;</span>
+                      <div className="flex flex-col items-center gap-1">
+                        <Package className="size-4" />
+                        <span className="text-xs font-semibold tabular-nums">{formatQty(totalProduksi)}</span>
+                        <span className="text-center text-[9px] leading-tight text-background/70">Kantong Produksi</span>
+                      </div>
+                      <span className="text-background/50">=</span>
+                      <div className="flex flex-col items-center gap-1">
+                        <Wallet className="size-4" />
+                        <span className="text-xs font-semibold tabular-nums">{formatRupiah(costEstimasi)}</span>
+                        <span className="text-center text-[9px] leading-tight text-background/70">Estimasi Cost</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] leading-snug text-background/70">
+                      Estimasi, bukan biaya riil periode ini. Rate HPP Bersih bulan {formatDate(tanggalUsaha)} adalah rata-rata bulanan seluruh
+                      perusahaan (sewa, listrik, gaji, dll), tidak bisa dipecah per-shift secara akurat.
+                    </p>
+                  </div>
+                ),
               },
             ];
 
@@ -191,7 +216,7 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
                             <TooltipTrigger className="w-fit cursor-help text-left text-sm font-semibold tabular-nums underline decoration-dotted decoration-muted-foreground/50 underline-offset-2">
                               {r.value}
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-64">{r.tooltip}</TooltipContent>
+                            <TooltipContent className="max-w-none flex-col items-stretch gap-0 p-3">{r.tooltip}</TooltipContent>
                           </Tooltip>
                         ) : (
                           <p className="text-sm font-semibold tabular-nums">{r.value}</p>

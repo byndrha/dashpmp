@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Package, Zap, Timer, PackageCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +20,14 @@ const STATUS_BADGE_CLASS: Record<StatusMesin, string> = {
 };
 
 export function PanelMesin({ mesinList }: { mesinList: MesinRow[] }) {
+  // Tampilkan Mesin 3 -> 2 -> 1 (kebalikan urutan query yang ascending
+  // MesinID) sesuai permintaan user 2026-09-19 -- murni urutan tampil,
+  // tidak mengubah ORDER BY di query supaya konsumen getMesinList lain
+  // (produksi-app, laporan-shift-detail) tidak ikut terdampak.
+  const urutanTampil = [...mesinList].reverse();
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      {mesinList.map((mesin) => (
+    <div className="flex flex-wrap gap-3">
+      {urutanTampil.map((mesin) => (
         <MesinCard key={mesin.MesinID} mesin={mesin} />
       ))}
     </div>
@@ -82,17 +88,31 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
         }
       }}
     >
-      <DialogTrigger className="rounded-lg border border-border p-3 text-left text-sm hover:bg-muted/50">
+      <DialogTrigger className="rounded-lg border border-border bg-background p-3 text-left text-sm hover:bg-muted/50">
         <div className="flex items-center justify-between gap-2">
           <p className="font-semibold">{mesin.Nama}</p>
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE_CLASS[mesin.Status]}`}>
             {STATUS_MESIN_LABEL[mesin.Status]}
           </span>
         </div>
-        <p className="text-xs text-muted-foreground">Kapasitas: {mesin.KapasitasProduksiPerHari} kantong/hari</p>
-        <p className="text-xs text-muted-foreground">Listrik: {mesin.KonsumsiListrikKWh} kWh</p>
-        <p className="text-xs text-muted-foreground">Produksi: {mesin.LamaProduksiMenit} menit</p>
-        <p className="text-xs text-muted-foreground">Kemas: {mesin.LamaPengemasanMenit} menit</p>
+        <div className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1" title="Kapasitas Produksi">
+            <Package className="size-3.5" />
+            {mesin.KapasitasProduksiPerHari}/hari
+          </span>
+          <span className="flex items-center gap-1" title="Konsumsi Listrik">
+            <Zap className="size-3.5" />
+            {mesin.KonsumsiListrikKWh} kWh
+          </span>
+          <span className="flex items-center gap-1" title="Lama Produksi">
+            <Timer className="size-3.5" />
+            {mesin.LamaProduksiMenit} mnt
+          </span>
+          <span className="flex items-center gap-1" title="Lama Pengemasan">
+            <PackageCheck className="size-3.5" />
+            {mesin.LamaPengemasanMenit} mnt
+          </span>
+        </div>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

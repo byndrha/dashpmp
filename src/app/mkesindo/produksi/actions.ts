@@ -29,7 +29,12 @@ import {
   type ProduksiSelesaiMuatInput,
 } from "@/lib/queries/produksi-muatan";
 import { getJadwalDetail, type JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
-import { getKorelasiProduksiPenjualan, type KorelasiProduksiPenjualanData } from "@/lib/queries/produksi-korelasi-penjualan";
+import {
+  getKorelasiProduksiPenjualan,
+  getKorelasiRingkasanBulan,
+  type KorelasiProduksiPenjualanData,
+} from "@/lib/queries/produksi-korelasi-penjualan";
+import type { KorelasiRingkasan } from "@/lib/korelasi-format";
 import { getJadwalBulan, setJadwalTim, hapusJadwalTim, type JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
 import { getAkunNamaMap, getStafOperasionalOptions, getProduksiAkunOptions, type StafOperasionalOption } from "@/lib/queries/akun";
 import {
@@ -120,6 +125,13 @@ export async function getKorelasiProduksiPenjualanAction(tanggalUsaha: string): 
   return runAction(async () => {
     await requireProduksiView();
     return getKorelasiProduksiPenjualan(tanggalUsaha);
+  });
+}
+
+export async function getKorelasiRingkasanBulanAction(tahun: number, bulan: number): Promise<ActionResult<Record<string, KorelasiRingkasan>>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getKorelasiRingkasanBulan(tahun, bulan);
   });
 }
 

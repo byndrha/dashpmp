@@ -1,44 +1,22 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { RiwayatProduksiRowWithNama } from "@/app/mkesindo/produksi/actions";
+import { RiwayatShiftGroupCard } from "@/components/produksi/riwayat-shift-group-card";
+import type { RiwayatShiftGroup } from "@/lib/queries/produksi-riwayat-detail";
 
-export function RiwayatProduksi({ riwayat }: { riwayat: RiwayatProduksiRowWithNama[] }) {
-  if (riwayat.length === 0) {
+// Riwayat Produksi versi detail: dikelompokkan per (Tanggal, Shift) --
+// urutan shift dalam satu tanggal selalu kronologis 2 -> 3 -> 1 (sudah
+// diurutkan dari query, lihat produksi-riwayat-detail.ts), grup ter-baru
+// paling atas. Rendering tiap kartu grup (header collapsible + statistik +
+// daftar entri) didelegasikan ke RiwayatShiftGroupCard (client component,
+// butuh useState untuk toggle collapse) -- file ini sengaja tetap Server
+// Component murni. Sesuai permintaan user 2026-09-19.
+export function RiwayatProduksi({ riwayatGrup }: { riwayatGrup: RiwayatShiftGroup[] }) {
+  if (riwayatGrup.length === 0) {
     return <p className="text-sm text-muted-foreground">Belum ada riwayat produksi.</p>;
   }
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Tanggal</TableHead>
-            <TableHead>Tanggal &amp; Shift Produksi</TableHead>
-            <TableHead>Jam Panen</TableHead>
-            <TableHead>Mesin</TableHead>
-            <TableHead>Pallet</TableHead>
-            <TableHead>Jumlah Awal</TableHead>
-            <TableHead>Sisa</TableHead>
-            <TableHead>Dicatat Oleh</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {riwayat.map((r) => (
-            <TableRow key={r.BatchID}>
-              <TableCell>{new Date(r.TanggalProduksi).toLocaleDateString("id-ID")}</TableCell>
-              <TableCell>
-                {new Date(r.TanggalLabel).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
-                {" — Shift "}
-                {r.Shift}
-              </TableCell>
-              <TableCell>{r.JamPanen || "-"}</TableCell>
-              <TableCell>{r.MesinNama}</TableCell>
-              <TableCell>{r.Kode}</TableCell>
-              <TableCell>{r.Qty10KG} kantong 10kg</TableCell>
-              <TableCell>{r.SisaQty10KG} kantong 10kg</TableCell>
-              <TableCell>{r.DicatatOlehNama}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="flex flex-col gap-4">
+      {riwayatGrup.map((g) => (
+        <RiwayatShiftGroupCard key={`${g.tanggalUsaha}-${g.shift}`} group={g} />
+      ))}
     </div>
   );
 }
