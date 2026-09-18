@@ -32,7 +32,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah, formatTime, formatKemasanQty } from "@/lib/format";
 import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
-import type { JadwalCard as JadwalCardData, JadwalDetailRow, DriverStopRow, AvailableSalesOrder, ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
+import type {
+  JadwalCard as JadwalCardData,
+  JadwalDetailRow,
+  DriverStopRow,
+  AvailableSalesOrder,
+  ArmadaConflictInfo,
+  ArmadaUtilisasiHarian,
+} from "@/lib/queries/pengiriman-jadwal";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
 import type { FuelType } from "@/lib/armada-fuel";
@@ -64,6 +71,7 @@ import {
   getPriceLevelOptionsAction,
   getDriverPositionAction,
   getIstirahatForJadwalAction,
+  getArmadaUtilisasiHarianAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
@@ -324,6 +332,11 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // per dialog open alongside pabrik below, same convention this file
   // already uses rather than a separate mount-once fetch.
   const [priceLevels, setPriceLevels] = useState<PriceLevelOption[]>([]);
+  // For Efektifitas Armada poin 4 (Utility Effectiveness) -- whole-day
+  // WO/Idle/Breakdown for this armada, refetched per dialog open alongside
+  // priceLevels/pabrik above. Null while loading/unavailable (armadaId not
+  // resolved yet), same "not yet computable" treatment poin 1-3 already use.
+  const [utilisasiHarian, setUtilisasiHarian] = useState<ArmadaUtilisasiHarian | null>(null);
   // Live driver GPS for RouteMap's rotating truck marker — polled every 10s
   // once Mulai Muat is done, see the effect below. Null hides the marker.
   const [driverPosition, setDriverPosition] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -485,7 +498,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       .then((data: { latitude: number; longitude: number }) => setPabrik(data))
       .catch(() => setPabrik(null));
     getPriceLevelOptionsAction().then(setPriceLevels);
-  }, [jadwalId]);
+    Promise.resolve(armadaId != null ? getArmadaUtilisasiHarianAction(armadaId, businessDate) : null).then(setUtilisasiHarian);
+  }, [jadwalId, armadaId, businessDate]);
 
   // Live driver position for RouteMap's rotating truck marker — starts
   // once "Mulai Muat" has actually happened (confirmed 2026-08-20: shows
@@ -985,6 +999,21 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     if (efektivitasHasil1 == null || totalFuelCost == null || route == null || route.distanceKm <= 0) return null;
     return (efektivitasHasil1 - totalFuelCost) / route.distanceKm;
   }, [efektivitasHasil1, totalFuelCost, route]);
+  const efektivitasSelisih = useMemo(() => {
+    if (efektivitasHasil1 == null || totalFuelCost == null) return null;
+    return efektivitasHasil1 - totalFuelCost;
+  }, [efektivitasHasil1, totalFuelCost]);
+
+  // Poin 4 -- Utility Effectiveness (confirmed with user 2026-09-18):
+  // WO / (WO + Idle + B), whole-day figure from getArmadaUtilisasiHarian.
+  // Zero-denominator (no WO/Idle/B recorded at all for this armada+day yet)
+  // is treated as "not yet computable", same as the other poin's guards.
+  const utilityEffectiveness = useMemo(() => {
+    if (utilisasiHarian == null) return null;
+    const total = utilisasiHarian.waktuOperasionalMenit + utilisasiHarian.idleMenit + utilisasiHarian.breakdownMenit;
+    if (total <= 0) return null;
+    return utilisasiHarian.waktuOperasionalMenit / total;
+  }, [utilisasiHarian]);
 
   // Aggregate bongkar time across every stop in the current order — the
   // per-stop "~X menit" label (SortableStopRow) shows this same function's
@@ -1277,11 +1306,17 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                   formula with the user 2026-08-20: (1) Jarak Tempuh x
                   rata-rata harga jual/kantong, minus (2) konsumsi BBM x
                   harga/liter (the base fuel cost, not the +15% buffer),
-                  divided by (3) Jarak Tempuh again. Every step's own inputs
-                  and result are spelled out (not just the final number) so
-                  staff can see where the figure comes from. Gated on
-                  `route` existing, same precondition the BBM breakdown
-                  block below already uses. */}
+                  divided by (3) Jarak Tempuh again — poin 3 also shows the
+                  raw (Hasil 1 - Hasil 2) alongside the per-km figure, added
+                  2026-09-18. Poin 4 (Utility Effectiveness, added same day)
+                  is WO / (WO + Idle + B) for this armada's WHOLE business
+                  day (every Jadwal + activity, not just this one route) —
+                  see getArmadaUtilisasiHarian's own comment for the exact
+                  source/mapping. Every step's own inputs and result are
+                  spelled out (not just the final number) so staff can see
+                  where the figure comes from. Gated on `route` existing,
+                  same precondition the BBM breakdown block below already
+                  uses. */}
               {route && (
                 <div className="flex flex-col gap-2.5 rounded-lg border bg-muted/30 p-3 text-sm">
                   <p className="flex items-center gap-1.5 font-semibold">
@@ -1326,14 +1361,39 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     </span>
                     <div className="min-w-0">
                       <p className="text-xs text-muted-foreground">(Hasil 1 &minus; Hasil 2) &divide; Jarak Tempuh</p>
-                      {efektivitasHasil1 != null && totalFuelCost != null && efektivitasPerKm != null ? (
+                      {efektivitasHasil1 != null && totalFuelCost != null && efektivitasPerKm != null && efektivitasSelisih != null ? (
                         <p className="tabular-nums">
                           ({formatRupiah(efektivitasHasil1)} &minus; {formatRupiah(totalFuelCost)}) &divide;{" "}
                           {route.distanceKm.toLocaleString("id-ID")} km ={" "}
-                          <span className="font-semibold text-primary">{formatRupiah(efektivitasPerKm)}/km</span>
+                          <span className="font-semibold text-primary">{formatRupiah(efektivitasPerKm)}/km</span>{" "}
+                          ({formatRupiah(efektivitasSelisih)})
                         </p>
                       ) : (
                         <p className="text-muted-foreground">Belum bisa dihitung — lengkapi data di atas dulu.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 border-t pt-2.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      4
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">
+                        Utility Effectiveness — WO &divide; (WO + Idle + B), seluruh armada ini hari ini
+                      </p>
+                      {utilisasiHarian != null && utilityEffectiveness != null ? (
+                        <p className="tabular-nums">
+                          {formatDurationMinutes(utilisasiHarian.waktuOperasionalMenit)} &divide;{" "}
+                          ({formatDurationMinutes(utilisasiHarian.waktuOperasionalMenit)} + {formatDurationMinutes(utilisasiHarian.idleMenit)} +{" "}
+                          {formatDurationMinutes(utilisasiHarian.breakdownMenit)}) ={" "}
+                          <span className="font-semibold text-primary">
+                            {(utilityEffectiveness * 100).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Belum bisa dihitung — belum ada data WO/Idle/Breakdown armada ini hari ini.
+                        </p>
                       )}
                     </div>
                   </div>

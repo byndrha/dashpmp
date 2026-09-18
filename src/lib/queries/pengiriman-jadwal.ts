@@ -3296,3 +3296,74 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
       : null,
   };
 }
+
+export interface ArmadaUtilisasiHarian {
+  waktuOperasionalMenit: number;
+  idleMenit: number;
+  breakdownMenit: number;
+}
+
+// Feeds "Efektifitas Armada" poin 4 (Utility Effectiveness) in
+// route-validation-dialog.tsx — confirmed with user 2026-09-18 to be a
+// WHOLE-DAY figure for this armada (every Jadwal + activity on the business
+// date), not just the single route the dialog happens to be showing.
+//
+// WO (Waktu Operasional) sums JamMulaiMuat -> DashboardVehicleCheck's
+// "DATANG" scan (same source getJamKembaliAktualMap uses) across every
+// Jadwal this armada ran that day; a Jadwal missing either timestamp
+// (still in progress, or never checked back in) contributes 0, same
+// "not yet computable" treatment the rest of this panel already uses for
+// incomplete data rather than guessing.
+//
+// Idle and Breakdown come from DashboardArmadaActivity, clipped to the same
+// 14:00 WIB rollover window as everywhere else in this file (an activity
+// straddling the boundary only counts the portion inside this business
+// date). Per user's confirmed mapping: "Perawatan" is Breakdown (their
+// definition explicitly includes scheduled technical maintenance, not just
+// unplanned damage); "Menganggur", "Pencucian", and "IsiBBM" are all Idle
+// (mechanically fine, just not out on a route).
+export async function getArmadaUtilisasiHarian(armadaId: number, businessDate: string): Promise<ArmadaUtilisasiHarian> {
+  const pool = await getPool();
+
+  const [woResult, activityResult] = await Promise.all([
+    pool
+      .request()
+      .input("armadaId", sql.Int, armadaId)
+      .input("businessDate", sql.Date, businessDate).query(`
+        SELECT ISNULL(SUM(DATEDIFF(MINUTE, j.JamMulaiMuat, vc.CheckedAt)), 0) AS TotalMenit
+        FROM DashboardPengirimanJadwal j
+        JOIN DashboardVehicleCheck vc ON vc.JadwalID = j.JadwalID AND vc.Tipe = 'DATANG'
+        WHERE j.IsDeleted = 0 AND j.ArmadaID = @armadaId AND j.JamMulaiMuat IS NOT NULL
+          AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+          AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+      `),
+    pool
+      .request()
+      .input("armadaId", sql.Int, armadaId)
+      .input("businessDate", sql.Date, businessDate).query(`
+        SELECT ActivityType,
+          SUM(DATEDIFF(MINUTE,
+            CASE WHEN StartTime < DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+                 THEN DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) ELSE StartTime END,
+            CASE WHEN EndTime > DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+                 THEN DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME)) ELSE EndTime END
+          )) AS TotalMenit
+        FROM DashboardArmadaActivity
+        WHERE IsDeleted = 0 AND ArmadaID = @armadaId
+          AND StartTime < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+          AND EndTime > DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+        GROUP BY ActivityType
+      `),
+  ]);
+
+  const waktuOperasionalMenit = (woResult.recordset[0] as { TotalMenit: number }).TotalMenit;
+
+  let idleMenit = 0;
+  let breakdownMenit = 0;
+  for (const r of activityResult.recordset as { ActivityType: string; TotalMenit: number }[]) {
+    if (r.ActivityType === "Perawatan") breakdownMenit += r.TotalMenit;
+    else idleMenit += r.TotalMenit; // Menganggur, Pencucian, IsiBBM
+  }
+
+  return { waktuOperasionalMenit, idleMenit, breakdownMenit };
+}

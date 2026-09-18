@@ -20,10 +20,12 @@ import {
   mergeExternalDeliveriesIntoJadwal,
   getMaxSalesOrderTransDateForDeliveries,
   checkArmadaConflict,
+  getArmadaUtilisasiHarian,
   type DriverStopRow,
   type StopDeliveryProof,
   type AvailableSalesOrder,
   type ArmadaConflictInfo,
+  type ArmadaUtilisasiHarian,
 } from "@/lib/queries/pengiriman-jadwal";
 import { getLatestDriverPosition, type DriverPosition } from "@/lib/queries/akun-lokasi";
 import {
@@ -265,6 +267,10 @@ export async function getAvailableSalesOrdersAction(businessDate: string): Promi
 
 export async function getArmadaActivitiesAction(businessDate: string): Promise<ArmadaActivity[]> {
   return getArmadaActivities(businessDate);
+}
+
+export async function getArmadaUtilisasiHarianAction(armadaId: number, businessDate: string): Promise<ArmadaUtilisasiHarian> {
+  return getArmadaUtilisasiHarian(armadaId, businessDate);
 }
 
 export async function createArmadaActivityAction(input: {
