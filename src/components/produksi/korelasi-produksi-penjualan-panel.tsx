@@ -102,6 +102,26 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
           <p className="text-sm text-destructive">{error}</p>
         ) : data ? (
           (() => {
+            // Ringkasan satu periode penuh (jumlah ketiga shift), bukan
+            // rata-rata per shift -- "Sisa (Stok)" dihitung dengan rumus
+            // rekonsiliasi yang sama seperti kolom "Sisa Produksi" di tabel
+            // bawah (Stok Awal + Produksi - DO - Retur - Kerusakan), hanya
+            // sekali untuk seluruh periode alih-alih bertahap per shift.
+            const totalProduksi = data.rows.reduce((sum, r) => sum + r.totalProduksi, 0);
+            const totalDO = data.rows.reduce((sum, r) => sum + r.totalDO, 0);
+            const totalRetur = data.rows.reduce((sum, r) => sum + r.retur, 0);
+            const totalKerusakan = data.rows.reduce((sum, r) => sum + r.kerusakan, 0);
+            const sisaStok = data.stokAwalPeriode + totalProduksi - totalDO - totalRetur - totalKerusakan;
+            const penjualanPercent = totalProduksi > 0 ? (totalDO / totalProduksi) * 100 : null;
+
+            const ringkasan: { label: string; value: string }[] = [
+              { label: "Total Produksi", value: formatQty(totalProduksi) },
+              { label: "Total DO", value: formatQty(totalDO) },
+              { label: "Sisa (Stok)", value: formatQty(sisaStok) },
+              { label: "Penjualan", value: formatWaste(penjualanPercent) },
+              { label: "Total Retur", value: formatQty(totalRetur) },
+            ];
+
             const periods: PeriodColumn[] = [
               { key: "awal", label: "Stok Awal", row: null },
               ...data.rows.map((row) => ({ key: String(row.shift), label: `Shift ${SHIFT_ROMAN[row.shift]}`, row })),
@@ -132,30 +152,40 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
             ];
 
             return (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Metrik</TableHead>
-                    {periods.map((p) => (
-                      <TableHead key={p.key} className="text-right">
-                        {p.label}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {metrics.map((m) => (
-                    <TableRow key={m.label}>
-                      <TableCell className="text-muted-foreground">{m.label}</TableCell>
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+                  {ringkasan.map((r) => (
+                    <div key={r.label} className="flex flex-col gap-0.5">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{r.label}</p>
+                      <p className="text-sm font-semibold tabular-nums">{r.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Metrik</TableHead>
                       {periods.map((p) => (
-                        <TableCell key={p.key} className={cn("text-right tabular-nums", m.emphasize && "font-semibold")}>
-                          {m.render(p)}
-                        </TableCell>
+                        <TableHead key={p.key} className="text-right">
+                          {p.label}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {metrics.map((m) => (
+                      <TableRow key={m.label}>
+                        <TableCell className="text-muted-foreground">{m.label}</TableCell>
+                        {periods.map((p) => (
+                          <TableCell key={p.key} className={cn("text-right tabular-nums", m.emphasize && "font-semibold")}>
+                            {m.render(p)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             );
           })()
         ) : null}
