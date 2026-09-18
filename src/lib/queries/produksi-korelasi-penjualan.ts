@@ -2,6 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { getShiftWindow, getPreviousShift, getShiftLabel, getReportShift, type ShiftNumber } from "@/lib/report-shift";
 import { getQtyRecapForShift, getAktivitasForShift } from "@/lib/queries/aktivitas-produksi";
 import { getSnapshotStokEs, hitungTotalSisaStokEsLive } from "@/lib/queries/laporan-shift-stok-es-snapshot";
+import { getHPPBersih } from "@/lib/queries/hpp-bersih";
 
 // Chronological order within one TanggalUsaha, same as report-shift.ts's own
 // getPreviousShift/getShiftWindow convention: Shift 2 -> 3 -> 1.
@@ -25,6 +26,12 @@ export interface KorelasiProduksiPenjualanData {
   tanggalUsaha: string;
   stokAwalPeriode: number;
   rows: KorelasiShiftRow[];
+  // Opsi A untuk "Cost" (dikonfirmasi user 2026-09-19): rate HPP Bersih
+  // (Rp/kantong) bulan berjalan tanggalUsaha, dari modul HPP Bersih yang
+  // sudah ada (getHPPBersih) -- estimasi, bukan biaya riil shift ini,
+  // karena HPP Bersih sendiri adalah rata-rata BULANAN seluruh perusahaan
+  // (sewa, listrik, gaji, dll tidak bisa dipecah per-shift secara akurat).
+  hppBersihRatePerKantong: number;
 }
 
 // Total kantong shipped (DeliveryOrderDetail.Delivered, not .Qty -- see
@@ -106,7 +113,11 @@ export async function getKorelasiProduksiPenjualan(tanggalUsaha: string): Promis
 
   const periodeAwal = getPreviousShift(tanggalUsaha, 2);
   const periodeAwalBerjalan = periodeAwal.tanggalUsaha === tanggalUsahaBerjalan && periodeAwal.shift === shiftBerjalan;
-  const stokAwalPeriode = (await getColdStorageForShift(periodeAwal.tanggalUsaha, periodeAwal.shift, periodeAwalBerjalan)).value;
+  const [{ value: stokAwalPeriode }, hppBersih] = await Promise.all([
+    getColdStorageForShift(periodeAwal.tanggalUsaha, periodeAwal.shift, periodeAwalBerjalan),
+    getHPPBersih(Number(tanggalUsaha.slice(0, 4))),
+  ]);
+  const hppBersihRatePerKantong = hppBersih.totalHPPBersih[Number(tanggalUsaha.slice(5, 7)) - 1] ?? 0;
 
   const rows: KorelasiShiftRow[] = [];
   let stokAwal = stokAwalPeriode;
@@ -143,5 +154,5 @@ export async function getKorelasiProduksiPenjualan(tanggalUsaha: string): Promis
     stokAwal = coldStorage.value;
   }
 
-  return { tanggalUsaha, stokAwalPeriode, rows };
+  return { tanggalUsaha, stokAwalPeriode, rows, hppBersihRatePerKantong };
 }

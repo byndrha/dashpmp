@@ -5,8 +5,9 @@ import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatRupiah } from "@/lib/format";
 import { getKorelasiProduksiPenjualanAction } from "@/app/mkesindo/produksi/actions";
 import type { KorelasiProduksiPenjualanData, KorelasiShiftRow } from "@/lib/queries/produksi-korelasi-penjualan";
 
@@ -118,20 +119,27 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
             // kolom "Waste" per-shift di tabel bawah). Dua metrik berbeda,
             // jangan disamakan meski sama-sama melibatkan Retur.
             const returPercent = totalRetur > 0 ? (totalProduksi / totalRetur) * 100 : null;
+            // Opsi A (dikonfirmasi user 2026-09-19): rate HPP Bersih Rp/kantong
+            // BULAN ini (dari modul HPP Bersih yang sudah ada) x Produksi
+            // periode ini -- estimasi, bukan biaya riil shift ini, karena HPP
+            // Bersih sendiri rata-rata bulanan seluruh perusahaan (sewa,
+            // listrik, gaji, dll tidak bisa dipecah per-shift secara akurat).
+            const costEstimasi = data.hppBersihRatePerKantong * totalProduksi;
 
-            const ringkasanBaris1: { label: string; value: string }[] = [
-              { label: "Total Produksi", value: formatQty(totalProduksi) },
-              { label: "Total DO", value: formatQty(totalDO) },
+            const ringkasanBaris1: { label: string; value: ReactNode }[] = [
+              { label: "Produksi", value: formatQty(totalProduksi) },
+              { label: "Terkirim", value: formatQty(totalDO) },
               { label: "Sisa (Stok)", value: formatQty(sisaStok) },
-              { label: "Total Retur", value: formatQty(totalRetur) },
+              { label: "Retur", value: formatQty(totalRetur) },
             ];
-            // "Cost" masih belum ada rumusnya (dikaitkan ke HPP, belum
-            // diputuskan user per 2026-09-19) -- ditampilkan sebagai slot
-            // kosong dulu, bukan angka yang diada-adakan.
-            const ringkasanBaris2: { label: string; value: string }[] = [
+            const ringkasanBaris2: { label: string; value: ReactNode; tooltip?: string }[] = [
               { label: "Penjualan", value: formatWaste(penjualanPercent) },
-              { label: "Retur", value: formatWaste(returPercent) },
-              { label: "Cost", value: "Belum ditentukan" },
+              { label: "Indeks Retur", value: formatWaste(returPercent) },
+              {
+                label: "Cost",
+                value: formatRupiah(costEstimasi),
+                tooltip: `Estimasi, bukan biaya riil periode ini: rate HPP Bersih bulan ${formatDate(tanggalUsaha)} (${formatRupiah(data.hppBersihRatePerKantong)}/kantong, dari modul HPP Bersih) × Produksi periode ini (${formatQty(totalProduksi)} kantong) = ${formatRupiah(costEstimasi)}. HPP Bersih adalah rata-rata bulanan seluruh perusahaan (sewa, listrik, gaji, dll) -- tidak bisa dipecah per-shift secara akurat.`,
+              },
             ];
 
             const periods: PeriodColumn[] = [
@@ -178,7 +186,16 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
                     {ringkasanBaris2.map((r) => (
                       <div key={r.label} className="flex flex-col gap-0.5">
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{r.label}</p>
-                        <p className="text-sm font-semibold tabular-nums">{r.value}</p>
+                        {r.tooltip ? (
+                          <Tooltip>
+                            <TooltipTrigger className="w-fit cursor-help text-left text-sm font-semibold tabular-nums underline decoration-dotted decoration-muted-foreground/50 underline-offset-2">
+                              {r.value}
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-64">{r.tooltip}</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <p className="text-sm font-semibold tabular-nums">{r.value}</p>
+                        )}
                       </div>
                     ))}
                   </div>
