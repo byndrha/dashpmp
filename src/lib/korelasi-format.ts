@@ -8,6 +8,8 @@ import type { KorelasiProduksiPenjualanData } from "@/lib/queries/produksi-korel
 
 export interface KorelasiRingkasan {
   totalProduksi: number;
+  totalProduksi5KG: number;
+  totalProduksiGabungan: number;
   totalDO: number;
   sisaStok: number;
   totalRetur: number;
@@ -22,6 +24,8 @@ export interface KorelasiRingkasan {
 // Produksi/Retur x100% BUKAN kebalikannya, Cost = Opsi A rate HPP Bersih).
 export function computeKorelasiRingkasan(data: KorelasiProduksiPenjualanData): KorelasiRingkasan {
   const totalProduksi = data.rows.reduce((sum, r) => sum + r.totalProduksi, 0);
+  const totalProduksi5KG = data.rows.reduce((sum, r) => sum + r.totalProduksi5KG, 0);
+  const totalProduksiGabungan = totalProduksi + totalProduksi5KG / 2;
   const totalDO = data.rows.reduce((sum, r) => sum + r.totalDO, 0);
   const totalRetur = data.rows.reduce((sum, r) => sum + r.retur, 0);
   const totalKerusakan = data.rows.reduce((sum, r) => sum + r.kerusakan, 0);
@@ -29,7 +33,7 @@ export function computeKorelasiRingkasan(data: KorelasiProduksiPenjualanData): K
   const penjualanPercent = totalProduksi > 0 ? (totalDO / totalProduksi) * 100 : null;
   const returPercent = totalRetur > 0 ? (totalProduksi / totalRetur) * 100 : null;
   const costEstimasi = data.hppBersihRatePerKantong * totalProduksi;
-  return { totalProduksi, totalDO, sisaStok, totalRetur, penjualanPercent, returPercent, costEstimasi };
+  return { totalProduksi, totalProduksi5KG, totalProduksiGabungan, totalDO, sisaStok, totalRetur, penjualanPercent, returPercent, costEstimasi };
 }
 
 export function formatQty(value: number): string {

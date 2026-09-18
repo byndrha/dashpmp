@@ -101,6 +101,8 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
             // bawah (Stok Awal + Produksi - DO - Retur - Kerusakan), hanya
             // sekali untuk seluruh periode alih-alih bertahap per shift.
             const totalProduksi = data.rows.reduce((sum, r) => sum + r.totalProduksi, 0);
+            const totalProduksi5KG = data.rows.reduce((sum, r) => sum + r.totalProduksi5KG, 0);
+            const totalProduksiGabungan = totalProduksi + totalProduksi5KG / 2;
             const totalDO = data.rows.reduce((sum, r) => sum + r.totalDO, 0);
             const totalRetur = data.rows.reduce((sum, r) => sum + r.retur, 0);
             const totalKerusakan = data.rows.reduce((sum, r) => sum + r.kerusakan, 0);
@@ -119,7 +121,9 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
             const costEstimasi = data.hppBersihRatePerKantong * totalProduksi;
 
             const ringkasanBaris1: { label: string; value: ReactNode }[] = [
-              { label: "Produksi", value: formatQty(totalProduksi) },
+              { label: "Produksi 10KG", value: formatQty(totalProduksi) },
+              { label: "Produksi 5KG", value: formatQty(totalProduksi5KG) },
+              { label: "Gabungan", value: formatQty(totalProduksiGabungan) },
               { label: "Terkirim", value: formatQty(totalDO) },
               { label: "Sisa (Stok)", value: formatQty(sisaStok) },
               { label: "Retur", value: formatQty(totalRetur) },
@@ -173,6 +177,7 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
             ];
             const metrics: { label: string; emphasize?: boolean; render: (p: PeriodColumn) => ReactNode }[] = [
               { label: "Produksi", render: (p) => (p.row ? formatQty(p.row.totalProduksi) : "—") },
+              { label: "Produksi 5KG", render: (p) => (p.row ? formatQty(p.row.totalProduksi5KG) : "—") },
               { label: "DO", render: (p) => (p.row ? formatQty(p.row.totalDO) : "—") },
               {
                 label: "Sisa Produksi",
@@ -199,7 +204,7 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
             return (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
                     {ringkasanBaris1.map((r) => (
                       <div key={r.label} className="flex flex-col gap-0.5">
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{r.label}</p>

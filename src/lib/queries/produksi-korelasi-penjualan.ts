@@ -14,6 +14,7 @@ export interface KorelasiShiftRow {
   shiftLabel: string;
   stokAwal: number;
   totalProduksi: number;
+  totalProduksi5KG: number;
   totalDO: number;
   retur: number;
   kerusakan: number;
@@ -85,6 +86,24 @@ export async function getReturForShift(tanggalUsaha: string, shift: ShiftNumber)
   return (result.recordset[0] as { Total: number }).Total;
 }
 
+// Total kantong 5KG hasil Cek Kualitas (BUKAN dari DashboardProduksiBatch --
+// varian 5kg tidak pernah masuk pallet, jadi tidak ikut hitungan Total
+// Produksi lama yang bersumber dari Batch). Angka MENTAH (jumlah kantong
+// 5kg asli, belum dikonversi) -- konversi ke ekivalen 10kg terjadi di
+// pemanggil, sesuai Global Constraints spec.
+async function getTotalProduksi5KGForShift(tanggalUsaha: string, shift: ShiftNumber): Promise<number> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("tanggalLabel", sql.Date, tanggalUsaha)
+    .input("shift", sql.TinyInt, shift).query(`
+      SELECT ISNULL(SUM(Qty10KG), 0) AS Total
+      FROM DashboardProduksiKualitas
+      WHERE TanggalLabel = @tanggalLabel AND Shift = @shift AND Variant = '5kg' AND Qty10KG IS NOT NULL
+    `);
+  return (result.recordset[0] as { Total: number }).Total;
+}
+
 // Actual (not computed) remaining Cold Storage stock as of the END of a
 // given shift -- same finalized-snapshot-with-live-fallback logic
 // getLaporanShiftDetail already uses for its own stokAkhir, duplicated here
@@ -130,12 +149,13 @@ export async function getKorelasiProduksiPenjualan(tanggalUsaha: string): Promis
 
   for (const shift of SHIFT_ORDER) {
     const isShiftBerjalan = tanggalUsaha === tanggalUsahaBerjalan && shift === shiftBerjalan;
-    const [qtyRecap, aktivitas, totalDO, retur, coldStorage] = await Promise.all([
+    const [qtyRecap, aktivitas, totalDO, retur, coldStorage, totalProduksi5KG] = await Promise.all([
       getQtyRecapForShift(tanggalUsaha, shift),
       getAktivitasForShift(tanggalUsaha, shift),
       getTotalDOForShift(tanggalUsaha, shift),
       getReturForShift(tanggalUsaha, shift),
       getColdStorageForShift(tanggalUsaha, shift, isShiftBerjalan),
+      getTotalProduksi5KGForShift(tanggalUsaha, shift),
     ]);
 
     const totalProduksi = qtyRecap.totalKantongEkivalen;
@@ -148,6 +168,7 @@ export async function getKorelasiProduksiPenjualan(tanggalUsaha: string): Promis
       shiftLabel: getShiftLabel(shift, "work"),
       stokAwal,
       totalProduksi,
+      totalProduksi5KG,
       totalDO,
       retur,
       kerusakan,
