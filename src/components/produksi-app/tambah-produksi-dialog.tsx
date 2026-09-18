@@ -94,7 +94,7 @@ export function TambahProduksiDialog({
     let cancelled = false;
     getKualitasRiwayatAction().then((result) => {
       if (cancelled) return;
-      if (result.success) setKualitasList(result.data);
+      if (result.success) setKualitasList(result.data.filter((k) => k.Variant === "10kg"));
     });
     return () => {
       cancelled = true;

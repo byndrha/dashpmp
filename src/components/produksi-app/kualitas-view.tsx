@@ -145,7 +145,7 @@ function TambahKualitasDialog({
       return;
     }
     if (!qty10KG.trim() || Number(qty10KG) <= 0) {
-      setError("Isi QTY 10 KG Kantong Es.");
+      setError("Isi QTY Kantong Es.");
       return;
     }
     startTransition(async () => {

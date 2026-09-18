@@ -222,11 +222,12 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
     // concurrently mutated in a way that matters here).
     const kualitasResult = await new sql.Request(transaction)
       .input("kualitasId", sql.Int, input.kualitasId)
-      .query(`SELECT MesinID, TanggalLabel, Shift, Waktu, Qty10KG FROM DashboardProduksiKualitas WHERE KualitasID = @kualitasId`);
+      .query(`SELECT MesinID, TanggalLabel, Shift, Waktu, Qty10KG, Variant FROM DashboardProduksiKualitas WHERE KualitasID = @kualitasId`);
     const kualitas = kualitasResult.recordset[0] as
-      | { MesinID: number; TanggalLabel: Date; Shift: number; Waktu: string; Qty10KG: number | null }
+      | { MesinID: number; TanggalLabel: Date; Shift: number; Waktu: string; Qty10KG: number | null; Variant: string }
       | undefined;
     if (!kualitas) throw new AppError("Pemeriksaan Kualitas yang dipilih tidak ditemukan.");
+    if (kualitas.Variant !== "10kg") throw new AppError("Pemeriksaan Kualitas varian 5kg tidak bisa dialokasikan ke pallet.");
 
     // Insert speculatively — aman karena satu transaksi dengan pengecekan
     // kapasitas di bawah: kalau kapasitas terlampaui, rollback membuang
