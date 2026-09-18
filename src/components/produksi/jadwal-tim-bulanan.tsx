@@ -847,7 +847,9 @@ export function JadwalTimBulanan({
                         user 2026-09-19. */}
                     {showRingkasan && !isFuture && ringkasan && (
                       <div className="mt-1 flex flex-col gap-0.5 border-t border-dashed border-border/60 pt-1 text-[9px] leading-tight text-muted-foreground">
-                        <span>Produksi: {formatQty(ringkasan.totalProduksi)}</span>
+                        <span>Produksi 10KG: {formatQty(ringkasan.totalProduksi)}</span>
+                        <span>Produksi 5KG: {formatQty(ringkasan.totalProduksi5KG)}</span>
+                        <span>Gabungan: {formatQty(ringkasan.totalProduksiGabungan)}</span>
                         <span>Terkirim: {formatQty(ringkasan.totalDO)}</span>
                         <span>Sisa (Stok): {formatQty(ringkasan.sisaStok)}</span>
                         <span>Retur: {formatQty(ringkasan.totalRetur)}</span>
