@@ -95,6 +95,7 @@ import {
   type TakeAwayMuatanPendingRow,
   type TakeAwayMuatanSelesaiRow,
 } from "@/lib/queries/takeaway-muatan";
+import { getValidasiBulan, type ValidasiShift } from "@/lib/queries/produksi-validasi-tim";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
   return runAction(async () => {
@@ -709,5 +710,12 @@ export async function takeAwaySelesaiMuatAction(takeAwayMuatanId: number): Promi
     revalidatePath("/mkesindo/pemesanan");
     revalidatePath("/mkesindo/delivery");
     revalidatePath("/mkesindo/laporan");
+  });
+}
+
+export async function getValidasiBulanAction(tahun: number, bulan: number): Promise<ActionResult<Record<string, ValidasiShift>>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    return getValidasiBulan(tahun, bulan);
   });
 }
