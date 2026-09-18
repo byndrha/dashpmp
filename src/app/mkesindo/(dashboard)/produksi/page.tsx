@@ -36,12 +36,19 @@ export default async function ProduksiPage() {
     <div className="flex flex-col gap-6">
       <h1 className="font-display text-xl font-semibold">Produksi</h1>
       <section>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">Peta Warehouse</h2>
-          <WarehouseLegend />
-        </div>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0 flex-1">
+            {/* Grid 3-kolom (1fr/auto/1fr) supaya legenda benar-benar center
+                terhadap lebar kotak Peta Warehouse saja -- BUKAN lebar penuh
+                section (yang juga mencakup panel Korelasi di sebelahnya).
+                Kolom kanan kosong hanya penyeimbang agar kolom tengah
+                (legenda) presisi di tengah, bukan condong ke kiri karena
+                lebar h2 di kolom kiri. */}
+            <div className="mb-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">Peta Warehouse</h2>
+              <WarehouseLegend />
+              <div aria-hidden />
+            </div>
             <PetaWarehouseDesktop posisi={posisi} />
           </div>
           <KorelasiProduksiPenjualanPanel tanggalUsahaAwal={tanggalUsaha} />
