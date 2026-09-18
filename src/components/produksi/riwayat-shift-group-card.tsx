@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { FotoThumbnail } from "@/components/produksi/foto-thumbnail";
 import type { RiwayatShiftGroup } from "@/lib/queries/produksi-riwayat-detail";
+import { formatQty } from "@/lib/korelasi-format";
 
 // Badge kejernihan/ukuran & bentuk (nama tidak dibuat generik karena
 // makna OK/Gagal-nya spesifik per pemeriksaan).
@@ -20,10 +21,6 @@ function CekBadge({ label, ok }: { label: string; ok: boolean }) {
       {label} {ok ? "OK" : "Gagal"}
     </span>
   );
-}
-
-function formatQty(value: number): string {
-  return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
 }
 
 // Satu kartu grup (Tanggal, Shift) -- header-nya bisa diklik untuk
@@ -57,6 +54,12 @@ export function RiwayatShiftGroupCard({ group }: { group: RiwayatShiftGroup }) {
             Produksi <b className="text-foreground tabular-nums">{formatQty(group.stats.totalProduksi)}</b>
           </span>
           <span>
+            Produksi 5KG <b className="text-foreground tabular-nums">{formatQty(group.stats.totalProduksi5KG)}</b>
+          </span>
+          <span>
+            Gabungan <b className="text-foreground tabular-nums">{formatQty(group.stats.totalProduksiGabungan)}</b>
+          </span>
+          <span>
             Masuk Pallet <b className="text-foreground tabular-nums">{formatQty(group.stats.masukPallet)}</b>
           </span>
           <span>
@@ -86,6 +89,9 @@ export function RiwayatShiftGroupCard({ group }: { group: RiwayatShiftGroup }) {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="font-semibold tabular-nums">{e.waktu}</span>
                   <span className="text-xs text-muted-foreground">{e.mesinNama}</span>
+                  <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-600">
+                    {e.variant === "10kg" ? "10 KG" : "5 KG"}
+                  </span>
                   <CekBadge label="Kejernihan" ok={e.cekKejernihan} />
                   <CekBadge label="Ukuran &amp; Bentuk" ok={e.cekUkuranBentuk} />
                 </div>

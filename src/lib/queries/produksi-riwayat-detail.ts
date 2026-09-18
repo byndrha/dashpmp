@@ -54,6 +54,8 @@ export interface RiwayatKualitasEntry {
 export interface RiwayatHeaderStats {
   stokAwal: number;
   totalProduksi: number;
+  totalProduksi5KG: number;
+  totalProduksiGabungan: number;
   masukPallet: number;
   terkirim: number;
   sisaStokAkhir: number;
@@ -216,11 +218,19 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
         getReturForShift(group.tanggalUsaha, group.shift),
         getColdStorageForShift(group.tanggalUsaha, group.shift, isShiftBerjalan),
       ]);
-      const totalProduksi = group.entries.reduce((sum, e) => sum + (e.qty10KG ?? 0), 0);
+      const totalProduksi = group.entries
+        .filter((e) => e.variant === "10kg")
+        .reduce((sum, e) => sum + (e.qty10KG ?? 0), 0);
+      const totalProduksi5KG = group.entries
+        .filter((e) => e.variant === "5kg")
+        .reduce((sum, e) => sum + (e.qty10KG ?? 0), 0);
+      const totalProduksiGabungan = totalProduksi + totalProduksi5KG / 2;
       const masukPallet = group.entries.reduce((sum, e) => sum + e.alokasiPallet.reduce((s, a) => s + a.qty10KG, 0), 0);
       const stats: RiwayatHeaderStats = {
         stokAwal: stokAwal.value,
         totalProduksi,
+        totalProduksi5KG,
+        totalProduksiGabungan,
         masukPallet,
         terkirim,
         sisaStokAkhir: sisaStokAkhir.value,
