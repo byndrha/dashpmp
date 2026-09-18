@@ -26,9 +26,14 @@ export async function allocateTakeAwayStock(
   // TOP N membatasi jumlah baris yang di-UPDLOCK dan jumlah round-trip
   // INSERT sekuensial di loop bawah -- tanpa batas ini, qty besar bisa
   // mengunci ribuan baris selama beberapa menit (insiden 2026-09-18, lihat
-  // ledger SDD).
+  // ledger SDD). 200 (bukan 50) supaya ada headroom kalau kebetulan
+  // beberapa puluh baris Kualitas TERBARU sudah habis/terpallet duluan --
+  // filter Sisa > 0 tidak bisa dipasang SEBELUM TOP di sini (computed
+  // correlated-subquery column, butuh index/kolom sisa terpisah yang di
+  // luar scope task ini) tanpa mengulang scan tanpa batas yang jadi
+  // penyebab insiden, jadi cap dinaikkan sebagai gantinya (temuan review).
   const kualitasResult = await new sql.Request(transaction).input("variant", sql.VarChar(8), variant).query(`
-    SELECT TOP 50 k.KualitasID, k.Qty10KG,
+    SELECT TOP 200 k.KualitasID, k.Qty10KG,
            k.Qty10KG
              - ISNULL((SELECT SUM(b.Qty10KG) FROM DashboardProduksiBatch b WITH (UPDLOCK, HOLDLOCK) WHERE b.KualitasID = k.KualitasID AND b.IsDeleted = 0), 0)
              - ISNULL((SELECT SUM(ta.Qty) FROM DashboardTakeAwayAlokasi ta WITH (UPDLOCK, HOLDLOCK) WHERE ta.KualitasID = k.KualitasID AND ta.SumberTipe = 'KUALITAS'), 0)
