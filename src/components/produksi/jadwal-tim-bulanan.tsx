@@ -13,6 +13,8 @@ import type { StafOperasionalOption } from "@/lib/queries/akun";
 import type { ShiftNumber } from "@/lib/report-shift";
 
 const BULAN_NAMA = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+const BULAN_SINGKAT = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGU", "SEP", "OKT", "NOV", "DES"];
+const HARI_SINGKAT = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
 // Header kalender Senin-first (bukan Minggu-first), sesuai referensi desain
 // user 2026-09-19.
 const HARI_HEADER = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
@@ -23,6 +25,10 @@ const SHIFT_URUTAN: ShiftNumber[] = [1, 2, 3];
 // menyimpan makna bisnis apa pun.
 const TIM_COLORS = ["bg-sky-600", "bg-emerald-600", "bg-amber-600", "bg-violet-600", "bg-rose-600", "bg-cyan-600"];
 const TIM_BORDER_COLORS = ["border-sky-600", "border-emerald-600", "border-amber-600", "border-violet-600", "border-rose-600", "border-cyan-600"];
+// Warna teks label "S{n}" DI BAWAH kotak huruf Tim -- teks terpisah (bukan
+// digabung dalam satu badge), tetap satu warna dengan kotak huruf di
+// atasnya. Sesuai referensi desain user 2026-09-19.
+const TIM_TEXT_COLORS = ["text-sky-400", "text-emerald-400", "text-amber-400", "text-violet-400", "text-rose-400", "text-cyan-400"];
 // Warna badge S1/S2/S3 di kartu ringkasan -- per NOMOR SHIFT (bukan per
 // Tim, warna Tim sendiri sudah dipakai bar kiri kartu), sesuai referensi
 // desain user: S1 biru, S2 hijau, S3 oranye.
@@ -110,7 +116,7 @@ function TimBadge({
   });
 
   if (!entry) {
-    return <div className="flex size-6 items-center justify-center rounded text-[9px] text-muted-foreground/40">&ndash;</div>;
+    return <div className="size-7" />;
   }
 
   return (
@@ -124,15 +130,18 @@ function TimBadge({
       type="button"
       disabled={disabled}
       title={`${tim.nama} — Shift ${entry.shift}`}
-      className={cn(
-        "flex h-6 min-w-[34px] items-center justify-center gap-0.5 rounded px-1 text-[9px] font-semibold text-white",
-        TIM_COLORS[timIdx % TIM_COLORS.length],
-        isDragging && "z-20 opacity-50",
-        isOver && "ring-2 ring-offset-1 ring-primary"
-      )}
+      className={cn("flex flex-col items-center gap-0.5", isDragging && "z-20 opacity-50")}
     >
-      <span>{timLetter(tim.nama)}</span>
-      <span className="opacity-80">S{entry.shift}</span>
+      <span
+        className={cn(
+          "flex size-7 items-center justify-center rounded text-xs font-bold text-white",
+          TIM_COLORS[timIdx % TIM_COLORS.length],
+          isOver && "ring-2 ring-offset-1 ring-offset-background ring-primary"
+        )}
+      >
+        {timLetter(tim.nama)}
+      </span>
+      <span className={cn("text-[10px] font-semibold", TIM_TEXT_COLORS[timIdx % TIM_TEXT_COLORS.length])}>S{entry.shift}</span>
     </button>
   );
 }
@@ -169,21 +178,19 @@ function BadgeKosongPopover({
   }
 
   if (disabled || shiftKosong.length === 0) {
-    return <div className="flex size-6 items-center justify-center rounded text-[9px] text-muted-foreground/40">&ndash;</div>;
+    return <div className="size-7" />;
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <button
-            type="button"
-            title={`${tim.nama} — belum dijadwalkan, klik untuk isi`}
-            className="flex size-6 items-center justify-center rounded border border-dashed border-muted-foreground/40 text-[9px] text-muted-foreground hover:bg-muted"
-          />
+          <button type="button" title={`${tim.nama} — belum dijadwalkan, klik untuk isi`} className="flex flex-col items-center gap-0.5" />
         }
       >
-        +
+        <span className="flex size-7 items-center justify-center rounded border border-dashed border-muted-foreground/40 text-xs text-muted-foreground hover:bg-muted">
+          +
+        </span>
       </PopoverTrigger>
       <PopoverContent className="w-40 p-1.5">
         <p className="mb-1 px-1 text-[10px] text-muted-foreground">Jadwalkan {tim.nama} di:</p>
@@ -380,40 +387,52 @@ export function JadwalTimBulanan({
                   <div
                     key={cell.tanggalUsaha}
                     className={cn(
-                      "flex min-h-[76px] flex-col gap-1 border-b border-r border-border p-1.5 last:border-r-0",
+                      "flex min-h-[76px] items-center justify-between gap-2 border-b border-r border-border p-2 last:border-r-0",
                       !cell.inMonth && "bg-muted/10"
                     )}
                   >
-                    <div className="flex items-baseline justify-between">
-                      <span className={cn("text-xs font-semibold", !cell.inMonth && "text-muted-foreground/50")}>
+                    {/* Blok tanggal+nama hari di kiri -- untuk tanggal luar
+                        bulan, sub-label menunjukkan BULAN asalnya (mis.
+                        "AGU"), bukan nama hari, supaya jelas ini luapan dari
+                        bulan lain; label "Lalu"/"Depan" menggantikan posisi
+                        badge Tim di kanan (tanggal luar bulan tidak
+                        menampilkan/bisa diedit jadwalnya di sini). */}
+                    <div className="flex shrink-0 flex-col">
+                      <span className={cn("text-xl font-bold leading-none", !cell.inMonth && "text-muted-foreground/40")}>
                         {cell.date.getUTCDate()}
                       </span>
-                      {!cell.inMonth && <span className="text-[9px] italic text-muted-foreground/50">{cell.before ? "Lalu" : "Depan"}</span>}
+                      <span className="mt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                        {cell.inMonth ? HARI_SINGKAT[cell.date.getUTCDay()] : BULAN_SINGKAT[cell.date.getUTCMonth()]}
+                      </span>
                     </div>
-                    <div className="flex flex-wrap gap-1">
-                      {timList.map((tim, idx) => {
-                        const entry = dayByTim?.get(tim.timId);
-                        return entry ? (
-                          <TimBadge
-                            key={tim.timId}
-                            tanggalUsaha={cell.tanggalUsaha}
-                            tim={tim}
-                            timIdx={idx}
-                            entry={entry}
-                            disabled={!cell.inMonth}
-                          />
-                        ) : (
-                          <BadgeKosongPopover
-                            key={tim.timId}
-                            tanggalUsaha={cell.tanggalUsaha}
-                            tim={tim}
-                            shiftKosong={shiftKosong}
-                            disabled={!cell.inMonth}
-                            onAssigned={(s, id) => updateEntry(cell.tanggalUsaha, s, id)}
-                          />
-                        );
-                      })}
-                    </div>
+                    {!cell.inMonth ? (
+                      <span className="text-xs italic text-muted-foreground/50">{cell.before ? "Lalu" : "Depan"}</span>
+                    ) : (
+                      <div className="flex shrink-0 gap-1.5">
+                        {timList.map((tim, idx) => {
+                          const entry = dayByTim?.get(tim.timId);
+                          return entry ? (
+                            <TimBadge
+                              key={tim.timId}
+                              tanggalUsaha={cell.tanggalUsaha}
+                              tim={tim}
+                              timIdx={idx}
+                              entry={entry}
+                              disabled={!cell.inMonth}
+                            />
+                          ) : (
+                            <BadgeKosongPopover
+                              key={tim.timId}
+                              tanggalUsaha={cell.tanggalUsaha}
+                              tim={tim}
+                              shiftKosong={shiftKosong}
+                              disabled={!cell.inMonth}
+                              onAssigned={(s, id) => updateEntry(cell.tanggalUsaha, s, id)}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
