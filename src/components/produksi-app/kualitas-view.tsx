@@ -21,6 +21,7 @@ import { STATUS_MESIN_LABEL } from "@/lib/produksi-mesin-status";
 import { createKualitasAction, getKualitasRiwayatAction } from "@/app/mkesindo/produksi/actions";
 import type { KualitasRow } from "@/lib/queries/produksi-kualitas";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
+import type { KantongVariant } from "@/lib/queries/sales-order";
 
 const SHIFT_OPTIONS = [1, 2, 3] as const;
 
@@ -70,6 +71,7 @@ function TambahKualitasDialog({
   const [waktu, setWaktu] = useState(() => getWibTimeHHmm());
   const [shift, setShift] = useState<string>("1");
   const [mesinId, setMesinId] = useState<string>("");
+  const [variant, setVariant] = useState<KantongVariant>("10kg");
   const [checklist, setChecklist] = useState<ChecklistState>(DEFAULT_CHECKLIST);
   const [diameterDalamMm, setDiameterDalamMm] = useState("");
   const [qty10KG, setQty10KG] = useState("");
@@ -88,6 +90,7 @@ function TambahKualitasDialog({
     setWaktu(getWibTimeHHmm());
     setShift("1");
     setMesinId("");
+    setVariant("10kg");
     setChecklist(DEFAULT_CHECKLIST);
     setDiameterDalamMm("");
     setQty10KG("");
@@ -151,6 +154,7 @@ function TambahKualitasDialog({
         waktu,
         shift: Number(shift) as 1 | 2 | 3,
         mesinId: Number(mesinId),
+        variant,
         cekKejernihan: checklist.cekKejernihan,
         cekUkuranBentuk: checklist.cekUkuranBentuk,
         diameterDalamMm: diameterDalamMm.trim() ? Number(diameterDalamMm) : null,
@@ -207,6 +211,15 @@ function TambahKualitasDialog({
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant={variant === "10kg" ? "default" : "outline"} onClick={() => setVariant("10kg")}>
+              10 KG
+            </Button>
+            <Button type="button" variant={variant === "5kg" ? "default" : "outline"} onClick={() => setVariant("5kg")}>
+              5 KG
+            </Button>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -279,7 +292,9 @@ function TambahKualitasDialog({
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">QTY 10 KG Kantong Es</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                QTY Kantong Es ({variant === "10kg" ? "10 KG" : "5 KG"})
+              </label>
               <Input
                 type="number"
                 step="1"
@@ -419,6 +434,9 @@ function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-1.5">
+            <span className="rounded px-2 py-0.5 text-[11px] font-medium bg-sky-500/15 text-sky-600">
+              {kualitas.Variant === "10kg" ? "10 KG" : "5 KG"}
+            </span>
             {items.map((i) => (
               <span
                 key={i.label}
@@ -442,7 +460,7 @@ function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
                 kualitas.Qty10KG != null &&
                 " • "}
               {kualitas.Qty10KG != null &&
-                `QTY: ${kualitas.Qty10KG} kantong 10kg (sisa ${kualitas.SisaAlokasi})`}
+                `QTY: ${kualitas.Qty10KG} kantong ${kualitas.Variant === "10kg" ? "10kg" : "5kg"} (sisa ${kualitas.SisaAlokasi})`}
             </p>
           )}
 
