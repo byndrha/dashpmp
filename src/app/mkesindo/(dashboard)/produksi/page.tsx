@@ -6,7 +6,7 @@ import { getAllTim, getSemuaAnggotaTim } from "@/lib/queries/tim-produksi";
 import { getAkunNamaMap, getProduksiAkunOptions } from "@/lib/queries/akun";
 import { getJadwalBulan } from "@/lib/queries/jadwal-tim-produksi";
 import { getCurrentShift } from "@/lib/queries/aktivitas-produksi";
-import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-desktop";
+import { PetaWarehouseDesktop, WarehouseLegend } from "@/components/produksi/peta-warehouse-desktop";
 import { KorelasiProduksiPenjualanPanel } from "@/components/produksi/korelasi-produksi-penjualan-panel";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
 import { PanelTimProduksi } from "@/components/produksi/panel-tim-produksi";
@@ -36,7 +36,10 @@ export default async function ProduksiPage() {
     <div className="flex flex-col gap-6">
       <h1 className="font-display text-xl font-semibold">Produksi</h1>
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Peta Warehouse</h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">Peta Warehouse</h2>
+          <WarehouseLegend />
+        </div>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0 flex-1">
             <PetaWarehouseDesktop posisi={posisi} />

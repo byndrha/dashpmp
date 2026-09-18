@@ -8,6 +8,28 @@ import { RiwayatPosisiListDesktop } from "@/components/produksi/riwayat-posisi-l
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
 
+// Dipisah dari PetaWarehouseDesktop supaya bisa dirender di page.tsx sejajar
+// heading "Peta Warehouse" (di LUAR kotak peta), bukan lagi di dalam/bawah
+// peta -- sesuai permintaan user 2026-09-19.
+export function WarehouseLegend() {
+  return (
+    <div className="flex flex-wrap gap-3 text-[11px]">
+      <span className="flex items-center gap-1">
+        <span className="size-3 rounded-sm bg-red-600" /> Paling lama (&ge;3 hari)
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="size-3 rounded-sm bg-amber-500" /> Menengah (1-2 hari)
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="size-3 rounded-sm bg-emerald-600" /> Baru (&lt;1 hari)
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="size-3 rounded-sm bg-muted" /> Kosong
+      </span>
+    </div>
+  );
+}
+
 export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) {
   // Stores just the id, not the row itself -- so the summary below (Terisi
   // X/120, batch count) always reflects the LATEST posisi prop after an
@@ -19,23 +41,6 @@ export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) 
 
   return (
     <div className="rounded-lg border border-border p-4">
-      {/* Dipindah ke atas (sejajar heading "Peta Warehouse" di luar kotak
-          ini), dari posisi lama di bawah peta -- tetap di dalam batas kotak
-          Peta Warehouse sesuai permintaan user 2026-09-19. */}
-      <div className="mb-3 flex flex-wrap justify-end gap-3 text-[11px]">
-        <span className="flex items-center gap-1">
-          <span className="size-3 rounded-sm bg-red-600" /> Paling lama (&ge;3 hari)
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="size-3 rounded-sm bg-amber-500" /> Menengah (1-2 hari)
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="size-3 rounded-sm bg-emerald-600" /> Baru (&lt;1 hari)
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="size-3 rounded-sm bg-muted" /> Kosong
-        </span>
-      </div>
       <div className={cn("flex flex-col gap-4", selected && "lg:flex-row lg:items-start")}>
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-4 overflow-x-auto pb-2">
