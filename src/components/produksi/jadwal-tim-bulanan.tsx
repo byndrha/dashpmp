@@ -168,7 +168,7 @@ function TimBadge({
       </span>
       <span className={cn("text-[10px] font-semibold", TIM_TEXT_COLORS[timIdx % TIM_TEXT_COLORS.length])}>S{entry.shift}</span>
       {validasi && (
-        <span className="pointer-events-none absolute -top-1 right-[-2px] flex gap-[3px]">
+        <span className="absolute -top-1 right-[-2px] flex gap-[3px]">
           <span
             title={`Cek Kualitas: ${validasi.kualitas.detail}`}
             className={cn(
