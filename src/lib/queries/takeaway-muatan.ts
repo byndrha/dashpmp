@@ -2,6 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
 import { getNaiveWibTransDate } from "@/lib/business-date";
 import type { KantongVariant } from "@/lib/queries/sales-order";
+import { allocateTakeAwayStock } from "@/lib/queries/takeaway-alokasi";
 
 export interface TakeAwayMuatanPendingRow {
   takeAwayMuatanId: number;
@@ -234,29 +235,29 @@ export async function takeAwaySelesaiMuat(
     .request()
     .input("id", sql.Int, takeAwayMuatanId)
     .query(
-      `SELECT SalesOrderID, JamMulaiMuat, JamSelesaiMuat FROM DashboardTakeAwayMuatan WHERE TakeAwayMuatanID = @id AND IsDeleted = 0`
+      `SELECT SalesOrderID, Variant, QtyDipesan, JamMulaiMuat, JamSelesaiMuat FROM DashboardTakeAwayMuatan WHERE TakeAwayMuatanID = @id AND IsDeleted = 0`
     );
   const muatan = muatanResult.recordset[0] as
-    | { SalesOrderID: string; JamMulaiMuat: Date | null; JamSelesaiMuat: Date | null }
+    | { SalesOrderID: string; Variant: KantongVariant; QtyDipesan: number; JamMulaiMuat: Date | null; JamSelesaiMuat: Date | null }
     | undefined;
   if (!muatan) throw new AppError("Order TakeAway ini tidak ditemukan.");
   if (!muatan.JamMulaiMuat) throw new AppError("Mulai Muat belum dilakukan untuk order ini.");
   if (muatan.JamSelesaiMuat) throw new AppError("Order TakeAway ini sudah selesai dimuat.");
 
   const salesOrderId = muatan.SalesOrderID;
-  let deliveryOrderId: string | null = null;
-  let salesInvoiceId: string | null = null;
 
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
   try {
-    const soResult = await pool
-      .request()
+    await allocateTakeAwayStock(transaction, takeAwayMuatanId, muatan.Variant, muatan.QtyDipesan);
+
+    const soResult = await new sql.Request(transaction)
       .input("soId", sql.VarChar(16), salesOrderId)
       .query(`SELECT BusinessPartnerID, DueDate, TermOfPaymentID FROM SalesOrder WHERE SalesOrderID = @soId`);
     const so = soResult.recordset[0] as { BusinessPartnerID: string; DueDate: Date; TermOfPaymentID: string } | undefined;
     if (!so) throw new AppError("Sales Order tidak ditemukan.");
 
-    const sodResult = await pool
-      .request()
+    const sodResult = await new sql.Request(transaction)
       .input("soId", sql.VarChar(16), salesOrderId)
       .query(`SELECT SalesOrderDetailID, ItemID, Name, Qty, Unit, Price, Amount FROM SalesOrderDetail WHERE SalesOrderID = @soId`);
     const soDetails = sodResult.recordset as {
@@ -273,11 +274,10 @@ export async function takeAwaySelesaiMuat(
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    deliveryOrderId = await nextDeliveryOrderId(pool);
+    const deliveryOrderId = await nextDeliveryOrderId(pool);
     const doVoucherSeq = await nextDOVoucherSeq(pool, yearMonth);
     const doVoucherNo = `MKE/DO/${doVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
-    await pool
-      .request()
+    await new sql.Request(transaction)
       .input("id", sql.VarChar(16), deliveryOrderId)
       .input("voucherNo", sql.VarChar(128), doVoucherNo)
       .input("branchId", sql.VarChar(16), BRANCH_ID)
@@ -301,8 +301,7 @@ export async function takeAwaySelesaiMuat(
 
     for (const sod of soDetails) {
       const detailId = await nextDeliveryOrderDetailId(pool);
-      await pool
-        .request()
+      await new sql.Request(transaction)
         .input("id", sql.VarChar(16), detailId)
         .input("doId", sql.VarChar(16), deliveryOrderId)
         .input("itemId", sql.VarChar(160), sod.ItemID)
@@ -321,11 +320,10 @@ export async function takeAwaySelesaiMuat(
         `);
     }
 
-    salesInvoiceId = await nextSalesInvoiceId(pool);
+    const salesInvoiceId = await nextSalesInvoiceId(pool);
     const siVoucherSeq = await nextSIVoucherSeq(pool, yearMonth);
     const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
-    await pool
-      .request()
+    await new sql.Request(transaction)
       .input("id", sql.VarChar(16), salesInvoiceId)
       .input("voucherNo", sql.VarChar(128), siVoucherNo)
       .input("dueDate", sql.DateTime, so.DueDate)
@@ -367,8 +365,7 @@ export async function takeAwaySelesaiMuat(
 
     for (const sod of soDetails) {
       const detailId = await nextSalesInvoiceDetailId(pool);
-      await pool
-        .request()
+      await new sql.Request(transaction)
         .input("id", sql.VarChar(16), detailId)
         .input("siId", sql.VarChar(16), salesInvoiceId)
         .input("itemId", sql.VarChar(160), sod.ItemID)
@@ -386,17 +383,14 @@ export async function takeAwaySelesaiMuat(
         `);
     }
 
-    await pool
-      .request()
+    await new sql.Request(transaction)
       .input("soId", sql.VarChar(16), salesOrderId)
       .query(`UPDATE SalesOrder SET IsClosed = 1, IsInvoiced = 1, ModifiedDate = GETDATE() WHERE SalesOrderID = @soId`);
-    await pool
-      .request()
+    await new sql.Request(transaction)
       .input("doId", sql.VarChar(16), deliveryOrderId)
       .query(`UPDATE DeliveryOrder SET IsClosed = 1, IsInvoiced = 1, ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
 
-    await pool
-      .request()
+    await new sql.Request(transaction)
       .input("id", sql.Int, takeAwayMuatanId)
       .input("akunId", sql.Int, dicatatOlehAkunId)
       .input("doId", sql.VarChar(16), deliveryOrderId)
@@ -407,28 +401,10 @@ export async function takeAwaySelesaiMuat(
         WHERE TakeAwayMuatanID = @id
       `);
 
+    await transaction.commit();
     return { deliveryOrderId, salesInvoiceId };
   } catch (err) {
-    if (salesInvoiceId) {
-      await pool
-        .request()
-        .input("id", sql.VarChar(16), salesInvoiceId)
-        .query(`UPDATE SalesInvoice SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE SalesInvoiceID = @id`);
-      await pool
-        .request()
-        .input("siId", sql.VarChar(16), salesInvoiceId)
-        .query(`DELETE FROM SalesInvoiceDetail WHERE SalesInvoiceID = @siId`);
-    }
-    if (deliveryOrderId) {
-      await pool
-        .request()
-        .input("id", sql.VarChar(16), deliveryOrderId)
-        .query(`UPDATE DeliveryOrder SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE DeliveryOrderID = @id`);
-      await pool
-        .request()
-        .input("doId", sql.VarChar(16), deliveryOrderId)
-        .query(`DELETE FROM DeliveryOrderDetail WHERE DeliveryOrderID = @doId`);
-    }
+    await transaction.rollback();
     throw err;
   }
 }
