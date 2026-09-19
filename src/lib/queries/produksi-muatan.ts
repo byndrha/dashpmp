@@ -9,6 +9,7 @@ import {
   JADWAL_KANTONG_5KG_EXPR,
 } from "@/lib/queries/pengiriman-jadwal";
 import { getShiftWindow, type ShiftNumber } from "@/lib/report-shift";
+import { allocateArmadaStock5KG } from "@/lib/queries/armada-alokasi";
 
 // Same 14:00 WIB rollover rule as the rest of the app (business-date.ts) —
 // a card whose own JamJadwal falls in today's business-date window or
@@ -159,6 +160,10 @@ export async function produksiSelesaiMuat(input: ProduksiSelesaiMuatInput): Prom
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
+    if (input.qty5KGDimuat > 0) {
+      await allocateArmadaStock5KG(transaction, input.jadwalId, input.qty5KGDimuat);
+    }
+
     for (const item of input.alokasi) {
       if (item.qty10KG < 0) {
         throw new AppError("Jumlah yang diambil tidak boleh negatif.");
