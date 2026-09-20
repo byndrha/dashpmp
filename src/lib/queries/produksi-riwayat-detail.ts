@@ -81,18 +81,26 @@ export interface RiwayatShiftGroup {
 // Produksi), dan siapa yang menginput. Dibatasi per JUMLAH HARI (bukan flat
 // row count) supaya tiap grup tanggal+shift yang tampil selalu utuh, tidak
 // terpotong di tengah. Sesuai permintaan user 2026-09-19.
+// Urutan kronologis maju (Shift 2 -> 3 -> 1), dipakai untuk menentukan shift
+// mana saja yang "sudah dimulai" pada TanggalUsaha berjalan (lihat enumerasi
+// grup kosong di bawah) -- kebalikan dari SHIFT_CHRONO_RANK di atas yang
+// dipakai untuk urutan TAMPIL (terbaru dulu).
+const SHIFT_FORWARD_RANK: Record<ShiftNumber, number> = { 2: 0, 3: 1, 1: 2 };
+const SEMUA_SHIFT: ShiftNumber[] = [2, 3, 1];
+
 export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<RiwayatShiftGroup[]> {
   const pool = await getPool();
 
-  const minTanggalResult = await pool.request().input("jumlahHari", sql.Int, jumlahHari).query(`
-    SELECT MIN(TanggalLabel) AS MinTanggal FROM (
-      SELECT DISTINCT TOP (@jumlahHari) TanggalLabel
-      FROM DashboardProduksiKualitas
-      ORDER BY TanggalLabel DESC
-    ) t
-  `);
-  const minTanggal = (minTanggalResult.recordset[0] as { MinTanggal: Date | null }).MinTanggal;
-  if (!minTanggal) return [];
+  // Batas tanggal dihitung dari KALENDER (mundur jumlahHari hari dari
+  // TanggalUsaha berjalan), BUKAN dari tanggal yang kebetulan sudah punya
+  // data Cek Kualitas -- supaya shift yang timnya SAMA SEKALI tidak
+  // menjalankan SOP tetap masuk jendela dan tetap ditampilkan (lihat
+  // enumerasi grup kosong di bawah), bukan diam-diam hilang dari riwayat.
+  const { shift: shiftBerjalan, businessDate: businessDateBerjalan } = getReportShift("work");
+  const tanggalUsahaBerjalan = businessDateBerjalan.toISOString().slice(0, 10);
+  const minTanggalDate = new Date(businessDateBerjalan);
+  minTanggalDate.setUTCDate(minTanggalDate.getUTCDate() - (jumlahHari - 1));
+  const minTanggal = minTanggalDate.toISOString().slice(0, 10);
 
   const [kualitasResult, jadwalResult] = await Promise.all([
     pool.request().input("minTanggal", sql.Date, minTanggal).query(`
@@ -214,14 +222,32 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
     });
   }
 
+  // Enumerasi grup KOSONG untuk setiap (TanggalUsaha, Shift) dalam jendela
+  // kalender yang BELUM punya entri Kualitas sama sekali -- sengaja tetap
+  // ditampilkan (bukan dihilangkan begitu saja) supaya shift yang timnya
+  // tidak menjalankan SOP Cek Kualitas tetap kelihatan di Riwayat Produksi
+  // sebagai penanda, sesuai permintaan user 2026-09-20. Shift pada
+  // TanggalUsaha berjalan yang belum dimulai (rank kronologisnya lebih
+  // besar dari shift yang sedang berjalan sekarang) sengaja DILEWATI --
+  // belum waktunya, bukan pelanggaran.
+  for (let d = new Date(minTanggalDate); d.getTime() <= businessDateBerjalan.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
+    const tanggalUsaha = d.toISOString().slice(0, 10);
+    for (const shift of SEMUA_SHIFT) {
+      if (tanggalUsaha === tanggalUsahaBerjalan && SHIFT_FORWARD_RANK[shift] > SHIFT_FORWARD_RANK[shiftBerjalan]) continue;
+      const key = `${tanggalUsaha}|${shift}`;
+      if (groupByKey.has(key)) continue;
+      const tim = timByTanggalShift.get(key);
+      groupByKey.set(key, { tanggalUsaha, shift, timId: tim?.timId ?? null, timNama: tim?.timNama ?? null, entries: [] });
+    }
+  }
+
   // Stok Awal/Terkirim/Retur/Sisa Stok Akhir dihitung per grup lewat fungsi
   // Korelasi Produksi-Penjualan yang sama, dijalankan paralel antar grup --
   // aman terhadap SQL Server walau jumlahnya banyak (jumlahHari x ~3 shift)
   // karena getPool()'s connection pool sendiri sudah dibatasi max:10 (lihat
   // lib/db.ts, sama seperti pertimbangan getKorelasiRingkasanBulan).
-  const { shift: shiftBerjalan, businessDate: businessDateBerjalan } = getReportShift("work");
-  const tanggalUsahaBerjalan = businessDateBerjalan.toISOString().slice(0, 10);
-
+  // (shiftBerjalan/businessDateBerjalan/tanggalUsahaBerjalan sudah dihitung
+  // di awal fungsi untuk keperluan batas tanggal & enumerasi grup kosong.)
   const groupsWithStats = await Promise.all(
     [...groupByKey.values()].map(async (group) => {
       const prev = getPreviousShift(group.tanggalUsaha, group.shift);

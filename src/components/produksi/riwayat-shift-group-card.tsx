@@ -77,7 +77,12 @@ export function RiwayatShiftGroupCard({ group }: { group: RiwayatShiftGroup }) {
           </span>
         </div>
       </button>
-      {!collapsed && (
+      {!collapsed && group.entries.length === 0 && (
+        <p className="bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
+          Tidak ada entri Cek Kualitas — SOP tidak dijalankan pada shift ini.
+        </p>
+      )}
+      {!collapsed && group.entries.length > 0 && (
         <div className="divide-y divide-border">
           {group.entries.map((e) => (
             <div key={e.kualitasId} className="flex items-center gap-3 p-2 text-sm">
