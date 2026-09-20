@@ -745,7 +745,7 @@ Buat `src/components/produksi/koreksi-snapshot-dialog.tsx`:
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { getSnapshotStokEsAction, koreksiSnapshotStokEsAction } from "@/app/mkesindo/produksi/actions";
 import type { ShiftNumber } from "@/lib/report-shift";
 
@@ -795,7 +795,9 @@ export function KoreksiSnapshotDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button variant="outline" size="sm" className="h-7 text-xs" />}>Koreksi Riwayat Stok</DialogTrigger>
       <DialogContent className="flex max-w-sm flex-col gap-3">
-        <p className="text-sm font-semibold">Koreksi Snapshot Stok Es Historis</p>
+        <DialogHeader>
+          <DialogTitle>Koreksi Snapshot Stok Es Historis</DialogTitle>
+        </DialogHeader>
         <Input type="date" value={tanggalUsaha} onChange={(e) => setTanggalUsaha(e.target.value)} className="h-8 text-xs" />
         <select
           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
