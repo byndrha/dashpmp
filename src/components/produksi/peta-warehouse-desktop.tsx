@@ -39,15 +39,12 @@ export function WarehouseLegend() {
   );
 }
 
-export function PetaWarehouseDesktop({ posisi, mesinList }: { posisi: PalletPosisiRow[]; mesinList: MesinRow[] }) {
-  // Stores just the id, not the row itself -- so the summary below (Terisi
-  // X/120, batch count) always reflects the LATEST posisi prop after an
-  // Ubah/Hapus in RiwayatPosisiListDesktop triggers a server refresh,
-  // instead of freezing on the stale row object captured at click time.
-  const [selectedPosisiId, setSelectedPosisiId] = useState<number | null>(null);
-  const byKode = new Map(posisi.map((p) => [p.Kode, p]));
-  const selected = selectedPosisiId != null ? (posisi.find((p) => p.PosisiID === selectedPosisiId) ?? null) : null;
-
+// Dipisah dari PetaWarehouseDesktop supaya bisa di-key oleh posisiId di
+// tempat pemanggilannya -- me-remount komponen ini (membuang seluruh state
+// internalnya) setiap kali posisi yang dipilih berubah, tanpa perlu
+// useEffect yang memanggil setState di body-nya (dilarang lint
+// react-hooks/set-state-in-effect). Lihat komentar di tempat pemanggilan.
+function BaselineForm({ posisiId, mesinList }: { posisiId: number; mesinList: MesinRow[] }) {
   const [showBaselineForm, setShowBaselineForm] = useState(false);
   const [baselineMesinId, setBaselineMesinId] = useState<number | "">("");
   const [baselineQty, setBaselineQty] = useState("");
@@ -55,12 +52,19 @@ export function PetaWarehouseDesktop({ posisi, mesinList }: { posisi: PalletPosi
   const [baselineError, setBaselineError] = useState<string | null>(null);
   const [baselinePending, startBaselineTransition] = useTransition();
 
+  function resetForm() {
+    setShowBaselineForm(false);
+    setBaselineMesinId("");
+    setBaselineQty("");
+    setBaselineAlasan("");
+    setBaselineError(null);
+  }
+
   function handleTambahBaseline() {
-    if (!selected) return;
     setBaselineError(null);
     startBaselineTransition(async () => {
       const result = await createBatchBaselineAction(
-        selected.PosisiID,
+        posisiId,
         Number(baselineMesinId),
         Number(baselineQty) || 0,
         baselineAlasan.trim()
@@ -69,12 +73,73 @@ export function PetaWarehouseDesktop({ posisi, mesinList }: { posisi: PalletPosi
         setBaselineError(result.error);
         return;
       }
-      setShowBaselineForm(false);
-      setBaselineMesinId("");
-      setBaselineQty("");
-      setBaselineAlasan("");
+      resetForm();
     });
   }
+
+  if (!showBaselineForm) {
+    return (
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowBaselineForm(true)}>
+        + Tambah Stok Awal
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-border p-2.5">
+      <p className="text-xs font-semibold">Tambah Stok Awal</p>
+      <select
+        className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+        value={baselineMesinId}
+        onChange={(e) => setBaselineMesinId(e.target.value === "" ? "" : Number(e.target.value))}
+      >
+        <option value="">Pilih Mesin</option>
+        {mesinList.map((m) => (
+          <option key={m.MesinID} value={m.MesinID}>
+            {m.Nama}
+          </option>
+        ))}
+      </select>
+      <Input
+        type="number"
+        placeholder="Qty 10kg"
+        value={baselineQty}
+        onChange={(e) => setBaselineQty(e.target.value)}
+        className="h-7 text-xs"
+      />
+      <Input
+        type="text"
+        placeholder="Alasan (wajib)"
+        value={baselineAlasan}
+        onChange={(e) => setBaselineAlasan(e.target.value)}
+        className="h-7 text-xs"
+      />
+      <div className="flex gap-1.5">
+        <Button
+          size="sm"
+          className="h-7 flex-1 text-xs"
+          disabled={baselinePending || !baselineMesinId || !baselineQty || !baselineAlasan.trim()}
+          onClick={handleTambahBaseline}
+        >
+          Simpan
+        </Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={resetForm}>
+          Batal
+        </Button>
+      </div>
+      {baselineError && <p className="text-[11px] text-destructive">{baselineError}</p>}
+    </div>
+  );
+}
+
+export function PetaWarehouseDesktop({ posisi, mesinList }: { posisi: PalletPosisiRow[]; mesinList: MesinRow[] }) {
+  // Stores just the id, not the row itself -- so the summary below (Terisi
+  // X/120, batch count) always reflects the LATEST posisi prop after an
+  // Ubah/Hapus in RiwayatPosisiListDesktop triggers a server refresh,
+  // instead of freezing on the stale row object captured at click time.
+  const [selectedPosisiId, setSelectedPosisiId] = useState<number | null>(null);
+  const byKode = new Map(posisi.map((p) => [p.Kode, p]));
+  const selected = selectedPosisiId != null ? (posisi.find((p) => p.PosisiID === selectedPosisiId) ?? null) : null;
 
   // Legenda harus selalu presis di tengah "Pintu Geser" berapa pun lebar
   // layar -- offset dari TEPI KANAN kotak tidak bisa dipakai karena kotak
@@ -206,55 +271,21 @@ export function PetaWarehouseDesktop({ posisi, mesinList }: { posisi: PalletPosi
                 {selected.JumlahBatchAktif > 1 && ` — ${selected.JumlahBatchAktif} batch aktif`}
               </p>
             </div>
-            {!showBaselineForm ? (
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowBaselineForm(true)}>
-                + Tambah Stok Awal
-              </Button>
-            ) : (
-              <div className="flex flex-col gap-1.5 rounded-md border border-border p-2.5">
-                <p className="text-xs font-semibold">Tambah Stok Awal</p>
-                <select
-                  className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-                  value={baselineMesinId}
-                  onChange={(e) => setBaselineMesinId(e.target.value === "" ? "" : Number(e.target.value))}
-                >
-                  <option value="">Pilih Mesin</option>
-                  {mesinList.map((m) => (
-                    <option key={m.MesinID} value={m.MesinID}>
-                      {m.Nama}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  type="number"
-                  placeholder="Qty 10kg"
-                  value={baselineQty}
-                  onChange={(e) => setBaselineQty(e.target.value)}
-                  className="h-7 text-xs"
-                />
-                <Input
-                  type="text"
-                  placeholder="Alasan (wajib)"
-                  value={baselineAlasan}
-                  onChange={(e) => setBaselineAlasan(e.target.value)}
-                  className="h-7 text-xs"
-                />
-                <div className="flex gap-1.5">
-                  <Button
-                    size="sm"
-                    className="h-7 flex-1 text-xs"
-                    disabled={baselinePending || !baselineMesinId || !baselineQty || !baselineAlasan.trim()}
-                    onClick={handleTambahBaseline}
-                  >
-                    Simpan
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowBaselineForm(false)}>
-                    Batal
-                  </Button>
-                </div>
-                {baselineError && <p className="text-[11px] text-destructive">{baselineError}</p>}
-              </div>
-            )}
+            {/* key={selected.PosisiID} -- me-remount BaselineForm (jadi
+                seluruh state internalnya dibuang & dibuat ulang dari nol)
+                setiap kali posisi yang dipilih berubah, baik ganti pallet
+                lain maupun tutup-lalu-buka panel lain. Tanpa ini, mengisi
+                form untuk posisi A lalu klik pallet lain (posisi B) sebelum
+                sempat Simpan/Batal bisa membuat submit berikutnya memakai
+                posisiId yang sudah berubah (B) digabung qty/alasan yang
+                sebenarnya dimaksudkan untuk A -- baseline salah posisi
+                dengan jejak audit yang tidak sesuai kejadian sebenarnya.
+                Dipilih lewat key+remount (pola resmi React untuk "reset
+                state saat identitas berubah"), bukan useEffect yang
+                memanggil setState langsung di body-nya -- itu melanggar
+                aturan lint react-hooks/set-state-in-effect (cascading
+                render) yang aktif di eslint config repo ini. */}
+            <BaselineForm key={selected.PosisiID} posisiId={selected.PosisiID} mesinList={mesinList} />
           </div>
         )}
       </div>
