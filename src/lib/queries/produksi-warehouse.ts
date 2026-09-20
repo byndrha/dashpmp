@@ -334,6 +334,8 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
 export interface UpdateBatchQtyInput {
   batchId: number;
   qty10KG: number;
+  alasan: string;
+  dicatatOlehAkunId: number;
 }
 
 // Koreksi jumlah kantong pada satu input stok yang sudah tercatat --
@@ -417,6 +419,17 @@ export async function updateBatchQty(input: UpdateBatchQtyInput): Promise<void> 
       }
     }
 
+    await new sql.Request(transaction)
+      .input("batchId", sql.Int, input.batchId)
+      .input("qtyLama", sql.Int, batch.Qty10KG)
+      .input("qtyBaru", sql.Int, input.qty10KG)
+      .input("alasan", sql.NVarChar(500), input.alasan)
+      .input("akunId", sql.Int, input.dicatatOlehAkunId)
+      .query(`
+        INSERT INTO DashboardKoreksiStokPallet (Jenis, BatchID, QtyLama, QtyBaru, Alasan, DicatatOlehAkunID)
+        VALUES ('KOREKSI', @batchId, @qtyLama, @qtyBaru, @alasan, @akunId)
+      `);
+
     await transaction.commit();
   } catch (err) {
     await transaction.rollback();
@@ -431,25 +444,49 @@ export async function updateBatchQty(input: UpdateBatchQtyInput): Promise<void> 
 // produksiSelesaiMuat yang mungkin mengurangi SisaQty10KG di saat
 // bersamaan -- pola yang sama seperti UPDATE...WHERE SisaQty10KG >=
 // @qty10 yang sudah dipakai di produksi-muatan.ts.
-export async function deleteBatch(batchId: number): Promise<void> {
+export interface DeleteBatchInput {
+  batchId: number;
+  alasan: string;
+  dicatatOlehAkunId: number;
+}
+
+export async function deleteBatch(input: DeleteBatchInput): Promise<void> {
   const pool = await getPool();
-  const result = await pool
-    .request()
-    .input("batchId", sql.Int, batchId)
-    .query(`
-      UPDATE DashboardProduksiBatch
-      SET IsDeleted = 1, ModifiedDate = GETDATE()
-      OUTPUT INSERTED.BatchID
-      WHERE BatchID = @batchId AND IsDeleted = 0 AND SisaQty10KG = Qty10KG
-    `);
-  if (result.recordset.length === 0) {
-    const check = await pool
-      .request()
-      .input("batchId", sql.Int, batchId)
-      .query(`SELECT IsDeleted, Qty10KG, SisaQty10KG FROM DashboardProduksiBatch WHERE BatchID = @batchId`);
-    const row = check.recordset[0] as { IsDeleted: boolean; Qty10KG: number; SisaQty10KG: number } | undefined;
-    if (!row || row.IsDeleted) throw new AppError("Input stok ini tidak ditemukan.");
-    const terpakai = row.Qty10KG - row.SisaQty10KG;
-    throw new AppError(`Tidak bisa dihapus, sudah ada ${terpakai} kantong yang terpakai.`);
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const result = await new sql.Request(transaction)
+      .input("batchId", sql.Int, input.batchId)
+      .query(`
+        UPDATE DashboardProduksiBatch
+        SET IsDeleted = 1, ModifiedDate = GETDATE()
+        OUTPUT INSERTED.BatchID, INSERTED.Qty10KG
+        WHERE BatchID = @batchId AND IsDeleted = 0 AND SisaQty10KG = Qty10KG
+      `);
+    if (result.recordset.length === 0) {
+      const check = await new sql.Request(transaction)
+        .input("batchId", sql.Int, input.batchId)
+        .query(`SELECT IsDeleted, Qty10KG, SisaQty10KG FROM DashboardProduksiBatch WHERE BatchID = @batchId`);
+      const row = check.recordset[0] as { IsDeleted: boolean; Qty10KG: number; SisaQty10KG: number } | undefined;
+      if (!row || row.IsDeleted) throw new AppError("Input stok ini tidak ditemukan.");
+      const terpakai = row.Qty10KG - row.SisaQty10KG;
+      throw new AppError(`Tidak bisa dihapus, sudah ada ${terpakai} kantong yang terpakai.`);
+    }
+
+    const deleted = result.recordset[0] as { BatchID: number; Qty10KG: number };
+    await new sql.Request(transaction)
+      .input("batchId", sql.Int, input.batchId)
+      .input("qtyLama", sql.Int, deleted.Qty10KG)
+      .input("alasan", sql.NVarChar(500), input.alasan)
+      .input("akunId", sql.Int, input.dicatatOlehAkunId)
+      .query(`
+        INSERT INTO DashboardKoreksiStokPallet (Jenis, BatchID, QtyLama, QtyBaru, Alasan, DicatatOlehAkunID)
+        VALUES ('KOREKSI', @batchId, @qtyLama, 0, @alasan, @akunId)
+      `);
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
   }
 }

@@ -194,11 +194,12 @@ export async function createBatchAction(
 // updateBatchQty di produksi-warehouse.ts untuk aturan lengkapnya (tidak
 // bisa di bawah jumlah yang sudah terpakai, kapasitas pallet dan plafon
 // Kualitas dicek ulang).
-export async function updateBatchQtyAction(batchId: number, qty10KG: number): Promise<ActionResult<void>> {
+export async function updateBatchQtyAction(batchId: number, qty10KG: number, alasan: string): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireProduksiView();
+    const session = await requireProduksiAdmin();
     if (!qty10KG || qty10KG <= 0) throw new AppError("Isi jumlah kantong 10kg.");
-    await updateBatchQty({ batchId, qty10KG });
+    if (!alasan.trim()) throw new AppError("Isi alasan koreksi.");
+    await updateBatchQty({ batchId, qty10KG, alasan: alasan.trim(), dicatatOlehAkunId: Number(session.user.id) });
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
   });
@@ -207,10 +208,11 @@ export async function updateBatchQtyAction(batchId: number, qty10KG: number): Pr
 // Koreksi admin/desktop untuk input stok yang salah catat — hanya berhasil
 // kalau belum ada sama sekali yang terpakai, lihat deleteBatch di
 // produksi-warehouse.ts.
-export async function deleteBatchAction(batchId: number): Promise<ActionResult<void>> {
+export async function deleteBatchAction(batchId: number, alasan: string): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireProduksiView();
-    await deleteBatch(batchId);
+    const session = await requireProduksiAdmin();
+    if (!alasan.trim()) throw new AppError("Isi alasan penghapusan.");
+    await deleteBatch({ batchId, alasan: alasan.trim(), dicatatOlehAkunId: Number(session.user.id) });
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
   });

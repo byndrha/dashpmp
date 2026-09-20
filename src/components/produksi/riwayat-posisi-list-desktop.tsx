@@ -26,6 +26,7 @@ function formatPeriodeLabel(windowEnd: Date): string {
 function BatchRow({ row, onChanged }: { row: RiwayatProduksiRowWithNama; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(row.Qty10KG));
+  const [alasan, setAlasan] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -35,7 +36,7 @@ function BatchRow({ row, onChanged }: { row: RiwayatProduksiRowWithNama; onChang
   function handleSimpan() {
     setError(null);
     startTransition(async () => {
-      const result = await updateBatchQtyAction(row.BatchID, Number(qty) || 0);
+      const result = await updateBatchQtyAction(row.BatchID, Number(qty) || 0, alasan.trim());
       if (!result.success) {
         setError(result.error);
         return;
@@ -46,10 +47,11 @@ function BatchRow({ row, onChanged }: { row: RiwayatProduksiRowWithNama; onChang
   }
 
   function handleHapus() {
-    if (!confirm(`Hapus input ${row.Qty10KG} kantong dari ${row.MesinNama} ini? Tindakan ini tidak bisa dibatalkan.`)) return;
+    const alasanHapus = prompt(`Hapus input ${row.Qty10KG} kantong dari ${row.MesinNama} ini? Tindakan ini tidak bisa dibatalkan. Isi alasan penghapusan:`);
+    if (!alasanHapus || !alasanHapus.trim()) return;
     setError(null);
     startTransition(async () => {
-      const result = await deleteBatchAction(row.BatchID);
+      const result = await deleteBatchAction(row.BatchID, alasanHapus.trim());
       if (!result.success) {
         setError(result.error);
         return;
@@ -81,6 +83,7 @@ function BatchRow({ row, onChanged }: { row: RiwayatProduksiRowWithNama; onChang
               disabled={pending}
               onClick={() => {
                 setQty(String(row.Qty10KG));
+                setAlasan("");
                 setError(null);
                 setEditing(true);
               }}
@@ -101,20 +104,29 @@ function BatchRow({ row, onChanged }: { row: RiwayatProduksiRowWithNama; onChang
         )}
       </div>
       {editing && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              min={terpakai}
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              className="h-7 w-24 text-xs"
+            />
+            <Button size="sm" className="h-7 px-2 text-xs" disabled={pending || !alasan.trim()} onClick={handleSimpan}>
+              Simpan
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={pending} onClick={() => setEditing(false)}>
+              Batal
+            </Button>
+          </div>
           <Input
-            type="number"
-            min={terpakai}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            className="h-7 w-24 text-xs"
+            type="text"
+            placeholder="Alasan koreksi (wajib)"
+            value={alasan}
+            onChange={(e) => setAlasan(e.target.value)}
+            className="h-7 text-xs"
           />
-          <Button size="sm" className="h-7 px-2 text-xs" disabled={pending} onClick={handleSimpan}>
-            Simpan
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={pending} onClick={() => setEditing(false)}>
-            Batal
-          </Button>
         </div>
       )}
       {error && <p className="text-[11px] text-destructive">{error}</p>}
