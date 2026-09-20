@@ -156,6 +156,18 @@ export async function changeOwnPassword(input: {
   await pool.query(`UPDATE akun SET password_hash = $1, updated_at = now() WHERE id = $2`, [passwordHash, input.userId]);
 }
 
+// Re-verifikasi password akun yang SEDANG LOGIN (bukan login ulang) --
+// dipakai sebelum generate kode ambil-alih, supaya sesi yang lupa
+// di-logout tidak bisa dipakai orang lain generate kode tanpa tahu
+// passwordnya.
+export async function verifyOwnPassword(userId: number, password: string): Promise<boolean> {
+  const pool = getPgPool();
+  const result = await pool.query(`SELECT password_hash FROM akun WHERE id = $1`, [userId]);
+  const row = result.rows[0] as { password_hash: string } | undefined;
+  if (!row) return false;
+  return bcrypt.compare(password, row.password_hash);
+}
+
 // ---------- Perusahaan lookup — preserved exactly for perusahaan-form-dialog.tsx,
 // perusahaan-list.tsx, grup/perusahaan/page.tsx (previous plan's admin UI). ----------
 

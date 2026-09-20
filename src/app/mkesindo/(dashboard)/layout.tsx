@@ -7,6 +7,7 @@ import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { AutoRefresh } from "@/components/dashboard/auto-refresh";
+import { KodeAmbilAlihButton } from "@/components/dashboard/kode-ambil-alih-button";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
@@ -124,6 +125,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
           <div className="flex items-center gap-1">
             <NotificationBell />
+            {session?.user && (canAccessAllPT(session.user) || session.user.bolehGenerateKodeAmbilAlih) && <KodeAmbilAlihButton />}
             <AppearanceMenu />
             <UserMenu name={session?.user?.name ?? session?.user?.username ?? "User"} profile={profile} />
           </div>
