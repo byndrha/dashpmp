@@ -18,13 +18,16 @@ const SHIFT_LIST: ShiftNumber[] = [1, 2, 3];
 // 3 validasi per (TanggalUsaha, Shift) untuk SATU bulan kalender sekaligus
 // -- dipakai 3 titik centang di kotak huruf Tim, jadwal-tim-bulanan.tsx.
 // Bukan per-Tim (Kualitas/Batch/Pengiriman tidak menyimpan TimID), murni
-// menandai KELENGKAPAN shift itu sendiri -- lihat spec Bagian 4.
+// menandai KELENGKAPAN shift itu sendiri -- lihat spec Bagian 4 (proyek
+// varian/TakeAway-FIFO) dan spec Bagian 4 (proyek alokasi Armada-5KG).
 export async function getValidasiBulan(tahun: number, bulan: number): Promise<Record<string, ValidasiShift>> {
   const pool = await getPool();
   const awal = new Date(Date.UTC(tahun, bulan - 1, 1));
   const akhir = new Date(Date.UTC(tahun, bulan, 1));
+  const start = naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan - 1, 0, 0, 0, 0)));
+  const end = naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan, 2, 0, 0, 0)));
 
-  const [mesinAktifResult, kualitasResult, sisaKualitasResult, pengirimanResult, takeAwayResult] = await Promise.all([
+  const [mesinAktifResult, kualitasResult, sisaKualitasResult, armada10Result, armada5Result, takeAwayResult] = await Promise.all([
     pool.request().query(`SELECT MesinID FROM DashboardProduksiMesin WHERE Status = 'AKTIF'`),
     pool
       .request()
@@ -45,17 +48,44 @@ export async function getValidasiBulan(tahun: number, bulan: number): Promise<Re
         FROM DashboardProduksiKualitas k
         WHERE k.TanggalLabel >= @awal AND k.TanggalLabel < @akhir AND k.Variant = '10kg' AND k.Qty10KG IS NOT NULL
       `),
+    // Bukti A: Armada 10KG -- JamSelesaiMuat hanya dihitung kalau JadwalID
+    // punya minimal satu baris DashboardProduksiMuatanDetail (baris itu
+    // hanya tercipta kalau klaim atomik ke DashboardProduksiBatch berhasil
+    // di produksiSelesaiMuat) -- menangkap celah "Selesai Muat armada tanpa
+    // alokasi pallet nyata".
     pool
       .request()
-      .input("start", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan - 1, 0, 0, 0, 0))))
-      .input("end", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan, 2, 0, 0, 0)))).query(`
-        SELECT JamSelesaiMuat FROM DashboardPengirimanJadwal WHERE IsDeleted = 0 AND JamSelesaiMuat IS NOT NULL AND JamSelesaiMuat BETWEEN @start AND @end
+      .input("start", sql.DateTime, start)
+      .input("end", sql.DateTime, end).query(`
+        SELECT DISTINCT j.JamSelesaiMuat
+        FROM DashboardPengirimanJadwal j
+        INNER JOIN DashboardProduksiMuatanDetail d ON d.JadwalID = j.JadwalID
+        WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL AND j.JamSelesaiMuat BETWEEN @start AND @end
       `),
+    // Bukti B: Armada 5KG -- sama seperti Bukti A tapi lewat
+    // DashboardArmadaAlokasi (baris itu hanya tercipta kalau
+    // allocateArmadaStock5KG berhasil).
     pool
       .request()
-      .input("start", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan - 1, 0, 0, 0, 0))))
-      .input("end", sql.DateTime, naiveWibToUtcInstant(new Date(Date.UTC(tahun, bulan, 2, 0, 0, 0)))).query(`
-        SELECT JamSelesaiMuat FROM DashboardTakeAwayMuatan WHERE IsDeleted = 0 AND JamSelesaiMuat IS NOT NULL AND JamSelesaiMuat BETWEEN @start AND @end
+      .input("start", sql.DateTime, start)
+      .input("end", sql.DateTime, end).query(`
+        SELECT DISTINCT j.JamSelesaiMuat
+        FROM DashboardPengirimanJadwal j
+        INNER JOIN DashboardArmadaAlokasi a ON a.JadwalID = j.JadwalID
+        WHERE j.IsDeleted = 0 AND j.JamSelesaiMuat IS NOT NULL AND j.JamSelesaiMuat BETWEEN @start AND @end
+      `),
+    // Bukti C: TakeAway (10KG & 5KG) -- JamSelesaiMuat hanya dihitung kalau
+    // TakeAwayMuatanID punya minimal satu baris DashboardTakeAwayAlokasi
+    // (SumberTipe apa saja -- KUALITAS atau BATCH, keduanya bukti alokasi
+    // nyata; untuk 5kg SumberTipe memang selalu KUALITAS by design).
+    pool
+      .request()
+      .input("start", sql.DateTime, start)
+      .input("end", sql.DateTime, end).query(`
+        SELECT DISTINCT tam.JamSelesaiMuat
+        FROM DashboardTakeAwayMuatan tam
+        INNER JOIN DashboardTakeAwayAlokasi ta ON ta.TakeAwayMuatanID = tam.TakeAwayMuatanID
+        WHERE tam.IsDeleted = 0 AND tam.JamSelesaiMuat IS NOT NULL AND tam.JamSelesaiMuat BETWEEN @start AND @end
       `),
   ]);
 
@@ -79,10 +109,11 @@ export async function getValidasiBulan(tahun: number, bulan: number): Promise<Re
     if (sisa > 0) adaSisaByShift.set(key, true);
   }
 
-  // Centang 3: kumpulkan semua JamSelesaiMuat (armada + TakeAway), cocokkan
-  // ke jendela shift tiap hari dalam bulan ini.
-  const semuaJamSelesai: Date[] = [
-    ...(pengirimanResult.recordset as { JamSelesaiMuat: Date }[]).map((r) => r.JamSelesaiMuat),
+  // Centang 3: gabungkan 3 bukti alokasi nyata (Armada 10KG, Armada 5KG,
+  // TakeAway), cocokkan ke jendela shift tiap hari dalam bulan ini.
+  const semuaJamSelesaiDenganBukti: Date[] = [
+    ...(armada10Result.recordset as { JamSelesaiMuat: Date }[]).map((r) => r.JamSelesaiMuat),
+    ...(armada5Result.recordset as { JamSelesaiMuat: Date }[]).map((r) => r.JamSelesaiMuat),
     ...(takeAwayResult.recordset as { JamSelesaiMuat: Date }[]).map((r) => r.JamSelesaiMuat),
   ];
 
@@ -102,7 +133,7 @@ export async function getValidasiBulan(tahun: number, bulan: number): Promise<Re
       const window = getShiftWindow(businessDate, shift, "work");
       const startUtc = naiveWibToUtcInstant(window.start);
       const endUtc = naiveWibToUtcInstant(window.end);
-      const adaMuatan = semuaJamSelesai.some((t) => t >= startUtc && t <= endUtc);
+      const adaMuatan = semuaJamSelesaiDenganBukti.some((t) => t >= startUtc && t <= endUtc);
 
       hasil[key] = {
         kualitas: {
@@ -118,7 +149,9 @@ export async function getValidasiBulan(tahun: number, bulan: number): Promise<Re
         },
         muatan: {
           lengkap: adaMuatan,
-          detail: adaMuatan ? "Sudah ada Selesai Muat pada shift ini." : "Belum ada Selesai Muat pada shift ini.",
+          detail: adaMuatan
+            ? "Sudah ada Selesai Muat dengan bukti alokasi stok pada shift ini."
+            : "Belum ada Selesai Muat dengan bukti alokasi stok pada shift ini.",
         },
       };
     }
