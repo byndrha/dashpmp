@@ -37,6 +37,7 @@ export async function allocateTakeAwayStock(
            k.Qty10KG
              - ISNULL((SELECT SUM(b.Qty10KG) FROM DashboardProduksiBatch b WITH (UPDLOCK, HOLDLOCK) WHERE b.KualitasID = k.KualitasID AND b.IsDeleted = 0), 0)
              - ISNULL((SELECT SUM(ta.Qty) FROM DashboardTakeAwayAlokasi ta WITH (UPDLOCK, HOLDLOCK) WHERE ta.KualitasID = k.KualitasID AND ta.SumberTipe = 'KUALITAS'), 0)
+             - ISNULL((SELECT SUM(aa.Qty) FROM DashboardArmadaAlokasi aa WITH (UPDLOCK, HOLDLOCK) WHERE aa.KualitasID = k.KualitasID), 0)
              AS Sisa
     FROM DashboardProduksiKualitas k WITH (UPDLOCK, HOLDLOCK)
     WHERE k.Variant = @variant AND k.Qty10KG IS NOT NULL
