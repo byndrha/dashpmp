@@ -56,11 +56,22 @@ export function KoreksiSnapshotDialog() {
         <DialogHeader>
           <DialogTitle>Koreksi Snapshot Stok Es Historis</DialogTitle>
         </DialogHeader>
-        <Input type="date" value={tanggalUsaha} onChange={(e) => setTanggalUsaha(e.target.value)} className="h-8 text-xs" />
+        <Input
+          type="date"
+          value={tanggalUsaha}
+          onChange={(e) => {
+            setTanggalUsaha(e.target.value);
+            setAngkaLama(undefined);
+          }}
+          className="h-8 text-xs"
+        />
         <select
           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
           value={shift}
-          onChange={(e) => setShift(e.target.value === "" ? "" : (Number(e.target.value) as ShiftNumber))}
+          onChange={(e) => {
+            setShift(e.target.value === "" ? "" : (Number(e.target.value) as ShiftNumber));
+            setAngkaLama(undefined);
+          }}
         >
           <option value="">Pilih Shift</option>
           <option value={1}>Shift 1</option>
