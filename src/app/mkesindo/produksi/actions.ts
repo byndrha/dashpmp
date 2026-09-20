@@ -10,10 +10,12 @@ import {
   createBatch,
   updateBatchQty,
   deleteBatch,
+  createBatchBaseline,
   getBatchAktifForAlokasi,
   type PalletPosisiRow,
   type RiwayatProduksiRow,
   type CreateBatchInput,
+  type CreateBatchBaselineInput,
   type BatchAktifRow,
 } from "@/lib/queries/produksi-warehouse";
 import {
@@ -215,6 +217,29 @@ export async function deleteBatchAction(batchId: number, alasan: string): Promis
     await deleteBatch({ batchId, alasan: alasan.trim(), dicatatOlehAkunId: Number(session.user.id) });
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+export async function createBatchBaselineAction(
+  posisiId: number,
+  mesinId: number,
+  qty10KG: number,
+  alasan: string
+): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    const session = await requireProduksiAdmin();
+    if (!qty10KG || qty10KG <= 0) throw new AppError("Isi jumlah kantong 10kg.");
+    if (!alasan.trim()) throw new AppError("Isi alasan penambahan stok awal.");
+    const batchId = await createBatchBaseline({
+      posisiId,
+      mesinId,
+      qty10KG,
+      alasan: alasan.trim(),
+      dicatatOlehAkunId: Number(session.user.id),
+    });
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+    return batchId;
   });
 }
 

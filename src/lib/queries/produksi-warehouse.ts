@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
+import { getReportShift } from "@/lib/report-shift";
 
 // Re-exported for existing server-side consumers importing it from here --
 // client components must import from @/lib/produksi-warehouse-constants
@@ -322,6 +323,77 @@ export async function createBatch(input: CreateBatchInput): Promise<number> {
         );
       }
     }
+
+    await transaction.commit();
+    return batchId;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+export interface CreateBatchBaselineInput {
+  posisiId: number;
+  mesinId: number;
+  qty10KG: number;
+  alasan: string;
+  dicatatOlehAkunId: number;
+}
+
+// Pallet baseline -- stok fisik yang sudah ada di gudang SEBELUM sistem ini
+// melacak stok, tidak pernah tercatat lewat Cek Kualitas -> Tambah Produksi
+// normal. KualitasID sengaja NULL (data produksi aslinya memang tidak
+// pernah tercatat) -- kolom ini sudah nullable di skema live. mesinId tetap
+// wajib diisi (kolom NOT NULL) murni formalitas administratif, admin
+// memilih salah satu Mesin yang ada, BUKAN klaim bahwa stok ini benar dari
+// mesin tersebut. Locking/cek kapasitas mengikuti pola createBatch persis.
+export async function createBatchBaseline(input: CreateBatchBaselineInput): Promise<number> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    await new sql.Request(transaction)
+      .input("posisiId", sql.Int, input.posisiId)
+      .query(`SELECT PosisiID FROM DashboardProduksiPalletPosisi WITH (UPDLOCK, HOLDLOCK) WHERE PosisiID = @posisiId`);
+
+    const { businessDate, shift } = getReportShift("work");
+    const tanggalLabel = businessDate.toISOString().slice(0, 10);
+
+    const insertResult = await new sql.Request(transaction)
+      .input("mesinId", sql.Int, input.mesinId)
+      .input("posisiId", sql.Int, input.posisiId)
+      .input("qty10", sql.Int, input.qty10KG)
+      .input("akunId", sql.Int, input.dicatatOlehAkunId)
+      .input("tanggalLabel", sql.Date, tanggalLabel)
+      .input("shift", sql.TinyInt, shift)
+      .query(`
+        INSERT INTO DashboardProduksiBatch (MesinID, PosisiID, TanggalProduksi, Qty10KG, SisaQty10KG, DicatatOlehAkunID, TanggalLabel, Shift, JamPanen, KualitasID)
+        OUTPUT INSERTED.BatchID
+        VALUES (@mesinId, @posisiId, GETDATE(), @qty10, @qty10, @akunId, @tanggalLabel, @shift, NULL, NULL)
+      `);
+    const batchId = insertResult.recordset[0].BatchID as number;
+
+    const capacityCheck = await new sql.Request(transaction)
+      .input("posisiId", sql.Int, input.posisiId)
+      .query(`
+        SELECT ISNULL(SUM(SisaQty10KG), 0) AS TotalSisa
+        FROM DashboardProduksiBatch
+        WHERE PosisiID = @posisiId AND IsDeleted = 0 AND SisaQty10KG > 0
+      `);
+    const totalSisa = capacityCheck.recordset[0].TotalSisa as number;
+    if (totalSisa > KAPASITAS_PALLET_10KG) {
+      throw new AppError(`Kapasitas pallet ini penuh -- total jadi ${totalSisa}/${KAPASITAS_PALLET_10KG} kantong 10kg.`);
+    }
+
+    await new sql.Request(transaction)
+      .input("batchId", sql.Int, batchId)
+      .input("qtyBaru", sql.Int, input.qty10KG)
+      .input("alasan", sql.NVarChar(500), input.alasan)
+      .input("akunId", sql.Int, input.dicatatOlehAkunId)
+      .query(`
+        INSERT INTO DashboardKoreksiStokPallet (Jenis, BatchID, QtyBaru, Alasan, DicatatOlehAkunID)
+        VALUES ('BASELINE', @batchId, @qtyBaru, @alasan, @akunId)
+      `);
 
     await transaction.commit();
     return batchId;

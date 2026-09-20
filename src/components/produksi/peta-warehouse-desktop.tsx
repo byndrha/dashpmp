@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { WAREHOUSE_ZONES } from "@/components/produksi/warehouse-layout";
 import { WarehouseCell } from "@/components/produksi/warehouse-cell";
 import { RiwayatPosisiListDesktop } from "@/components/produksi/riwayat-posisi-list-desktop";
 import { KAPASITAS_PALLET_10KG } from "@/lib/produksi-warehouse-constants";
 import type { PalletPosisiRow } from "@/lib/queries/produksi-warehouse";
+import type { MesinRow } from "@/lib/queries/produksi-mesin";
+import { createBatchBaselineAction } from "@/app/mkesindo/produksi/actions";
 
 // Dipindah ke BAWAH LUAR kotak peta (sejajar Pintu Geser) dan dibuat grid
 // 2 kolom x 2 baris sesuai permintaan user 2026-09-19 -- dirender di
@@ -36,7 +39,7 @@ export function WarehouseLegend() {
   );
 }
 
-export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) {
+export function PetaWarehouseDesktop({ posisi, mesinList }: { posisi: PalletPosisiRow[]; mesinList: MesinRow[] }) {
   // Stores just the id, not the row itself -- so the summary below (Terisi
   // X/120, batch count) always reflects the LATEST posisi prop after an
   // Ubah/Hapus in RiwayatPosisiListDesktop triggers a server refresh,
@@ -44,6 +47,34 @@ export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) 
   const [selectedPosisiId, setSelectedPosisiId] = useState<number | null>(null);
   const byKode = new Map(posisi.map((p) => [p.Kode, p]));
   const selected = selectedPosisiId != null ? (posisi.find((p) => p.PosisiID === selectedPosisiId) ?? null) : null;
+
+  const [showBaselineForm, setShowBaselineForm] = useState(false);
+  const [baselineMesinId, setBaselineMesinId] = useState<number | "">("");
+  const [baselineQty, setBaselineQty] = useState("");
+  const [baselineAlasan, setBaselineAlasan] = useState("");
+  const [baselineError, setBaselineError] = useState<string | null>(null);
+  const [baselinePending, startBaselineTransition] = useTransition();
+
+  function handleTambahBaseline() {
+    if (!selected) return;
+    setBaselineError(null);
+    startBaselineTransition(async () => {
+      const result = await createBatchBaselineAction(
+        selected.PosisiID,
+        Number(baselineMesinId),
+        Number(baselineQty) || 0,
+        baselineAlasan.trim()
+      );
+      if (!result.success) {
+        setBaselineError(result.error);
+        return;
+      }
+      setShowBaselineForm(false);
+      setBaselineMesinId("");
+      setBaselineQty("");
+      setBaselineAlasan("");
+    });
+  }
 
   // Legenda harus selalu presis di tengah "Pintu Geser" berapa pun lebar
   // layar -- offset dari TEPI KANAN kotak tidak bisa dipakai karena kotak
@@ -175,6 +206,55 @@ export function PetaWarehouseDesktop({ posisi }: { posisi: PalletPosisiRow[] }) 
                 {selected.JumlahBatchAktif > 1 && ` — ${selected.JumlahBatchAktif} batch aktif`}
               </p>
             </div>
+            {!showBaselineForm ? (
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowBaselineForm(true)}>
+                + Tambah Stok Awal
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-1.5 rounded-md border border-border p-2.5">
+                <p className="text-xs font-semibold">Tambah Stok Awal</p>
+                <select
+                  className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                  value={baselineMesinId}
+                  onChange={(e) => setBaselineMesinId(e.target.value === "" ? "" : Number(e.target.value))}
+                >
+                  <option value="">Pilih Mesin</option>
+                  {mesinList.map((m) => (
+                    <option key={m.MesinID} value={m.MesinID}>
+                      {m.Nama}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  type="number"
+                  placeholder="Qty 10kg"
+                  value={baselineQty}
+                  onChange={(e) => setBaselineQty(e.target.value)}
+                  className="h-7 text-xs"
+                />
+                <Input
+                  type="text"
+                  placeholder="Alasan (wajib)"
+                  value={baselineAlasan}
+                  onChange={(e) => setBaselineAlasan(e.target.value)}
+                  className="h-7 text-xs"
+                />
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    className="h-7 flex-1 text-xs"
+                    disabled={baselinePending || !baselineMesinId || !baselineQty || !baselineAlasan.trim()}
+                    onClick={handleTambahBaseline}
+                  >
+                    Simpan
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowBaselineForm(false)}>
+                    Batal
+                  </Button>
+                </div>
+                {baselineError && <p className="text-[11px] text-destructive">{baselineError}</p>}
+              </div>
+            )}
           </div>
         )}
       </div>
