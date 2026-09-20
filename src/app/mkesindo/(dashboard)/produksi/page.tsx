@@ -12,6 +12,7 @@ import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-deskt
 import { KorelasiProduksiPenjualanPanel } from "@/components/produksi/korelasi-produksi-penjualan-panel";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
 import { JadwalDanRiwayatProduksi } from "@/components/produksi/jadwal-dan-riwayat-produksi";
+import { KoreksiSnapshotDialog } from "@/components/produksi/koreksi-snapshot-dialog";
 
 export const metadata: Metadata = { title: "Produksi" };
 
@@ -59,6 +60,9 @@ export default async function ProduksiPage() {
           "Jadwal Tim Produksi" di bawahnya. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_440px] lg:items-start">
         <div className="relative mb-16 min-w-0">
+          <div className="mb-2 flex justify-end">
+            <KoreksiSnapshotDialog />
+          </div>
           <PetaWarehouseDesktop posisi={posisi} mesinList={mesinList} />
           <div className="absolute inset-x-4 bottom-0 z-10 translate-y-1/2">
             <PanelMesin mesinList={mesinList} />

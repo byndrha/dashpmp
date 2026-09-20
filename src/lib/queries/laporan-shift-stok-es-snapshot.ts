@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { getNaiveWibNow } from "@/lib/business-date";
 import type { ShiftNumber } from "@/lib/report-shift";
+import { AppError } from "@/lib/action-result";
 
 // Total live sisa stok es (SUM SisaQty10KG across all active pallet
 // batches) — same query as getTotalStokEs10KG in aktivitas-produksi.ts and
@@ -69,3 +70,54 @@ export async function getSnapshotStokEs(tanggalUsaha: string, shift: ShiftNumber
 // Live total, exported for Task 7's "shift currently running" display path
 // (labeled "(live, belum final)" in the UI, per spec Bagian 4).
 export { hitungTotalSisaStokEsLive };
+
+// Perbaikan angka snapshot shift yang SUDAH final (bukan shift berjalan).
+// WAJIB UPDATE langsung baris yang sudah ada -- lihat WARNING di
+// catatSnapshotJikaBelumAda di atas: soft-delete+insert ulang akan bentrok
+// UQ_LaporanShiftStokEsSnapshot yang tidak difilter IsDeleted.
+export async function koreksiSnapshotStokEs(
+  tanggalUsaha: string,
+  shift: ShiftNumber,
+  qtyBaru: number,
+  alasan: string,
+  dicatatOlehAkunId: number
+): Promise<void> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const existing = await new sql.Request(transaction)
+      .input("t", sql.Date, tanggalUsaha)
+      .input("s", sql.TinyInt, shift)
+      .query(
+        `SELECT TotalSisaQty10KG FROM DashboardLaporanShiftStokEsSnapshot WITH (UPDLOCK, HOLDLOCK) WHERE TanggalUsaha = @t AND Shift = @s AND IsDeleted = 0`
+      );
+    const row = existing.recordset[0] as { TotalSisaQty10KG: number } | undefined;
+    if (!row) throw new AppError("Belum ada snapshot untuk shift ini -- tidak bisa dikoreksi.");
+
+    await new sql.Request(transaction)
+      .input("t", sql.Date, tanggalUsaha)
+      .input("s", sql.TinyInt, shift)
+      .input("total", sql.Decimal(18, 2), qtyBaru)
+      .query(
+        `UPDATE DashboardLaporanShiftStokEsSnapshot SET TotalSisaQty10KG = @total WHERE TanggalUsaha = @t AND Shift = @s AND IsDeleted = 0`
+      );
+
+    await new sql.Request(transaction)
+      .input("t", sql.Date, tanggalUsaha)
+      .input("s", sql.TinyInt, shift)
+      .input("qtyLama", sql.Int, row.TotalSisaQty10KG)
+      .input("qtyBaru", sql.Int, qtyBaru)
+      .input("alasan", sql.NVarChar(500), alasan)
+      .input("akunId", sql.Int, dicatatOlehAkunId)
+      .query(`
+        INSERT INTO DashboardKoreksiStokPallet (Jenis, TanggalUsaha, Shift, QtyLama, QtyBaru, Alasan, DicatatOlehAkunID)
+        VALUES ('SNAPSHOT', @t, @s, @qtyLama, @qtyBaru, @alasan, @akunId)
+      `);
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}

@@ -18,6 +18,7 @@ import {
   type CreateBatchBaselineInput,
   type BatchAktifRow,
 } from "@/lib/queries/produksi-warehouse";
+import { getSnapshotStokEs, koreksiSnapshotStokEs } from "@/lib/queries/laporan-shift-stok-es-snapshot";
 import {
   getDraftJadwalForProduksi,
   getAllDraftJadwalForProduksi,
@@ -240,6 +241,28 @@ export async function createBatchBaselineAction(
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
     return batchId;
+  });
+}
+
+export async function getSnapshotStokEsAction(tanggalUsaha: string, shift: ShiftNumber): Promise<ActionResult<number | null>> {
+  return runAction(async () => {
+    await requireProduksiAdmin();
+    return getSnapshotStokEs(tanggalUsaha, shift);
+  });
+}
+
+export async function koreksiSnapshotStokEsAction(
+  tanggalUsaha: string,
+  shift: ShiftNumber,
+  qtyBaru: number,
+  alasan: string
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireProduksiAdmin();
+    if (qtyBaru < 0) throw new AppError("Qty tidak boleh negatif.");
+    if (!alasan.trim()) throw new AppError("Isi alasan koreksi.");
+    await koreksiSnapshotStokEs(tanggalUsaha, shift, qtyBaru, alasan.trim(), Number(session.user.id));
+    revalidatePath("/mkesindo/produksi");
   });
 }
 
