@@ -362,6 +362,15 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // `then` discriminates which of the two handlers to resume since both
   // share this one piece of state.
   const [conflict, setConflict] = useState<{ info: ArmadaConflictInfo; jamJadwal: Date; then: "save" | "selesaiMuat" } | null>(null);
+  // Dialog kode ambil-alih (Task 4) -- ditampilkan sebelum handleMuat/
+  // handleSelesaiMuat yang sebenarnya jalan. pendingKodeSelesaiMuat
+  // disimpan terpisah dari state `conflict` di atas (yang juga dipakai
+  // jalur "save" yang tidak terkait kode sama sekali) supaya kode yang
+  // sudah diverifikasi tetap tersedia saat konflik armada di-"Lanjutkan".
+  const [showKodeDialog, setShowKodeDialog] = useState<"MULAI_MUAT" | "SELESAI_MUAT" | null>(null);
+  const [kodeInput, setKodeInput] = useState("");
+  const [kodeError, setKodeError] = useState<string | null>(null);
+  const [pendingKodeSelesaiMuat, setPendingKodeSelesaiMuat] = useState("");
   // Lets staff drop the map panel entirely (no Leaflet init, no OSRM wait) —
   // useful on a slow connection when all they need is the stop list/totals
   // to check or share, matching what's already in buildShareText.
@@ -709,13 +718,22 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // warehouse/FIFO records won't reflect what was actually shipped.
   function handleMuat() {
     if (jadwalId == null) return;
+    setKodeInput("");
+    setKodeError(null);
+    setShowKodeDialog("MULAI_MUAT");
+  }
+
+  function handleMuatDenganKode(kode: string) {
+    if (jadwalId == null) return;
     const targetId = jadwalId;
-    setError(null);
+    setKodeError(null);
     startTransition(async () => {
-      const result = await startMuatAction(targetId);
+      const result = await startMuatAction(targetId, kode);
       if (!result.success) {
-        if (jadwalIdRef.current === targetId) setError(result.error);
+        if (jadwalIdRef.current === targetId) setKodeError(result.error);
+        return;
       }
+      setShowKodeDialog(null);
     });
   }
 
@@ -738,7 +756,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // doSaveDriverTime, a successful save here continues on to
   // selesaiMuatAction and the invoice-printing loop — that's why this
   // isn't just a call to doSaveDriverTime.
-  function doSaveDriverTimeThenSelesaiMuat(targetId: number, jamJadwal: Date) {
+  function doSaveDriverTimeThenSelesaiMuat(targetId: number, jamJadwal: Date, kode: string) {
     startTransition(async () => {
       const driverTimeResult = await updateJadwalDriverTimeAction(
         targetId,
@@ -763,7 +781,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
         }
         return;
       }
-      const selesaiMuatResult = await selesaiMuatAction(targetId);
+      const selesaiMuatResult = await selesaiMuatAction(targetId, kode);
       if (!selesaiMuatResult.success) {
         if (jadwalIdRef.current === targetId) setError(selesaiMuatResult.error);
         return;
@@ -779,17 +797,26 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // state above and doSaveDriverTimeThenSelesaiMuat).
   function handleSelesaiMuat() {
     if (jadwalId == null || armadaId == null) return;
+    setKodeInput("");
+    setKodeError(null);
+    setShowKodeDialog("SELESAI_MUAT");
+  }
+
+  function handleSelesaiMuatDenganKode(kode: string) {
+    if (jadwalId == null || armadaId == null) return;
     const targetId = jadwalId;
     const jamJadwal = buildJamJadwal();
-    setError(null);
+    setKodeError(null);
     startTransition(async () => {
       const check = await checkArmadaConflictAction(armadaId, jamJadwal, totalQty, targetId);
       if (jadwalIdRef.current !== targetId) return;
+      setShowKodeDialog(null);
       if (check) {
+        setPendingKodeSelesaiMuat(kode);
         setConflict({ info: check, jamJadwal, then: "selesaiMuat" });
         return;
       }
-      doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal);
+      doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal, kode);
     });
   }
 
@@ -1635,11 +1662,45 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
               if (then === "save") {
                 doSaveDriverTime(targetId, jamJadwal);
               } else {
-                doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal);
+                doSaveDriverTimeThenSelesaiMuat(targetId, jamJadwal, pendingKodeSelesaiMuat);
               }
             }}
           />
         )}
+        <Dialog open={showKodeDialog != null} onOpenChange={(open) => !open && setShowKodeDialog(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Masukkan Kode Ambil-Alih</DialogTitle>
+              <DialogDescription>
+                Alur normal Mulai/Selesai Muat seharusnya lewat aplikasi produksi (Kepala Produksi/Wakilnya). Kode
+                ambil-alih didapat dari Manager, berlaku 3 menit dan hanya bisa dipakai sekali.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Kode 6 digit"
+              value={kodeInput}
+              onChange={(e) => setKodeInput(e.target.value)}
+            />
+            {kodeError && <p className="text-sm text-destructive">{kodeError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowKodeDialog(null)} disabled={pending}>
+                Batal
+              </Button>
+              <Button
+                disabled={pending || kodeInput.trim().length !== 6}
+                onClick={() => {
+                  if (showKodeDialog === "MULAI_MUAT") handleMuatDenganKode(kodeInput.trim());
+                  else if (showKodeDialog === "SELESAI_MUAT") handleSelesaiMuatDenganKode(kodeInput.trim());
+                }}
+              >
+                Konfirmasi
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

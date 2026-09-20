@@ -84,6 +84,7 @@ import {
   type SisaReturRow,
 } from "@/lib/queries/retur-resale";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
+import { verifikasiDanPakaiKodeAmbilAlih } from "@/lib/queries/kode-ambil-alih";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
   return runAction(async () => {
@@ -204,15 +205,22 @@ export async function mergeExternalDeliveriesAction(
   });
 }
 
-export async function startMuatAction(jadwalId: number): Promise<ActionResult<void>> {
+export async function startMuatAction(jadwalId: number, kode: string): Promise<ActionResult<void>> {
   return runAction(async () => {
+    const session = await requireModuleAccess("delivery");
+    await verifikasiDanPakaiKodeAmbilAlih(kode, Number(session.user.id), jadwalId, "MULAI_MUAT");
     await startMuat(jadwalId);
     revalidatePath("/mkesindo/delivery");
   });
 }
 
-export async function selesaiMuatAction(jadwalId: number): Promise<ActionResult<{ jadwalDetailId: number; invoiceToken: string }[]>> {
+export async function selesaiMuatAction(
+  jadwalId: number,
+  kode: string
+): Promise<ActionResult<{ jadwalDetailId: number; invoiceToken: string }[]>> {
   return runAction(async () => {
+    const session = await requireModuleAccess("delivery");
+    await verifikasiDanPakaiKodeAmbilAlih(kode, Number(session.user.id), jadwalId, "SELESAI_MUAT");
     const result = await selesaiMuat(jadwalId);
     revalidatePath("/mkesindo/delivery");
     return result;

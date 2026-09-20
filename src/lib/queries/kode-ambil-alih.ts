@@ -1,4 +1,5 @@
 import { getPgPool } from "@/lib/pg";
+import { AppError } from "@/lib/action-result";
 
 export interface KodeAmbilAlihAktif {
   kode: string;
@@ -80,4 +81,29 @@ export async function getRiwayatKodeAmbilAlih(limit = 20): Promise<RiwayatKodeAm
       dipakaiUntukAksi: row.dipakai_untuk_aksi,
     })
   );
+}
+
+// Klaim atomik terhadap baris PALING BARU dibuat saja -- ini yang membuat
+// "generate baru mengalahkan kode lama" bekerja tanpa kolom status
+// terpisah, dan mencegah kode yang sama dipakai dua kali oleh dua
+// permintaan bersamaan (UPDATE...WHERE...RETURNING, pola atomik yang
+// sama dipakai berulang kali di seluruh dashboard ini untuk klaim stok).
+export async function verifikasiDanPakaiKodeAmbilAlih(
+  kode: string,
+  dipakaiOlehAkunId: number,
+  jadwalId: number,
+  aksi: "MULAI_MUAT" | "SELESAI_MUAT"
+): Promise<void> {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `UPDATE kode_ambil_alih
+     SET dipakai_pada = now(), dipakai_oleh_akun_id = $1, dipakai_untuk_jadwal_id = $2, dipakai_untuk_aksi = $3
+     WHERE id = (SELECT id FROM kode_ambil_alih ORDER BY dibuat_pada DESC LIMIT 1)
+       AND kode = $4 AND dipakai_pada IS NULL AND kedaluwarsa_pada >= now()
+     RETURNING id`,
+    [dipakaiOlehAkunId, jadwalId, aksi, kode]
+  );
+  if (result.rows.length === 0) {
+    throw new AppError("Kode ambil-alih tidak valid, sudah dipakai, atau sudah kedaluwarsa.");
+  }
 }
