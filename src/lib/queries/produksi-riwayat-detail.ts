@@ -161,6 +161,19 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
     }
   }
 
+  const armadaByKualitasId = new Map<number, number>();
+  if (kualitasIds.length > 0) {
+    const armadaResult = await pool.request().query(`
+      SELECT KualitasID, SUM(Qty) AS TotalQty
+      FROM DashboardArmadaAlokasi
+      WHERE KualitasID IN (${kualitasIds.join(",")})
+      GROUP BY KualitasID
+    `);
+    for (const r of armadaResult.recordset as { KualitasID: number; TotalQty: number }[]) {
+      armadaByKualitasId.set(r.KualitasID, r.TotalQty);
+    }
+  }
+
   const timByTanggalShift = new Map<string, { timId: number; timNama: string }>();
   for (const r of jadwalResult.recordset as { TanggalUsaha: Date; Shift: ShiftNumber; TimID: number; TimNama: string }[]) {
     timByTanggalShift.set(`${r.TanggalUsaha.toISOString().slice(0, 10)}|${r.Shift}`, { timId: r.TimID, timNama: r.TimNama });
@@ -178,7 +191,9 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
     }
     const alokasiPallet = alokasiByKualitasId.get(r.KualitasID) ?? [];
     const totalTeralokasi =
-      alokasiPallet.reduce((sum, a) => sum + a.qty10KG, 0) + (takeAwayByKualitasId.get(r.KualitasID) ?? 0);
+      alokasiPallet.reduce((sum, a) => sum + a.qty10KG, 0) +
+      (takeAwayByKualitasId.get(r.KualitasID) ?? 0) +
+      (armadaByKualitasId.get(r.KualitasID) ?? 0);
     group.entries.push({
       kualitasId: r.KualitasID,
       waktu: r.Waktu,

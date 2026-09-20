@@ -29,9 +29,10 @@ export interface KualitasRow {
   // Qty10KG minus SUM(DashboardProduksiBatch.Qty10KG) already allocated to
   // any pallete under this KualitasID (IsDeleted = 0), plus SUM(Qty) already
   // allocated to TakeAway (DashboardTakeAwayAlokasi, SumberTipe = 'KUALITAS')
-  // -- null when Qty10KG itself is null (no ceiling to compute against, e.g.
-  // legacy rows). Never negative (floored at 0) even if over-allocated
-  // somehow slipped through before this check existed.
+  // and to Armada (DashboardArmadaAlokasi) -- null when Qty10KG itself is
+  // null (no ceiling to compute against, e.g. legacy rows). Never negative
+  // (floored at 0) even if over-allocated somehow slipped through before
+  // this check existed.
   SisaAlokasi: number | null;
 }
 
@@ -54,7 +55,8 @@ export async function getKualitasRiwayat(limit = 50): Promise<KualitasRow[]> {
       OUTER APPLY (
         SELECT
           ISNULL((SELECT SUM(b.Qty10KG) FROM DashboardProduksiBatch b WHERE b.KualitasID = k.KualitasID AND b.IsDeleted = 0), 0) +
-          ISNULL((SELECT SUM(ta.Qty) FROM DashboardTakeAwayAlokasi ta WHERE ta.KualitasID = k.KualitasID AND ta.SumberTipe = 'KUALITAS'), 0)
+          ISNULL((SELECT SUM(ta.Qty) FROM DashboardTakeAwayAlokasi ta WHERE ta.KualitasID = k.KualitasID AND ta.SumberTipe = 'KUALITAS'), 0) +
+          ISNULL((SELECT SUM(aa.Qty) FROM DashboardArmadaAlokasi aa WHERE aa.KualitasID = k.KualitasID), 0)
           AS TotalTeralokasi
       ) alok
       ORDER BY k.CreatedDate DESC
