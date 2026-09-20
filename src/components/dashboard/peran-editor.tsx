@@ -18,6 +18,7 @@ import {
   setPeranDriverAction,
   setPeranProduksiAction,
   setPeranOperasionalAction,
+  setPeranBolehGenerateKodeAmbilAlihAction,
 } from "@/app/grup/akun/peran/actions";
 
 function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
@@ -35,6 +36,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
   const [isDriver, setIsDriverState] = useState(peran.isDriver);
   const [isProduksi, setIsProduksiState] = useState(peran.isProduksi);
   const [isOperasional, setIsOperasionalState] = useState(peran.isOperasional);
+  const [bolehGenerateKodeAmbilAlih, setBolehGenerateKodeAmbilAlihState] = useState(peran.bolehGenerateKodeAmbilAlih);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -70,6 +72,11 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     setDirty(true);
   }
 
+  function toggleBolehGenerateKodeAmbilAlih() {
+    setBolehGenerateKodeAmbilAlihState((prev) => !prev);
+    setDirty(true);
+  }
+
   function handleSave() {
     setError(null);
     startTransition(async () => {
@@ -86,6 +93,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
         setPeranDriverAction(peran.id, isDriver),
         setPeranProduksiAction(peran.id, isProduksi),
         setPeranOperasionalAction(peran.id, isOperasional),
+        setPeranBolehGenerateKodeAmbilAlihAction(peran.id, bolehGenerateKodeAmbilAlih),
       ]);
       const failed = results.find((r) => !r.success);
       if (failed && !failed.success) {
@@ -178,6 +186,21 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
             <span className="block text-muted-foreground">
               Menandai akun sebagai Staf Operasional — dipakai untuk dropdown pemilihan di fitur lain (mis. Aktivitas
               Produksi), terpisah dari izin akses modul &quot;Laporan&quot;.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
+          <input
+            type="checkbox"
+            className="accent-primary"
+            checked={bolehGenerateKodeAmbilAlih}
+            onChange={toggleBolehGenerateKodeAmbilAlih}
+          />
+          <span>
+            Boleh Generate Kode Ambil-Alih
+            <span className="block text-muted-foreground">
+              Peran ini bisa generate kode ambil-alih untuk tombol Mulai/Selesai Muat manual di board Delivery (harus Manager
+              ke atas).
             </span>
           </span>
         </label>

@@ -17,6 +17,7 @@ declare module "next-auth" {
       isDriver: boolean;
       isProduksi: boolean;
       isOperasional: boolean;
+      bolehGenerateKodeAmbilAlih: boolean;
       canAksesInventaris: boolean;
       salesmanId: string | null;
       permissions: PermissionMap;
@@ -34,6 +35,7 @@ declare module "next-auth" {
     isDriver: boolean;
     isProduksi: boolean;
     isOperasional: boolean;
+    bolehGenerateKodeAmbilAlih: boolean;
     canAksesInventaris: boolean;
     salesmanId: string | null;
     permissions: PermissionMap;
@@ -52,6 +54,7 @@ declare module "next-auth/jwt" {
     isDriver: boolean;
     isProduksi: boolean;
     isOperasional: boolean;
+    bolehGenerateKodeAmbilAlih: boolean;
     canAksesInventaris: boolean;
     salesmanId: string | null;
     permissions: PermissionMap;

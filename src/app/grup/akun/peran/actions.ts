@@ -10,6 +10,7 @@ import {
   setPeranDriver,
   setPeranProduksi,
   setPeranOperasional,
+  setPeranBolehGenerateKodeAmbilAlih,
   listAllPeran,
 } from "@/lib/queries/akun";
 import type { ModuleKey } from "@/lib/permissions";
@@ -78,6 +79,14 @@ export async function setPeranOperasionalAction(peranId: number, isOperasional: 
   return runAction(async () => {
     await requireGrupAccess();
     await setPeranOperasional(peranId, isOperasional);
+    revalidatePath("/grup/akun/peran");
+  });
+}
+
+export async function setPeranBolehGenerateKodeAmbilAlihAction(peranId: number, boleh: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    await setPeranBolehGenerateKodeAmbilAlih(peranId, boleh);
     revalidatePath("/grup/akun/peran");
   });
 }

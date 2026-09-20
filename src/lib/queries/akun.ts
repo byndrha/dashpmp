@@ -21,6 +21,7 @@ export interface AkunAuthRow {
   isDriver: boolean;
   isProduksi: boolean;
   isOperasional: boolean;
+  bolehGenerateKodeAmbilAlih: boolean;
   canAksesInventaris: boolean;
   salesmanId: string | null;
   isActive: boolean;
@@ -37,6 +38,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
             COALESCE(r.is_driver, false) AS is_driver,
             COALESCE(r.is_produksi, false) AS is_produksi,
             COALESCE(r.is_operasional, false) AS is_operasional,
+            COALESCE(r.boleh_generate_kode_ambil_alih, false) AS boleh_generate_kode_ambil_alih,
             a.can_akses_inventaris,
             a.salesman_id,
             a.is_active, a.failed_login_count, a.locked_until
@@ -61,6 +63,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
     isDriver: row.is_driver,
     isProduksi: row.is_produksi,
     isOperasional: row.is_operasional,
+    bolehGenerateKodeAmbilAlih: row.boleh_generate_kode_ambil_alih,
     canAksesInventaris: row.can_akses_inventaris,
     salesmanId: row.salesman_id,
     isActive: row.is_active,
@@ -309,6 +312,7 @@ export interface PeranRow {
   isDriver: boolean;
   isProduksi: boolean;
   isOperasional: boolean;
+  bolehGenerateKodeAmbilAlih: boolean;
   akunCount: number;
 }
 
@@ -316,6 +320,7 @@ export async function listAllPeran(): Promise<PeranRow[]> {
   const pool = getPgPool();
   const result = await pool.query(`
     SELECT r.id, r.perusahaan_id, r.nama, r.is_super_admin, r.is_satpam, r.is_driver, r.is_produksi, r.is_operasional,
+           r.boleh_generate_kode_ambil_alih,
            (SELECT count(*) FROM akun a WHERE a.peran_id = r.id) AS akun_count
     FROM peran r
     ORDER BY r.perusahaan_id, r.is_super_admin DESC, r.nama
@@ -329,6 +334,7 @@ export async function listAllPeran(): Promise<PeranRow[]> {
     isDriver: row.is_driver,
     isProduksi: row.is_produksi,
     isOperasional: row.is_operasional,
+    bolehGenerateKodeAmbilAlih: row.boleh_generate_kode_ambil_alih,
     akunCount: Number(row.akun_count),
   }));
 }
@@ -395,6 +401,11 @@ export async function setPeranProduksi(peranId: number, isProduksi: boolean): Pr
 export async function setPeranOperasional(peranId: number, isOperasional: boolean): Promise<void> {
   const pool = getPgPool();
   await pool.query(`UPDATE peran SET is_operasional = $1 WHERE id = $2`, [isOperasional, peranId]);
+}
+
+export async function setPeranBolehGenerateKodeAmbilAlih(peranId: number, boleh: boolean): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE peran SET boleh_generate_kode_ambil_alih = $1 WHERE id = $2`, [boleh, peranId]);
 }
 
 // Cross-PT Inventaris access lives on akun itself (not peran) since it must

@@ -193,3 +193,15 @@ export async function requireProduksiAdmin() {
   }
   return session;
 }
+
+// Gerbang untuk fitur kode ambil-alih Mulai/Selesai Muat manual (Task 3 & 4
+// rencana ini) -- Manager ke atas, ditandai lewat peran.boleh_generate_kode_ambil_alih
+// (diatur di /grup/akun/peran), bukan role/isXxx flag tetap seperti gerbang lain.
+export async function requireManagerKeAtas() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!canAccessAllPT(session.user) && !session.user.bolehGenerateKodeAmbilAlih) {
+    redirect("/akses-ditolak");
+  }
+  return session;
+}
