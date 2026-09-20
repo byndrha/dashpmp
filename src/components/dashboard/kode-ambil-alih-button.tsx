@@ -22,6 +22,8 @@ function nowMs(): number {
   return Date.now();
 }
 
+const AKSI_LABEL: Record<string, string> = { MULAI_MUAT: "Mulai Muat", SELESAI_MUAT: "Selesai Muat" };
+
 export function KodeAmbilAlihButton() {
   const [open, setOpen] = useState(false);
   const [kodeAktif, setKodeAktif] = useState<{ kode: string; kedaluwarsaPada: string } | null | undefined>(undefined);
@@ -111,17 +113,19 @@ export function KodeAmbilAlihButton() {
             <p className="text-xs font-semibold text-muted-foreground">Riwayat Kode</p>
             <div className="flex max-h-48 flex-col gap-1 overflow-y-auto text-xs">
               {riwayat.length === 0 && <p className="text-muted-foreground">Belum ada riwayat.</p>}
-              {riwayat.map((r) => (
+              {riwayat.map((r, index) => (
                 <div key={r.id} className="flex flex-col border-b border-border py-1 last:border-b-0">
                   <span>
                     {r.kode} — dibuat {r.dibuatOlehNama} ({new Date(r.dibuatPada).toLocaleString("id-ID")})
                   </span>
                   <span className="text-muted-foreground">
                     {r.dipakaiPada
-                      ? `Dipakai ${r.dipakaiOlehNama} untuk ${r.dipakaiUntukAksi} (Jadwal #${r.dipakaiUntukJadwalId}) — ${new Date(r.dipakaiPada).toLocaleString("id-ID")}`
+                      ? `Dipakai ${r.dipakaiOlehNama} untuk ${AKSI_LABEL[r.dipakaiUntukAksi ?? ""] ?? r.dipakaiUntukAksi} (Jadwal #${r.dipakaiUntukJadwalId}) — ${new Date(r.dipakaiPada).toLocaleString("id-ID")}`
                       : new Date(r.kedaluwarsaPada).getTime() < nowMs()
                         ? "Kedaluwarsa, tidak terpakai"
-                        : "Masih aktif"}
+                        : index === 0
+                          ? "Masih aktif"
+                          : "Digantikan kode baru"}
                   </span>
                 </div>
               ))}
