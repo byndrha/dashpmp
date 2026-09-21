@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { formatDate, formatRupiah, formatDateWib, formatTimeWib } from "@/lib/format";
+import { formatDate, formatTime, formatRupiah } from "@/lib/format";
 import type { GLPostingHealthRow } from "@/lib/queries/gl-posting-health";
 import type { BacklogPreview, BacklogPostResult } from "@/lib/queries/gl-posting-backfill";
 import type { ActionResult } from "@/lib/action-result";
@@ -127,8 +127,17 @@ export function GLPostingHealthCard({ rows, bolehProses, onPreview, onPost, riwa
                       <p className="mt-0.5 whitespace-normal text-right text-[10px] text-muted-foreground">
                         {riwayatPerTanggal[r.tanggal].jumlahDokumen} dok. diposting manual oleh{" "}
                         {riwayatPerTanggal[r.tanggal].dipostingOlehNama} (
-                        {formatDateWib(riwayatPerTanggal[r.tanggal].dipostingPada)}{" "}
-                        {formatTimeWib(riwayatPerTanggal[r.tanggal].dipostingPada)})
+                        {/* dipostingPada berasal dari DipostingPada, kolom DEFAULT
+                            GETDATE() (bukan naive-WIB seperti TransDate-family) --
+                            server SQL Server ini genuinely UTC (lihat precedent di
+                            marketing-collection-attribution.ts:113-121 soal
+                            ReviewedAt), jadi nilainya TRUE UTC instant. Pakai
+                            formatDate/formatTime BIASA (bukan *Wib), yang tidak
+                            pin timeZone dan karenanya membaca timezone ambien --
+                            browser end user (WIB) di komponen client ini -- supaya
+                            konversi UTC->WIB terjadi secara otomatis dan benar. */}
+                        {formatDate(riwayatPerTanggal[r.tanggal].dipostingPada)}{" "}
+                        {formatTime(riwayatPerTanggal[r.tanggal].dipostingPada)})
                       </p>
                     )}
                   </TableCell>
