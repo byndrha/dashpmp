@@ -1,8 +1,7 @@
-import { AlertTriangle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatRupiah } from "@/lib/format";
 import type { GLPostingHealthRow } from "@/lib/queries/gl-posting-health";
 
 // Rasio dibuat vs ter-GL-posting hari itu -- >=95% dianggap normal (hijau),
@@ -23,12 +22,12 @@ const TONE_CLASS: Record<"ok" | "warn" | "bad", string> = {
   bad: "text-destructive font-semibold",
 };
 
-function RasioCell({ dibuat, posted }: { dibuat: number; posted: number }) {
+function RasioCell({ dibuat, posted, sublabel }: { dibuat: number; posted: number; sublabel?: string }) {
   const tone = rasioTone(dibuat, posted);
   const persen = dibuat === 0 ? null : Math.round((posted / dibuat) * 100);
   return (
     <TableCell className={cn("px-1.5 py-1.5 text-right text-xs tabular-nums", TONE_CLASS[tone])}>
-      {posted}/{dibuat}
+      {sublabel ?? `${posted}/${dibuat}`}
       {persen != null && <span className="ml-1 text-[10px]">({persen}%)</span>}
     </TableCell>
   );
@@ -39,20 +38,35 @@ export function GLPostingHealthCard({ rows }: { rows: GLPostingHealthRow[] }) {
     (r) => rasioTone(r.siDibuat, r.siPosted) === "bad" || rasioTone(r.doDibuat, r.doPosted) === "bad"
   );
 
+  const totalSIDibuat = rows.reduce((s, r) => s + r.siDibuat, 0);
+  const totalSIPosted = rows.reduce((s, r) => s + r.siPosted, 0);
+  const totalRpDibuat = rows.reduce((s, r) => s + r.siRupiahDibuat, 0);
+  const totalRpPosted = rows.reduce((s, r) => s + r.siRupiahPosted, 0);
+  const persenDok = totalSIDibuat === 0 ? 100 : Math.round((totalSIPosted / totalSIDibuat) * 100);
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <details className="group overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 ring-foreground/10 shadow-md">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2 font-heading text-base font-medium leading-snug">
           Kesehatan Posting GL (SI/DO)
-          {adaMasalah && <AlertTriangle className="size-4 text-destructive" />}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+          {adaMasalah && <AlertTriangle className="size-4 shrink-0 text-destructive" />}
+        </span>
+        <span className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="tabular-nums">
+            {totalSIPosted}/{totalSIDibuat} SI ({persenDok}%)
+          </span>
+          <span className="tabular-nums">
+            {formatRupiah(totalRpPosted)} / {formatRupiah(totalRpDibuat)}
+          </span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </span>
+      </summary>
+      <div className="px-4 pb-4">
         <p className="mb-2 text-xs text-muted-foreground">
           Membandingkan jumlah SalesInvoice/DeliveryOrder yang dibuat per hari terhadap jumlah yang
-          benar-benar ter-posting ke GeneralLedger pada hari yang sama. Rasio rendah berarti ada
-          dokumen yang belum masuk COA — segera periksa kalau tanda merah muncul beberapa hari
-          berturut-turut.
+          benar-benar ter-posting ke GeneralLedger pada hari yang sama, termasuk nilai Rupiah
+          Pendapatan yang seharusnya vs yang benar-benar masuk COA. Rasio rendah berarti ada dokumen
+          yang belum masuk COA — segera periksa kalau tanda merah muncul beberapa hari berturut-turut.
         </p>
         <div className="overflow-x-auto">
           <Table>
@@ -60,6 +74,7 @@ export function GLPostingHealthCard({ rows }: { rows: GLPostingHealthRow[] }) {
               <TableRow>
                 <TableHead className="h-7 px-1.5 text-[10px]">Tanggal</TableHead>
                 <TableHead className="h-7 px-1.5 text-right text-[10px]">SI Posted/Dibuat</TableHead>
+                <TableHead className="h-7 px-1.5 text-right text-[10px]">Pendapatan Ter-posting/Seharusnya (Rp)</TableHead>
                 <TableHead className="h-7 px-1.5 text-right text-[10px]">DO Posted/Dibuat</TableHead>
               </TableRow>
             </TableHeader>
@@ -68,13 +83,18 @@ export function GLPostingHealthCard({ rows }: { rows: GLPostingHealthRow[] }) {
                 <TableRow key={r.tanggal}>
                   <TableCell className="px-1.5 py-1.5 text-xs">{formatDate(r.tanggal)}</TableCell>
                   <RasioCell dibuat={r.siDibuat} posted={r.siPosted} />
+                  <RasioCell
+                    dibuat={r.siRupiahDibuat}
+                    posted={r.siRupiahPosted}
+                    sublabel={`${formatRupiah(r.siRupiahPosted)} / ${formatRupiah(r.siRupiahDibuat)}`}
+                  />
                   <RasioCell dibuat={r.doDibuat} posted={r.doPosted} />
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </details>
   );
 }
