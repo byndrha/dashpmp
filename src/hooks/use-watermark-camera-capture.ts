@@ -12,6 +12,10 @@ export interface UseWatermarkCameraCaptureOptions {
   label: string;
   active: boolean;
   onCapture: (result: WatermarkCaptureResult) => void;
+  // Default "environment" (kamera belakang) kalau tidak diberikan -- semua
+  // pemakai existing (Satpam Patroli/Tamu) tidak perlu berubah. Kunjungan
+  // Marketing mengoper "user" untuk slot foto tampak depan (selfie).
+  facingMode?: "environment" | "user";
 }
 
 export interface UseWatermarkCameraCaptureResult {
@@ -129,6 +133,7 @@ export function useWatermarkCameraCapture({
   label,
   active,
   onCapture,
+  facingMode = "environment",
 }: UseWatermarkCameraCaptureOptions): UseWatermarkCameraCaptureResult {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -149,7 +154,7 @@ export function useWatermarkCameraCapture({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" } })
+      .getUserMedia({ video: { facingMode } })
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -178,7 +183,7 @@ export function useWatermarkCameraCapture({
         streamRef.current = null;
       }
     };
-  }, [active, retryCount]);
+  }, [active, retryCount, facingMode]);
 
   function handleCapture() {
     const video = videoRef.current;
