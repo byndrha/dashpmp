@@ -6,6 +6,7 @@ import { getBalanceSheetDetail } from "@/lib/queries/balance-sheet";
 import { getCashFlowDetail } from "@/lib/queries/cash-flow";
 import { getCashFlowHarian, getCashFlowHarianHistory } from "@/lib/queries/cash-flow-harian";
 import { getHPPBersih } from "@/lib/queries/hpp-bersih";
+import { getGLPostingHealth } from "@/lib/queries/gl-posting-health";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { requireModuleAccess } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -25,6 +26,7 @@ import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
 import { CashFlowHarianPanel } from "@/components/dashboard/cash-flow-harian-panel";
 import { CashFlowHarianHistoryPanel } from "@/components/dashboard/cash-flow-harian-history-panel";
 import { HPPBersihPanel } from "@/components/dashboard/hpp-bersih-panel";
+import { GLPostingHealthCard } from "@/components/dashboard/gl-posting-health-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRupiah, formatPercent, formatDate } from "@/lib/format";
 
@@ -39,7 +41,7 @@ export default async function PnLPage({
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();
-  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian, cashFlowHarianHistory, hppBersih] =
+  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian, cashFlowHarianHistory, hppBersih, glPostingHealth] =
     await Promise.all([
       getPnL(filter),
       getBEP(filter),
@@ -49,6 +51,7 @@ export default async function PnLPage({
       getCashFlowHarian(cfDate),
       getCashFlowHarianHistory(),
       getHPPBersih(new Date().getUTCFullYear()),
+      getGLPostingHealth(getBusinessDateISO()),
     ]);
   const periodStart = new Date(filter.startDate);
   // filter.endDate is an exclusive boundary (start of the day *after* the
@@ -91,6 +94,8 @@ export default async function PnLPage({
           tone={pnl.LabaBersih >= 0 ? "positive" : "negative"}
         />
       </div>
+
+      <GLPostingHealthCard rows={glPostingHealth} />
 
       {/* Container query, not lg: — this page lives under the same
           @container/dashboard-main as Penjualan, so the split should react to
