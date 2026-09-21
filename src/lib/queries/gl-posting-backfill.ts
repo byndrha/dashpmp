@@ -20,6 +20,13 @@ export interface ComputedDoc {
   currencyId: string;
   rate: number;
   lines: GLLine[];
+  // Hanya terisi utk docType SALESINVOICE (VoucherNo DeliveryOrder induknya,
+  // sudah diresolusi oleh computeBacklogForDate). null utk DELIVERYORDER.
+  // Dipakai postBacklogForDate (fix round 1, Finding 1) utk memastikan SI
+  // tidak diposting kalau DO induknya DIRENCANAKAN diposting di run yang
+  // sama tapi ternyata GAGAL -- computeBacklogForDate sendiri hanya tahu
+  // rencana pra-posting (dipostingDiRunIni), bukan hasil aktual tiap DO.
+  parentDoVoucherNo: string | null;
 }
 
 export interface BacklogSkip {
@@ -460,6 +467,7 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
       currencyId: doc.currencyId,
       rate: doc.rate,
       lines: hasil.lines,
+      parentDoVoucherNo: null,
     });
   }
 
@@ -491,6 +499,13 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
       });
       continue;
     }
+    // Invariant: dipostingDiRunIni/sudahPunyaGL di atas hanya bisa true kalau
+    // doVoucherNo terisi (lihat definisi keduanya) -- guard ini murni utk
+    // menyempitkan tipe TS ke `string`, bukan jalur yang seharusnya tercapai.
+    if (!doVoucherNo) {
+      skipped.push({ voucherNo: doc.voucherNo, docType: "SALESINVOICE", documentId: doc.documentId, alasan: "DeliveryOrder induk tidak ditemukan" });
+      continue;
+    }
 
     const hasil = await hitungGLSalesInvoice(pool, doc, mapping);
     if ("alasan" in hasil) {
@@ -508,6 +523,7 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
       currencyId: doc.currencyId,
       rate: doc.rate,
       lines: hasil.lines,
+      parentDoVoucherNo: doVoucherNo,
     });
   }
 
@@ -541,8 +557,24 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
 // Format live: string angka, zero-padded ke 8 digit setelah menembus
 // 10.000.000 (mis. "01243198"), varchar(16) -- padStart(8) di bawah aman
 // jauh di bawah batas kolom.
+//
+// FIX ROUND 1, Finding 2 (code review): tanpa lock hint, dua TRANSAKSI
+// BERBEDA (dua dokumen berbeda) yang keduanya memanggil ini nyaris
+// bersamaan bisa sama-sama membaca MaxID yang SAMA di bawah READ COMMITTED
+// (tidak ada apa pun yang mencegahnya -- beda dari GeneralLedger.VoucherNo
+// yang di-guard idempotency-check WITH UPDLOCK/HOLDLOCK di postSatuDokumen,
+// MaxID di sini TIDAK punya guard apa pun sebelumnya) -- karena
+// GeneralLedger.ID tidak py constraint UNIQUE/PK, kedua transaksi akan
+// SUKSES insert ID yang identik utk voucher yang BERBEDA, diam-diam merusak
+// invarian "satu ID unik per voucher" yang dipakai laporan/join lain.
+// WITH (UPDLOCK, HOLDLOCK) di sini (pola sama dgn idempotency-check)
+// membuat transaksi kedua yang mencoba baca MaxID menunggu transaksi
+// pertama commit/rollback dulu -- menyerialkan langkah "baca MaxID" lintas
+// transaksi berbeda, mencegah dua dokumen berbeda mendapat ID yang sama.
+// Diverifikasi live (fix round 1): 2 dokumen BERBEDA diposting bersamaan
+// mendapat 2 ID BERBEDA, tidak ada collision -- lihat task-3-report.md.
 async function nextGeneralLedgerId(poolOrTx: sql.ConnectionPool | sql.Transaction): Promise<string> {
-  const result = await poolOrTx.request().query(`SELECT MAX(TRY_CAST(ID AS INT)) AS MaxID FROM GeneralLedger`);
+  const result = await poolOrTx.request().query(`SELECT MAX(TRY_CAST(ID AS INT)) AS MaxID FROM GeneralLedger WITH (UPDLOCK, HOLDLOCK)`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
@@ -677,13 +709,47 @@ export async function postBacklogForDate(tanggal: string, dipostingOlehAkunId: n
   const rencana = await computeBacklogForDate(tanggal);
   const tanggalProses = new Date().toISOString().slice(0, 10);
 
-  const urutan = [
-    ...rencana.postable.filter((d) => d.docType === "DELIVERYORDER"),
-    ...rencana.postable.filter((d) => d.docType === "SALESINVOICE"),
-  ];
+  const doDocs = rencana.postable.filter((d) => d.docType === "DELIVERYORDER");
+  const siDocs = rencana.postable.filter((d) => d.docType === "SALESINVOICE");
+
+  // FIX ROUND 1, Finding 1 (code review): computeBacklogForDate's
+  // `dipostingDiRunIni` cuma menandai bahwa DO induk sebuah SI DIRENCANAKAN
+  // ikut diposting di run ini (dicek SEBELUM posting apa pun mulai) -- itu
+  // TIDAK sama dengan "DO induk benar-benar berhasil ter-posting". Kalau
+  // postSatuDokumen utk DO induk itu GAGAL (mis. error DB di tengah jalan),
+  // tanpa pengecekan tambahan SI anaknya akan tetap diposting di bawah,
+  // menghasilkan kredit 1399 tanpa debit DO pasangannya yang pernah
+  // benar-benar tertulis -- 1399 tidak lagi balance utk pasangan itu.
+  // Fix: lacak VoucherNo DO yang BENAR-BENAR "POSTED" di run ini
+  // (doSuksesVoucherNos). Utk tiap SI: kalau DO induknya ada di daftar
+  // "direncanakan run ini" (doDirencanakanVoucherNos) TAPI TIDAK ada di
+  // daftar "sukses run ini", SI itu di-skip (GAGAL, tidak pernah masuk
+  // postSatuDokumen) -- DO induk yang SUDAH py GL SEBELUM run ini (tidak
+  // direncanakan run ini sama sekali, sesuai jaminan computeBacklogForDate)
+  // tetap aman diposting terlepas dari hasil run ini.
+  const doDirencanakanVoucherNos = new Set(doDocs.map((d) => d.voucherNo));
+  const doSuksesVoucherNos = new Set<string>();
 
   const hasilPerDokumen: BacklogPostResultItem[] = [];
-  for (const doc of urutan) {
+
+  for (const doc of doDocs) {
+    const hasil = await postSatuDokumen(pool, doc, dipostingOlehAkunId, tanggalProses);
+    hasilPerDokumen.push(hasil);
+    if (hasil.status === "POSTED") doSuksesVoucherNos.add(doc.voucherNo);
+  }
+
+  for (const doc of siDocs) {
+    const indukDirencanakan = doc.parentDoVoucherNo !== null && doDirencanakanVoucherNos.has(doc.parentDoVoucherNo);
+    const indukSukses = doc.parentDoVoucherNo !== null && doSuksesVoucherNos.has(doc.parentDoVoucherNo);
+    if (indukDirencanakan && !indukSukses) {
+      hasilPerDokumen.push({
+        voucherNo: doc.voucherNo,
+        docType: doc.docType,
+        status: "GAGAL",
+        alasan: "DeliveryOrder induk gagal diposting pada proses ini",
+      });
+      continue;
+    }
     hasilPerDokumen.push(await postSatuDokumen(pool, doc, dipostingOlehAkunId, tanggalProses));
   }
 
