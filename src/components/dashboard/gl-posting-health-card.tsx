@@ -107,7 +107,8 @@ export function GLPostingHealthCard({ rows, bolehProses, onPreview, onPost }: GL
                   />
                   <RasioCell dibuat={r.doDibuat} posted={r.doPosted} />
                   <TableCell className="px-1.5 py-1.5 text-right">
-                    {bolehProses && rasioTone(r.siDibuat, r.siPosted) !== "ok" && (
+                    {bolehProses &&
+                      (rasioTone(r.siDibuat, r.siPosted) !== "ok" || rasioTone(r.doDibuat, r.doPosted) !== "ok") && (
                       <Button
                         size="sm"
                         variant="outline"
