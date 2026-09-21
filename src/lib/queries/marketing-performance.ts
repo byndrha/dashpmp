@@ -63,6 +63,11 @@ export interface MarketingPerformanceData {
   // date" — backs the green-dot indicator on their aggregate row in Kinerja
   // Marketing. Same periodDays-length array shape as DailyQty.
   visitLogFilledByMarketing: Record<string, boolean[]>;
+  // Per-mitra, per-hari status kunjungan TERVERIFIKASI (GPS+foto) — independen
+  // dari visitLogFilledByMarketing di atas (itu per-Marketing aggregate untuk
+  // dot hijau di baris Marketing; ini per-(mitra,tanggal) untuk ikon centang
+  // di MitraDayCell/DayBox). Index sama persis dengan mitraDailyQty.
+  mitraTerverifikasiByDay: Record<string, boolean[]>;
 }
 
 // Kantong here counts a 5KG bag as half a kantong — same KANTONG_QTY_EXPR
@@ -157,7 +162,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       .input("rangeStart", sql.Date, rangeStart)
       .input("rangeEnd", sql.Date, rangeEnd)
       .query(`
-        SELECT DISTINCT BusinessPartnerID, LogDate
+        SELECT DISTINCT BusinessPartnerID, LogDate, IsTerverifikasi
         FROM DashboardMarketingVisitLog
         WHERE LogDate >= @rangeStart AND LogDate < @rangeEnd
           AND HasilKunjungan IS NOT NULL AND LTRIM(RTRIM(HasilKunjungan)) <> ''
@@ -252,15 +257,19 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   // (distinct BusinessPartnerID+LogDate pairs only), not a second
   // per-mitra resolution.
   const visitLogFilledByMarketing: Record<string, boolean[]> = {};
+  const mitraTerverifikasiByDay: Record<string, boolean[]> = {};
   for (const userId of new Set(resolvedMarketingByMitra.values())) {
     visitLogFilledByMarketing[userId] = new Array(periodDays).fill(false);
   }
-  for (const r of visitLogResult.recordset as { BusinessPartnerID: string; LogDate: string }[]) {
+  for (const id of resolvedMarketingByMitra.keys()) mitraTerverifikasiByDay[id] = new Array(periodDays).fill(false);
+
+  for (const r of visitLogResult.recordset as { BusinessPartnerID: string; LogDate: string; IsTerverifikasi: boolean }[]) {
     const marketingUserId = resolvedMarketingByMitra.get(r.BusinessPartnerID);
     if (!marketingUserId) continue;
     const dayIndex = Math.round((new Date(r.LogDate).getTime() - rangeStart.getTime()) / 86400000);
     if (dayIndex < 0 || dayIndex >= periodDays) continue;
     visitLogFilledByMarketing[marketingUserId][dayIndex] = true;
+    if (r.IsTerverifikasi) mitraTerverifikasiByDay[r.BusinessPartnerID][dayIndex] = true;
   }
 
   return {
@@ -271,5 +280,6 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     mitraDailyQty,
     allMitraByMarketing: Object.fromEntries(allMitraByMarketing),
     visitLogFilledByMarketing,
+    mitraTerverifikasiByDay,
   };
 }

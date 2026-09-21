@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, Star, Users, ChevronDown, Loader2, Search } from "lucide-react";
+import { ArrowUp, ArrowDown, Star, Users, ChevronDown, Loader2, Search, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,12 +129,14 @@ function MitraDayCell({
   prevQty,
   isPast,
   businessPartnerId,
+  isTerverifikasi,
 }: {
   dateISO: string;
   qty: number;
   prevQty: number | null;
   isPast: boolean;
   businessPartnerId: string;
+  isTerverifikasi: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -190,6 +192,11 @@ function MitraDayCell({
         }
       >
         {hasEntry && <span className="absolute top-1 right-1 size-1.5 rounded-full bg-primary" />}
+        {isTerverifikasi && (
+          <span title="Kunjungan terverifikasi (GPS + foto)" className="absolute top-0.5 right-0.5">
+            <CheckCircle2 className="size-3 fill-green-500 text-white" />
+          </span>
+        )}
         <span className="text-[9px] text-muted-foreground/60">{formatDayMonth(dateISO)}</span>
         <span className="font-semibold">{isPast ? formatQty(qty) : "-"}</span>
         {delta != null ? (
@@ -246,12 +253,14 @@ function MitraDayCell({
 function MitraPrioritasRow({
   mitra,
   dailyQty,
+  terverifikasiByDay,
   dates,
   todayISO,
   onMitraClick,
 }: {
   mitra: MarketingMitraAssignment;
   dailyQty: number[];
+  terverifikasiByDay: boolean[];
   dates: string[];
   todayISO: string;
   onMitraClick: (businessPartnerId: string) => void;
@@ -284,6 +293,7 @@ function MitraPrioritasRow({
             prevQty={i > 0 ? (dailyQty[i - 1] ?? 0) : null}
             isPast={dateISO <= todayISO}
             businessPartnerId={mitra.BusinessPartnerID}
+            isTerverifikasi={terverifikasiByDay[i] ?? false}
           />
         ))}
       </div>
@@ -297,12 +307,14 @@ function MitraPrioritasRow({
 function AllMitraRow({
   mitra,
   dailyQty,
+  terverifikasiByDay,
   dates,
   todayISO,
   onMitraClick,
 }: {
   mitra: MarketingScopeAllMitra;
   dailyQty: number[];
+  terverifikasiByDay: boolean[];
   dates: string[];
   todayISO: string;
   onMitraClick: (businessPartnerId: string) => void;
@@ -332,6 +344,7 @@ function AllMitraRow({
             prevQty={i > 0 ? (dailyQty[i - 1] ?? 0) : null}
             isPast={dateISO <= todayISO}
             businessPartnerId={mitra.BusinessPartnerID}
+            isTerverifikasi={terverifikasiByDay[i] ?? false}
           />
         ))}
       </div>
@@ -347,6 +360,7 @@ function MarketingCard({
   mitraPrioritas,
   allMitra,
   mitraDailyQty,
+  mitraTerverifikasiByDay,
   onMitraClick,
   forceOpen,
   dailyDelta,
@@ -361,6 +375,7 @@ function MarketingCard({
   mitraPrioritas: MarketingMitraAssignment[];
   allMitra: MarketingScopeAllMitra[];
   mitraDailyQty: Record<string, number[]>;
+  mitraTerverifikasiByDay: Record<string, boolean[]>;
   onMitraClick: (businessPartnerId: string) => void;
   // True while a mitra search is active and matched at least one mitra in
   // this Marketing's roster — forces both collapses open regardless of
@@ -500,6 +515,7 @@ function MarketingCard({
                   key={m.MarketingMitraID}
                   mitra={m}
                   dailyQty={mitraDailyQty[m.BusinessPartnerID] ?? []}
+                  terverifikasiByDay={mitraTerverifikasiByDay[m.BusinessPartnerID] ?? []}
                   dates={dates}
                   todayISO={todayISO}
                   onMitraClick={onMitraClick}
@@ -531,6 +547,7 @@ function MarketingCard({
                   key={m.BusinessPartnerID}
                   mitra={m}
                   dailyQty={mitraDailyQty[m.BusinessPartnerID] ?? []}
+                  terverifikasiByDay={mitraTerverifikasiByDay[m.BusinessPartnerID] ?? []}
                   dates={dates}
                   todayISO={todayISO}
                   onMitraClick={onMitraClick}
@@ -562,6 +579,7 @@ function MarketingCard({
                   key={m.BusinessPartnerID}
                   mitra={m}
                   dailyQty={mitraDailyQty[m.BusinessPartnerID] ?? []}
+                  terverifikasiByDay={mitraTerverifikasiByDay[m.BusinessPartnerID] ?? []}
                   dates={dates}
                   todayISO={todayISO}
                   onMitraClick={onMitraClick}
@@ -606,7 +624,7 @@ export function MarketingPerformancePanel({
   mitraAssignments: MarketingMitraAssignment[];
   initialTrendBundle: MarketingTrendBundle | null;
 }) {
-  const { cells, periodDays, rangeStartISO, todayISO, mitraDailyQty, allMitraByMarketing, visitLogFilledByMarketing } = data;
+  const { cells, periodDays, rangeStartISO, todayISO, mitraDailyQty, allMitraByMarketing, visitLogFilledByMarketing, mitraTerverifikasiByDay } = data;
   const [wilayahFilter, setWilayahFilter] = useState(ALL);
   const [kecamatanFilter, setKecamatanFilter] = useState(ALL);
   const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
@@ -915,6 +933,7 @@ export function MarketingPerformancePanel({
                   mitraPrioritas={mitraPrioritas}
                   allMitra={allMitra}
                   mitraDailyQty={mitraDailyQty}
+                  mitraTerverifikasiByDay={mitraTerverifikasiByDay}
                   onMitraClick={setDetailMitraId}
                   forceOpen={forceOpen}
                   dailyDelta={deltaPerDateByMarketing.get(r.MarketingUserID) ?? EMPTY_DELTA}
