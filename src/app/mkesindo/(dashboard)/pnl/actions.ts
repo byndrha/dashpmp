@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { requireManagerKeAtas } from "@/lib/require-access";
 import { setCOABudget } from "@/lib/queries/keuangan-detail";
 import {
   saveCashFlowDailyFigures,
@@ -9,6 +10,12 @@ import {
   deleteCashFlowExpense,
 } from "@/lib/queries/cash-flow-harian";
 import { getHPPBersih, type HPPBersihData } from "@/lib/queries/hpp-bersih";
+import {
+  computeBacklogForDate,
+  postBacklogForDate,
+  type BacklogPreview,
+  type BacklogPostResult,
+} from "@/lib/queries/gl-posting-backfill";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function saveCOABudgetAction(input: {
@@ -77,5 +84,21 @@ export async function getHPPBersihAction(year: number): Promise<ActionResult<HPP
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
     return getHPPBersih(year);
+  });
+}
+
+export async function previewGLBacklogAction(tanggal: string): Promise<ActionResult<BacklogPreview>> {
+  return runAction(async () => {
+    await requireManagerKeAtas();
+    return computeBacklogForDate(tanggal);
+  });
+}
+
+export async function postGLBacklogAction(tanggal: string): Promise<ActionResult<BacklogPostResult>> {
+  return runAction(async () => {
+    const session = await requireManagerKeAtas();
+    const result = await postBacklogForDate(tanggal, Number(session.user.id));
+    revalidatePath("/mkesindo/pnl");
+    return result;
   });
 }
