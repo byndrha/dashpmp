@@ -7,6 +7,8 @@ import { getCashFlowDetail } from "@/lib/queries/cash-flow";
 import { getCashFlowHarian, getCashFlowHarianHistory } from "@/lib/queries/cash-flow-harian";
 import { getHPPBersih } from "@/lib/queries/hpp-bersih";
 import { getGLPostingHealth } from "@/lib/queries/gl-posting-health";
+import { getBackfillRingkasanPerTanggal } from "@/lib/queries/gl-posting-backfill";
+import { getAkunNamaMap } from "@/lib/queries/akun";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { requireModuleAccess, canAccessAllPT } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
@@ -48,7 +50,22 @@ export default async function PnLPage({
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();
-  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian, cashFlowHarianHistory, hppBersih, glPostingHealth] =
+
+  // Jendela tanggal HARUS sama persis dengan yang dipakai getGLPostingHealth
+  // (todayISO, hari=30 default) di bawah -- lihat gl-posting-health.ts:
+  // endDate = todayISO + 1 hari (batas atas eksklusif), startDate = endDate
+  // dikurangi `hari` hari. Direplikasi di sini (bukan diimpor) karena
+  // getGLPostingHealth menghitungnya secara internal dan tidak
+  // mengekspornya -- kalau logikanya berubah di sana, ubah juga di sini.
+  const todayISOUntukBackfill = getBusinessDateISO();
+  const backfillEndDate = new Date(`${todayISOUntukBackfill}T00:00:00.000Z`);
+  backfillEndDate.setUTCDate(backfillEndDate.getUTCDate() + 1);
+  const backfillStartDate = new Date(backfillEndDate);
+  backfillStartDate.setUTCDate(backfillStartDate.getUTCDate() - 30);
+  const backfillStartISO = backfillStartDate.toISOString().slice(0, 10);
+  const backfillEndISO = backfillEndDate.toISOString().slice(0, 10);
+
+  const [pnl, bep, coaDetail, balanceSheet, cashFlow, cashFlowHarian, cashFlowHarianHistory, hppBersih, glPostingHealth, backfillRingkasan] =
     await Promise.all([
       getPnL(filter),
       getBEP(filter),
@@ -59,7 +76,19 @@ export default async function PnLPage({
       getCashFlowHarianHistory(),
       getHPPBersih(new Date().getUTCFullYear()),
       getGLPostingHealth(getBusinessDateISO()),
+      getBackfillRingkasanPerTanggal(backfillStartISO, backfillEndISO),
     ]);
+
+  const backfillAkunIds = Array.from(new Set(Array.from(backfillRingkasan.values()).map((v) => v.dipostingOlehAkunId)));
+  const backfillAkunNamaMap = await getAkunNamaMap(backfillAkunIds);
+  const riwayatPerTanggal: Record<string, { jumlahDokumen: number; dipostingOlehNama: string; dipostingPada: string }> = {};
+  for (const [tanggal, ringkasan] of backfillRingkasan) {
+    riwayatPerTanggal[tanggal] = {
+      jumlahDokumen: ringkasan.jumlahDokumen,
+      dipostingOlehNama: backfillAkunNamaMap.get(ringkasan.dipostingOlehAkunId) ?? "(akun tidak ditemukan)",
+      dipostingPada: ringkasan.dipostingPada,
+    };
+  }
   const periodStart = new Date(filter.startDate);
   // filter.endDate is an exclusive boundary (start of the day *after* the
   // selected period) — the balance sheet's actual "as of" cutoff is the day
@@ -107,6 +136,7 @@ export default async function PnLPage({
         bolehProses={bolehProsesGLBacklog}
         onPreview={previewGLBacklogAction}
         onPost={postGLBacklogAction}
+        riwayatPerTanggal={riwayatPerTanggal}
       />
 
       {/* Container query, not lg: — this page lives under the same

@@ -1,5 +1,6 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
+import { getNaiveWibTransDate } from "@/lib/business-date";
 
 export type DocType = "SALESINVOICE" | "DELIVERYORDER";
 
@@ -756,7 +757,15 @@ export async function postBacklogForDate(tanggal: string, dipostingOlehAkunId: n
   // tanggal yang sama tidak dijamin sepakat kalau ItemAverage berubah di
   // antara keduanya, tapi satu panggilan selalu konsisten secara internal).
   const rencana = await computeBacklogForDate(tanggal);
-  const tanggalProses = new Date().toISOString().slice(0, 10);
+  // FIX (Minor, whole-branch review): tanggalProses hanya dipakai sebagai
+  // tag kosmetik di Memo GL (tidak pernah dipakai untuk doc.transDate atau
+  // angka GL apa pun) -- tapi tetap harus ikut konvensi naive-WIB yang
+  // sudah dipakai semua penulisan tanggal lain di repo ini (lihat
+  // getNaiveWibTransDate), bukan new Date().toISOString() yang membaca
+  // kalender UTC server. Server yang berjalan UTC murni bisa salah satu
+  // hari dibanding WIB antara 00:00-07:00 WIB -- persis kelas bug yang
+  // sama seperti transdate-wib-utc-boundary-bug.
+  const tanggalProses = getNaiveWibTransDate().toISOString().slice(0, 10);
 
   const doDocs = rencana.postable.filter((d) => d.docType === "DELIVERYORDER");
   const siDocs = rencana.postable.filter((d) => d.docType === "SALESINVOICE");
@@ -809,4 +818,57 @@ export async function postBacklogForDate(tanggal: string, dipostingOlehAkunId: n
     jumlahPosted: hasilPerDokumen.filter((h) => h.status === "POSTED").length,
     jumlahGagal: hasilPerDokumen.filter((h) => h.status === "GAGAL").length,
   };
+}
+
+export interface BackfillRiwayatRingkasan {
+  jumlahDokumen: number;
+  dipostingOlehAkunId: number;
+  dipostingPada: string;
+}
+
+// Ringkasan per tanggal dari tabel audit trail Task 1 -- dipakai kartu
+// Kesehatan Posting GL untuk menampilkan "siapa & kapan" pada baris yang
+// sudah pernah diproses fitur ini, sesuai spec Bagian 3. Satu baris per
+// tanggal: total dokumen yang diposting fitur ini (bisa kurang dari total
+// backlog kalau baru sebagian tanggal itu diproses), plus akun & waktu dari
+// baris TERBARU (bukan daftar lengkap -- cukup untuk konteks ringkas di
+// tabel, bukan riwayat granular per dokumen).
+export async function getBackfillRingkasanPerTanggal(
+  tanggalMulai: string,
+  tanggalAkhir: string
+): Promise<Map<string, BackfillRiwayatRingkasan>> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("mulai", sql.Date, tanggalMulai)
+    .input("akhir", sql.Date, tanggalAkhir).query(`
+      WITH terurut AS (
+        SELECT CAST(TransDate AS DATE) AS tanggal, DipostingOlehAkunID, DipostingPada,
+               ROW_NUMBER() OVER (PARTITION BY CAST(TransDate AS DATE) ORDER BY DipostingPada DESC) AS rn
+        FROM DashboardGLPostingBackfill
+        WHERE TransDate >= @mulai AND TransDate < @akhir
+      )
+      SELECT
+        t.tanggal,
+        (SELECT COUNT(*) FROM DashboardGLPostingBackfill b WHERE CAST(b.TransDate AS DATE) = t.tanggal) AS jumlahDokumen,
+        t.DipostingOlehAkunID,
+        t.DipostingPada
+      FROM terurut t
+      WHERE t.rn = 1
+    `);
+
+  const map = new Map<string, BackfillRiwayatRingkasan>();
+  for (const row of result.recordset as {
+    tanggal: Date;
+    jumlahDokumen: number;
+    DipostingOlehAkunID: number;
+    DipostingPada: Date;
+  }[]) {
+    map.set(row.tanggal.toISOString().slice(0, 10), {
+      jumlahDokumen: row.jumlahDokumen,
+      dipostingOlehAkunId: row.DipostingOlehAkunID,
+      dipostingPada: row.DipostingPada.toISOString(),
+    });
+  }
+  return map;
 }

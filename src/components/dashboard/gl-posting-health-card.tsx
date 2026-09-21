@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { formatDate, formatRupiah } from "@/lib/format";
+import { formatDate, formatRupiah, formatDateWib, formatTimeWib } from "@/lib/format";
 import type { GLPostingHealthRow } from "@/lib/queries/gl-posting-health";
 import type { BacklogPreview, BacklogPostResult } from "@/lib/queries/gl-posting-backfill";
 import type { ActionResult } from "@/lib/action-result";
@@ -45,9 +45,14 @@ interface GLPostingHealthCardProps {
   bolehProses: boolean;
   onPreview: (tanggal: string) => Promise<ActionResult<BacklogPreview>>;
   onPost: (tanggal: string) => Promise<ActionResult<BacklogPostResult>>;
+  // Ringkasan "siapa & kapan" dari DashboardGLPostingBackfill (spec Bagian 3)
+  // untuk baris tanggal yang sudah pernah diproses fitur ini -- dari Server
+  // Component (getBackfillRingkasanPerTanggal + getAkunNamaMap di pnl/page.tsx),
+  // sudah diserialisasi jadi plain object (bukan Map) supaya bisa lewat props.
+  riwayatPerTanggal: Record<string, { jumlahDokumen: number; dipostingOlehNama: string; dipostingPada: string }>;
 }
 
-export function GLPostingHealthCard({ rows, bolehProses, onPreview, onPost }: GLPostingHealthCardProps) {
+export function GLPostingHealthCard({ rows, bolehProses, onPreview, onPost, riwayatPerTanggal }: GLPostingHealthCardProps) {
   const [tanggalDiproses, setTanggalDiproses] = useState<string | null>(null);
 
   const adaMasalah = rows.some(
@@ -117,6 +122,14 @@ export function GLPostingHealthCard({ rows, bolehProses, onPreview, onPost }: GL
                       >
                         Proses
                       </Button>
+                    )}
+                    {riwayatPerTanggal[r.tanggal] && (
+                      <p className="mt-0.5 whitespace-normal text-right text-[10px] text-muted-foreground">
+                        {riwayatPerTanggal[r.tanggal].jumlahDokumen} dok. diposting manual oleh{" "}
+                        {riwayatPerTanggal[r.tanggal].dipostingOlehNama} (
+                        {formatDateWib(riwayatPerTanggal[r.tanggal].dipostingPada)}{" "}
+                        {formatTimeWib(riwayatPerTanggal[r.tanggal].dipostingPada)})
+                      </p>
                     )}
                   </TableCell>
                 </TableRow>
