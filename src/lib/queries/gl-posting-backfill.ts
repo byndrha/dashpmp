@@ -51,25 +51,28 @@ const BATAS_DATA_NORMAL = "2026-09-12";
 // ItemID yang sama) supaya atribusi item->akun tidak ambigu, karena GL
 // mengagregasi baris multi-item yang berbagi akun menjadi satu baris.
 //
-// PENTING (ditemukan lewat validasi Step 6, 21 Sep 2026): sejumlah kecil
-// ItemID punya baris GL historis yang "nyasar" ke akun Pendapatan (4%) yang
-// BEDA dari mayoritas mutlak transaksinya -- contoh nyata: ItemID "019"
-// punya 177.985 baris ke akun 4001 vs cuma 2 baris ke akun 4003 (kemungkinan
-// koreksi/kesalahan input manual di ERP, bukan pola normal). Versi pertama
-// fungsi ini memakai MAX(CASE...) yang secara tidak sengaja memilih "4003"
-// (lebih besar secara string) padahal "4001" adalah akun yang BENAR --
-// menyebabkan 7/10 sample SalesInvoice pada pengecekan formula (Step 6 no.1)
-// tidak cocok dengan GL asli. Diperbaiki dengan memilih akun yang PALING
-// SERING muncul (mode) per ItemID, bukan MAX() -- setelah perbaikan ini,
-// 20/20 sample cocok persis. HppAccountNo & PersediaanAccountNo (Persediaan)
-// ternyata 100% konsisten per ItemID pada data ini (tidak ada ambiguitas),
-// tapi pola mode dipakai di ketiganya untuk konsisten & aman terhadap data
-// masa depan yang mungkin punya ambiguitas serupa.
+// PENTING (ditemukan lewat validasi Step 6, 21 Sep 2026, angka dikoreksi di
+// fix round 1 setelah code review -- lihat task-2-report.md untuk jejak
+// lengkap): sejumlah kecil ItemID punya baris GL historis yang "nyasar" ke
+// akun Pendapatan (4%) yang BEDA dari mayoritas mutlak transaksinya --
+// contoh nyata: ItemID "019" punya 177.985 baris ke akun 4001 vs cuma 2
+// baris ke akun 4003 (kemungkinan koreksi/kesalahan input manual di ERP,
+// bukan pola normal). Versi pertama fungsi ini memakai MAX(CASE...) yang
+// secara tidak sengaja memilih "4003" (lebih besar secara string) padahal
+// "4001" adalah akun yang BENAR -- pada run pertama validasi formula (20
+// dokumen acak), ini menyebabkan 11/20 cocok (9/10 SalesInvoice TIDAK
+// cocok, 0/10 DeliveryOrder gagal -- DeliveryOrder tidak kena bug ini
+// karena akun Persediaan ternyata 100% konsisten per ItemID, tidak ambigu).
+// Diperbaiki dua tahap: (1) pilih akun PALING SERING muncul (mode) per
+// ItemID bukan MAX(); (2) frekuensi dihitung dari COUNT(DISTINCT VoucherNo)
+// bukan COUNT(*) baris hasil JOIN, supaya voucher dengan >1 baris detail
+// untuk item yang sama tidak dihitung berlebih. Setelah kedua perbaikan:
+// 20/20 sample cocok pada run validasi ulang (lihat task-2-report.md).
 async function buildItemAccountMapping(pool: sql.ConnectionPool): Promise<Map<string, ItemAccountMapping>> {
   const pendapatan = await pool.request().input("batas", sql.Date, BATAS_DATA_NORMAL).query(`
     WITH Ranked AS (
       SELECT sid.ItemID, coa.AccountNo,
-             ROW_NUMBER() OVER (PARTITION BY sid.ItemID ORDER BY COUNT(*) DESC, coa.AccountNo ASC) AS rn
+             ROW_NUMBER() OVER (PARTITION BY sid.ItemID ORDER BY COUNT(DISTINCT si.VoucherNo) DESC, coa.AccountNo ASC) AS rn
       FROM SalesInvoice si
       JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
       JOIN GeneralLedger gl ON gl.VoucherNo = si.VoucherNo AND gl.[Type] = 'SALESINVOICE'
@@ -88,7 +91,7 @@ async function buildItemAccountMapping(pool: sql.ConnectionPool): Promise<Map<st
   const hpp = await pool.request().input("batas", sql.Date, BATAS_DATA_NORMAL).query(`
     WITH Ranked AS (
       SELECT sid.ItemID, coa.AccountNo,
-             ROW_NUMBER() OVER (PARTITION BY sid.ItemID ORDER BY COUNT(*) DESC, coa.AccountNo ASC) AS rn
+             ROW_NUMBER() OVER (PARTITION BY sid.ItemID ORDER BY COUNT(DISTINCT si.VoucherNo) DESC, coa.AccountNo ASC) AS rn
       FROM SalesInvoice si
       JOIN SalesInvoiceDetail sid ON sid.SalesInvoiceID = si.SalesInvoiceID
       JOIN GeneralLedger gl ON gl.VoucherNo = si.VoucherNo AND gl.[Type] = 'SALESINVOICE'
@@ -107,7 +110,7 @@ async function buildItemAccountMapping(pool: sql.ConnectionPool): Promise<Map<st
   const persediaan = await pool.request().input("batas", sql.Date, BATAS_DATA_NORMAL).query(`
     WITH Ranked AS (
       SELECT dod.ItemID, coa.AccountNo,
-             ROW_NUMBER() OVER (PARTITION BY dod.ItemID ORDER BY COUNT(*) DESC, coa.AccountNo ASC) AS rn
+             ROW_NUMBER() OVER (PARTITION BY dod.ItemID ORDER BY COUNT(DISTINCT do1.VoucherNo) DESC, coa.AccountNo ASC) AS rn
       FROM DeliveryOrder do1
       JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do1.DeliveryOrderID
       JOIN GeneralLedger gl ON gl.VoucherNo = do1.VoucherNo AND gl.[Type] = 'DELIVERYORDER'
@@ -149,6 +152,20 @@ async function buildItemAccountMapping(pool: sql.ConnectionPool): Promise<Map<st
 
 // null berarti baris ItemAverage TIDAK ADA (bukan bernilai 0) -- pemanggil
 // wajib skip dokumen, tidak boleh fallback ke 0. Lihat Review Focus.
+//
+// CATATAN (ditemukan lewat validasi Step 6 fix round 1, 21 Sep 2026):
+// `ItemAverage` adalah SATU baris live per (ItemID, Year, Month) yang terus
+// ditimpa ERP sepanjang bulan berjalan (tidak ada riwayat/snapshot per
+// tanggal) -- diverifikasi live: ItemAverage untuk ItemID "0110"/Sep 2026
+// terakhir di-update 11 Sep 2026, sehingga membandingkan dokumen 4 Sep 2026
+// (tanggal jauh sebelum update terakhir) terhadap Average SEKARANG bisa
+// menunjukkan selisih kecil dari yang tercatat di GL asli waktu itu -- ini
+// artefak validasi historis (bukan bug formula): untuk backlog SUNGGUHAN,
+// baris DO dan SI yang sama-sama dihitung fresh oleh computeBacklogForDate
+// pada run yang sama akan SELALU memakai nilai Average yang identik untuk
+// ItemID/Year/Month yang sama, jadi drift ini tidak bisa terjadi di alur
+// produksi -- hanya muncul saat memvalidasi ulang dokumen historis yang
+// Average bulannya sudah bergerak sejak tanggal posting aslinya.
 async function getItemAverage(
   pool: sql.ConnectionPool,
   itemId: string,
@@ -353,6 +370,29 @@ async function hitungGLSalesInvoice(
   // computeBacklogForDate (Step 5), BUKAN di sini -- fungsi ini murni
   // menghitung baris GL dari detail item, dipanggil hanya setelah
   // computeBacklogForDate memastikan DO induknya sudah/akan ter-posting.
+
+  // PENTING (ditemukan lewat validasi Step 6 fix round 1, 21 Sep 2026):
+  // SalesReturn EKSPLISIT DI LUAR CAKUPAN formula ini (lihat spec Bagian 1,
+  // "Batasan cakupan"). Diverifikasi live: SalesInvoice yang DO induknya
+  // punya SalesReturn terkait ternyata GL voucher SI-nya sendiri diberi
+  // BARIS TAMBAHAN oleh ERP (pasangan wash 1399/Persediaan yang membalik
+  // sebagian biaya barang yang diretur) di luar 4 baris standar -- formula
+  // 4-baris ini TIDAK merepetisi baris tambahan itu (contoh nyata:
+  // MKE/SI/001256/2026-09/003/001, DO induknya 01241268 punya SalesReturn
+  // MKE/SR/000026/2026-09/003/001 -- GL asli 7 baris, formula ini
+  // menghasilkan net yang benar tapi bukan baris-per-baris yang sama).
+  // Frekuensi live: 15/1677 (~0,9%) voucher SI di jendela 1-11 Sep 2026
+  // punya >4 baris GL -- konsisten dengan skala kecil kasus SalesReturn.
+  // Daripada menulis GL yang salah/tidak lengkap untuk kasus ini, dokumen
+  // di-skip eksplisit (bukan ditebak), sama seperti pola skip lain di
+  // fungsi ini.
+  const returTerkait = await pool
+    .request()
+    .input("doId", sql.VarChar(16), doc.deliveryOrderId)
+    .query(`SELECT TOP 1 1 AS ada FROM SalesReturn WHERE DeliveryOrderID = @doId AND IsDeleted = 0`);
+  if (returTerkait.recordset.length > 0) {
+    return { alasan: "DeliveryOrder induk punya SalesReturn terkait -- di luar cakupan formula ini (lihat spec Bagian 1)" };
+  }
 
   const detail = await pool
     .request()
