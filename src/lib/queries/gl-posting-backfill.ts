@@ -558,26 +558,44 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
 // 10.000.000 (mis. "01243198"), varchar(16) -- padStart(8) di bawah aman
 // jauh di bawah batas kolom.
 //
-// FIX ROUND 1, Finding 2 (code review): tanpa lock hint, dua TRANSAKSI
-// BERBEDA (dua dokumen berbeda) yang keduanya memanggil ini nyaris
-// bersamaan bisa sama-sama membaca MaxID yang SAMA di bawah READ COMMITTED
-// (tidak ada apa pun yang mencegahnya -- beda dari GeneralLedger.VoucherNo
-// yang di-guard idempotency-check WITH UPDLOCK/HOLDLOCK di postSatuDokumen,
-// MaxID di sini TIDAK punya guard apa pun sebelumnya) -- karena
+// FIX ROUND 1, Finding 2 (code review): tanpa guard, dua TRANSAKSI BERBEDA
+// (dua dokumen berbeda) yang keduanya memanggil ini nyaris bersamaan bisa
+// sama-sama membaca MaxID yang SAMA di bawah READ COMMITTED -- karena
 // GeneralLedger.ID tidak py constraint UNIQUE/PK, kedua transaksi akan
 // SUKSES insert ID yang identik utk voucher yang BERBEDA, diam-diam merusak
 // invarian "satu ID unik per voucher" yang dipakai laporan/join lain.
-// WITH (UPDLOCK, HOLDLOCK) di sini (pola sama dgn idempotency-check)
-// membuat transaksi kedua yang mencoba baca MaxID menunggu transaksi
-// pertama commit/rollback dulu -- menyerialkan langkah "baca MaxID" lintas
-// transaksi berbeda, mencegah dua dokumen berbeda mendapat ID yang sama.
-// Diverifikasi live (fix round 1): 2 dokumen BERBEDA diposting bersamaan
-// mendapat 2 ID BERBEDA, tidak ada collision -- lihat task-3-report.md.
+//
+// FIX ROUND 2 (code review thd fix round 1): round 1 menambahkan
+// `WITH (UPDLOCK, HOLDLOCK)` di sini -- BENAR secara logika (serialisasi
+// lintas-transaksi), TAPI ini SELECT MAX(...) tanpa index atas 1,9 juta
+// baris live yang JUGA ditulis ERP desktop scr real-time -- UPDLOCK atas
+// scan penuh tabel sebesar itu nyaris pasti eskalasi ke page/table lock
+// (ambang default SQL Server ~5000 lock/statement), dan HOLDLOCK menahannya
+// sampai transaksi (bukan cuma statement) commit -- artinya SELURUH durasi
+// postSatuDokumen (idempotency-check + generate ID + semua insert GL/audit)
+// berisiko memblokir posting SalesPayment/dsb milik ERP desktop yang SAMA
+// SEKALI TIDAK PERNAH DIUJI. Diganti dgn `sp_getapplock` (lihat
+// APLLOCK_RESOURCE di postSatuDokumen) -- mutex bernama di subsistem lock
+// TERPISAH (`resource_type='APPLICATION'`), TIDAK PERNAH menyentuh baris
+// GeneralLedger sama sekali, jadi TIDAK BISA memblokir atau diblokir lock
+// baris/halaman/tabel milik ERP. Karena postSatuDokumen sekarang SELALU
+// memegang applock ini utk seluruh transaksinya (lihat sana), dan desain
+// posting-nya sequential (bukan konkuren dibatasi), applock SENDIRIAN sudah
+// cukup menyerialkan SEMUA panggilan dashpmp-vs-dashpmp ke fungsi ini --
+// table hint di SINI tidak diperlukan lagi, dikembalikan jadi plain SELECT.
 async function nextGeneralLedgerId(poolOrTx: sql.ConnectionPool | sql.Transaction): Promise<string> {
-  const result = await poolOrTx.request().query(`SELECT MAX(TRY_CAST(ID AS INT)) AS MaxID FROM GeneralLedger WITH (UPDLOCK, HOLDLOCK)`);
+  const result = await poolOrTx.request().query(`SELECT MAX(TRY_CAST(ID AS INT)) AS MaxID FROM GeneralLedger`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
+
+// Nama resource applock -- SATU nama tetap dipakai semua pemanggil
+// postSatuDokumen (lintas dokumen, lintas request) supaya semuanya benar2
+// saling eksklusi di titik kritis yang sama (idempotency-check + generate
+// ID GeneralLedger). Bukan per-VoucherNo krn justru race lintas-DOKUMEN
+// (Finding 2 round 1) yang perlu diserialkan, bukan cuma race per-dokumen
+// yang sama (itu levelnya sudah dijamin idempotency-check sendiri).
+const APPLOCK_RESOURCE = "dashpmp_gl_backfill_posting";
 
 const chartOfAccountIdCache = new Map<string, string>();
 async function getChartOfAccountId(poolOrTx: sql.ConnectionPool | sql.Transaction, accountNo: string): Promise<string> {
@@ -603,9 +621,23 @@ export interface BacklogPostResultItem {
 // Satu dokumen = satu transaksi MSSQL sendiri (bukan satu transaksi untuk
 // seluruh backlog tanggal itu) -- kegagalan satu dokumen tidak boleh
 // merollback dokumen lain yang sudah berhasil. Pengecekan ulang idempoten
-// (WITH UPDLOCK, HOLDLOCK) dilakukan DI DALAM transaksi ini, tepat sebelum
-// insert pertama, supaya dua pemanggilan bersamaan untuk dokumen yang sama
-// tidak bisa lolos keduanya (lihat Step 4c untuk verifikasi live race-nya).
+// dilakukan DI DALAM transaksi ini, tepat sebelum insert pertama, supaya
+// dua pemanggilan bersamaan untuk dokumen yang sama tidak bisa lolos
+// keduanya (lihat Step 4c untuk verifikasi live race-nya).
+//
+// FIX ROUND 2 (code review): keselamatan konkurensi (baik "dokumen sama
+// diposting 2x" maupun "2 dokumen beda rebutan ID GeneralLedger yang sama")
+// SEKARANG dijamin oleh sp_getapplock (@LockOwner='Transaction', lihat di
+// bawah) -- BUKAN lagi table hint WITH (UPDLOCK, HOLDLOCK) di query
+// GeneralLedger manapun (dihapus dari idempotency-check di bawah maupun
+// nextGeneralLedgerId). Alasan: applock adalah mutex bernama di subsistem
+// lock TERPISAH SAMA SEKALI dari row/page/table lock -- tidak pernah
+// menyentuh satu baris GeneralLedger pun, jadi tidak bisa memblokir/
+// diblokir oleh ERP desktop yang menulis ke tabel yang sama scr real-time.
+// UPDLOCK/HOLDLOCK atas SELECT tanpa index di tabel 1,9 juta baris live
+// yang dipakai bersama itu berisiko nyata eskalasi ke page/table lock yang
+// tertahan sepanjang durasi transaksi -- risiko ini belum pernah diuji thd
+// ERP sungguhan, jadi dihindari sepenuhnya, bukan cuma diminimalkan.
 async function postSatuDokumen(
   pool: sql.ConnectionPool,
   doc: ComputedDoc,
@@ -615,10 +647,27 @@ async function postSatuDokumen(
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
+    // Applock DULUAN, sebelum query GeneralLedger apa pun -- @LockOwner
+    // 'Transaction' brarti lock ini otomatis lepas saat transaksi ini
+    // commit ATAU rollback (termasuk lewat jalur catch di bawah), tidak
+    // perlu sp_releaseapplock manual. @LockTimeout 30 detik: pemanggil yang
+    // nunggu applock yang macet gagal bersih (exception tertangkap di
+    // catch, jadi GAGAL biasa), bukan hang selamanya.
+    await new sql.Request(transaction)
+      .input("resource", sql.VarChar(255), APPLOCK_RESOURCE)
+      .input("lockMode", sql.VarChar(32), "Exclusive")
+      .input("lockOwner", sql.VarChar(32), "Transaction")
+      .input("lockTimeout", sql.Int, 30000)
+      .query(`
+        DECLARE @result INT;
+        EXEC @result = sp_getapplock @Resource = @resource, @LockMode = @lockMode, @LockOwner = @lockOwner, @LockTimeout = @lockTimeout;
+        IF @result < 0 THROW 50000, 'Gagal memperoleh application lock untuk posting GL backfill', 1;
+      `);
+
     const cekUlang = await new sql.Request(transaction)
       .input("v", sql.VarChar(64), doc.voucherNo)
       .input("t", sql.VarChar(20), doc.docType)
-      .query(`SELECT TOP 1 1 AS ada FROM GeneralLedger WITH (UPDLOCK, HOLDLOCK) WHERE VoucherNo = @v AND [Type] = @t`);
+      .query(`SELECT TOP 1 1 AS ada FROM GeneralLedger WHERE VoucherNo = @v AND [Type] = @t`);
     if (cekUlang.recordset.length > 0) {
       await transaction.rollback();
       return { voucherNo: doc.voucherNo, docType: doc.docType, status: "GAGAL", alasan: "Sudah ter-posting (terdeteksi ulang saat commit)" };
