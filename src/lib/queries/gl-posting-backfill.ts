@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import { AppError } from "@/lib/action-result";
 
 export type DocType = "SALESINVOICE" | "DELIVERYORDER";
 
@@ -523,5 +524,174 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
     postable,
     skipped,
     totalPerAkun: Array.from(totalMap, ([accountNo, v]) => ({ accountNo, ...v })),
+  };
+}
+
+// ============================================================================
+// POSTING SUNGGUHAN (write, transaksional, idempoten, dengan trackback)
+// ============================================================================
+
+// GeneralLedger.ID BUKAN primary key sungguhan (tidak ada constraint di
+// database live, dikonfirmasi lewat INFORMATION_SCHEMA.TABLE_CONSTRAINTS --
+// hasilnya kosong) dan nilainya DIBAGI oleh semua baris satu voucher yang
+// sama (dikonfirmasi live: baris GeneralLedger untuk satu VoucherNo yang
+// sama semuanya punya ID yang identik, bukan unik per baris) -- karena itu
+// nextGeneralLedgerId() dipanggil SEKALI per dokumen (bukan per baris) dan
+// dipakai ulang untuk semua baris doc.lines-nya, meniru pola live ini persis.
+// Format live: string angka, zero-padded ke 8 digit setelah menembus
+// 10.000.000 (mis. "01243198"), varchar(16) -- padStart(8) di bawah aman
+// jauh di bawah batas kolom.
+async function nextGeneralLedgerId(poolOrTx: sql.ConnectionPool | sql.Transaction): Promise<string> {
+  const result = await poolOrTx.request().query(`SELECT MAX(TRY_CAST(ID AS INT)) AS MaxID FROM GeneralLedger`);
+  const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
+  return String(maxId + 1).padStart(8, "0");
+}
+
+const chartOfAccountIdCache = new Map<string, string>();
+async function getChartOfAccountId(poolOrTx: sql.ConnectionPool | sql.Transaction, accountNo: string): Promise<string> {
+  const cached = chartOfAccountIdCache.get(accountNo);
+  if (cached) return cached;
+  const result = await poolOrTx
+    .request()
+    .input("accountNo", sql.VarChar(20), accountNo)
+    .query(`SELECT TOP 1 ChartOfAccountID FROM ChartOfAccount WHERE AccountNo = @accountNo`);
+  const row = result.recordset[0] as { ChartOfAccountID: string } | undefined;
+  if (!row) throw new AppError(`ChartOfAccountID untuk akun ${accountNo} tidak ditemukan`);
+  chartOfAccountIdCache.set(accountNo, row.ChartOfAccountID);
+  return row.ChartOfAccountID;
+}
+
+export interface BacklogPostResultItem {
+  voucherNo: string;
+  docType: DocType;
+  status: "POSTED" | "GAGAL";
+  alasan?: string;
+}
+
+// Satu dokumen = satu transaksi MSSQL sendiri (bukan satu transaksi untuk
+// seluruh backlog tanggal itu) -- kegagalan satu dokumen tidak boleh
+// merollback dokumen lain yang sudah berhasil. Pengecekan ulang idempoten
+// (WITH UPDLOCK, HOLDLOCK) dilakukan DI DALAM transaksi ini, tepat sebelum
+// insert pertama, supaya dua pemanggilan bersamaan untuk dokumen yang sama
+// tidak bisa lolos keduanya (lihat Step 4c untuk verifikasi live race-nya).
+async function postSatuDokumen(
+  pool: sql.ConnectionPool,
+  doc: ComputedDoc,
+  dipostingOlehAkunId: number,
+  tanggalProses: string
+): Promise<BacklogPostResultItem> {
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const cekUlang = await new sql.Request(transaction)
+      .input("v", sql.VarChar(64), doc.voucherNo)
+      .input("t", sql.VarChar(20), doc.docType)
+      .query(`SELECT TOP 1 1 AS ada FROM GeneralLedger WITH (UPDLOCK, HOLDLOCK) WHERE VoucherNo = @v AND [Type] = @t`);
+    if (cekUlang.recordset.length > 0) {
+      await transaction.rollback();
+      return { voucherNo: doc.voucherNo, docType: doc.docType, status: "GAGAL", alasan: "Sudah ter-posting (terdeteksi ulang saat commit)" };
+    }
+
+    const glId = await nextGeneralLedgerId(transaction);
+    const memo = `[DASHPMP-BACKFILL] ${tanggalProses}`;
+    const insertHeader = await new sql.Request(transaction)
+      .input("voucherNo", sql.VarChar(64), doc.voucherNo)
+      .input("docType", sql.VarChar(20), doc.docType)
+      .input("documentId", sql.VarChar(16), doc.documentId)
+      .input("transDate", sql.DateTime, doc.transDate)
+      .input("akunId", sql.Int, dipostingOlehAkunId)
+      .query(`
+        INSERT INTO DashboardGLPostingBackfill (VoucherNo, DocType, DocumentID, TransDate, DipostingOlehAkunID)
+        OUTPUT INSERTED.BackfillID
+        VALUES (@voucherNo, @docType, @documentId, @transDate, @akunId)
+      `);
+    const backfillId = (insertHeader.recordset[0] as { BackfillID: number }).BackfillID;
+
+    for (const line of doc.lines) {
+      const chartOfAccountId = await getChartOfAccountId(transaction, line.accountNo);
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), glId)
+        .input("branchId", sql.VarChar(16), doc.branchId)
+        .input("departmentId", sql.VarChar(16), doc.departmentId)
+        .input("voucherNo", sql.VarChar(64), doc.voucherNo)
+        .input("transDate", sql.DateTime, doc.transDate)
+        .input("docType", sql.VarChar(20), doc.docType)
+        .input("chartOfAccountId", sql.VarChar(16), chartOfAccountId)
+        .input("debit", sql.Decimal(18, 6), line.debit)
+        .input("credit", sql.Decimal(18, 6), line.credit)
+        .input("memo", sql.VarChar(255), memo)
+        .input("businessPartnerId", sql.VarChar(16), doc.businessPartnerId)
+        .input("currencyId", sql.VarChar(16), doc.currencyId)
+        .input("rate", sql.Decimal(18, 6), doc.rate)
+        .query(`
+          INSERT INTO GeneralLedger
+            (ID, BranchID, DepartmentID, VoucherNo, TransDate, [Type], ChartOfAccountID, Debit, Credit, Memo, BusinessPartnerID, CurrencyID, Rate)
+          VALUES
+            (@id, @branchId, @departmentId, @voucherNo, @transDate, @docType, @chartOfAccountId, @debit, @credit, @memo, @businessPartnerId, @currencyId, @rate)
+        `);
+
+      await new sql.Request(transaction)
+        .input("backfillId", sql.Int, backfillId)
+        .input("glId", sql.VarChar(16), glId)
+        .input("accountNo", sql.VarChar(20), line.accountNo)
+        .input("debit", sql.Decimal(18, 6), line.debit)
+        .input("credit", sql.Decimal(18, 6), line.credit)
+        .query(`
+          INSERT INTO DashboardGLPostingBackfillDetail (BackfillID, GeneralLedgerID, AccountNo, Debit, Credit)
+          VALUES (@backfillId, @glId, @accountNo, @debit, @credit)
+        `);
+    }
+
+    await transaction.commit();
+    return { voucherNo: doc.voucherNo, docType: doc.docType, status: "POSTED" };
+  } catch (err) {
+    await transaction.rollback();
+    // Pesan mentah dari driver MSSQL (nama tabel/kolom, detail constraint,
+    // dsb) tidak boleh sampai ke UI -- log server-side, tampilkan pesan
+    // Indonesia generik ke Manager (pola sama seperti AppError di
+    // action-result.ts, yang justru dirancang mencegah kebocoran ini).
+    console.error(`Gagal posting ${doc.docType} ${doc.voucherNo}:`, err);
+    const alasan = "Terjadi kesalahan teknis saat menulis ke database -- lihat log server untuk detail.";
+    return { voucherNo: doc.voucherNo, docType: doc.docType, status: "GAGAL", alasan };
+  }
+}
+
+export interface BacklogPostResult {
+  tanggal: string;
+  hasilPerDokumen: BacklogPostResultItem[];
+  skipped: BacklogSkip[];
+  jumlahPosted: number;
+  jumlahGagal: number;
+}
+
+export async function postBacklogForDate(tanggal: string, dipostingOlehAkunId: number): Promise<BacklogPostResult> {
+  const pool = await getPool();
+  // Dihitung ulang FRESH di sini (bukan menerima preview dari client) --
+  // lihat spec: "tiap dokumen 1 transaksi sendiri" + mencegah state basi
+  // antara preview dan submit. Dipanggil TEPAT SEKALI untuk seluruh run ini
+  // -- setiap dokumen di bawah diposting dari snapshot `rencana` yang sama,
+  // TIDAK PERNAH dihitung ulang per dokumen (lihat catatan ItemAverage di
+  // getItemAverage: dua panggilan computeBacklogForDate terpisah untuk
+  // tanggal yang sama tidak dijamin sepakat kalau ItemAverage berubah di
+  // antara keduanya, tapi satu panggilan selalu konsisten secara internal).
+  const rencana = await computeBacklogForDate(tanggal);
+  const tanggalProses = new Date().toISOString().slice(0, 10);
+
+  const urutan = [
+    ...rencana.postable.filter((d) => d.docType === "DELIVERYORDER"),
+    ...rencana.postable.filter((d) => d.docType === "SALESINVOICE"),
+  ];
+
+  const hasilPerDokumen: BacklogPostResultItem[] = [];
+  for (const doc of urutan) {
+    hasilPerDokumen.push(await postSatuDokumen(pool, doc, dipostingOlehAkunId, tanggalProses));
+  }
+
+  return {
+    tanggal,
+    hasilPerDokumen,
+    skipped: rencana.skipped,
+    jumlahPosted: hasilPerDokumen.filter((h) => h.status === "POSTED").length,
+    jumlahGagal: hasilPerDokumen.filter((h) => h.status === "GAGAL").length,
   };
 }
