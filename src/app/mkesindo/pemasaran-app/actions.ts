@@ -72,15 +72,19 @@ export async function getKinerjaMarketingAction(): Promise<ActionResult<KinerjaM
       Harga: m.PriceLevel != null ? (priceByLevel.get(m.PriceLevel) ?? null) : null,
     }));
     const mitraDailyQty: Record<string, number[]> = {};
+    const mitraTerverifikasiByDay: Record<string, boolean[]> = {};
     for (const m of ownMitraRoster) {
       const qty = data.mitraDailyQty[m.BusinessPartnerID];
       if (qty) mitraDailyQty[m.BusinessPartnerID] = qty;
+      const terverifikasi = data.mitraTerverifikasiByDay[m.BusinessPartnerID];
+      if (terverifikasi) mitraTerverifikasiByDay[m.BusinessPartnerID] = terverifikasi;
     }
     return {
       ...data,
       cells: data.cells.filter((c) => c.MarketingUserID === session.user.id),
       allMitraByMarketing: { [session.user.id]: ownMitraRoster },
       mitraDailyQty,
+      mitraTerverifikasiByDay,
     };
   });
 }

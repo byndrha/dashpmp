@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Users, ArrowUp, ArrowDown, Search, List, Star } from "lucide-react";
+import { Loader2, Users, ArrowUp, ArrowDown, Search, List, Star, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ function DayBox({
   prevQty,
   isPast,
   hasEntry,
+  isTerverifikasi,
   onOpen,
 }: {
   dateISO: string;
@@ -76,6 +77,7 @@ function DayBox({
   prevQty: number | null;
   isPast: boolean;
   hasEntry: boolean;
+  isTerverifikasi: boolean;
   onOpen: () => void;
 }) {
   const delta = isPast && prevQty != null ? qty - prevQty : null;
@@ -87,10 +89,15 @@ function DayBox({
       disabled={!isPast}
       title={isPast ? "Klik untuk catat kunjungan" : "Belum terjadi"}
       className={cn(
-        "flex w-12 shrink-0 flex-col items-center gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums transition-colors disabled:cursor-default disabled:opacity-60",
+        "relative flex w-12 shrink-0 flex-col items-center gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums transition-colors disabled:cursor-default disabled:opacity-60",
         hasEntry ? "bg-primary/15" : "bg-muted"
       )}
     >
+      {isTerverifikasi && (
+        <span title="Kunjungan terverifikasi (GPS + foto)" className="absolute top-0.5 right-0.5">
+          <CheckCircle2 className="size-3 fill-green-500 text-white" />
+        </span>
+      )}
       <span className="text-[9px] text-muted-foreground">{dayLabel}</span>
       <span className="font-medium">{isPast ? formatQty(qty) : "-"}</span>
       {delta != null ? (
@@ -368,6 +375,7 @@ export function KinerjaMarketingSubTab() {
                   prevQty={i > 0 ? (daily[i - 1] ?? 0) : null}
                   isPast={dateISO <= todayISO}
                   hasEntry={hasEntry.has(`${m.BusinessPartnerID}|${dateISO}`)}
+                  isTerverifikasi={data!.mitraTerverifikasiByDay[m.BusinessPartnerID]?.[i] ?? false}
                   onOpen={() => openDay(m.BusinessPartnerID, m.Name, dateISO)}
                 />
               );
