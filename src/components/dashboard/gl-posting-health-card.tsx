@@ -1,8 +1,15 @@
+"use client";
+
+import { useState } from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRupiah } from "@/lib/format";
 import type { GLPostingHealthRow } from "@/lib/queries/gl-posting-health";
+import type { BacklogPreview, BacklogPostResult } from "@/lib/queries/gl-posting-backfill";
+import type { ActionResult } from "@/lib/action-result";
+import { GLPostingBackfillDialog } from "@/components/dashboard/gl-posting-backfill-dialog";
 
 // Rasio dibuat vs ter-GL-posting hari itu -- >=95% dianggap normal (hijau),
 // 50-94% mulai tersendat (kuning), <50% dianggap macet total (merah). Hari
@@ -33,7 +40,16 @@ function RasioCell({ dibuat, posted, sublabel }: { dibuat: number; posted: numbe
   );
 }
 
-export function GLPostingHealthCard({ rows }: { rows: GLPostingHealthRow[] }) {
+interface GLPostingHealthCardProps {
+  rows: GLPostingHealthRow[];
+  bolehProses: boolean;
+  onPreview: (tanggal: string) => Promise<ActionResult<BacklogPreview>>;
+  onPost: (tanggal: string) => Promise<ActionResult<BacklogPostResult>>;
+}
+
+export function GLPostingHealthCard({ rows, bolehProses, onPreview, onPost }: GLPostingHealthCardProps) {
+  const [tanggalDiproses, setTanggalDiproses] = useState<string | null>(null);
+
   const adaMasalah = rows.some(
     (r) => rasioTone(r.siDibuat, r.siPosted) === "bad" || rasioTone(r.doDibuat, r.doPosted) === "bad"
   );
@@ -76,6 +92,7 @@ export function GLPostingHealthCard({ rows }: { rows: GLPostingHealthRow[] }) {
                 <TableHead className="h-7 px-1.5 text-right text-[10px]">SI Posted/Dibuat</TableHead>
                 <TableHead className="h-7 px-1.5 text-right text-[10px]">Pendapatan Ter-posting/Seharusnya (Rp)</TableHead>
                 <TableHead className="h-7 px-1.5 text-right text-[10px]">DO Posted/Dibuat</TableHead>
+                <TableHead className="h-7 px-1.5 text-right text-[10px]">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -89,12 +106,38 @@ export function GLPostingHealthCard({ rows }: { rows: GLPostingHealthRow[] }) {
                     sublabel={`${formatRupiah(r.siRupiahPosted)} / ${formatRupiah(r.siRupiahDibuat)}`}
                   />
                   <RasioCell dibuat={r.doDibuat} posted={r.doPosted} />
+                  <TableCell className="px-1.5 py-1.5 text-right">
+                    {bolehProses && rasioTone(r.siDibuat, r.siPosted) !== "ok" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-[10px]"
+                        onClick={() => setTanggalDiproses(r.tanggal)}
+                      >
+                        Proses
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
       </div>
+
+      {tanggalDiproses && (
+        <GLPostingBackfillDialog
+          tanggal={tanggalDiproses}
+          open={tanggalDiproses !== null}
+          onOpenChange={(open) => !open && setTanggalDiproses(null)}
+          onPreview={onPreview}
+          onPost={onPost}
+          onSelesai={() => {
+            /* revalidatePath di postGLBacklogAction sudah memicu refresh data
+               server -- tidak perlu aksi tambahan di sini. */
+          }}
+        />
+      )}
     </details>
   );
 }

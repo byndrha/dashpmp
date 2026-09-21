@@ -8,7 +8,7 @@ import { getCashFlowHarian, getCashFlowHarianHistory } from "@/lib/queries/cash-
 import { getHPPBersih } from "@/lib/queries/hpp-bersih";
 import { getGLPostingHealth } from "@/lib/queries/gl-posting-health";
 import { getBusinessDateISO } from "@/lib/business-date";
-import { requireModuleAccess } from "@/lib/require-access";
+import { requireModuleAccess, canAccessAllPT } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -20,6 +20,8 @@ import {
   addCashFlowExpenseAction,
   deleteCashFlowExpenseAction,
   getHPPBersihAction,
+  previewGLBacklogAction,
+  postGLBacklogAction,
 } from "@/app/mkesindo/(dashboard)/pnl/actions";
 import { BalanceSheetTable } from "@/components/dashboard/balance-sheet-table";
 import { CashFlowPanel } from "@/components/dashboard/cash-flow-panel";
@@ -37,7 +39,12 @@ export default async function PnLPage({
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
-  await requireModuleAccess("pnl");
+  const session = await requireModuleAccess("pnl");
+  // Sama persis dengan gerbang tampil ikon kode ambil-alih di
+  // mkesindo/(dashboard)/layout.tsx -- disamakan sengaja karena Task 4's
+  // action (previewGLBacklogAction/postGLBacklogAction) digerbangi oleh
+  // requireManagerKeAtas(), yang punya kondisi akses yang sama.
+  const bolehProsesGLBacklog = canAccessAllPT(session.user) || session.user.bolehGenerateKodeAmbilAlih;
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();
@@ -95,7 +102,12 @@ export default async function PnLPage({
         />
       </div>
 
-      <GLPostingHealthCard rows={glPostingHealth} />
+      <GLPostingHealthCard
+        rows={glPostingHealth}
+        bolehProses={bolehProsesGLBacklog}
+        onPreview={previewGLBacklogAction}
+        onPost={postGLBacklogAction}
+      />
 
       {/* Container query, not lg: — this page lives under the same
           @container/dashboard-main as Penjualan, so the split should react to
