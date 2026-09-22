@@ -19,6 +19,7 @@ import {
   saveVisitLogAction,
 } from "@/app/mkesindo/pemasaran-app/actions";
 import type { KinerjaMarketingData } from "@/app/mkesindo/pemasaran-app/actions";
+import { subscribeKunjunganConfirmed } from "@/lib/kunjungan-refresh-bus";
 import type { MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 import type { PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
 import { MatriksPerformaTable, PangsaPasarTable, TrendExpandButton } from "@/components/dashboard/marketing-trend-tables";
@@ -173,20 +174,31 @@ export function KinerjaMarketingSubTab() {
 
   useEffect(() => {
     let cancelled = false;
-    getKinerjaMarketingAction().then((result) => {
-      if (cancelled) return;
-      if (!result.success) {
-        setError(result.error);
-        return;
-      }
-      setData(result.data);
-    });
+    function loadData() {
+      getKinerjaMarketingAction().then((result) => {
+        if (cancelled) return;
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
+        setData(result.data);
+      });
+    }
+    loadData();
     getKinerjaMarketingTrendAction(3).then((result) => {
       if (cancelled || !result.success) return;
       setTrend(result.data);
     });
+    // Refetch the checkmark/qty grid when TambahKunjunganSheet (a sibling in
+    // the tab shell, not a parent) confirms a visit — see
+    // kunjungan-refresh-bus.ts for why revalidatePath alone doesn't reach
+    // this already-mounted tab (final review Finding 2). Trend data isn't
+    // re-fetched here — it's the historical months-back view, not something
+    // a single just-confirmed visit changes.
+    const unsubscribe = subscribeKunjunganConfirmed(loadData);
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 

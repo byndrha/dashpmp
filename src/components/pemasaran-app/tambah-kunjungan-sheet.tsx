@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, X, Camera, RefreshCw, MapPin, Loader2 } from "lucide-react";
+import { Plus, X, Camera, RefreshCw, SwitchCamera, MapPin, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,37 +18,64 @@ import {
   confirmKunjunganAction,
 } from "@/app/mkesindo/pemasaran-app/actions";
 import type { MitraRow } from "@/lib/queries/mitra";
+import { notifyKunjunganConfirmed } from "@/lib/kunjungan-refresh-bus";
 
 const RADIUS_METERS = 100;
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// Fallback dipakai HANYA kalau geolocation gagal/ditolak saat masuk mode
+// pin-drop (lihat effect di bawah) — bukan lagi nilai yang selalu dipakai
+// (final review Finding 4).
+const FALLBACK_LAT = -7.8663;
+const FALLBACK_LNG = 111.4664;
 
 // Satu slot foto — kamera + preview + tombol ambil ulang, dipakai untuk
-// kedua slot (tampak depan & penagihan) dengan facingMode berbeda.
+// kedua slot (tampak depan & penagihan). `facingMode` sekarang hanya nilai
+// AWAL — kalau `allowToggle` true (khusus slot "Tampak Depan", per spec
+// Bagian 4: "opsi toggle kamera depan/belakang (untuk selfie)"), slot ini
+// punya state lokal sendiri dan menampilkan tombol flip; slot "Penagihan"
+// tetap terkunci ke facingMode prop-nya (final review Finding 5).
 function PhotoSlot({
   label,
   facingMode,
+  allowToggle = false,
   file,
   onCapture,
 }: {
   label: string;
   facingMode: "environment" | "user";
+  allowToggle?: boolean;
   file: File | null;
   onCapture: (file: File) => void;
 }) {
   const [active, setActive] = useState(false);
+  const [currentFacingMode, setCurrentFacingMode] = useState(facingMode);
   const { videoRef, error, capturing, retry, handleCapture } = useWatermarkCameraCapture({
     label,
     active,
-    facingMode,
+    facingMode: currentFacingMode,
     onCapture: (result) => {
       onCapture(result.file);
       setActive(false);
     },
   });
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+
+  function toggleFacingMode() {
+    setCurrentFacingMode((prev) => (prev === "user" ? "environment" : "user"));
+  }
+
+  const flipButton = allowToggle && (
+    <Button
+      type="button"
+      size="icon"
+      variant="secondary"
+      className="absolute top-2 right-2 size-8"
+      onClick={toggleFacingMode}
+      title="Ganti kamera depan/belakang"
+    >
+      <SwitchCamera className="size-3.5" />
+    </Button>
+  );
 
   if (file && previewUrl) {
     return (
@@ -69,6 +96,7 @@ function PhotoSlot({
         {active && (
           <div className="relative overflow-hidden rounded-md bg-black">
             <video ref={videoRef} autoPlay playsInline muted className="h-40 w-full object-cover" />
+            {flipButton}
             {error ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-2 text-center text-xs text-white">
                 {error}
@@ -102,6 +130,7 @@ function PhotoSlot({
       ) : (
         <div className="relative overflow-hidden rounded-md bg-black">
           <video ref={videoRef} autoPlay playsInline muted className="h-40 w-full object-cover" />
+          {flipButton}
           {error ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-2 text-center text-xs text-white">
               {error}
@@ -140,6 +169,13 @@ export function TambahKunjunganSheet() {
   const [hasilKunjungan, setHasilKunjungan] = useState("");
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Posisi awal peta pin-drop — GPS marketing saat itu (spec Bagian 3 poin
+  // 3), diisi lewat navigator.geolocation SEKALI (single-shot, bukan
+  // watchPosition — Global Constraint GPS di feature ini) waktu masuk mode
+  // pin-drop; FALLBACK_LAT/LNG cuma dipakai kalau geolocation gagal/ditolak
+  // (final review Finding 4).
+  const [pinInitialPos, setPinInitialPos] = useState<{ lat: number; lng: number }>({ lat: FALLBACK_LAT, lng: FALLBACK_LNG });
+  const pinGeoRequestedRef = useRef(false);
 
   function resetState() {
     setSelectedId(null);
@@ -152,6 +188,8 @@ export function TambahKunjunganSheet() {
     setFotoPenagihan(null);
     setHasilKunjungan("");
     setConfirmError(null);
+    setPinInitialPos({ lat: FALLBACK_LAT, lng: FALLBACK_LNG });
+    pinGeoRequestedRef.current = false;
   }
 
   function handleOpenChange(next: boolean) {
@@ -190,7 +228,27 @@ export function TambahKunjunganSheet() {
     setFotoPenagihan(null);
     setHasilKunjungan("");
     setConfirmError(null);
+    setPinInitialPos({ lat: FALLBACK_LAT, lng: FALLBACK_LNG });
+    pinGeoRequestedRef.current = false;
   }
+
+  // Sekali per mitra terpilih yang butuh pin-drop: minta GPS marketing saat
+  // ini untuk jadi posisi awal peta (bukan koordinat statis) — lihat
+  // pinInitialPos di atas. Guard pinGeoRequestedRef mencegah permintaan
+  // berulang tiap re-render selama pinDraft masih null.
+  useEffect(() => {
+    if (!needsPin || pinDraft || pinGeoRequestedRef.current) return;
+    pinGeoRequestedRef.current = true;
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setPinInitialPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {
+        // Gagal/ditolak — tetap pakai FALLBACK_LAT/LNG yang sudah jadi
+        // default state, tidak perlu diapa-apakan lagi di sini.
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [needsPin, pinDraft]);
 
   function handlePinConfirm() {
     if (!pinDraft || !selectedMitra) return;
@@ -260,9 +318,11 @@ export function TambahKunjunganSheet() {
           uploadPhoto(fotoDepan, "depan"),
           uploadPhoto(fotoPenagihan, "penagihan"),
         ]);
+        // dateISO TIDAK dikirim lagi dari sini — dihitung server-side di
+        // confirmKunjunganAction lewat getBusinessDateISO() (WIB-aware),
+        // bukan dari jam device client (final review Finding 3).
         const result = await confirmKunjunganAction({
           businessPartnerId: selectedMitra.BusinessPartnerID,
-          dateISO: todayISO(),
           hasilKunjungan: hasilKunjungan.trim(),
           fotoTampakDepanPath,
           fotoPenagihanPath,
@@ -274,6 +334,11 @@ export function TambahKunjunganSheet() {
           return;
         }
         toast.success("Kunjungan berhasil dikonfirmasi.");
+        // Beritahu Beranda/Kinerja Marketing (mounted sebagai sibling di tab
+        // shell, tetap hidup lewat pola keep-alive) supaya refetch data
+        // mereka sendiri — lihat kunjungan-refresh-bus.ts (final review
+        // Finding 2).
+        notifyKunjunganConfirmed();
         handleOpenChange(false);
       } catch (err) {
         setConfirmError(err instanceof Error ? err.message : "Gagal mengonfirmasi kunjungan");
@@ -337,8 +402,8 @@ export function TambahKunjunganSheet() {
                     <MapPin className="size-3.5" /> Mitra ini belum punya lokasi tersimpan. Tandai lokasi di peta:
                   </p>
                   <MitraLocationMap
-                    latitude={-7.8663}
-                    longitude={111.4664}
+                    latitude={pinInitialPos.lat}
+                    longitude={pinInitialPos.lng}
                     onChange={(lat, lng) => setPinDraft({ lat, lng })}
                     recenterKey={0}
                   />
@@ -382,7 +447,13 @@ export function TambahKunjunganSheet() {
 
                   {withinRadius && (
                     <div className="flex flex-col gap-4 border-t pt-4">
-                      <PhotoSlot label="Foto Tampak Depan Lokasi (bisa selfie)" facingMode="user" file={fotoDepan} onCapture={setFotoDepan} />
+                      <PhotoSlot
+                        label="Foto Tampak Depan Lokasi (bisa selfie)"
+                        facingMode="user"
+                        allowToggle
+                        file={fotoDepan}
+                        onCapture={setFotoDepan}
+                      />
                       <PhotoSlot label="Foto Hasil Penagihan/Penawaran" facingMode="environment" file={fotoPenagihan} onCapture={setFotoPenagihan} />
 
                       <div className="flex flex-col gap-1.5">

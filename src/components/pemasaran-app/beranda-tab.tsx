@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { RiwayatKunjunganDialog } from "@/components/pemasaran-app/riwayat-kunjungan-dialog";
 import { formatRupiah } from "@/lib/format";
 import { getBerandaDataAction, getWilayahDeliveryAction, setMitraNoteAction } from "@/app/mkesindo/pemasaran-app/actions";
+import { subscribeKunjunganConfirmed } from "@/lib/kunjungan-refresh-bus";
 import type { TopMitraPiutangRowWithKunjungan } from "@/app/mkesindo/pemasaran-app/actions";
 import type { SalesDayComparisonResult } from "@/lib/queries/sales-overview";
 import type { TopMitraPiutangRow } from "@/lib/queries/top-mitra-piutang";
@@ -51,17 +52,26 @@ export function BerandaTab() {
 
   useEffect(() => {
     let cancelled = false;
-    getBerandaDataAction().then((result) => {
-      if (cancelled) return;
-      if (!result.success) {
-        setError(result.error);
-        return;
-      }
-      setSales(result.data.sales);
-      setTopPiutang(result.data.topPiutang);
-    });
+    function load() {
+      getBerandaDataAction().then((result) => {
+        if (cancelled) return;
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
+        setSales(result.data.sales);
+        setTopPiutang(result.data.topPiutang);
+      });
+    }
+    load();
+    // Refetch when TambahKunjunganSheet (mounted as a sibling in the tab
+    // shell, not a parent) confirms a visit — see kunjungan-refresh-bus.ts
+    // for why revalidatePath alone doesn't reach this already-mounted tab
+    // (final review Finding 2).
+    const unsubscribe = subscribeKunjunganConfirmed(load);
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 

@@ -32,6 +32,8 @@ import { getPangsaPasarTrend, type PangsaPasarTrendData } from "@/lib/queries/pa
 import { saveVerifiedKunjungan, getVisitLogHistoryForMitra, getLatestVisitLogSnippets } from "@/lib/queries/marketing-visit-log";
 import { getAkunNamaMap } from "@/lib/queries/akun";
 import { haversineKm } from "@/lib/route-estimate";
+import { getBusinessDateISO } from "@/lib/business-date";
+import { revalidatePath } from "next/cache";
 
 function ownMitra(all: MitraRow[], marketingName: string): MitraRow[] {
   return all.filter((m) => m.MarketingNama === marketingName);
@@ -257,7 +259,6 @@ const KUNJUNGAN_RADIUS_METERS = 100;
 
 export async function confirmKunjunganAction(input: {
   businessPartnerId: string;
-  dateISO: string;
   hasilKunjungan: string;
   fotoTampakDepanPath: string;
   fotoPenagihanPath: string;
@@ -266,9 +267,21 @@ export async function confirmKunjunganAction(input: {
 }): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireMarketing();
+    // "Hari ini" (LogDate) dihitung SERVER-SIDE via getBusinessDateISO (WIB,
+    // rollover 14:00 — konvensi "today" yang sama persis dipakai
+    // getMarketingPerformance()'s todayISO), bukan dari input client seperti
+    // sebelumnya. dateISO dulu diterima dari client, dihitung lewat
+    // `new Date().toISOString().slice(0,10)` di tambah-kunjungan-sheet.tsx —
+    // itu tanggal kalender UTC, salah untuk WIB 00:00-06:59 (kembalikan
+    // tanggal KEMARIN), reinkarnasi bug WIB/UTC yang sudah diperbaiki di 8
+    // jalur tulis SO/DO/SI/SR lain (lihat getNaiveWibTransDate) tapi belum
+    // dibawa ke kunjungan ini (final review Finding 3). Menghitungnya di
+    // server juga menutup celah manipulasi jam device lewat DevTools, sama
+    // alasannya dengan validasi jarak di bawah.
+    const dateISO = getBusinessDateISO();
     // Ownership check sama seperti saveVisitLogAction — mencegah konfirmasi
     // kunjungan ke mitra di luar cakupan marketing yang login.
-    const roster = await getVisitLogStatusForMarketing(session.user.id, input.dateISO);
+    const roster = await getVisitLogStatusForMarketing(session.user.id, dateISO);
     if (!roster.some((r) => r.BusinessPartnerID === input.businessPartnerId)) {
       throw new AppError("Anda tidak memiliki akses ke mitra ini.");
     }
@@ -293,7 +306,7 @@ export async function confirmKunjunganAction(input: {
 
     await saveVerifiedKunjungan({
       businessPartnerId: input.businessPartnerId,
-      dateISO: input.dateISO,
+      dateISO,
       hasilKunjungan: input.hasilKunjungan,
       fotoTampakDepanPath: input.fotoTampakDepanPath,
       fotoPenagihanPath: input.fotoPenagihanPath,
@@ -301,6 +314,21 @@ export async function confirmKunjunganAction(input: {
       longitude: input.longitude,
       userId: session.user.id,
     });
+
+    // Task shell (pemasaran-app-tab-shell.tsx) keeps Beranda/Kinerja
+    // Marketing mounted client-side after first visit and they fetch their
+    // data via Server Actions straight from useEffect on mount — not via
+    // page-level RSC props — so revalidatePath alone does NOT reach their
+    // already-rendered state (it only invalidates the Router Cache for a
+    // path; nothing here re-triggers those effects). Kept anyway for the
+    // codebase-wide convention (every sibling mutating action in this file's
+    // family calls it — see produksi/actions.ts) and in case a full
+    // reload/direct navigation to these paths happens. The actual fix for
+    // the keep-alive staleness (final review Finding 2) is
+    // notifyKunjunganConfirmed() below, a small in-page pub/sub that Beranda
+    // and Kinerja Marketing subscribe to and refetch on.
+    revalidatePath("/mkesindo/pemasaran-app");
+    revalidatePath("/mkesindo/pemasaran-app/pemasaran");
   });
 }
 
@@ -310,8 +338,14 @@ export async function getVisitLogHistoryForMitraAction(businessPartnerId: string
   return runAction(async () => {
     const session = await requireMarketing();
     // Ownership check sama seperti getVisitLogDetailAction — hanya boleh
-    // lihat riwayat mitra milik sendiri.
-    const roster = await getVisitLogStatusForMarketing(session.user.id, new Date().toISOString().slice(0, 10));
+    // lihat riwayat mitra milik sendiri. dateISO di sini dipakai
+    // getVisitLogStatusForMarketing hanya untuk resolusi roster (bukan
+    // filter riwayat itu sendiri), tapi tetap harus WIB-aware — bukan
+    // `new Date().toISOString().slice(0,10)` (tanggal kalender UTC, salah
+    // untuk WIB 00:00-06:59, final review Finding 3) — biar konsisten
+    // dengan getBusinessDateISO's "today" di seluruh permukaan pemasaran-app
+    // ini (lihat todayISO field di getMarketingPerformance()).
+    const roster = await getVisitLogStatusForMarketing(session.user.id, getBusinessDateISO());
     if (!roster.some((r) => r.BusinessPartnerID === businessPartnerId)) {
       throw new AppError("Anda tidak memiliki akses ke mitra ini.");
     }
