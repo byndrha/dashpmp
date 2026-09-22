@@ -30,14 +30,20 @@ import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { getMarketingPerformanceTrend, type MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 import { getPangsaPasarTrend, type PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
 import { saveVerifiedKunjungan, getVisitLogHistoryForMitra, getLatestVisitLogSnippets } from "@/lib/queries/marketing-visit-log";
+import { getAkunNamaMap } from "@/lib/queries/akun";
 import { haversineKm } from "@/lib/route-estimate";
 
 function ownMitra(all: MitraRow[], marketingName: string): MitraRow[] {
   return all.filter((m) => m.MarketingNama === marketingName);
 }
 
+export type TopMitraPiutangRowWithKunjungan = TopMitraPiutangRow & {
+  LatestKunjunganText: string | null;
+  LatestKunjunganDate: string | null;
+};
+
 export async function getBerandaDataAction(): Promise<
-  ActionResult<{ sales: SalesDayComparisonResult; topPiutang: TopMitraPiutangRow[] }>
+  ActionResult<{ sales: SalesDayComparisonResult; topPiutang: TopMitraPiutangRowWithKunjungan[] }>
 > {
   return runAction(async () => {
     const session = await requireMarketing();
@@ -48,7 +54,13 @@ export async function getBerandaDataAction(): Promise<
       getMitraList(),
     ]);
     const ownIds = new Set(ownMitra(ownMitraList, marketingName).map((m) => m.BusinessPartnerID));
-    return { sales, topPiutang: allPiutang.filter((r) => ownIds.has(r.BusinessPartnerID)) };
+    const ownPiutang = allPiutang.filter((r) => ownIds.has(r.BusinessPartnerID));
+    const snippets = await getLatestVisitLogSnippets(ownPiutang.map((r) => r.BusinessPartnerID));
+    const topPiutang: TopMitraPiutangRowWithKunjungan[] = ownPiutang.map((r) => {
+      const snippet = snippets.get(r.BusinessPartnerID);
+      return { ...r, LatestKunjunganText: snippet?.hasilKunjungan ?? null, LatestKunjunganDate: snippet?.logDate ?? null };
+    });
+    return { sales, topPiutang };
   });
 }
 
@@ -289,5 +301,25 @@ export async function confirmKunjunganAction(input: {
       longitude: input.longitude,
       userId: session.user.id,
     });
+  });
+}
+
+export type VisitLogHistoryEntry = MarketingVisitLogEntry & { dicatatOlehNama: string };
+
+export async function getVisitLogHistoryForMitraAction(businessPartnerId: string): Promise<ActionResult<VisitLogHistoryEntry[]>> {
+  return runAction(async () => {
+    const session = await requireMarketing();
+    // Ownership check sama seperti getVisitLogDetailAction — hanya boleh
+    // lihat riwayat mitra milik sendiri.
+    const roster = await getVisitLogStatusForMarketing(session.user.id, new Date().toISOString().slice(0, 10));
+    if (!roster.some((r) => r.BusinessPartnerID === businessPartnerId)) {
+      throw new AppError("Anda tidak memiliki akses ke mitra ini.");
+    }
+    const history = await getVisitLogHistoryForMitra(businessPartnerId);
+    // CreatedByUserID -> nama akun, resolusi lintas-DB (Postgres akun,
+    // bukan MSSQL) — pola identik produksi-riwayat-detail.ts.
+    const akunIds = [...new Set(history.map((h) => Number(h.CreatedByUserID)))].filter((id) => !Number.isNaN(id));
+    const namaMap = await getAkunNamaMap(akunIds);
+    return history.map((h) => ({ ...h, dicatatOlehNama: namaMap.get(Number(h.CreatedByUserID)) ?? "Tidak diketahui" }));
   });
 }

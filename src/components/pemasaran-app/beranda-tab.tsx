@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { NotebookPen, PackageCheck, Wallet, Loader2 } from "lucide-react";
+import { NotebookPen, PackageCheck, Wallet, Loader2, MessageSquareText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { RiwayatKunjunganDialog } from "@/components/pemasaran-app/riwayat-kunjungan-dialog";
 import { formatRupiah } from "@/lib/format";
 import { getBerandaDataAction, getWilayahDeliveryAction, setMitraNoteAction } from "@/app/mkesindo/pemasaran-app/actions";
+import type { TopMitraPiutangRowWithKunjungan } from "@/app/mkesindo/pemasaran-app/actions";
 import type { SalesDayComparisonResult } from "@/lib/queries/sales-overview";
 import type { TopMitraPiutangRow } from "@/lib/queries/top-mitra-piutang";
 import type { PiutangStatus } from "@/lib/queries/aging";
@@ -28,7 +30,7 @@ const STATUS_BADGE_VARIANT: Record<PiutangStatus, string> = {
 
 export function BerandaTab() {
   const [sales, setSales] = useState<SalesDayComparisonResult | null>(null);
-  const [topPiutang, setTopPiutang] = useState<TopMitraPiutangRow[] | null>(null);
+  const [topPiutang, setTopPiutang] = useState<TopMitraPiutangRowWithKunjungan[] | null>(null);
   const [delivery, setDelivery] = useState<PemasaranWilayahDeliveryRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Kept separate from `error` on purpose: a failure fetching the Pengiriman
@@ -39,6 +41,7 @@ export function BerandaTab() {
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<TopMitraPiutangRow | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const [riwayatMitra, setRiwayatMitra] = useState<{ businessPartnerId: string; name: string } | null>(null);
   // See top-mitra-piutang-panel.tsx's editingNoteIdRef for why this exists:
   // read fresh after an await so a save request for a mitra the user has
   // since switched away from (or closed the dialog for) can't paint a stale
@@ -242,6 +245,16 @@ export function BerandaTab() {
                   <NotebookPen className="size-3.5 shrink-0" />
                   {r.TargetNote ? <span className="truncate">{r.TargetNote}</span> : <span>Tambah catatan</span>}
                 </button>
+                {r.LatestKunjunganText && (
+                  <button
+                    type="button"
+                    onClick={() => setRiwayatMitra({ businessPartnerId: r.BusinessPartnerID, name: r.CustomerName })}
+                    className="mt-1 flex items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-primary"
+                  >
+                    <MessageSquareText className="size-3.5 shrink-0" />
+                    <span className="truncate">{r.LatestKunjunganText}</span>
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -267,6 +280,12 @@ export function BerandaTab() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <RiwayatKunjunganDialog
+        businessPartnerId={riwayatMitra?.businessPartnerId ?? null}
+        mitraName={riwayatMitra?.name ?? ""}
+        onOpenChange={(open) => !open && setRiwayatMitra(null)}
+      />
     </div>
   );
 }
