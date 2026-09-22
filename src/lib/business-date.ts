@@ -143,6 +143,25 @@ export function getNaiveWibNow(now: Date = new Date()): Date {
   );
 }
 
+// Instant (as a "YYYY-MM-DDTHH:mm" string, straight off the WIB wall clock —
+// suitable directly as an <input type="datetime-local"> min/value attribute)
+// when the CURRENT business/sales period began. A business date always
+// covers the 24h window from (that date - 1) at ROLLOVER_HOUR:00 WIB through
+// that date's own ROLLOVER_HOUR:00 WIB — true regardless of which branch of
+// getBusinessDate's own rollover check produced it: subtracting exactly one
+// day from getBusinessDate(now) and pinning ROLLOVER_HOUR:00 lands on the
+// window's start either way. Used to bound "Kas Kecil" payment-date entry to
+// the sales period still open right now (Pembayaran Piutang, 2026-09-22).
+export function getBusinessPeriodStartWib(now: Date = new Date()): string {
+  const businessDate = getBusinessDate(now);
+  const start = new Date(businessDate.getTime() - 86_400_000);
+  const y = start.getUTCFullYear();
+  const m = String(start.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(start.getUTCDate()).padStart(2, "0");
+  const h = String(ROLLOVER_HOUR).padStart(2, "0");
+  return `${y}-${m}-${d}T${h}:00`;
+}
+
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000; // WIB has no DST — a fixed UTC+7.
 
 // Converts a "naive WIB" Date (raw UTC-component values ARE the WIB

@@ -22,6 +22,13 @@ export interface RecordPaymentInput {
   konteks: Konteks;
   allocations: PaymentAllocationInput[];
   notes?: string;
+  // "YYYY-MM-DDTHH:mm" dari <input type="datetime-local">, mewakili jam
+  // dinding WIB apa adanya (bukan UTC asli) -- dikonversi ke Date "naive
+  // WIB" di recordPayment() sebelum ditulis ke TransDate, konvensi yang
+  // sama dipakai semua kolom TransDate lain di sistem ini. Opsional:
+  // caller yang tidak mengirimkannya (driver-app) tetap default ke waktu
+  // sekarang, perilaku persis seperti sebelum field ini ada (2026-09-22).
+  tanggalWaktuBayar?: string;
 }
 
 export interface RecordPaymentResult {

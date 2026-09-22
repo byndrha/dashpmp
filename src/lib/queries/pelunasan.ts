@@ -2,6 +2,13 @@ import { getPool, sql } from "@/lib/db";
 import type { RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
 import { AppError } from "@/lib/action-result";
 import { getMetodePembayaranByKode } from "@/lib/queries/metode-pembayaran";
+import { getNaiveWibNow, getBusinessPeriodStartWib } from "@/lib/business-date";
+
+// Satu-satunya kode "Kas Kecil" yang benar-benar ada di metode_pembayaran
+// mkesindo (dicek langsung ke Postgres 2026-09-22) -- dibatasi ke periode
+// penjualan berjalan (bukan bebas seperti Kas Besar/Transfer/QRIS) karena
+// pencatatannya mengikuti rekonsiliasi kas harian, bukan momen realtime.
+const KAS_KECIL_KODE = "tunai-kecil";
 
 export type { PaymentAllocationInput, RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-types";
 
@@ -124,6 +131,26 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
     throw new AppError("Catatan wajib diisi untuk metode pembayaran ini.");
   }
 
+  // transDate ditulis sebagai Date "naive WIB" (angka mentahnya ADALAH jam
+  // dinding WIB, bukan UTC asli) -- konvensi yang sama dipakai semua kolom
+  // TransDate lain di sistem ini (lihat getNaiveWibTransDate). Menambahkan
+  // "Z" ke string datetime-local ("YYYY-MM-DDTHH:mm") membuat JS Date
+  // memperlakukan angka apa adanya sebagai komponen (bukan re-konversi zona
+  // waktu), persis yang dibutuhkan. Divalidasi ULANG di sini (bukan cuma
+  // percaya batas min/max di browser) -- baik "tidak boleh masa depan"
+  // (semua metode) maupun "harus dalam periode berjalan" (Kas Kecil saja).
+  const transDate = input.tanggalWaktuBayar ? new Date(`${input.tanggalWaktuBayar}:00.000Z`) : getNaiveWibNow();
+  const nowWib = getNaiveWibNow();
+  if (transDate.getTime() > nowWib.getTime()) {
+    throw new AppError("Tanggal & jam pembayaran tidak boleh di masa depan.");
+  }
+  if (input.metodePembayaranKode === KAS_KECIL_KODE) {
+    const periodStart = new Date(`${getBusinessPeriodStartWib()}:00.000Z`);
+    if (transDate.getTime() < periodStart.getTime()) {
+      throw new AppError("Untuk Kas Kecil, tanggal & jam pembayaran harus dalam periode penjualan yang sedang berjalan.");
+    }
+  }
+
   const pool = await getPool();
   const invoiceIds = allocations.map((a) => a.salesInvoiceId);
 
@@ -153,6 +180,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
     .request()
     .input("id", sql.VarChar(16), salesPaymentId)
     .input("voucherNo", sql.VarChar(128), voucherNo)
+    .input("transDate", sql.DateTime, transDate)
     .input("notes", sql.VarChar(512), input.notes ?? "")
     .input("bpId", sql.VarChar(16), input.businessPartnerId)
     .input("amount", sql.Decimal(23, 4), totalAmount)
@@ -165,7 +193,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
          CurrencyID, Rate, SalesmanID, ChartOfAccountDepositID, DepartmentID, IsAccountReceiveable,
          EDC, CardNo, ProjectID, SalesDepositID, SalesPaymentRequestID)
       VALUES
-        (@id, @voucherNo, GETDATE(), @notes, @bpId, @amount, NULL, 0, GETDATE(),
+        (@id, @voucherNo, @transDate, @notes, @bpId, @amount, NULL, 0, GETDATE(),
          @coaId, @branchId, '', '', '',
          '', 1, NULL, '', @departmentId, 0,
          '', '', NULL, NULL, NULL)

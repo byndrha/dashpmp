@@ -12,12 +12,19 @@ export function QrPaymentPanel({
   konteks,
   amount,
   onSubmit,
+  onMetodeChange,
 }: {
   perusahaanId: number;
   konteks: Konteks;
   amount: number;
   // Omit for konteks="publik" — that surface is read-only, no form.
   onSubmit?: (input: { metodeKode: string; catatan: string | null }) => Promise<void>;
+  // Fired whenever the selected metode kode changes (including the initial
+  // auto-selection on mount) — lets a caller react to which payment method
+  // is currently active before the user actually submits (e.g. Pelunasan's
+  // "Kas Kecil"-only date-range restriction, 2026-09-22). Optional: every
+  // pre-existing caller (driver-app, publik display) is unaffected.
+  onMetodeChange?: (kode: string | null) => void;
 }) {
   const [rows, setRows] = useState<MetodePembayaranRow[] | null>(null);
   const [selectedMetode, setSelectedMetode] = useState<MetodePembayaranRow["metode"] | null>(null);
@@ -35,10 +42,14 @@ export function QrPaymentPanel({
       setSelectedMetode(firstMetode);
       const firstRow = data.find((r) => r.metode === firstMetode) ?? null;
       setSelectedKode(firstRow?.kode ?? null);
+      onMetodeChange?.(firstRow?.kode ?? null);
     });
     return () => {
       cancelled = true;
     };
+    // onMetodeChange intentionally excluded below: an inline callback
+    // identity changing every render must not re-trigger this fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perusahaanId, konteks]);
 
   const metodeOptions = useMemo(() => Array.from(new Set((rows ?? []).map((r) => r.metode))), [rows]);
@@ -76,6 +87,7 @@ export function QrPaymentPanel({
           setSelectedMetode(v as MetodePembayaranRow["metode"]);
           const first = (rows ?? []).find((r) => r.metode === v);
           setSelectedKode(first?.kode ?? null);
+          onMetodeChange?.(first?.kode ?? null);
           // wajib_catatan exists precisely because there's no automatic
           // proof a Transfer/QRIS-Statis payment happened — the note IS
           // the audit trail, so a note typed on one channel must never
@@ -103,6 +115,7 @@ export function QrPaymentPanel({
                     variant={selectedKode === r.kode ? "default" : "outline"}
                     onClick={() => {
                       setSelectedKode(r.kode);
+                      onMetodeChange?.(r.kode);
                       setCatatan("");
                       setError(null);
                     }}

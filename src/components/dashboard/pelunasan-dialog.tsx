@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, HandCoins } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -12,10 +13,25 @@ import {
 } from "@/components/ui/dialog";
 import { QrPaymentPanel } from "@/components/dashboard/qr-payment-panel";
 import { formatRupiah, formatDate } from "@/lib/format";
+import { getNaiveWibNow, getBusinessPeriodStartWib } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { OutstandingInvoice } from "@/lib/queries/pelunasan";
 import { getOutstandingInvoicesAction, recordPaymentAction } from "@/app/mkesindo/(dashboard)/aging/actions";
 import { toast } from "sonner";
+
+// Satu-satunya kode "Kas Kecil" di metode_pembayaran mkesindo (lihat catatan
+// yang sama di pelunasan.ts) — satu-satunya metode yang tanggal/jam
+// bayarnya dibatasi ke periode penjualan berjalan, bukan bebas seperti Kas
+// Besar/Transfer/QRIS.
+const KAS_KECIL_KODE = "tunai-kecil";
+
+// "YYYY-MM-DDTHH:mm" pas untuk value/min/max <input type="datetime-local">
+// — getNaiveWibNow()'s raw UTC components ARE the WIB wall clock, jadi
+// slice ISO string-nya langsung dipakai apa adanya (bukan Date lokal
+// browser, yang bisa beda dari WIB kalau perangkat viewer di zona lain).
+function nowWibInputValue(): string {
+  return getNaiveWibNow().toISOString().slice(0, 16);
+}
 
 interface LineState {
   checked: boolean;
@@ -37,6 +53,8 @@ export function PelunasanDialog({
 }) {
   const [invoices, setInvoices] = useState<OutstandingInvoice[] | null>(null);
   const [lines, setLines] = useState<Record<string, LineState>>({});
+  const [selectedMetodeKode, setSelectedMetodeKode] = useState<string | null>(null);
+  const [tanggalWaktuBayar, setTanggalWaktuBayar] = useState(nowWibInputValue);
 
   useEffect(() => {
     if (!open) return;
@@ -45,6 +63,7 @@ export function PelunasanDialog({
     // clicked — not derivable from render since it's an async network call.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInvoices(null);
+    setTanggalWaktuBayar(nowWibInputValue());
     getOutstandingInvoicesAction(businessPartnerId).then((result) => {
       if (cancelled || !result.success) return;
       const rows = result.data;
@@ -57,6 +76,9 @@ export function PelunasanDialog({
       cancelled = true;
     };
   }, [open, businessPartnerId]);
+
+  const maxTanggalWaktu = nowWibInputValue();
+  const minTanggalWaktu = selectedMetodeKode === KAS_KECIL_KODE ? getBusinessPeriodStartWib() : undefined;
 
   function toggleLine(invoice: OutstandingInvoice) {
     setLines((prev) => ({
@@ -90,6 +112,7 @@ export function PelunasanDialog({
       metodePembayaranKode: input.metodeKode,
       notes: input.catatan ?? undefined,
       allocations: activeLines.map(([salesInvoiceId, l]) => ({ salesInvoiceId, amount: Number(l.amount) })),
+      tanggalWaktuBayar,
     });
     if (!result.success) {
       toast.error(result.error);
@@ -117,6 +140,26 @@ export function PelunasanDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          <div>
+            <Label htmlFor="tanggal-waktu-bayar" className="text-xs">
+              Tanggal &amp; Jam Pembayaran
+            </Label>
+            <Input
+              id="tanggal-waktu-bayar"
+              type="datetime-local"
+              value={tanggalWaktuBayar}
+              min={minTanggalWaktu}
+              max={maxTanggalWaktu}
+              onChange={(e) => setTanggalWaktuBayar(e.target.value)}
+              className="h-8 text-xs"
+            />
+            {selectedMetodeKode === KAS_KECIL_KODE && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Kas Kecil hanya bisa dicatat dalam periode penjualan yang sedang berjalan.
+              </p>
+            )}
+          </div>
+
           <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto rounded border p-2">
             {invoices === null && (
               <p className="py-6 text-center text-sm text-muted-foreground">Memuat invoice outstanding...</p>
@@ -190,6 +233,7 @@ export function PelunasanDialog({
               konteks="kasir"
               amount={totalDibayar}
               onSubmit={handlePaymentSubmit}
+              onMetodeChange={setSelectedMetodeKode}
             />
           )}
         </div>
