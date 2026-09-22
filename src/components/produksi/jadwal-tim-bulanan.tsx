@@ -258,17 +258,39 @@ function BadgeKosongPopoverShift({
   );
 }
 
-function AnggotaCard({ anggota, timList }: { anggota: AnggotaTimRow; timList: TimRow[] }) {
+function AnggotaCard({
+  anggota,
+  timList,
+  produksiAkunOptions,
+}: {
+  anggota: AnggotaTimRow;
+  timList: TimRow[];
+  produksiAkunOptions: StafOperasionalOption[];
+}) {
   const [open, setOpen] = useState(false);
   const [nama, setNama] = useState(anggota.nama);
   const [timId, setTimId] = useState(anggota.timId);
+  const [akunId, setAkunId] = useState(anggota.akunId);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Memilih akun langsung mengisi Nama dari nama akun tsb -- Nama tetap
+  // bisa diubah manual sesudahnya kalau perlu (misal panggilan berbeda).
+  function handlePilihAkun(value: string | null) {
+    if (!value || value === UNSET) {
+      setAkunId(null);
+      return;
+    }
+    const id = Number(value);
+    setAkunId(id);
+    const opt = produksiAkunOptions.find((o) => o.akunId === id);
+    if (opt) setNama(opt.nama);
+  }
 
   function handleSave() {
     setError(null);
     startTransition(async () => {
-      const result = await updateAnggotaTimAction(anggota.anggotaId, { nama, timId });
+      const result = await updateAnggotaTimAction(anggota.anggotaId, { nama, timId, akunId });
       if (!result.success) {
         setError(result.error);
         return;
@@ -298,6 +320,7 @@ function AnggotaCard({ anggota, timList }: { anggota: AnggotaTimRow; timList: Ti
         if (next) {
           setNama(anggota.nama);
           setTimId(anggota.timId);
+          setAkunId(anggota.akunId);
           setError(null);
         }
       }}
@@ -310,6 +333,26 @@ function AnggotaCard({ anggota, timList }: { anggota: AnggotaTimRow; timList: Ti
           <DialogTitle>Ubah Anggota Tim Produksi</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
+          <div>
+            <Label>Akun</Label>
+            <Select value={akunId != null ? String(akunId) : UNSET} onValueChange={handlePilihAkun}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Tanpa akun">
+                  {(v: string) =>
+                    v === UNSET ? "Tanpa akun" : (produksiAkunOptions.find((o) => String(o.akunId) === v)?.nama ?? "Tanpa akun")
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNSET}>Tanpa akun</SelectItem>
+                {produksiAkunOptions.map((o) => (
+                  <SelectItem key={o.akunId} value={String(o.akunId)}>
+                    {o.nama}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div>
             <Label>Nama</Label>
             <Input value={nama} onChange={(e) => setNama(e.target.value)} />
@@ -344,11 +387,23 @@ function AnggotaCard({ anggota, timList }: { anggota: AnggotaTimRow; timList: Ti
   );
 }
 
-function TambahAnggotaDialog({ tim }: { tim: TimRow }) {
+function TambahAnggotaDialog({ tim, produksiAkunOptions }: { tim: TimRow; produksiAkunOptions: StafOperasionalOption[] }) {
   const [open, setOpen] = useState(false);
   const [nama, setNama] = useState("");
+  const [akunId, setAkunId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  function handlePilihAkun(value: string | null) {
+    if (!value || value === UNSET) {
+      setAkunId(null);
+      return;
+    }
+    const id = Number(value);
+    setAkunId(id);
+    const opt = produksiAkunOptions.find((o) => o.akunId === id);
+    if (opt) setNama(opt.nama);
+  }
 
   function handleSubmit() {
     if (!nama.trim()) {
@@ -357,18 +412,29 @@ function TambahAnggotaDialog({ tim }: { tim: TimRow }) {
     }
     setError(null);
     startTransition(async () => {
-      const result = await tambahAnggotaTimAction(tim.timId, nama.trim());
+      const result = await tambahAnggotaTimAction(tim.timId, nama.trim(), akunId);
       if (!result.success) {
         setError(result.error);
         return;
       }
       setNama("");
+      setAkunId(null);
       setOpen(false);
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setNama("");
+          setAkunId(null);
+          setError(null);
+        }
+      }}
+    >
       <DialogTrigger className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border p-2 text-sm text-muted-foreground hover:bg-muted/50">
         <Plus className="size-4" /> Tambah Anggota
       </DialogTrigger>
@@ -377,6 +443,26 @@ function TambahAnggotaDialog({ tim }: { tim: TimRow }) {
           <DialogTitle>Tambah Anggota — {tim.nama}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
+          <div>
+            <Label>Akun</Label>
+            <Select value={akunId != null ? String(akunId) : UNSET} onValueChange={handlePilihAkun}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Tanpa akun">
+                  {(v: string) =>
+                    v === UNSET ? "Tanpa akun" : (produksiAkunOptions.find((o) => String(o.akunId) === v)?.nama ?? "Tanpa akun")
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNSET}>Tanpa akun</SelectItem>
+                {produksiAkunOptions.map((o) => (
+                  <SelectItem key={o.akunId} value={String(o.akunId)}>
+                    {o.nama}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div>
             <Label>Nama</Label>
             <Input value={nama} onChange={(e) => setNama(e.target.value)} />
@@ -523,9 +609,9 @@ function TimRingkasanCard({
           {anggotaList
             .filter((a) => a.timId === tim.timId)
             .map((a) => (
-              <AnggotaCard key={a.anggotaId} anggota={a} timList={timList} />
+              <AnggotaCard key={a.anggotaId} anggota={a} timList={timList} produksiAkunOptions={produksiAkunOptions} />
             ))}
-          <TambahAnggotaDialog tim={tim} />
+          <TambahAnggotaDialog tim={tim} produksiAkunOptions={produksiAkunOptions} />
         </div>
       </DialogContent>
     </Dialog>

@@ -13,6 +13,10 @@ export interface AnggotaTimRow {
   timId: number;
   timNama: string;
   nama: string;
+  // Akun Postgres milik anggota ini, kalau sudah dikaitkan -- null berarti
+  // anggota masih murni nama bebas (belum/tidak punya akun individual),
+  // sama seperti KepalaAkunID/WakilKepalaAkunID di DashboardTimProduksi.
+  akunId: number | null;
 }
 
 export async function getAllTim(): Promise<TimRow[]> {
@@ -69,30 +73,32 @@ export async function getAnggotaTim(timId: number): Promise<AnggotaTimRow[]> {
     .request()
     .input("timId", sql.Int, timId)
     .query(`
-      SELECT a.AnggotaID, a.TimID, t.Nama AS TimNama, a.Nama
+      SELECT a.AnggotaID, a.TimID, t.Nama AS TimNama, a.Nama, a.AkunID
       FROM DashboardTimProduksiAnggota a
       JOIN DashboardTimProduksi t ON t.TimID = a.TimID
       WHERE a.TimID = @timId AND a.IsDeleted = 0
       ORDER BY a.Nama
     `);
-  return (result.recordset as { AnggotaID: number; TimID: number; TimNama: string; Nama: string }[]).map((r) => ({
+  return (result.recordset as { AnggotaID: number; TimID: number; TimNama: string; Nama: string; AkunID: number | null }[]).map((r) => ({
     anggotaId: r.AnggotaID,
     timId: r.TimID,
     timNama: r.TimNama,
     nama: r.Nama,
+    akunId: r.AkunID,
   }));
 }
 
-export async function tambahAnggotaTim(timId: number, nama: string): Promise<number> {
+export async function tambahAnggotaTim(timId: number, nama: string, akunId: number | null): Promise<number> {
   const pool = await getPool();
   const result = await pool
     .request()
     .input("timId", sql.Int, timId)
     .input("nama", sql.VarChar(100), nama)
+    .input("akunId", sql.Int, akunId)
     .query(`
-      INSERT INTO DashboardTimProduksiAnggota (TimID, Nama)
+      INSERT INTO DashboardTimProduksiAnggota (TimID, Nama, AkunID)
       OUTPUT INSERTED.AnggotaID
-      VALUES (@timId, @nama)
+      VALUES (@timId, @nama, @akunId)
     `);
   return (result.recordset[0] as { AnggotaID: number }).AnggotaID;
 }
@@ -133,17 +139,18 @@ export async function hapusAnggotaTimIfOwned(anggotaId: number, timId: number): 
 export async function getSemuaAnggotaTim(): Promise<AnggotaTimRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT a.AnggotaID, a.TimID, t.Nama AS TimNama, a.Nama
+    SELECT a.AnggotaID, a.TimID, t.Nama AS TimNama, a.Nama, a.AkunID
     FROM DashboardTimProduksiAnggota a
     JOIN DashboardTimProduksi t ON t.TimID = a.TimID
     WHERE a.IsDeleted = 0
     ORDER BY t.Nama, a.Nama
   `);
-  return (result.recordset as { AnggotaID: number; TimID: number; TimNama: string; Nama: string }[]).map((r) => ({
+  return (result.recordset as { AnggotaID: number; TimID: number; TimNama: string; Nama: string; AkunID: number | null }[]).map((r) => ({
     anggotaId: r.AnggotaID,
     timId: r.TimID,
     timNama: r.TimNama,
     nama: r.Nama,
+    akunId: r.AkunID,
   }));
 }
 
@@ -151,12 +158,18 @@ export async function getSemuaAnggotaTim(): Promise<AnggotaTimRow[]> {
 // menyentuh Susunan Tim shift lampau manapun (Kehadiran mereferensikan
 // AnggotaID langsung, independen dari TimID saat ini -- sama seperti
 // versi lama fungsi ini terhadap kolom Shift).
-export async function updateAnggotaTim(anggotaId: number, input: { nama: string; timId: number }): Promise<void> {
+export async function updateAnggotaTim(
+  anggotaId: number,
+  input: { nama: string; timId: number; akunId: number | null }
+): Promise<void> {
   const pool = await getPool();
   await pool
     .request()
     .input("anggotaId", sql.Int, anggotaId)
     .input("nama", sql.VarChar(100), input.nama)
     .input("timId", sql.Int, input.timId)
-    .query(`UPDATE DashboardTimProduksiAnggota SET Nama = @nama, TimID = @timId, ModifiedDate = GETDATE() WHERE AnggotaID = @anggotaId`);
+    .input("akunId", sql.Int, input.akunId)
+    .query(
+      `UPDATE DashboardTimProduksiAnggota SET Nama = @nama, TimID = @timId, AkunID = @akunId, ModifiedDate = GETDATE() WHERE AnggotaID = @anggotaId`
+    );
 }

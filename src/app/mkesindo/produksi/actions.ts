@@ -459,21 +459,24 @@ export async function getSemuaAnggotaTimAction(): Promise<ActionResult<AnggotaTi
   });
 }
 
-export async function updateAnggotaTimAction(anggotaId: number, input: { nama: string; timId: number }): Promise<ActionResult<void>> {
+export async function updateAnggotaTimAction(
+  anggotaId: number,
+  input: { nama: string; timId: number; akunId: number | null }
+): Promise<ActionResult<void>> {
   return runAction(async () => {
     await requireProduksiView();
     if (!input.nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
-    await updateAnggotaTim(anggotaId, { nama: input.nama.trim(), timId: input.timId });
+    await updateAnggotaTim(anggotaId, { nama: input.nama.trim(), timId: input.timId, akunId: input.akunId });
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
   });
 }
 
-export async function tambahAnggotaTimAction(timId: number, nama: string): Promise<ActionResult<number>> {
+export async function tambahAnggotaTimAction(timId: number, nama: string, akunId: number | null): Promise<ActionResult<number>> {
   return runAction(async () => {
     await requireProduksiView();
     if (!nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
-    const id = await tambahAnggotaTim(timId, nama.trim());
+    const id = await tambahAnggotaTim(timId, nama.trim(), akunId);
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/produksi");
     return id;
@@ -706,7 +709,10 @@ export async function tambahAnggotaTimSayaAction(nama: string): Promise<ActionRe
     if (!nama.trim()) throw new AppError("Nama anggota tidak boleh kosong.");
     const tim = await getTimByKepalaAkunId(Number(session.user.id));
     if (!tim) throw new AppError("Anda bukan Kepala Produksi tim manapun.");
-    const id = await tambahAnggotaTim(tim.timId, nama.trim());
+    // Panel swalayan "Tim Saya" tetap nama bebas (tanpa pemilihan akun) --
+    // pengaitan akun hanya lewat panel admin (updateAnggotaTimAction), lihat
+    // catatan di jadwal-tim-bulanan.tsx.
+    const id = await tambahAnggotaTim(tim.timId, nama.trim(), null);
     revalidatePath("/mkesindo/produksi-app");
     revalidatePath("/mkesindo/produksi");
     return id;
