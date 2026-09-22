@@ -21,7 +21,7 @@ import {
   type MitraInput,
   type PriceLevelOption,
 } from "@/lib/queries/mitra";
-import { setMitraLocation } from "@/lib/queries/mitra-location";
+import { setMitraLocation, getMitraLocation } from "@/lib/queries/mitra-location";
 import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
 import { getTopMitraPiutang, type TopMitraPiutangRow } from "@/lib/queries/top-mitra-piutang";
 import { setMitraNote } from "@/lib/queries/collection-priority";
@@ -29,6 +29,8 @@ import type { SalesDayComparisonResult } from "@/lib/queries/sales-overview";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { getMarketingPerformanceTrend, type MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 import { getPangsaPasarTrend, type PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
+import { saveVerifiedKunjungan, getVisitLogHistoryForMitra, getLatestVisitLogSnippets } from "@/lib/queries/marketing-visit-log";
+import { haversineKm } from "@/lib/route-estimate";
 
 function ownMitra(all: MitraRow[], marketingName: string): MitraRow[] {
   return all.filter((m) => m.MarketingNama === marketingName);
@@ -224,5 +226,68 @@ export async function setMitraNoteAction(input: { businessPartnerId: string; not
   return runAction(async () => {
     const session = await requireMarketing();
     await setMitraNote(input.businessPartnerId, input.note, session.user.id);
+  });
+}
+
+// Sumber dropdown "Tambah Kunjungan" — mitra milik marketing yang login,
+// apa adanya (termasuk Latitude/Longitude/GeoAlamat kalau sudah pernah
+// dipin) — reuse getMitraList() yang sudah JOIN DashboardMitraLocation,
+// tidak perlu query baru.
+export async function getKunjunganMitraOptionsAction(): Promise<ActionResult<MitraRow[]>> {
+  return runAction(async () => {
+    const session = await requireMarketing();
+    const all = await getMitraList();
+    return ownMitra(all, session.user.name ?? session.user.username);
+  });
+}
+
+const KUNJUNGAN_RADIUS_METERS = 100;
+
+export async function confirmKunjunganAction(input: {
+  businessPartnerId: string;
+  dateISO: string;
+  hasilKunjungan: string;
+  fotoTampakDepanPath: string;
+  fotoPenagihanPath: string;
+  latitude: number;
+  longitude: number;
+}): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireMarketing();
+    // Ownership check sama seperti saveVisitLogAction — mencegah konfirmasi
+    // kunjungan ke mitra di luar cakupan marketing yang login.
+    const roster = await getVisitLogStatusForMarketing(session.user.id, input.dateISO);
+    if (!roster.some((r) => r.BusinessPartnerID === input.businessPartnerId)) {
+      throw new AppError("Anda tidak memiliki akses ke mitra ini.");
+    }
+
+    const mitraLocation = await getMitraLocation(input.businessPartnerId);
+    if (!mitraLocation) {
+      throw new AppError("Lokasi mitra belum tersimpan. Silakan pin lokasi mitra terlebih dahulu.");
+    }
+
+    // Validasi jarak DIULANG di server — tidak boleh hanya percaya validasi
+    // sisi client, mencegah manipulasi koordinat lewat DevTools (Review
+    // Focus plan ini).
+    const distanceKm = haversineKm(
+      { lat: mitraLocation.Latitude, lng: mitraLocation.Longitude },
+      { lat: input.latitude, lng: input.longitude }
+    );
+    if (distanceKm * 1000 > KUNJUNGAN_RADIUS_METERS) {
+      throw new AppError(
+        `Anda berada ${Math.round(distanceKm * 1000)}m dari lokasi mitra — kunjungan hanya bisa dikonfirmasi dalam radius ${KUNJUNGAN_RADIUS_METERS}m.`
+      );
+    }
+
+    await saveVerifiedKunjungan({
+      businessPartnerId: input.businessPartnerId,
+      dateISO: input.dateISO,
+      hasilKunjungan: input.hasilKunjungan,
+      fotoTampakDepanPath: input.fotoTampakDepanPath,
+      fotoPenagihanPath: input.fotoPenagihanPath,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      userId: session.user.id,
+    });
   });
 }
