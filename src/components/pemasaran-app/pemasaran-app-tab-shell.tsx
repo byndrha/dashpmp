@@ -6,6 +6,7 @@ import { User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PemasaranAppBottomNav } from "@/components/pemasaran-app/bottom-nav";
 import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
+import { TambahKunjunganSheet } from "@/components/pemasaran-app/tambah-kunjungan-sheet";
 
 export type PemasaranAppTabKey = "beranda" | "mitra" | "pemasaran";
 
@@ -59,6 +60,7 @@ export function PemasaranAppTabShell({
         {visited.has("pemasaran") && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "pemasaran" && "hidden")}>{pemasaran}</div>
         )}
+        <TambahKunjunganSheet />
       </div>
       <PemasaranAppBottomNav activeTab={activeTab} onChange={handleChangeTab} />
     </div>
