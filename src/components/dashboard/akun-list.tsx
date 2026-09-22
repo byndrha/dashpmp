@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import type { AkunRow, PerusahaanDirektoriOption, PeranRow, CreateAkunInput, UpdateAkunInput } from "@/lib/queries/akun";
 import type { DriverProfileRow } from "@/lib/queries/driver-profile";
@@ -575,77 +574,77 @@ export function AkunList({
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="flex flex-col divide-y rounded-lg border">
         {filtered.map((a) => (
-          <Card key={a.id} className="py-3.5">
-            <CardContent className="flex flex-col gap-2 px-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{a.nama}</p>
-                  <p className="font-data text-xs text-muted-foreground">@{a.username}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => {
-                      setError(null);
-                      editingIdRef.current = a.id;
-                      setEditing(a);
-                    }}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => {
-                      setError(null);
-                      resettingIdRef.current = a.id;
-                      setResetting(a);
-                    }}
-                  >
-                    <KeyRound className="size-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="size-7" disabled={pending} onClick={() => handleDelete(a)}>
-                    <Trash2 className="size-3.5 text-destructive" />
-                  </Button>
-                </div>
-              </div>
+          <div key={a.id} className="flex items-center gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium leading-snug">{a.nama}</p>
+              <p className="font-data text-xs text-muted-foreground">@{a.username}</p>
+            </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant={a.peranNama === "Super Administrator" ? "default" : "outline"} className="h-5 px-1.5 text-[10px]">
-                  {a.peranNama ?? "Direktur"}
-                </Badge>
-                <Badge variant={a.isActive ? "outline" : "destructive"} className="h-5 px-1.5 text-[10px]">
-                  {a.isActive ? "Aktif" : "Nonaktif"}
-                </Badge>
-              </div>
+            <div className="hidden min-w-0 flex-[2] flex-col gap-0.5 text-xs text-muted-foreground sm:flex">
+              <span className="inline-flex items-center gap-1 truncate">
+                <Building2 className="size-3 shrink-0" /> {scopeLabel(a)}
+              </span>
+              <span className="inline-flex items-center gap-1 truncate">
+                <Phone className="size-3 shrink-0" /> {a.nomorTelepon || "-"}
+              </span>
+              <span className="inline-flex items-center gap-1 truncate">
+                <Mail className="size-3 shrink-0" /> {a.email || "-"}
+              </span>
+              {a.salesmanId && (
+                <span className="truncate">
+                  Driver: {driverProfiles.find((d) => d.SalesmanID === a.salesmanId)?.Name ?? a.salesmanId}
+                </span>
+              )}
+            </div>
 
-              <div className="flex flex-col gap-1 border-t pt-2 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <Building2 className="size-3" /> {scopeLabel(a)}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Phone className="size-3" /> {a.nomorTelepon || "-"}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Mail className="size-3" /> {a.email || "-"}
-                </span>
-                <span>Login terakhir: {a.lastLoginAt ? formatDate(a.lastLoginAt) : "-"}</span>
-                {a.salesmanId && (
-                  <span className="inline-flex items-center gap-1.5">
-                    Driver: {driverProfiles.find((d) => d.SalesmanID === a.salesmanId)?.Name ?? a.salesmanId}
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <Badge variant={a.peranNama === "Super Administrator" ? "default" : "outline"} className="h-5 px-1.5 text-[10px]">
+                {a.peranNama ?? "Direktur"}
+              </Badge>
+              <Badge variant={a.isActive ? "outline" : "destructive"} className="h-5 px-1.5 text-[10px]">
+                {a.isActive ? "Aktif" : "Nonaktif"}
+              </Badge>
+            </div>
+
+            <div className="hidden shrink-0 text-xs text-muted-foreground lg:block">
+              Login: {a.lastLoginAt ? formatDate(a.lastLoginAt) : "-"}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => {
+                  setError(null);
+                  editingIdRef.current = a.id;
+                  setEditing(a);
+                }}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => {
+                  setError(null);
+                  resettingIdRef.current = a.id;
+                  setResetting(a);
+                }}
+              >
+                <KeyRound className="size-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="size-7" disabled={pending} onClick={() => handleDelete(a)}>
+                <Trash2 className="size-3.5 text-destructive" />
+              </Button>
+            </div>
+          </div>
         ))}
         {filtered.length === 0 && (
-          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Tidak ada akun untuk filter ini.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada akun untuk filter ini.</p>
         )}
       </div>
 
