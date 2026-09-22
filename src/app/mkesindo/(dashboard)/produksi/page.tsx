@@ -64,7 +64,16 @@ export default async function ProduksiPage() {
             <KoreksiSnapshotDialog />
           </div>
           <PetaWarehouseDesktop posisi={posisi} mesinList={mesinList} />
-          <div className="absolute inset-x-4 bottom-0 z-10 translate-y-1/2">
+          {/* left-4 saja (BUKAN inset-x-4) -- absolute tanpa `right` di-set
+              menyusut mengikuti lebar konten (shrink-to-fit), pas dengan
+              maksud desain di komentar atas ("TIDAK sampai ke kanan").
+              inset-x-4 (left-4 + right-4) sebelumnya memaksa div ini
+              melebar penuh, sehingga area kosong di kanan kartu Msn ikut
+              menutupi/menghalangi interaksi ke "Pintu Geser" dan
+              "Jalan & Jendela N" di baliknya walau tak terlihat (tidak
+              ber-background), karena z-10 tetap membuatnya menerima
+              pointer event di seluruh lebar itu. */}
+          <div className="absolute bottom-0 left-4 z-10 translate-y-1/2">
             <PanelMesin mesinList={mesinList} />
           </div>
         </div>
