@@ -55,6 +55,16 @@ export function PelunasanDialog({
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [selectedMetodeKode, setSelectedMetodeKode] = useState<string | null>(null);
   const [tanggalWaktuBayar, setTanggalWaktuBayar] = useState(nowWibInputValue);
+  const [tanggalDiubahManual, setTanggalDiubahManual] = useState(false);
+  // Berdetak tiap 30 detik selagi dialog terbuka -- murni untuk memaksa
+  // max/minTanggalWaktu di bawah dihitung ulang. Tanpa ini, kalau dialog
+  // dibiarkan terbuka lama menyeberangi rollover 14:00 WIB (mis. dibuka
+  // 13:50, baru ditekan Konfirmasi jam 16:31), nilai default yang
+  // ditampilkan tetap "beku" dari sebelum rollover -- untuk metode Kas
+  // Kecil ini membuat submit ditolak server sebagai "sebelum periode
+  // berjalan" walau tampak seperti waktu yang wajar di layar. Dilaporkan
+  // user 2026-09-22.
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -64,6 +74,7 @@ export function PelunasanDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInvoices(null);
     setTanggalWaktuBayar(nowWibInputValue());
+    setTanggalDiubahManual(false);
     getOutstandingInvoicesAction(businessPartnerId).then((result) => {
       if (cancelled || !result.success) return;
       const rows = result.data;
@@ -76,6 +87,15 @@ export function PelunasanDialog({
       cancelled = true;
     };
   }, [open, businessPartnerId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const interval = setInterval(() => {
+      setTick((t) => t + 1);
+      setTanggalWaktuBayar((prev) => (tanggalDiubahManual ? prev : nowWibInputValue()));
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [open, tanggalDiubahManual]);
 
   const maxTanggalWaktu = nowWibInputValue();
   const minTanggalWaktu = selectedMetodeKode === KAS_KECIL_KODE ? getBusinessPeriodStartWib() : undefined;
@@ -150,7 +170,10 @@ export function PelunasanDialog({
               value={tanggalWaktuBayar}
               min={minTanggalWaktu}
               max={maxTanggalWaktu}
-              onChange={(e) => setTanggalWaktuBayar(e.target.value)}
+              onChange={(e) => {
+                setTanggalWaktuBayar(e.target.value);
+                setTanggalDiubahManual(true);
+              }}
               className="h-8 text-xs"
             />
             {selectedMetodeKode === KAS_KECIL_KODE && (
