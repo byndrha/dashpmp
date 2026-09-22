@@ -129,6 +129,7 @@ export function TambahKunjunganSheet() {
   const [mitraOptions, setMitraOptions] = useState<MitraRow[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pinDraft, setPinDraft] = useState<{ lat: number; lng: number } | null>(null);
+  const [savedPin, setSavedPin] = useState<{ lat: number; lng: number } | null>(null);
   const [savingPin, setSavingPin] = useState(false);
   const [marketingPosition, setMarketingPosition] = useState<[number, number] | null>(null);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
@@ -143,6 +144,7 @@ export function TambahKunjunganSheet() {
   function resetState() {
     setSelectedId(null);
     setPinDraft(null);
+    setSavedPin(null);
     setMarketingPosition(null);
     setRouteInfo(null);
     setRouteError(null);
@@ -164,11 +166,12 @@ export function TambahKunjunganSheet() {
 
   const selectedMitra = mitraOptions?.find((m) => m.BusinessPartnerID === selectedId) ?? null;
   // Lokasi efektif mitra: dari BusinessPartner/DashboardMitraLocation kalau
-  // sudah ada, atau dari draft pin yang baru saja dikonfirmasi (belum
-  // refresh mitraOptions).
-  const mitraLat = pinDraft?.lat ?? selectedMitra?.Latitude ?? null;
-  const mitraLng = pinDraft?.lng ?? selectedMitra?.Longitude ?? null;
-  const needsPin = selectedMitra != null && mitraLat == null;
+  // sudah ada, atau dari pin yang BERHASIL disimpan sesi ini (savedPin;
+  // belum refresh mitraOptions). pinDraft TIDAK ikut di sini — itu cuma
+  // posisi pin yang sedang digeser user di peta pin-drop, belum tersimpan.
+  const mitraLat = savedPin?.lat ?? selectedMitra?.Latitude ?? null;
+  const mitraLng = savedPin?.lng ?? selectedMitra?.Longitude ?? null;
+  const needsPin = selectedMitra != null && selectedMitra.Latitude == null && savedPin == null;
 
   const distanceMeters =
     mitraLat != null && mitraLng != null && marketingPosition
@@ -179,9 +182,14 @@ export function TambahKunjunganSheet() {
   function handleSelectMitra(id: string) {
     setSelectedId(id);
     setPinDraft(null);
+    setSavedPin(null);
     setMarketingPosition(null);
     setRouteInfo(null);
     setRouteError(null);
+    setFotoDepan(null);
+    setFotoPenagihan(null);
+    setHasilKunjungan("");
+    setConfirmError(null);
   }
 
   function handlePinConfirm() {
@@ -199,9 +207,10 @@ export function TambahKunjunganSheet() {
         toast.error(result.error);
         return;
       }
-      // pinDraft tetap dipertahankan (bukan di-clear) sehingga mitraLat/Lng
-      // efektif langsung mengikuti pin yang baru dikonfirmasi tanpa perlu
+      // savedPin diset SETELAH sukses tersimpan di server — ini yang bikin
+      // needsPin jadi false dan mitraLat/Lng ikut pin ini, tanpa perlu
       // refetch getKunjunganMitraOptionsAction.
+      setSavedPin(pinDraft);
       toast.success("Lokasi mitra tersimpan.");
     });
   }
