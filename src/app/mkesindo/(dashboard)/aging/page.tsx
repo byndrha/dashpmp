@@ -1,25 +1,44 @@
 import type { Metadata } from "next";
-import { Receipt, AlertTriangle, Flame, Wallet, HandCoins, Percent } from "lucide-react";
+import { Suspense } from "react";
 import { requireModuleAccess } from "@/lib/require-access";
-import { getAgingReceivables } from "@/lib/queries/aging";
 import { getWilayahList } from "@/lib/queries/wilayah";
-import { getPiutangPeriodSummary } from "@/lib/queries/piutang-summary";
-import { getTodayReceivablePayments } from "@/lib/queries/piutang-payments";
-import { getCollectionPriority } from "@/lib/queries/collection-priority";
 import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
-import { KpiCard } from "@/components/dashboard/kpi-card";
-import { AgingTable } from "@/components/dashboard/aging-table";
-import { PiutangStatusPanel, type StatusBucket } from "@/components/dashboard/piutang-status-panel";
-import { PiutangPaymentsPanel } from "@/components/dashboard/piutang-payments-panel";
-import { CollectionPriorityTable } from "@/components/dashboard/collection-priority-table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
-import { formatRupiah, formatPercentPoints } from "@/lib/format";
-import type { PiutangStatus } from "@/lib/queries/aging";
+import {
+  PiutangKpiRowPeriode,
+  PiutangKpiRowAging,
+  PiutangInvoiceTablePanel,
+  PiutangStatusSection,
+  PiutangPrioritasPanel,
+  PiutangPembayaranPanel,
+} from "@/components/dashboard/piutang-sections";
 
 export const metadata: Metadata = { title: "Piutang" };
+
+// 3 boks berdampingan -- dipakai sebagai fallback Suspense untuk setiap
+// baris KPI, meniru bentuk KpiCard (Card + judul + angka besar) supaya
+// tidak ada "lompatan" tinggi begitu kontennya siap.
+function KpiRowSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {[0, 1, 2].map((i) => (
+        <Skeleton key={i} className="h-[104px] w-full rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
+function PanelSkeleton() {
+  return <Skeleton className="h-32 w-full rounded-lg" />;
+}
+
+function TableSkeleton() {
+  return <Skeleton className="h-96 w-full rounded-lg" />;
+}
 
 export default async function AgingPage({
   searchParams,
@@ -39,29 +58,14 @@ export default async function AgingPage({
   // UTC-midnight Date getTodayReceivablePayments expects.
   const businessPaymentsDate = new Date(paymentsDate);
 
-  const [rows, wilayahList, periodSummary, paymentsRows, priorityRows, perusahaanId] = await Promise.all([
-    getAgingReceivables(wilayah),
-    getWilayahList(),
-    getPiutangPeriodSummary(filter),
-    getTodayReceivablePayments(businessPaymentsDate),
-    getCollectionPriority(),
-    getMkesindoPerusahaanId(),
-  ]);
-
-  const totalOutstanding = rows.reduce((sum, r) => sum + r.Outstanding, 0);
-  const totalOverdue = rows
-    .filter((r) => r.AgingBucket !== "Belum Jatuh Tempo")
-    .reduce((sum, r) => sum + r.Outstanding, 0);
-  const totalCritical = rows.filter((r) => r.AgingBucket === ">90 Hari").reduce((sum, r) => sum + r.Outstanding, 0);
-
-  const statusBuckets: StatusBucket[] = (["Sehat", "Perhatian", "Kritis"] as PiutangStatus[]).map((status) => {
-    const matching = priorityRows.filter((r) => r.Status === status);
-    return {
-      status,
-      count: matching.length,
-      total: matching.reduce((sum, r) => sum + r.PiutangBerjalan, 0),
-    };
-  });
+  // Hanya 2 query ringan yang masih diambil di depan (dibutuhkan FilterBar
+  // dan AgingTable segera) -- setiap query berat lainnya (getAgingReceivables,
+  // getCollectionPriority, getTodayReceivablePayments) dipindah ke masing-
+  // masing seksi async-nya sendiri di piutang-sections.tsx, dirender lewat
+  // <Suspense> terpisah di bawah supaya halaman tidak menunggu SEMUA data
+  // sekaligus sebelum menampilkan apa pun (lihat komentar di
+  // piutang-sections.tsx soal urutan boks Periode vs Aging).
+  const [wilayahList, perusahaanId] = await Promise.all([getWilayahList(), getMkesindoPerusahaanId()]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,34 +74,42 @@ export default async function AgingPage({
         <FilterBar wilayahList={wilayahList} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Total Piutang Outstanding" value={formatRupiah(totalOutstanding)} icon={Receipt} />
-        <KpiCard label="Sudah Jatuh Tempo" value={formatRupiah(totalOverdue)} icon={AlertTriangle} tone="warning" />
-        <KpiCard label=">90 Hari (Kritis)" value={formatRupiah(totalCritical)} icon={Flame} tone="negative" />
-      </div>
+      {/* Boks "Periode" (Saldo Awal/Pembayaran/Rasio) ditaruh PALING ATAS --
+          hanya bergantung pada getPiutangPeriodSummary, query agregat ringan
+          tanpa join per-invoice, jadi ini yang paling cepat tampil.
+          Boks "Aging" (Total Outstanding/Overdue/Kritis) di bawahnya berbagi
+          query yang sama (getAgingReceivables, di-cache()) dengan tabel
+          Invoice Outstanding di tab pertama -- keduanya baru bisa tampil
+          begitu query terberat itu selesai, jadi sengaja ditaruh setelah
+          boks Periode, bukan lagi di atas seperti sebelumnya. */}
+      <Suspense fallback={<KpiRowSkeleton />}>
+        <PiutangKpiRowPeriode filter={filter} />
+      </Suspense>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Saldo Awal Periode" value={formatRupiah(periodSummary.SaldoAwalPeriode)} icon={Wallet} />
-        <KpiCard
-          label="Pembayaran Piutang Periode Ini"
-          value={formatRupiah(periodSummary.TotalPembayaranPeriode)}
-          icon={HandCoins}
-          tone="positive"
-        />
-        <KpiCard
-          label="Rasio Piutang / Omzet"
-          value={formatPercentPoints(periodSummary.RatioPiutangOmzetPct)}
-          icon={Percent}
-          tone={periodSummary.RatioPiutangOmzetPct > 30 ? "negative" : "default"}
-        />
-      </div>
+      <Suspense fallback={<KpiRowSkeleton />}>
+        <PiutangKpiRowAging wilayah={wilayah} />
+      </Suspense>
 
-      <PiutangStatusPanel buckets={statusBuckets} />
+      <Suspense fallback={<PanelSkeleton />}>
+        <PiutangStatusSection />
+      </Suspense>
 
       <PiutangTabs
-        invoicePanel={<AgingTable rows={rows} perusahaanId={perusahaanId} />}
-        pembayaranPanel={<PiutangPaymentsPanel rows={paymentsRows} businessDate={paymentsDate} todayISO={todayISO} />}
-        prioritasPanel={<CollectionPriorityTable rows={priorityRows} />}
+        invoicePanel={
+          <Suspense fallback={<TableSkeleton />}>
+            <PiutangInvoiceTablePanel wilayah={wilayah} perusahaanId={perusahaanId} />
+          </Suspense>
+        }
+        pembayaranPanel={
+          <Suspense fallback={<TableSkeleton />}>
+            <PiutangPembayaranPanel businessPaymentsDate={businessPaymentsDate} paymentsDate={paymentsDate} todayISO={todayISO} />
+          </Suspense>
+        }
+        prioritasPanel={
+          <Suspense fallback={<TableSkeleton />}>
+            <PiutangPrioritasPanel />
+          </Suspense>
+        }
       />
     </div>
   );

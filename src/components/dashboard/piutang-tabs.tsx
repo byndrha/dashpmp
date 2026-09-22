@@ -9,11 +9,14 @@ const TABS = [
   { value: "prioritas", label: "Prioritas Pemulihan" },
 ] as const;
 
-// Purely client-side (no URL sync): every panel's data is already fetched
-// upfront by the server page in one shot, so switching tabs has nothing to
-// wait on — round-tripping through router.push here (as an earlier version
-// did) meant every tab click re-ran the whole page's data fetching AND
-// reset scroll to the top, which is exactly what this avoids.
+// Purely client-side (no URL sync): each panel prop is one React element
+// created once by the server page (each wrapped in its own <Suspense> there,
+// see piutang-sections.tsx — panels stream in independently as their own
+// query resolves, not all-at-once anymore), so switching tabs never
+// recreates or refetches them. Round-tripping through router.push here (as
+// an earlier version did) meant every tab click re-ran the whole page's
+// data fetching AND reset scroll to the top, which is exactly what this
+// avoids.
 export function PiutangTabs({
   invoicePanel,
   pembayaranPanel,
