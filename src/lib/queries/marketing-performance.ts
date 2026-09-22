@@ -154,18 +154,30 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       FROM BusinessPartner
       WHERE ISNULL(IsDeleted, 0) = 0
     `),
-    // "Filled" means a real, non-blank HasilKunjungan — saveMarketingVisitLog
-    // upserts a row even when the textarea was left empty (trimmed to null),
-    // so a row's mere existence isn't enough; see its own comment.
+    // "Filled" (for the per-Marketing dot) means a real, non-blank
+    // HasilKunjungan — saveMarketingVisitLog upserts a row even when the
+    // textarea was left empty (trimmed to null), so a row's mere existence
+    // isn't enough; see its own comment. A VERIFIED row (IsTerverifikasi=1)
+    // must never be excluded by this WHERE regardless of HasilKunjungan's
+    // blankness though — otherwise a desktop/telemarketing user later
+    // blanking the text via the old manual-text jalur (saveMarketingVisitLog,
+    // which never touches IsTerverifikasi/photos/GPS) makes the checkmark
+    // disappear here even though the verification is still sitting untouched
+    // in the DB (final-review Finding 1). ISNULL(...) makes the blank-check
+    // NULL-safe: LTRIM(RTRIM(NULL)) <> '' is NULL/falsy in SQL Server, which
+    // would otherwise ALSO wrongly exclude a verified row whose
+    // HasilKunjungan happens to be NULL rather than ''. HasilKunjungan itself
+    // is now selected too, so the loop below can still gate the dot signal
+    // purely on text (see mitraTerverifikasiByDay comment).
     pool
       .request()
       .input("rangeStart", sql.Date, rangeStart)
       .input("rangeEnd", sql.Date, rangeEnd)
       .query(`
-        SELECT DISTINCT BusinessPartnerID, LogDate, IsTerverifikasi
+        SELECT DISTINCT BusinessPartnerID, LogDate, HasilKunjungan, IsTerverifikasi
         FROM DashboardMarketingVisitLog
         WHERE LogDate >= @rangeStart AND LogDate < @rangeEnd
-          AND HasilKunjungan IS NOT NULL AND LTRIM(RTRIM(HasilKunjungan)) <> ''
+          AND (LTRIM(RTRIM(ISNULL(HasilKunjungan, ''))) <> '' OR IsTerverifikasi = 1)
       `),
   ]);
 
@@ -263,12 +275,21 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   }
   for (const id of resolvedMarketingByMitra.keys()) mitraTerverifikasiByDay[id] = new Array(periodDays).fill(false);
 
-  for (const r of visitLogResult.recordset as { BusinessPartnerID: string; LogDate: string; IsTerverifikasi: boolean }[]) {
+  for (const r of visitLogResult.recordset as {
+    BusinessPartnerID: string;
+    LogDate: string;
+    HasilKunjungan: string | null;
+    IsTerverifikasi: boolean;
+  }[]) {
     const marketingUserId = resolvedMarketingByMitra.get(r.BusinessPartnerID);
     if (!marketingUserId) continue;
     const dayIndex = Math.round((new Date(r.LogDate).getTime() - rangeStart.getTime()) / 86400000);
     if (dayIndex < 0 || dayIndex >= periodDays) continue;
-    visitLogFilledByMarketing[marketingUserId][dayIndex] = true;
+    // Dot signal stays purely text-gated (a distinct "has a note" signal,
+    // not "verified") — WHERE above now also lets verified-but-blank rows
+    // through, so that gate has to be re-applied here in JS instead.
+    const hasText = r.HasilKunjungan != null && r.HasilKunjungan.trim() !== "";
+    if (hasText) visitLogFilledByMarketing[marketingUserId][dayIndex] = true;
     if (r.IsTerverifikasi) mitraTerverifikasiByDay[r.BusinessPartnerID][dayIndex] = true;
   }
 

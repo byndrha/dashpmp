@@ -126,8 +126,15 @@ export async function saveVerifiedKunjungan(input: {
 // Semua entri (baik terverifikasi maupun catatan manual) untuk satu mitra,
 // terbaru dulu — dipakai dialog "Riwayat Kunjungan" (Task 8). Baris dengan
 // HasilKunjungan kosong (upsert lama yang pernah menyimpan textarea
-// kosong) dikecualikan, sama seperti getMarketingPerformance's
-// visitLogResult.
+// kosong) dikecualikan, KECUALI baris itu sudah terverifikasi
+// (IsTerverifikasi = 1) — kalau tidak, mengosongkan teks lewat jalur manual
+// lama (saveMarketingVisitLog, yang sengaja tidak menyentuh
+// IsTerverifikasi/foto/GPS) akan membuat entri itu hilang dari Riwayat
+// Kunjungan walau foto+GPS+status terverifikasi masih utuh di DB (final
+// review Finding 1). ISNULL(...) menjaga perbandingan blank-nya tetap aman
+// dari NULL (LTRIM(RTRIM(NULL)) <> '' bernilai NULL/falsy di SQL Server,
+// yang tanpa ISNULL bisa ikut mengecualikan baris terverifikasi dengan
+// HasilKunjungan NULL, bukan cuma string kosong).
 export async function getVisitLogHistoryForMitra(businessPartnerId: string): Promise<MarketingVisitLogEntry[]> {
   const pool = await getPool();
   const result = await pool
@@ -138,7 +145,7 @@ export async function getVisitLogHistoryForMitra(businessPartnerId: string): Pro
              FotoTampakDepanPath, FotoPenagihanPath, Latitude, Longitude, IsTerverifikasi, VerifiedAt
       FROM DashboardMarketingVisitLog
       WHERE BusinessPartnerID = @businessPartnerId
-        AND HasilKunjungan IS NOT NULL AND LTRIM(RTRIM(HasilKunjungan)) <> ''
+        AND (LTRIM(RTRIM(ISNULL(HasilKunjungan, ''))) <> '' OR IsTerverifikasi = 1)
       ORDER BY LogDate DESC
     `);
   return (result.recordset as (Omit<MarketingVisitLogEntry, "LogDate" | "VerifiedAt" | "IsTerverifikasi"> & {
@@ -166,6 +173,10 @@ export async function getLatestVisitLogSnippets(
     request.input(name, sql.VarChar(16), id);
     return `@${name}`;
   });
+  // Same NULL-safe "blank OR verified" gate as getVisitLogHistoryForMitra —
+  // a verified-but-blank row must still count as this mitra's latest entry,
+  // not be skipped in favor of an older row that happens to have text
+  // (final review Finding 1).
   const result = await request.query(`
     SELECT v.BusinessPartnerID, v.HasilKunjungan, v.LogDate
     FROM DashboardMarketingVisitLog v
@@ -173,13 +184,13 @@ export async function getLatestVisitLogSnippets(
       SELECT BusinessPartnerID, MAX(LogDate) AS MaxLogDate
       FROM DashboardMarketingVisitLog
       WHERE BusinessPartnerID IN (${idParams.join(", ")})
-        AND HasilKunjungan IS NOT NULL AND LTRIM(RTRIM(HasilKunjungan)) <> ''
+        AND (LTRIM(RTRIM(ISNULL(HasilKunjungan, ''))) <> '' OR IsTerverifikasi = 1)
       GROUP BY BusinessPartnerID
     ) latest ON latest.BusinessPartnerID = v.BusinessPartnerID AND latest.MaxLogDate = v.LogDate
   `);
   const map = new Map<string, { hasilKunjungan: string; logDate: string }>();
-  for (const r of result.recordset as { BusinessPartnerID: string; HasilKunjungan: string; LogDate: Date }[]) {
-    map.set(r.BusinessPartnerID, { hasilKunjungan: r.HasilKunjungan, logDate: r.LogDate.toISOString().slice(0, 10) });
+  for (const r of result.recordset as { BusinessPartnerID: string; HasilKunjungan: string | null; LogDate: Date }[]) {
+    map.set(r.BusinessPartnerID, { hasilKunjungan: r.HasilKunjungan ?? "", logDate: r.LogDate.toISOString().slice(0, 10) });
   }
   return map;
 }
