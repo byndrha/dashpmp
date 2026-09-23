@@ -1,10 +1,10 @@
 // src/app/pmpersada/(dashboard)/penjualan/page.tsx
 import { getPenjualanTrend } from "@/lib/queries/penjualan-piutang";
-import { requirePmpersada } from "@/lib/require-access";
+import { requirePmpersadaKeuangan } from "@/lib/require-access";
 import { PenjualanTrendPanel } from "@/components/dashboard/penjualan-trend-panel";
 
 export default async function PmpersadaPenjualanPage() {
-  await requirePmpersada();
+  await requirePmpersadaKeuangan();
   const data = await getPenjualanTrend("pmpersada");
 
   return (
