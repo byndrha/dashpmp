@@ -1,12 +1,8 @@
 import { getPool } from "@/lib/db";
-import { monthBoundary } from "@/lib/business-date";
+import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { PARTNER_TYPE_CASE } from "@/lib/queries/aging";
-import {
-  getMarketingUsers,
-  getMarketingWilayahAssignments,
-  resolveResponsibleMarketing,
-  resolveMitraOverrides,
-} from "@/lib/queries/marketing-wilayah";
+import { getMarketingUsers, getMarketingWilayahAssignments, resolveMitraOverrideSources } from "@/lib/queries/marketing-wilayah";
+import { resolveAllMitraOwnership, resolveHybridOwner } from "@/lib/queries/marketing-ownership";
 import type { MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 
 export interface PangsaPasarMonth {
@@ -62,7 +58,7 @@ export async function getPangsaPasarTrend(
   const pool = await getPool();
   const monthStarts = performanceTrend.months.map((iso) => new Date(iso));
 
-  const [assignments, marketingUsers, mitraResult] = await Promise.all([
+  const [assignments, marketingUsers, mitraResult, ownerships] = await Promise.all([
     getMarketingWilayahAssignments(),
     getMarketingUsers(),
     pool.request().query(`
@@ -75,15 +71,33 @@ export async function getPangsaPasarTrend(
       FROM BusinessPartner bp
       WHERE ISNULL(IsDeleted, 0) = 0
     `),
+    resolveAllMitraOwnership(),
   ]);
-  const mitraOverrides = await resolveMitraOverrides(assignments);
+  const { prioritasOverrides } = await resolveMitraOverrideSources(assignments);
+  const ownershipByMitra = new Map(ownerships.map((o) => [o.businessPartnerId, o]));
+  const akunIdToNama = new Map(marketingUsers.map((u) => [u.UserID, u.Nama]));
+  const today = getBusinessDate();
   const marketingByName = new Map(marketingUsers.map((u) => [u.Nama, u]));
 
+  // Atribusi sekarang pakai aturan hybrid yang sama dengan
+  // marketing-performance.ts (Prioritas > mitra-yang-masih-NOO permanen ke
+  // pendaftar > mitra Existing ikut wilayah-live) — confirmed with user
+  // 2026-09-24. Aturan "kapan mitra masuk roster bulan itu" (JoinDate di
+  // bawah, `meta.JoinDate == null || ... >= nextMonthStart`) TIDAK berubah.
   const mitraMeta: MitraMeta[] = (
     mitraResult.recordset as { BusinessPartnerID: string; Wilayah: string; Kecamatan: string | null; JoinDate: string | null; PartnerType: string }[]
   ).map((r) => {
-    const marketingName = resolveResponsibleMarketing(r.BusinessPartnerID, r.Wilayah, r.Kecamatan, assignments, mitraOverrides);
-    const user = marketingName ? marketingByName.get(marketingName) : undefined;
+    const { marketingNama } = resolveHybridOwner(
+      r.BusinessPartnerID,
+      r.Wilayah,
+      r.Kecamatan,
+      assignments,
+      prioritasOverrides,
+      ownershipByMitra,
+      akunIdToNama,
+      today
+    );
+    const user = marketingNama ? marketingByName.get(marketingNama) : undefined;
     return { BusinessPartnerID: r.BusinessPartnerID, JoinDate: r.JoinDate, PartnerType: r.PartnerType, MarketingUserID: user?.UserID ?? null };
   });
 
