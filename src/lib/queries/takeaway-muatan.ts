@@ -3,6 +3,7 @@ import { AppError } from "@/lib/action-result";
 import { getNaiveWibTransDate } from "@/lib/business-date";
 import type { KantongVariant } from "@/lib/queries/sales-order";
 import { allocateTakeAwayStock } from "@/lib/queries/takeaway-alokasi";
+import { postDeliveryOrderRealtime, postSalesInvoiceRealtime } from "@/lib/queries/gl-posting-backfill";
 
 export interface TakeAwayMuatanPendingRow {
   takeAwayMuatanId: number;
@@ -277,6 +278,7 @@ export async function takeAwaySelesaiMuat(
     const deliveryOrderId = await nextDeliveryOrderId(pool);
     const doVoucherSeq = await nextDOVoucherSeq(pool, yearMonth);
     const doVoucherNo = `MKE/DO/${doVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+    const doTransDate = getNaiveWibTransDate();
     await new sql.Request(transaction)
       .input("id", sql.VarChar(16), deliveryOrderId)
       .input("voucherNo", sql.VarChar(128), doVoucherNo)
@@ -285,7 +287,7 @@ export async function takeAwaySelesaiMuat(
       .input("bpId", sql.VarChar(16), so.BusinessPartnerID)
       .input("soId", sql.VarChar(16), salesOrderId)
       .input("salesmanId", sql.VarChar(16), TAKEAWAY_SALESMAN_ID)
-      .input("transDate", sql.DateTime, getNaiveWibTransDate())
+      .input("transDate", sql.DateTime, doTransDate)
       .input("dueDate", sql.DateTime, so.DueDate).query(`
         INSERT INTO DeliveryOrder
           (DeliveryOrderID, VoucherNo, TransDate, BranchID, DepartmentID, BusinessPartnerID, Notes, SalesOrderID,
@@ -320,9 +322,22 @@ export async function takeAwaySelesaiMuat(
         `);
     }
 
+    await postDeliveryOrderRealtime(transaction, {
+      voucherNo: doVoucherNo,
+      documentId: deliveryOrderId,
+      transDate: doTransDate,
+      branchId: BRANCH_ID,
+      departmentId: DEPARTMENT_ID,
+      businessPartnerId: so.BusinessPartnerID,
+      currencyId: "",
+      rate: 1,
+      deliveryOrderId: null,
+    });
+
     const salesInvoiceId = await nextSalesInvoiceId(pool);
     const siVoucherSeq = await nextSIVoucherSeq(pool, yearMonth);
     const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+    const siTransDate = getNaiveWibTransDate();
     await new sql.Request(transaction)
       .input("id", sql.VarChar(16), salesInvoiceId)
       .input("voucherNo", sql.VarChar(128), siVoucherNo)
@@ -345,7 +360,7 @@ export async function takeAwaySelesaiMuat(
       // fix/comment on createSalesInvoiceForStop in pengiriman-jadwal.ts
       // for the live-diff evidence behind changing it to 0 (false), matching
       // 98.6% of real desktop-ERP-created invoices regardless of paid status.
-      .input("transDate", sql.DateTime, getNaiveWibTransDate())
+      .input("transDate", sql.DateTime, siTransDate)
       .input("salesmanId", sql.VarChar(16), TAKEAWAY_SALESMAN_ID).query(`
         INSERT INTO SalesInvoice
           (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -382,6 +397,18 @@ export async function takeAwaySelesaiMuat(
              0, @amount, @name, @amount, @amount, '', '', 0, NULL)
         `);
     }
+
+    await postSalesInvoiceRealtime(transaction, {
+      voucherNo: siVoucherNo,
+      documentId: salesInvoiceId,
+      transDate: siTransDate,
+      branchId: BRANCH_ID,
+      departmentId: DEPARTMENT_ID,
+      businessPartnerId: so.BusinessPartnerID,
+      currencyId: "",
+      rate: 1,
+      deliveryOrderId,
+    });
 
     await new sql.Request(transaction)
       .input("soId", sql.VarChar(16), salesOrderId)
