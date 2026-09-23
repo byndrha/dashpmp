@@ -584,19 +584,44 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
 // posting-nya sequential (bukan konkuren dibatasi), applock SENDIRIAN sudah
 // cukup menyerialkan SEMUA panggilan dashpmp-vs-dashpmp ke fungsi ini --
 // table hint di SINI tidak diperlukan lagi, dikembalikan jadi plain SELECT.
-async function nextGeneralLedgerId(poolOrTx: sql.ConnectionPool | sql.Transaction): Promise<string> {
+// Exported so any other write path that posts its OWN GeneralLedger rows
+// directly (e.g. pelunasan.ts's recordPayment(), which -- unlike SI/DO --
+// is entirely dashpmp's own transaction, so it posts synchronously rather
+// than needing a separate backlog/health-check system) can generate a safe
+// ID under the SAME applock below, instead of duplicating this query and
+// risking the exact cross-caller ID race Fix Round 1/2 above already
+// eliminated for postSatuDokumen.
+export async function nextGeneralLedgerId(poolOrTx: sql.ConnectionPool | sql.Transaction): Promise<string> {
   const result = await poolOrTx.request().query(`SELECT MAX(TRY_CAST(ID AS INT)) AS MaxID FROM GeneralLedger`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-// Nama resource applock -- SATU nama tetap dipakai semua pemanggil
-// postSatuDokumen (lintas dokumen, lintas request) supaya semuanya benar2
-// saling eksklusi di titik kritis yang sama (idempotency-check + generate
-// ID GeneralLedger). Bukan per-VoucherNo krn justru race lintas-DOKUMEN
-// (Finding 2 round 1) yang perlu diserialkan, bukan cuma race per-dokumen
-// yang sama (itu levelnya sudah dijamin idempotency-check sendiri).
-const APPLOCK_RESOURCE = "dashpmp_gl_backfill_posting";
+// Nama resource applock -- SATU nama tetap dipakai SEMUA pemanggil yang
+// generate GeneralLedger ID lewat nextGeneralLedgerId di atas (postSatuDokumen
+// DAN recordPayment) supaya semuanya benar2 saling eksklusi di titik kritis
+// yang sama (generate ID GeneralLedger). Bukan per-VoucherNo krn justru race
+// lintas-DOKUMEN/lintas-FITUR (Finding 2 round 1) yang perlu diserialkan,
+// bukan cuma race per-dokumen yang sama.
+export const APPLOCK_RESOURCE = "dashpmp_gl_backfill_posting";
+
+// Akuisisi applock di atas, dalam transaksi pemanggil -- dipakai postSatuDokumen
+// di bawah dan recordPayment (pelunasan.ts). @LockOwner 'Transaction' berarti
+// lock ini otomatis lepas saat transaksi pemanggil commit ATAU rollback, tidak
+// perlu sp_releaseapplock manual. @LockTimeout 30 detik: pemanggil yang
+// nunggu applock yang macet gagal bersih (exception), bukan hang selamanya.
+export async function acquireGLPostingApplock(transaction: sql.Transaction): Promise<void> {
+  await new sql.Request(transaction)
+    .input("resource", sql.VarChar(255), APPLOCK_RESOURCE)
+    .input("lockMode", sql.VarChar(32), "Exclusive")
+    .input("lockOwner", sql.VarChar(32), "Transaction")
+    .input("lockTimeout", sql.Int, 30000)
+    .query(`
+      DECLARE @result INT;
+      EXEC @result = sp_getapplock @Resource = @resource, @LockMode = @lockMode, @LockOwner = @lockOwner, @LockTimeout = @lockTimeout;
+      IF @result < 0 THROW 50000, 'Gagal memperoleh application lock untuk posting GeneralLedger', 1;
+    `);
+}
 
 const chartOfAccountIdCache = new Map<string, string>();
 async function getChartOfAccountId(poolOrTx: sql.ConnectionPool | sql.Transaction, accountNo: string): Promise<string> {
@@ -648,22 +673,9 @@ async function postSatuDokumen(
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
-    // Applock DULUAN, sebelum query GeneralLedger apa pun -- @LockOwner
-    // 'Transaction' brarti lock ini otomatis lepas saat transaksi ini
-    // commit ATAU rollback (termasuk lewat jalur catch di bawah), tidak
-    // perlu sp_releaseapplock manual. @LockTimeout 30 detik: pemanggil yang
-    // nunggu applock yang macet gagal bersih (exception tertangkap di
-    // catch, jadi GAGAL biasa), bukan hang selamanya.
-    await new sql.Request(transaction)
-      .input("resource", sql.VarChar(255), APPLOCK_RESOURCE)
-      .input("lockMode", sql.VarChar(32), "Exclusive")
-      .input("lockOwner", sql.VarChar(32), "Transaction")
-      .input("lockTimeout", sql.Int, 30000)
-      .query(`
-        DECLARE @result INT;
-        EXEC @result = sp_getapplock @Resource = @resource, @LockMode = @lockMode, @LockOwner = @lockOwner, @LockTimeout = @lockTimeout;
-        IF @result < 0 THROW 50000, 'Gagal memperoleh application lock untuk posting GL backfill', 1;
-      `);
+    // Applock DULUAN, sebelum query GeneralLedger apa pun -- lihat
+    // acquireGLPostingApplock's own comment di atas.
+    await acquireGLPostingApplock(transaction);
 
     const cekUlang = await new sql.Request(transaction)
       .input("v", sql.VarChar(64), doc.voucherNo)

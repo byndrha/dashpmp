@@ -3,6 +3,17 @@ import type { RecordPaymentInput, RecordPaymentResult } from "@/lib/pelunasan-ty
 import { AppError } from "@/lib/action-result";
 import { getMetodePembayaranByKode } from "@/lib/queries/metode-pembayaran";
 import { getNaiveWibNow, getBusinessPeriodStartWib } from "@/lib/business-date";
+import { nextGeneralLedgerId, acquireGLPostingApplock } from "@/lib/queries/gl-posting-backfill";
+
+// ChartOfAccountID tetap (bukan per-perusahaan/dicari lewat kode), sudah
+// diverifikasi langsung ke ChartOfAccount 2026-09-23:
+//   019  (AccountNo 1301) = Piutang Usaha
+//   0185 (AccountNo 2200) = Uang Muka Customer -- porsi kelebihan bayar
+//   (SalesPaymentDetail.Deposit) yang belum dialokasikan ke invoice manapun,
+//   dipisah dari Piutang Usaha supaya saldo piutang tidak turun untuk uang
+//   yang belum benar2 melunasi invoice tertentu.
+const AKUN_PIUTANG_USAHA = "019";
+const AKUN_UANG_MUKA_CUSTOMER = "0185";
 
 // Satu-satunya kode "Kas Kecil" yang benar-benar ada di metode_pembayaran
 // mkesindo (dicek langsung ke Postgres 2026-09-22) -- dibatasi ke periode
@@ -176,59 +187,115 @@ export async function recordPayment(input: RecordPaymentInput): Promise<RecordPa
   const voucherNo = `MKE/SP/${voucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
   const totalAmount = allocations.reduce((sum, a) => sum + a.amount, 0);
 
-  await pool
+  const bpNameResult = await pool
     .request()
-    .input("id", sql.VarChar(16), salesPaymentId)
-    .input("voucherNo", sql.VarChar(128), voucherNo)
-    .input("transDate", sql.DateTime, transDate)
-    .input("notes", sql.VarChar(512), input.notes ?? "")
     .input("bpId", sql.VarChar(16), input.businessPartnerId)
-    .input("amount", sql.Decimal(23, 4), totalAmount)
-    .input("coaId", sql.VarChar(16), metode.coaId)
-    .input("branchId", sql.VarChar(16), BRANCH_ID)
-    .input("departmentId", sql.VarChar(16), DEPARTMENT_ID).query(`
-      INSERT INTO SalesPayment
-        (SalesPaymentID, VoucherNo, TransDate, Notes, BusinessPartnerID, Amount, Type, IsDeleted, ModifiedDate,
-         ChartOfAccountID, BranchID, ChartOfAccountTaxID, ChartOfAccountExpenseID, ChartOfAccountDiscID,
-         CurrencyID, Rate, SalesmanID, ChartOfAccountDepositID, DepartmentID, IsAccountReceiveable,
-         EDC, CardNo, ProjectID, SalesDepositID, SalesPaymentRequestID)
-      VALUES
-        (@id, @voucherNo, @transDate, @notes, @bpId, @amount, NULL, 0, GETDATE(),
-         @coaId, @branchId, '', '', '',
-         '', 1, NULL, '', @departmentId, 0,
-         '', '', NULL, NULL, NULL)
-    `);
+    .query(`SELECT Name FROM BusinessPartner WHERE BusinessPartnerID = @bpId`);
+  const businessPartnerName = (bpNameResult.recordset[0] as { Name: string } | undefined)?.Name ?? input.businessPartnerId;
+  const glMemo = `Sales Payment To ${businessPartnerName}`;
 
-  let totalDeposit = 0;
-  for (const alloc of allocations) {
-    const outstanding = Math.max(0, outstandingMap.get(alloc.salesInvoiceId) ?? 0);
-    const amountApplied = Math.min(alloc.amount, outstanding);
-    const deposit = alloc.amount - amountApplied;
-    totalDeposit += deposit;
-
-    const detailId = await nextSalesPaymentDetailId(pool);
-    await pool
-      .request()
-      .input("id", sql.VarChar(16), detailId)
-      .input("spId", sql.VarChar(16), salesPaymentId)
-      .input("siId", sql.VarChar(16), alloc.salesInvoiceId)
-      .input("amount", sql.Decimal(23, 4), amountApplied)
-      .input("deposit", sql.Decimal(23, 4), deposit).query(`
-        INSERT INTO SalesPaymentDetail
-          (SalesPaymentDetailID, SalesPaymentID, SalesInvoiceID, Amount, Deposit, DiscRp, ModifiedDate,
-           IsDeleted, AddTax, Expense, CurrencyID, Rate, DepositAmount, Status)
+  // Ditulis dalam SATU transaksi (sebelumnya tidak -- INSERT terpisah
+  // sekuensial) supaya SalesPayment/SalesPaymentDetail/DashboardSalesPaymentMetode
+  // dan baris GeneralLedger baru di bawah gagal/berhasil bersama-sama, tidak
+  // ada kondisi "SP tercatat tapi GL kosong" (atau sebaliknya) akibat error
+  // di tengah jalan.
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    await new sql.Request(transaction)
+      .input("id", sql.VarChar(16), salesPaymentId)
+      .input("voucherNo", sql.VarChar(128), voucherNo)
+      .input("transDate", sql.DateTime, transDate)
+      .input("notes", sql.VarChar(512), input.notes ?? "")
+      .input("bpId", sql.VarChar(16), input.businessPartnerId)
+      .input("amount", sql.Decimal(23, 4), totalAmount)
+      .input("coaId", sql.VarChar(16), metode.coaId)
+      .input("branchId", sql.VarChar(16), BRANCH_ID)
+      .input("departmentId", sql.VarChar(16), DEPARTMENT_ID).query(`
+        INSERT INTO SalesPayment
+          (SalesPaymentID, VoucherNo, TransDate, Notes, BusinessPartnerID, Amount, Type, IsDeleted, ModifiedDate,
+           ChartOfAccountID, BranchID, ChartOfAccountTaxID, ChartOfAccountExpenseID, ChartOfAccountDiscID,
+           CurrencyID, Rate, SalesmanID, ChartOfAccountDepositID, DepartmentID, IsAccountReceiveable,
+           EDC, CardNo, ProjectID, SalesDepositID, SalesPaymentRequestID)
         VALUES
-          (@id, @spId, @siId, @amount, @deposit, 0, GETDATE(),
-           0, 0, 0, NULL, NULL, NULL, NULL)
+          (@id, @voucherNo, @transDate, @notes, @bpId, @amount, NULL, 0, GETDATE(),
+           @coaId, @branchId, '', '', '',
+           '', 1, NULL, '', @departmentId, 0,
+           '', '', NULL, NULL, NULL)
       `);
+
+    let totalDeposit = 0;
+    for (const alloc of allocations) {
+      const outstanding = Math.max(0, outstandingMap.get(alloc.salesInvoiceId) ?? 0);
+      const amountApplied = Math.min(alloc.amount, outstanding);
+      const deposit = alloc.amount - amountApplied;
+      totalDeposit += deposit;
+
+      const detailId = await nextSalesPaymentDetailId(pool);
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), detailId)
+        .input("spId", sql.VarChar(16), salesPaymentId)
+        .input("siId", sql.VarChar(16), alloc.salesInvoiceId)
+        .input("amount", sql.Decimal(23, 4), amountApplied)
+        .input("deposit", sql.Decimal(23, 4), deposit).query(`
+          INSERT INTO SalesPaymentDetail
+            (SalesPaymentDetailID, SalesPaymentID, SalesInvoiceID, Amount, Deposit, DiscRp, ModifiedDate,
+             IsDeleted, AddTax, Expense, CurrencyID, Rate, DepositAmount, Status)
+          VALUES
+            (@id, @spId, @siId, @amount, @deposit, 0, GETDATE(),
+             0, 0, 0, NULL, NULL, NULL, NULL)
+        `);
+    }
+
+    await new sql.Request(transaction)
+      .input("spId", sql.VarChar(16), salesPaymentId)
+      .input("metodeKode", sql.VarChar(64), input.metodePembayaranKode)
+      .input("catatan", sql.VarChar(500), input.notes ?? null)
+      .query(`INSERT INTO DashboardSalesPaymentMetode (SalesPaymentID, MetodeKode, Catatan) VALUES (@spId, @metodeKode, @catatan)`);
+
+    // Posting GeneralLedger -- ditambahkan 2026-09-23. Sebelum ini, SP yang
+    // dibuat lewat dashpmp TIDAK PERNAH ter-posting ke GL sama sekali (beda
+    // dgn SP yang dibuat lewat ERP desktop, yang selalu posting 2 baris:
+    // Debit akun kas/bank metode pembayaran = Amount, Credit 019 Piutang
+    // Usaha = Amount -- pola ini diverifikasi terhadap >1 SP nyata yang
+    // sudah ter-posting benar). Applock yang sama dgn gl-posting-backfill.ts
+    // dipakai supaya generate ID GeneralLedger di sini tidak race dgn proses
+    // backfill SI/DO yang berjalan terpisah.
+    await acquireGLPostingApplock(transaction);
+    const glId = await nextGeneralLedgerId(transaction);
+    const glRows: { chartOfAccountId: string; debit: number; credit: number }[] = [
+      { chartOfAccountId: metode.coaId, debit: totalAmount, credit: 0 },
+    ];
+    const amountAppliedTotal = totalAmount - totalDeposit;
+    if (amountAppliedTotal > 0) {
+      glRows.push({ chartOfAccountId: AKUN_PIUTANG_USAHA, debit: 0, credit: amountAppliedTotal });
+    }
+    if (totalDeposit > 0) {
+      glRows.push({ chartOfAccountId: AKUN_UANG_MUKA_CUSTOMER, debit: 0, credit: totalDeposit });
+    }
+    for (const line of glRows) {
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), glId)
+        .input("branchId", sql.VarChar(16), BRANCH_ID)
+        .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+        .input("voucherNo", sql.VarChar(64), voucherNo)
+        .input("transDate", sql.DateTime, transDate)
+        .input("chartOfAccountId", sql.VarChar(16), line.chartOfAccountId)
+        .input("debit", sql.Decimal(18, 6), line.debit)
+        .input("credit", sql.Decimal(18, 6), line.credit)
+        .input("memo", sql.VarChar(255), glMemo)
+        .input("businessPartnerId", sql.VarChar(16), input.businessPartnerId).query(`
+          INSERT INTO GeneralLedger
+            (ID, BranchID, DepartmentID, VoucherNo, TransDate, [Type], ChartOfAccountID, Debit, Credit, Memo, BusinessPartnerID, CurrencyID, Rate)
+          VALUES
+            (@id, @branchId, @departmentId, @voucherNo, @transDate, 'SALESPAYMENT', @chartOfAccountId, @debit, @credit, @memo, @businessPartnerId, '', 1)
+        `);
+    }
+
+    await transaction.commit();
+    return { salesPaymentId, voucherNo, totalAmount, totalDeposit };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
   }
-
-  await pool
-    .request()
-    .input("spId", sql.VarChar(16), salesPaymentId)
-    .input("metodeKode", sql.VarChar(64), input.metodePembayaranKode)
-    .input("catatan", sql.VarChar(500), input.notes ?? null)
-    .query(`INSERT INTO DashboardSalesPaymentMetode (SalesPaymentID, MetodeKode, Catatan) VALUES (@spId, @metodeKode, @catatan)`);
-
-  return { salesPaymentId, voucherNo, totalAmount, totalDeposit };
 }
