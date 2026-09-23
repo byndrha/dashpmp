@@ -3,6 +3,7 @@ import { AppError } from "@/lib/action-result";
 import { getNaiveWibTransDate } from "@/lib/business-date";
 import { getPriceLevelOptions } from "@/lib/queries/mitra";
 import { KANTONG_ITEM_ID } from "@/lib/queries/sales-order";
+import { postDeliveryOrderRealtime, postSalesInvoiceRealtime } from "@/lib/queries/gl-posting-backfill";
 
 export interface SisaReturRow {
   stopDeliveryItemId: number;
@@ -418,6 +419,7 @@ async function buatSoDoSiSekaligus(
   const deliveryOrderId = await nextDeliveryOrderId(transaction);
   const doVoucherSeq = await nextDOVoucherSeq(transaction, yearMonth);
   const doVoucherNo = `MKE/DO/${doVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+  const doTransDate = getNaiveWibTransDate();
   await new sql.Request(transaction)
     .input("id", sql.VarChar(16), deliveryOrderId)
     .input("voucherNo", sql.VarChar(128), doVoucherNo)
@@ -428,7 +430,7 @@ async function buatSoDoSiSekaligus(
     .input("salesmanId", sql.VarChar(16), jadwalRow.SalesmanID ?? "")
     .input("expeditionId", sql.VarChar(16), doExpeditionId)
     .input("vehicleNo", sql.VarChar(50), doVehicleNo)
-    .input("transDate", sql.DateTime, getNaiveWibTransDate())
+    .input("transDate", sql.DateTime, doTransDate)
     .input("dueDate", sql.DateTime, dueDate).query(`
       INSERT INTO DeliveryOrder
         (DeliveryOrderID, VoucherNo, TransDate, BranchID, DepartmentID, BusinessPartnerID, Notes, SalesOrderID,
@@ -459,9 +461,22 @@ async function buatSoDoSiSekaligus(
          0, @amount, @qty, @name, @qty, NULL, 0, @soDetailId)
     `);
 
+  await postDeliveryOrderRealtime(transaction, {
+    voucherNo: doVoucherNo,
+    documentId: deliveryOrderId,
+    transDate: doTransDate,
+    branchId: BRANCH_ID,
+    departmentId: DEPARTMENT_ID,
+    businessPartnerId: input.businessPartnerId,
+    currencyId: "",
+    rate: 1,
+    deliveryOrderId: null,
+  });
+
   const salesInvoiceId = await nextSalesInvoiceId(transaction);
   const siVoucherSeq = await nextSIVoucherSeq(transaction, yearMonth);
   const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+  const siTransDate = getNaiveWibTransDate();
   await new sql.Request(transaction)
     .input("id", sql.VarChar(16), salesInvoiceId)
     .input("voucherNo", sql.VarChar(128), siVoucherNo)
@@ -476,7 +491,7 @@ async function buatSoDoSiSekaligus(
     .input("branchId", sql.VarChar(16), BRANCH_ID)
     .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
     .input("amount", sql.Decimal(23, 4), amount)
-    .input("transDate", sql.DateTime, getNaiveWibTransDate())
+    .input("transDate", sql.DateTime, siTransDate)
     .input("salesmanId", sql.VarChar(16), jadwalRow.SalesmanID ?? "").query(`
       INSERT INTO SalesInvoice
         (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -509,6 +524,18 @@ async function buatSoDoSiSekaligus(
         (@id, @siId, @itemId, @qty, 'PCS', 1, 1, @price, 0, 0,
          0, @amount, @name, @amount, @amount, '', '', 0, NULL)
     `);
+
+  await postSalesInvoiceRealtime(transaction, {
+    voucherNo: siVoucherNo,
+    documentId: salesInvoiceId,
+    transDate: siTransDate,
+    branchId: BRANCH_ID,
+    departmentId: DEPARTMENT_ID,
+    businessPartnerId: input.businessPartnerId,
+    currencyId: "",
+    rate: 1,
+    deliveryOrderId,
+  });
 
   await new sql.Request(transaction).input("soId", sql.VarChar(16), salesOrderId).query(`UPDATE SalesOrder SET IsClosed = 1, IsInvoiced = 1 WHERE SalesOrderID = @soId`);
   await new sql.Request(transaction).input("doId", sql.VarChar(16), deliveryOrderId).query(`UPDATE DeliveryOrder SET IsClosed = 1, IsInvoiced = 1 WHERE DeliveryOrderID = @doId`);
