@@ -167,8 +167,43 @@ async function buildItemAccountMapping(pool: sql.ConnectionPool | sql.Transactio
 // di bawah) supaya keduanya selalu memakai mapping yang identik dan tidak
 // menghitung ulang query mahal ini (beberapa scan+join atas GeneralLedger
 // 1,9 juta+ baris) di setiap pembuatan dokumen.
+//
+// FIX (whole-branch review, 23 Sep 2026): dulu satu fungsi
+// `getItemAccountMappingCached(poolOrTx)` dipakai baik oleh backlog manual
+// MAUPUN posting real-time, memakai koneksi APA PUN yang diberikan
+// pemanggil -- termasuk `transaction` milik pembuatan dokumen live. Kalau
+// cache masih dingin (baru deploy / baru restart), scan mahal itu jalan DI
+// ATAS transaksi dokumen live tsb, menahannya terbuka (dengan baris
+// DeliveryOrder/SalesInvoice yang sudah diinsert tapi belum commit) selama
+// scan berlangsung -- dan kalau dua dokumen selesai nyaris bersamaan dalam
+// jendela dingin itu, KEDUANYA menjalankan scan yang sama secara konkuren,
+// masing2 sambil menahan transaksinya sendiri. Dipecah jadi dua fungsi:
+// peekItemAccountMappingCached (non-blocking, baca cache saja) dipakai jalur
+// real-time, dan warmItemAccountMappingCache (blocking, benar2 menjalankan
+// scan) dipakai backlog manual + dipicu fire-and-forget oleh jalur real-time
+// lewat koneksi pool-nya SENDIRI (bukan transaksi pemanggil).
 let cachedItemAccountMapping: Map<string, ItemAccountMapping> | null = null;
-export async function getItemAccountMappingCached(
+
+// Non-blocking "peek" -- dipakai jalur posting real-time
+// (postDeliveryOrderRealtime/postSalesInvoiceRealtime) yang berjalan DI
+// DALAM transaksi pembuatan dokumen live. TIDAK PERNAH menjalankan
+// buildItemAccountMapping sendiri -- hanya membaca cache in-memory yang
+// sudah ada. Kalau cache masih dingin, mengembalikan null SEGERA (bukan
+// menunggu scan selesai) supaya transaksi pemanggil tidak pernah tertahan
+// oleh scan GeneralLedger 1,9 juta+ baris.
+export function peekItemAccountMappingCached(): Map<string, ItemAccountMapping> | null {
+  return cachedItemAccountMapping;
+}
+
+// Blocking "warm" -- benar2 menjalankan buildItemAccountMapping dan mengisi
+// cache modul. Dipakai (a) computeBacklogForDate (aman blocking di sini,
+// karena bukan di dalam transaksi pembuatan dokumen live manapun), dan (b)
+// dipicu fire-and-forget oleh jalur real-time saat peek di atas mengembalikan
+// null -- SELALU lewat koneksi pool baru milik pemanggil sendiri (lihat
+// pemanggilan di postDeliveryOrderRealtime/postSalesInvoiceRealtime yang
+// memakai getPool(), BUKAN `transaction`-nya), supaya pemanasan cache yang
+// dingin TIDAK PERNAH terjadi di atas koneksi transaksi dokumen live.
+export async function warmItemAccountMappingCache(
   poolOrTx: sql.ConnectionPool | sql.Transaction
 ): Promise<Map<string, ItemAccountMapping>> {
   if (!cachedItemAccountMapping) {
@@ -463,7 +498,7 @@ async function hitungGLSalesInvoice(
 
 export async function computeBacklogForDate(tanggal: string): Promise<BacklogPreview> {
   const pool = await getPool();
-  const mapping = await getItemAccountMappingCached(pool);
+  const mapping = await warmItemAccountMappingCache(pool);
 
   const postable: ComputedDoc[] = [];
   const skipped: BacklogSkip[] = [];
@@ -953,10 +988,36 @@ export async function postDeliveryOrderRealtime(
   doc: DokumenBacklog
 ): Promise<RealtimePostResult> {
   try {
-    const mapping = await getItemAccountMappingCached(transaction);
+    const mapping = peekItemAccountMappingCached();
+    if (!mapping) {
+      // Cache dingin -- panaskan di BACKGROUND lewat koneksi pool SENDIRI
+      // (getPool(), bukan `transaction` dokumen ini), supaya scan
+      // GeneralLedger yang mahal tidak pernah menahan transaksi pembuatan
+      // dokumen live ini. Ini skip yang DISENGAJA (sama seperti skip lain di
+      // fungsi ini, mis. item tanpa histori mapping) -- percobaan real-time
+      // PERTAMA setelah deploy/cache-clear memang sengaja skip, percobaan
+      // berikutnya (setelah warm selesai di background) berhasil normal.
+      // Dokumen ini tetap terdeteksi panel Kesehatan Posting GL & bisa
+      // diproses manual lewat tombol "Proses" seperti skip lainnya.
+      warmItemAccountMappingCache(await getPool()).catch((err) =>
+        console.error("Gagal memanaskan cache pemetaan Item->Akun di background:", err)
+      );
+      return {
+        posted: false,
+        alasan: "Pemetaan akun belum siap (cache sedang dihangatkan) -- coba lagi lewat panel Kesehatan Posting GL.",
+      };
+    }
     const hasil = await hitungGLDeliveryOrder(transaction, doc, mapping);
     if ("alasan" in hasil) return { posted: false, alasan: hasil.alasan };
 
+    // Applock diakuisisi SETELAH pengecekan mapping di atas -- ini tetap
+    // aman meskipun komentar acquireGLPostingApplock/postSatuDokumen bilang
+    // "applock DULUAN, sebelum query GeneralLedger apa pun": peek di atas
+    // dijamin non-blocking dan HANYA membaca cache in-memory modul (tidak
+    // pernah query GeneralLedger sendiri), jadi tidak ada race
+    // query-sebelum-lock yang perlu dikhawatirkan -- yang terjadi sebelum
+    // lock cuma lookup cache in-memory (pemanasannya sendiri sudah dipisah
+    // ke koneksi pool terpisah lewat warmItemAccountMappingCache di atas).
     await acquireGLPostingApplock(transaction);
     const tulis = await tulisBarisGL(
       transaction,
@@ -979,10 +1040,26 @@ export async function postSalesInvoiceRealtime(
   doc: DokumenBacklog
 ): Promise<RealtimePostResult> {
   try {
-    const mapping = await getItemAccountMappingCached(transaction);
+    const mapping = peekItemAccountMappingCached();
+    if (!mapping) {
+      // Sama seperti postDeliveryOrderRealtime di atas -- lihat komentar
+      // di sana untuk penjelasan lengkap kenapa ini skip yang disengaja,
+      // bukan bug, dan kenapa warm dipicu di koneksi pool terpisah.
+      warmItemAccountMappingCache(await getPool()).catch((err) =>
+        console.error("Gagal memanaskan cache pemetaan Item->Akun di background:", err)
+      );
+      return {
+        posted: false,
+        alasan: "Pemetaan akun belum siap (cache sedang dihangatkan) -- coba lagi lewat panel Kesehatan Posting GL.",
+      };
+    }
     const hasil = await hitungGLSalesInvoice(transaction, doc, mapping);
     if ("alasan" in hasil) return { posted: false, alasan: hasil.alasan };
 
+    // Applock diakuisisi SETELAH pengecekan mapping di atas -- lihat
+    // komentar di postDeliveryOrderRealtime untuk penjelasan lengkap kenapa
+    // ini tetap aman terhadap catatan "applock DULUAN" di
+    // acquireGLPostingApplock/postSatuDokumen.
     await acquireGLPostingApplock(transaction);
     const tulis = await tulisBarisGL(
       transaction,
