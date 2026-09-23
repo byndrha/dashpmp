@@ -164,3 +164,120 @@ export async function getPenjualanTrend(kode: string): Promise<PenjualanTrendDat
     totalPendapatan12Bulan: months.reduce((sum, m) => sum + m.pendapatanRp, 0),
   };
 }
+
+export interface PiutangTrendMonth {
+  month: string;
+  piutangBaru: number; // GL Debit on the Piutang account this month
+  piutangTertagih: number; // GL Credit on the Piutang account this month
+  netMovement: number; // piutangBaru - piutangTertagih
+}
+
+export interface PiutangSummaryData {
+  totalPiutangSaatIni: number; // GL balance as of today, utama + logistik
+  totalPiutangUtama: number;
+  totalPiutangLogistik: number;
+  months: PiutangTrendMonth[];
+}
+
+interface PiutangAccountConfig {
+  kode: string;
+  label: CompanyKoneksiLabel;
+  accountNo: string;
+  requiresBranchFilter?: boolean;
+}
+
+// Confirmed live with accounting at both PTs (17-18 Sep 2026) -- each row is
+// 100% traceable to PMP_PEMESANAN. The pmpersada+logistik row needs
+// requiresBranchFilter: this database is shared with PMPakis (see
+// PMPERSADA_OWN_BRANCH_ID above, defined earlier in this file by Task 1) --
+// without it, this account's balance also includes PMPakis's own piutang.
+// Account "1114 Piutang Lainnya" (pmpersada/logistik) is deliberately
+// excluded -- confirmed by accounting to be an inter-company (PMPutra <->
+// PMPersada) receivable, not a customer/Agen receivable.
+const PIUTANG_ACCOUNTS: PiutangAccountConfig[] = [
+  { kode: "pmputra", label: "utama", accountNo: "1115" }, // "Piutang Agen"
+  { kode: "pmputra", label: "logistik", accountNo: "1111" }, // "Piutang Jasa Usaha"
+  { kode: "pmpersada", label: "utama", accountNo: "1115" }, // "Piutang Agen"
+  { kode: "pmpersada", label: "logistik", accountNo: "1111", requiresBranchFilter: true }, // "Piutang Reguler"
+];
+
+function getPiutangAccount(kode: string, label: CompanyKoneksiLabel): PiutangAccountConfig {
+  const entry = PIUTANG_ACCOUNTS.find((a) => a.kode === kode && a.label === label);
+  if (!entry) throw new Error(`No Piutang account configured for kode="${kode}" label="${label}"`);
+  return entry;
+}
+
+// Current balance (Debit-normal asset account) -- no date filter, matches
+// balance-sheet-pmputra.ts's own "as of today" pattern for AsetLancar.
+async function getPiutangBalance(kode: string, label: CompanyKoneksiLabel): Promise<number> {
+  const pool = await getCompanyPool(kode, label);
+  const account = getPiutangAccount(kode, label);
+  const request = pool.request().input("accountNo", sql.VarChar(16), account.accountNo);
+  if (account.requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT ISNULL(SUM(gl.Debit),0) AS TotalDebit, ISNULL(SUM(gl.Credit),0) AS TotalCredit
+    FROM GeneralLedger gl
+    JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
+    WHERE coa.AccountNo = @accountNo
+      ${account.requiresBranchFilter ? "AND gl.BranchID = @branchId" : ""}
+  `);
+  const r = result.recordset[0] as { TotalDebit: number; TotalCredit: number };
+  return r.TotalDebit - r.TotalCredit;
+}
+
+async function getPiutangMovementByMonth(
+  kode: string,
+  label: CompanyKoneksiLabel,
+  start: Date,
+  end: Date
+): Promise<Map<string, { baru: number; tertagih: number }>> {
+  const pool = await getCompanyPool(kode, label);
+  const account = getPiutangAccount(kode, label);
+  const request = pool
+    .request()
+    .input("accountNo", sql.VarChar(16), account.accountNo)
+    .input("start", sql.DateTime, start)
+    .input("end", sql.DateTime, end);
+  if (account.requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+      SELECT CONVERT(varchar(7), gl.TransDate, 120) AS Bulan,
+             SUM(gl.Debit) AS Baru, SUM(gl.Credit) AS Tertagih
+      FROM GeneralLedger gl
+      JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
+      WHERE coa.AccountNo = @accountNo
+        AND gl.TransDate >= @start AND gl.TransDate < @end
+        ${account.requiresBranchFilter ? "AND gl.BranchID = @branchId" : ""}
+      GROUP BY CONVERT(varchar(7), gl.TransDate, 120)
+    `);
+  const map = new Map<string, { baru: number; tertagih: number }>();
+  for (const r of result.recordset as { Bulan: string; Baru: number; Tertagih: number }[]) {
+    map.set(r.Bulan, { baru: r.Baru, tertagih: r.Tertagih });
+  }
+  return map;
+}
+
+export async function getPiutangSummary(kode: string): Promise<PiutangSummaryData> {
+  const { start, end, keys } = monthsWindow();
+
+  const [totalPiutangUtama, totalPiutangLogistik, movementUtama, movementLogistik] = await Promise.all([
+    getPiutangBalance(kode, "utama"),
+    getPiutangBalance(kode, "logistik"),
+    getPiutangMovementByMonth(kode, "utama", start, end),
+    getPiutangMovementByMonth(kode, "logistik", start, end),
+  ]);
+
+  const months: PiutangTrendMonth[] = keys.map((key) => {
+    const mU = movementUtama.get(key) ?? { baru: 0, tertagih: 0 };
+    const mL = movementLogistik.get(key) ?? { baru: 0, tertagih: 0 };
+    const piutangBaru = mU.baru + mL.baru;
+    const piutangTertagih = mU.tertagih + mL.tertagih;
+    return { month: key, piutangBaru, piutangTertagih, netMovement: piutangBaru - piutangTertagih };
+  });
+
+  return {
+    totalPiutangSaatIni: totalPiutangUtama + totalPiutangLogistik,
+    totalPiutangUtama,
+    totalPiutangLogistik,
+    months,
+  };
+}
