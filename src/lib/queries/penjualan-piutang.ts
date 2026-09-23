@@ -142,18 +142,16 @@ async function getPendapatanByMonth(
 export async function getPenjualanTrend(kode: string): Promise<PenjualanTrendData> {
   const { start, end, keys } = monthsWindow();
 
-  const [kantongUtama, kantongLogistik, pendapatanUtama, pendapatanLogistik] = await Promise.all([
+  const [kantongUtama, pendapatanUtama, pendapatanLogistik] = await Promise.all([
     getKantongByMonth(kode, "utama", start, end),
-    getKantongByMonth(kode, "logistik", start, end),
     getPendapatanByMonth(kode, "utama", start, end),
     getPendapatanByMonth(kode, "logistik", start, end),
   ]);
 
   const months: PenjualanTrendMonth[] = keys.map((key) => {
     const kU = kantongUtama.get(key) ?? { kecil: 0, besar: 0 };
-    const kL = kantongLogistik.get(key) ?? { kecil: 0, besar: 0 };
-    const kantongKecil = kU.kecil + kL.kecil;
-    const kantongBesar = kU.besar + kL.besar;
+    const kantongKecil = kU.kecil;
+    const kantongBesar = kU.besar;
     const pendapatanRp = (pendapatanUtama.get(key) ?? 0) + (pendapatanLogistik.get(key) ?? 0);
     return { month: key, kantongKecil, kantongBesar, kantongTotal: kantongKecil + kantongBesar, pendapatanRp };
   });
