@@ -934,3 +934,64 @@ export async function getBackfillRingkasanPerTanggal(
   }
   return map;
 }
+
+export interface RealtimePostResult {
+  posted: boolean;
+  alasan?: string;
+}
+
+// Dipanggil tepat setelah DeliveryOrderDetail selesai ditulis, DI DALAM
+// transaksi yang sama dengan pembuatan DO itu sendiri (lihat spec Bagian 3
+// keputusan #1 & #2). TIDAK PERNAH throw -- kegagalan apa pun (skip yang
+// disengaja seperti item tanpa histori mapping, ATAU error DB sungguhan)
+// dikembalikan sebagai { posted: false, alasan }, supaya pemanggil tetap
+// bisa lanjut commit transaksi pembuatan dokumennya tanpa GL. Dokumen yang
+// gagal di sini tetap terdeteksi oleh panel Kesehatan Posting GL seperti
+// biasa, siap diproses manual lewat tombol "Proses" kapan saja.
+export async function postDeliveryOrderRealtime(
+  transaction: sql.Transaction,
+  doc: DokumenBacklog
+): Promise<RealtimePostResult> {
+  try {
+    const mapping = await getItemAccountMappingCached(transaction);
+    const hasil = await hitungGLDeliveryOrder(transaction, doc, mapping);
+    if ("alasan" in hasil) return { posted: false, alasan: hasil.alasan };
+
+    await acquireGLPostingApplock(transaction);
+    const tulis = await tulisBarisGL(
+      transaction,
+      { ...doc, docType: "DELIVERYORDER", lines: hasil.lines },
+      "[DASHPMP-REALTIME]"
+    );
+    return tulis.posted ? { posted: true } : { posted: false, alasan: tulis.alasan };
+  } catch (err) {
+    console.error(`Gagal posting GL real-time DELIVERYORDER ${doc.voucherNo}:`, err);
+    return { posted: false, alasan: "Terjadi kesalahan teknis saat posting GL real-time -- lihat log server." };
+  }
+}
+
+// Sama seperti postDeliveryOrderRealtime, untuk SalesInvoice. Pemanggil
+// WAJIB mengisi doc.deliveryOrderId dengan DeliveryOrderID induk (dipakai
+// hitungGLSalesInvoice untuk cek SalesReturn terkait) -- BUKAN VoucherNo
+// DO induk, cukup ID mentahnya.
+export async function postSalesInvoiceRealtime(
+  transaction: sql.Transaction,
+  doc: DokumenBacklog
+): Promise<RealtimePostResult> {
+  try {
+    const mapping = await getItemAccountMappingCached(transaction);
+    const hasil = await hitungGLSalesInvoice(transaction, doc, mapping);
+    if ("alasan" in hasil) return { posted: false, alasan: hasil.alasan };
+
+    await acquireGLPostingApplock(transaction);
+    const tulis = await tulisBarisGL(
+      transaction,
+      { ...doc, docType: "SALESINVOICE", lines: hasil.lines },
+      "[DASHPMP-REALTIME]"
+    );
+    return tulis.posted ? { posted: true } : { posted: false, alasan: tulis.alasan };
+  } catch (err) {
+    console.error(`Gagal posting GL real-time SALESINVOICE ${doc.voucherNo}:`, err);
+    return { posted: false, alasan: "Terjadi kesalahan teknis saat posting GL real-time -- lihat log server." };
+  }
+}
