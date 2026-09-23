@@ -1216,6 +1216,12 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     {armadaNama ?? "Armada"}
                   </span>
                   <span className="text-muted-foreground">({order.length}) Tujuan</span>
+                  {route && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <RouteIcon className="size-4" />
+                      {route.distanceKm.toLocaleString("id-ID")} km
+                    </span>
+                  )}
                   {!isDraft && (
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <span className="font-medium text-foreground">{time}</span>
@@ -1631,10 +1637,6 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             {route && (
               <div className="flex flex-wrap gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
                 <span className="flex items-center gap-1">
-                  <RouteIcon className="size-4 text-muted-foreground" />
-                  {route.distanceKm.toLocaleString("id-ID")} km
-                </span>
-                <span className="flex items-center gap-1">
                   <Clock className="size-4 text-muted-foreground" />
                   Tempuh {route.durationMinutes} + Bongkar {Math.round(bongkarTotalMenit)} + Konfirmasi{" "}
                   {konfirmasiTotalMenit} = {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)}{" "}
@@ -1659,6 +1661,17 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
               </div>
             )}
 
+            {!isDraft && vehicleChecks.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Hasil Inspeksi Kendaraan (Satpam)</p>
+                <div className="flex flex-col gap-2">
+                  {vehicleChecks.map((c) => (
+                    <CheckSummary key={c.vehicleCheckId} check={c} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {!isDraft && jadwalId != null && armadaId != null && (
               <VehicleCheckDialog
                 jadwalId={jadwalId}
@@ -1675,16 +1688,6 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
         </div>
         </div>
 
-        {!isDraft && vehicleChecks.length > 0 && (
-          <div className="flex flex-col gap-2 border-t p-4 md:pt-3">
-            <p className="text-xs font-medium text-muted-foreground">Hasil Inspeksi Kendaraan (Satpam)</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {vehicleChecks.map((c) => (
-                <CheckSummary key={c.vehicleCheckId} check={c} />
-              ))}
-            </div>
-          </div>
-        )}
         <StopDeliveryProofDialog
           detail={proofDetail}
           jadwalId={jadwalId}
