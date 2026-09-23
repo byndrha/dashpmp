@@ -1,17 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { Plus, X, Camera, RefreshCw, SwitchCamera, MapPin, Loader2 } from "lucide-react";
+import { Plus, X, Camera, RefreshCw, SwitchCamera, MapPin, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { haversineKm } from "@/lib/route-estimate";
-import { MitraLocationMap } from "@/components/dashboard/mitra-location-map";
-import { KunjunganRouteMap, type RouteInfo } from "@/components/pemasaran-app/kunjungan-route-map";
+import type { RouteInfo } from "@/components/pemasaran-app/kunjungan-route-map";
 import { useWatermarkCameraCapture } from "@/hooks/use-watermark-camera-capture";
+
+// Leaflet/react-leaflet menyentuh `window` saat module dievaluasi -- pecah
+// kalau dirender di server (SSR). Komponen lain yang sudah pakai Leaflet di
+// codebase ini (mis. mitra-location-field.tsx) selalu memuatnya lewat
+// next/dynamic + ssr:false; sheet ini sebelumnya meng-import langsung dan
+// baru ketahuan pecah saat uji browser sungguhan (2026-09-23) -- tidak
+// pernah terdeteksi lewat tsc/eslint karena itu murni error runtime SSR.
+const MitraLocationMap = dynamic(
+  () => import("@/components/dashboard/mitra-location-map").then((m) => m.MitraLocationMap),
+  { ssr: false, loading: () => <Skeleton className="h-[260px] w-full rounded-lg" /> }
+);
+const KunjunganRouteMap = dynamic(
+  () => import("@/components/pemasaran-app/kunjungan-route-map").then((m) => m.KunjunganRouteMap),
+  { ssr: false, loading: () => <Skeleton className="h-[280px] w-full rounded-lg" /> }
+);
 import {
   getKunjunganMitraOptionsAction,
   setMitraLocationAction,
@@ -77,12 +93,14 @@ function PhotoSlot({
     </Button>
   );
 
+  // aspect-square (bukan h-40/h-24 tetap) -- supaya kedua slot foto bisa
+  // berdampingan 1:1 dalam grid 2 kolom, sesuai permintaan user 2026-09-23.
   if (file && previewUrl) {
     return (
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">{label}</Label>
-        <div className="relative">
-          <img src={previewUrl} alt={label} className="h-40 w-full rounded-md object-cover" />
+        <div className="relative aspect-square w-full">
+          <img src={previewUrl} alt={label} className="size-full rounded-md object-cover" />
           <Button
             type="button"
             size="sm"
@@ -94,8 +112,8 @@ function PhotoSlot({
           </Button>
         </div>
         {active && (
-          <div className="relative overflow-hidden rounded-md bg-black">
-            <video ref={videoRef} autoPlay playsInline muted className="h-40 w-full object-cover" />
+          <div className="relative aspect-square w-full overflow-hidden rounded-md bg-black">
+            <video ref={videoRef} autoPlay playsInline muted className="size-full object-cover" />
             {flipButton}
             {error ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-2 text-center text-xs text-white">
@@ -123,13 +141,24 @@ function PhotoSlot({
     <div className="flex flex-col gap-1.5">
       <Label className="text-xs">{label}</Label>
       {!active ? (
-        <Button type="button" variant="outline" className="h-24 flex-col gap-1.5" onClick={() => setActive(true)}>
-          <Camera className="size-5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Ambil Foto</span>
-        </Button>
+        // Button shadcn punya tinggi bawaan sendiri (mis. h-9) yang menimpa
+        // aspect-square kalau ditaruh langsung di elemen Button -- dibungkus
+        // div aspect-square dulu, Button diisi penuh lewat absolute inset-0,
+        // pola sama seperti pratinjau foto/video di bawah.
+        <div className="relative aspect-square w-full">
+          <Button
+            type="button"
+            variant="outline"
+            className="absolute inset-0"
+            onClick={() => setActive(true)}
+            title="Ambil Foto"
+          >
+            <Camera className="size-5 text-muted-foreground" />
+          </Button>
+        </div>
       ) : (
-        <div className="relative overflow-hidden rounded-md bg-black">
-          <video ref={videoRef} autoPlay playsInline muted className="h-40 w-full object-cover" />
+        <div className="relative aspect-square w-full overflow-hidden rounded-md bg-black">
+          <video ref={videoRef} autoPlay playsInline muted className="size-full object-cover" />
           {flipButton}
           {error ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-2 text-center text-xs text-white">
@@ -146,6 +175,110 @@ function PhotoSlot({
             >
               <Camera className="size-3.5" /> {capturing ? "Memproses..." : "Ambil Foto"}
             </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Ganti "Pilih Mitra" (dropdown Select biasa) -- input ketik untuk cari +
+// daftar hasil (Nama, Wilayah, Kecamatan), begitu dipilih berubah jadi
+// kotak panel detail mitra dengan tombol "Ganti" untuk kembali cari.
+// Sesuai permintaan user 2026-09-23.
+function MitraSelector({
+  mitraOptions,
+  selectedMitra,
+  onSelect,
+  onChangeMitra,
+}: {
+  mitraOptions: MitraRow[] | null;
+  selectedMitra: MitraRow | null;
+  onSelect: (id: string) => void;
+  onChangeMitra: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = mitraOptions ?? [];
+    if (!q) return list;
+    return list.filter((m) => m.Name.toLowerCase().includes(q));
+  }, [mitraOptions, query]);
+
+  if (selectedMitra) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Mitra</Label>
+        <div className="rounded-md border border-border p-3 text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-medium">{selectedMitra.Name}</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedMitra.Wilayah}
+                {selectedMitra.Kecamatan ? ` · ${selectedMitra.Kecamatan}` : ""}
+              </p>
+              {selectedMitra.Alamat && <p className="mt-1 text-xs text-muted-foreground">{selectedMitra.Alamat}</p>}
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onChangeMitra}>
+              Ganti
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor="mitra-search" className="text-xs">
+        Pilih Mitra
+      </Label>
+      <div className="relative">
+        <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          id="mitra-search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Ketik nama mitra..."
+          className="pl-8"
+        />
+      </div>
+      {open && (
+        <div className="max-h-56 overflow-y-auto rounded-md border border-border bg-card shadow-md">
+          {mitraOptions == null ? (
+            <p className="p-3 text-center text-xs text-muted-foreground">Memuat mitra...</p>
+          ) : filtered.length === 0 ? (
+            <p className="p-3 text-center text-xs text-muted-foreground">Tidak ada mitra ditemukan.</p>
+          ) : (
+            filtered.map((m) => (
+              <button
+                key={m.BusinessPartnerID}
+                type="button"
+                // onMouseDown (bukan onClick) supaya event ini terpicu SEBELUM
+                // onBlur input menutup daftar -- kalau pakai onClick, blur
+                // duluan menutup daftar dan klik kehilangan targetnya.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(m.BusinessPartnerID);
+                  setQuery("");
+                  setOpen(false);
+                }}
+                className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-accent"
+              >
+                <span className="font-medium">{m.Name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {m.Wilayah}
+                  {m.Kecamatan ? ` · ${m.Kecamatan}` : ""}
+                </span>
+              </button>
+            ))
           )}
         </div>
       )}
@@ -219,6 +352,23 @@ export function TambahKunjunganSheet() {
 
   function handleSelectMitra(id: string) {
     setSelectedId(id);
+    setPinDraft(null);
+    setSavedPin(null);
+    setMarketingPosition(null);
+    setRouteInfo(null);
+    setRouteError(null);
+    setFotoDepan(null);
+    setFotoPenagihan(null);
+    setHasilKunjungan("");
+    setConfirmError(null);
+    setPinInitialPos({ lat: FALLBACK_LAT, lng: FALLBACK_LNG });
+    pinGeoRequestedRef.current = false;
+  }
+
+  // Tombol "Ganti" di kotak panel Mitra-Selector -- sama seperti
+  // handleSelectMitra tapi mengosongkan pilihan (kembali ke input cari).
+  function handleChangeMitra() {
+    setSelectedId(null);
     setPinDraft(null);
     setSavedPin(null);
     setMarketingPosition(null);
@@ -359,7 +509,11 @@ export function TambahKunjunganSheet() {
       </button>
 
       {open && (
-        <div className="absolute inset-0 z-40 flex flex-col bg-background">
+        // fixed (bukan absolute) inset-0 -- supaya sheet ini menutupi
+        // navbar atas (header shell) DAN navbar bawah (bottom nav), bukan
+        // cuma area tengah antara keduanya. z-50 di atas header shell
+        // (z-20) dan tombol trigger (z-30). Sesuai permintaan user 2026-09-23.
+        <div className="fixed inset-0 z-50 flex flex-col bg-background">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h2 className="font-display text-base font-semibold">Tambah Kunjungan</h2>
             <button type="button" onClick={() => handleOpenChange(false)}>
@@ -369,32 +523,12 @@ export function TambahKunjunganSheet() {
 
           <div className="flex-1 overflow-y-auto p-4">
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Pilih Mitra</Label>
-                <Select value={selectedId ?? undefined} onValueChange={(v) => v && handleSelectMitra(v)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pilih mitra..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(mitraOptions ?? []).map((m) => (
-                      <SelectItem key={m.BusinessPartnerID} value={m.BusinessPartnerID}>
-                        {m.Name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedMitra && (
-                <div className="rounded-md border border-border p-3 text-sm">
-                  <p className="font-medium">{selectedMitra.Name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedMitra.Wilayah}
-                    {selectedMitra.Kecamatan ? ` · ${selectedMitra.Kecamatan}` : ""}
-                  </p>
-                  {selectedMitra.Alamat && <p className="mt-1 text-xs text-muted-foreground">{selectedMitra.Alamat}</p>}
-                </div>
-              )}
+              <MitraSelector
+                mitraOptions={mitraOptions}
+                selectedMitra={selectedMitra}
+                onSelect={handleSelectMitra}
+                onChangeMitra={handleChangeMitra}
+              />
 
               {needsPin && !pinDraft && (
                 <div className="flex flex-col gap-2">
@@ -447,14 +581,13 @@ export function TambahKunjunganSheet() {
 
                   {withinRadius && (
                     <div className="flex flex-col gap-4 border-t pt-4">
-                      <PhotoSlot
-                        label="Foto Tampak Depan Lokasi (bisa selfie)"
-                        facingMode="user"
-                        allowToggle
-                        file={fotoDepan}
-                        onCapture={setFotoDepan}
-                      />
-                      <PhotoSlot label="Foto Hasil Penagihan/Penawaran" facingMode="environment" file={fotoPenagihan} onCapture={setFotoPenagihan} />
+                      {/* Grid 2 kolom + aspect-square di PhotoSlot -- kedua
+                          foto berdampingan 1:1, label dipersingkat sesuai
+                          permintaan user 2026-09-23. */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <PhotoSlot label="Foto Lokasi" facingMode="user" allowToggle file={fotoDepan} onCapture={setFotoDepan} />
+                        <PhotoSlot label="Foto Hasil" facingMode="environment" file={fotoPenagihan} onCapture={setFotoPenagihan} />
+                      </div>
 
                       <div className="flex flex-col gap-1.5">
                         <Label className="text-xs">Hasil Kunjungan</Label>
@@ -463,21 +596,29 @@ export function TambahKunjunganSheet() {
                           onChange={(e) => setHasilKunjungan(e.target.value)}
                           rows={4}
                           placeholder="Catat hasil kunjungan ke mitra ini..."
+                          className="resize-none"
                         />
                       </div>
-
-                      {confirmError && <p className="text-xs text-destructive">{confirmError}</p>}
-
-                      <Button type="button" disabled={!canConfirm || pending} onClick={handleConfirm} className="gap-1.5">
-                        {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                        Konfirmasi Kunjungan
-                      </Button>
                     </div>
                   )}
                 </>
               )}
             </div>
           </div>
+
+          {/* Footer di luar area scroll (bukan class `sticky`) -- flex child
+              sesudah area overflow-y-auto di atas, sehingga selalu menempel
+              di bawah tanpa ikut ter-scroll, sesuai permintaan user
+              2026-09-23. */}
+          {withinRadius && (
+            <div className="flex flex-col gap-2 border-t bg-background p-4">
+              {confirmError && <p className="text-xs text-destructive">{confirmError}</p>}
+              <Button type="button" disabled={!canConfirm || pending} onClick={handleConfirm} className="w-full gap-1.5">
+                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                Konfirmasi Kunjungan
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </>
