@@ -23,6 +23,7 @@ import {
   getArmadaUtilisasiHarian,
   getArmadaUtilisasiPeriode,
   getArmadaNextJadwalStarted,
+  getJadwalTotalRetur,
   type DriverStopRow,
   type StopDeliveryProof,
   type AvailableSalesOrder,
@@ -289,6 +290,10 @@ export async function getArmadaUtilisasiPeriodeAction(armadaId: number, business
 
 export async function getArmadaNextJadwalStartedAction(jadwalId: number): Promise<boolean> {
   return getArmadaNextJadwalStarted(jadwalId);
+}
+
+export async function getJadwalTotalReturAction(jadwalId: number): Promise<number> {
+  return getJadwalTotalRetur(jadwalId);
 }
 
 export async function createArmadaActivityAction(input: {

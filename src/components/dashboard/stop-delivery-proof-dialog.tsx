@@ -76,9 +76,13 @@ export function StopDeliveryProofDialog({
             <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto text-sm">
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {proof.jamTiba && <span>Tiba {formatTime(proof.jamTiba)}</span>}
-                <span>
-                  Selesai {formatTime(proof.jamSelesai)} · {formatDate(proof.jamSelesai)}
-                </span>
+                {proof.jamSelesai ? (
+                  <span>
+                    Selesai {formatTime(proof.jamSelesai)} · {formatDate(proof.jamSelesai)}
+                  </span>
+                ) : (
+                  <span>Belum dikonfirmasi driver</span>
+                )}
               </div>
 
               {proof.fotoBuktiUrls.length > 0 && (

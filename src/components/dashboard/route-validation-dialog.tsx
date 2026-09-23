@@ -66,6 +66,7 @@ import {
   getArmadaUtilisasiHarianAction,
   getArmadaUtilisasiPeriodeAction,
   getArmadaNextJadwalStartedAction,
+  getJadwalTotalReturAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
@@ -115,8 +116,10 @@ function SortableStopRow({
   onRemove?: (detail: DriverStopRow) => void;
   // Once the armada is Berangkat, the "Lihat SI" icon no longer makes
   // sense here (per-stop invoices are already settled by then) — it's
-  // replaced per-row by a checkmark the moment that stop's own delivery
-  // completes (detail.JamSelesai), opening the proof-of-delivery popup.
+  // replaced per-row by a checkmark opening the proof-of-delivery popup.
+  // Shown regardless of detail.JamSelesai (confirmed with user 2026-09-23):
+  // retur data can exist even when the driver never confirmed that stop, so
+  // the popup itself (not this row) decides whether there's anything to show.
   hasDeparted: boolean;
   onOpenProof: (detail: DriverStopRow) => void;
 }) {
@@ -181,7 +184,7 @@ function SortableStopRow({
           Terkendala
         </Badge>
       )}
-      {hasDeparted && detail.JamSelesai != null ? (
+      {hasDeparted ? (
         <button
           type="button"
           title="Lihat bukti pengiriman"
@@ -309,6 +312,10 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // or "Tidak dilaksanakan" (window closed), fetched alongside vehicleChecks
   // in the same jadwalId-keyed effect below.
   const [nextJadwalStarted, setNextJadwalStarted] = useState(false);
+  // Total QtyRetur across every stop in this Jadwal — feeds the "Total
+  // Kantong + Bonus" panel and replaces MuatanQty on the "Cek Datang" card,
+  // fetched alongside vehicleChecks in the same jadwalId-keyed effect below.
+  const [totalRetur, setTotalRetur] = useState(0);
   // Every istirahat session logged against this Jadwal — feeds the Riwayat
   // Status popover's time summary (Task 11), fetched alongside
   // vehicleChecks in the same jadwalId-keyed effect below.
@@ -447,6 +454,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       setOrder([]);
       setVehicleChecks([]);
       setNextJadwalStarted(false);
+      setTotalRetur(0);
       setIstirahatSessions([]);
       return;
     }
@@ -459,6 +467,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       .finally(() => setLoading(false));
     getVehicleChecksForJadwalAction(jadwalId).then(setVehicleChecks);
     getArmadaNextJadwalStartedAction(jadwalId).then(setNextJadwalStarted);
+    getJadwalTotalReturAction(jadwalId).then(setTotalRetur);
     getIstirahatForJadwalAction(jadwalId).then(setIstirahatSessions);
   }, [jadwalId]);
 
@@ -1516,6 +1525,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                 <span className="font-medium">
                   {formatKemasanQty(totalQty10KG, totalQty5KG)}
                   {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
+                  {totalRetur > 0 && <span className="text-destructive"> (Retur {totalRetur})</span>}
                 </span>
               </div>
             )}
@@ -1633,7 +1643,16 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
               <div className="flex flex-col gap-2">
                 {(["BERANGKAT", "DATANG"] as const).map((tipe) => {
                   const check = vehicleChecks.find((c) => c.tipe === tipe);
-                  if (check) return <CheckSummary key={tipe} check={check} />;
+                  if (check) {
+                    // On Cek Datang, total Retur matters more than how much
+                    // was loaded (MuatanQty, same figure already shown on
+                    // Cek Berangkat) -- confirmed with user 2026-09-23.
+                    return tipe === "DATANG" ? (
+                      <CheckSummary key={tipe} check={check} packageLabel="kantong retur" packageQty={totalRetur} />
+                    ) : (
+                      <CheckSummary key={tipe} check={check} />
+                    );
+                  }
                   return (
                     <div key={tipe} className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-xs">
                       <span className="font-medium">{TIPE_LABEL[tipe]}</span>

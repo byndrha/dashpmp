@@ -18,7 +18,20 @@ import {
 // camera/carousel imports just for this summary block.
 export const TIPE_LABEL: Record<VehicleCheckTipe, string> = { BERANGKAT: "Cek Berangkat", DATANG: "Cek Datang" };
 
-export function CheckSummary({ check }: { check: VehicleCheckRow }) {
+export function CheckSummary({
+  check,
+  packageLabel,
+  packageQty,
+}: {
+  check: VehicleCheckRow;
+  // Overrides the "kantong es kristal" line below — used by
+  // route-validation-dialog.tsx's "Cek Datang" card to show total Retur
+  // instead of MuatanQty (added 2026-09-23), since on return what matters
+  // is how much came back, not how much was loaded. Other callers
+  // (satpam-app, etc.) leave these unset and get the original behavior.
+  packageLabel?: string;
+  packageQty?: number;
+}) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 text-xs">
       <div className="flex items-center justify-between">
@@ -39,7 +52,7 @@ export function CheckSummary({ check }: { check: VehicleCheckRow }) {
         </span>
         <span className="flex items-center gap-1">
           <Package className="size-3" />
-          {check.muatanQty.toLocaleString("id-ID")} kantong es kristal
+          {(packageQty ?? check.muatanQty).toLocaleString("id-ID")} {packageLabel ?? "kantong es kristal"}
         </span>
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">

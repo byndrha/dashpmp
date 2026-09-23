@@ -3191,7 +3191,11 @@ export interface StopDeliveryProofItem {
 export interface StopDeliveryProof {
   stopDeliveryId: number;
   jamTiba: string | null;
-  jamSelesai: string;
+  // Null when this StopDelivery row exists (so retur/item data can still be
+  // shown) but the driver never confirmed it via the driver-app's "Selesai
+  // Pembayaran" flow -- e.g. a retur recorded some other way. Confirmed
+  // with user 2026-09-23: retur detail must stay visible either way.
+  jamSelesai: string | null;
   fotoBuktiUrls: string[];
   tandaTanganUrl: string;
   tanpaPembayaran: boolean;
@@ -3206,8 +3210,12 @@ export interface StopDeliveryProof {
 }
 
 // Read-back for the RouteValidationDialog's proof-of-delivery popup —
-// everything confirmStopDelivery wrote for one already-completed stop.
-// Returns null for a stop with no JamSelesai yet (nothing to show).
+// everything confirmStopDelivery wrote for one stop, PLUS any retur data
+// recorded some other way (e.g. by office staff, not through the
+// driver-app's "Selesai Pembayaran" flow) — no longer requires JamSelesai
+// to be set (confirmed with user 2026-09-23: retur detail must stay
+// visible even when it isn't the driver's own input). Returns null only
+// when no StopDelivery row exists at all for this stop.
 export async function getStopDeliveryProof(jadwalDetailId: number): Promise<StopDeliveryProof | null> {
   const pool = await getPool();
 
@@ -3218,13 +3226,13 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
              sd.TanpaPembayaran, sd.SalesReturnID, jd.SalesInvoiceID
       FROM DashboardPengirimanStopDelivery sd
       JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalDetailID = sd.JadwalDetailID
-      WHERE sd.JadwalDetailID = @id AND sd.JamSelesai IS NOT NULL
+      WHERE sd.JadwalDetailID = @id
     `);
   const stopRow = stopResult.recordset[0] as
     | {
         StopDeliveryID: number;
         JamTiba: Date | null;
-        JamSelesai: Date;
+        JamSelesai: Date | null;
         FotoBuktiUrls: string | null;
         TandaTanganUrl: string | null;
         TanpaPembayaran: boolean;
@@ -3285,7 +3293,7 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
   return {
     stopDeliveryId: stopRow.StopDeliveryID,
     jamTiba: stopRow.JamTiba ? new Date(stopRow.JamTiba).toISOString() : null,
-    jamSelesai: new Date(stopRow.JamSelesai).toISOString(),
+    jamSelesai: stopRow.JamSelesai ? new Date(stopRow.JamSelesai).toISOString() : null,
     fotoBuktiUrls: stopRow.FotoBuktiUrls ? (JSON.parse(stopRow.FotoBuktiUrls) as string[]) : [],
     tandaTanganUrl: stopRow.TandaTanganUrl ?? "",
     tanpaPembayaran: stopRow.TanpaPembayaran,
@@ -3295,6 +3303,26 @@ export async function getStopDeliveryProof(jadwalDetailId: number): Promise<Stop
       ? { voucherNo: paymentRow.VoucherNo, amount: paymentRow.Amount, transDate: new Date(paymentRow.TransDate).toISOString() }
       : null,
   };
+}
+
+// Total QtyRetur across every stop in this Jadwal — feeds
+// route-validation-dialog.tsx's "Total Kantong + Bonus" panel and the "Cek
+// Datang" card (replacing MuatanQty there), added 2026-09-23. Counts retur
+// regardless of whether the stop's own JamSelesai was ever set by the
+// driver (same reasoning as getStopDeliveryProof above), so a retur
+// recorded some other way is never silently excluded from this total.
+export async function getJadwalTotalRetur(jadwalId: number): Promise<number> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId).query(`
+      SELECT ISNULL(SUM(sdi.QtyRetur), 0) AS TotalRetur
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
+      JOIN DashboardPengirimanStopDeliveryItem sdi ON sdi.StopDeliveryID = sd.StopDeliveryID
+      WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
+    `);
+  return (result.recordset[0] as { TotalRetur: number }).TotalRetur;
 }
 
 export interface ArmadaUtilisasiHarian {
