@@ -3303,45 +3303,47 @@ export interface ArmadaUtilisasiHarian {
   breakdownMenit: number;
 }
 
-type UtilisasiWoRow = { TotalMenit: number; MinStart: Date | null; MaxEnd: Date | null };
-type UtilisasiActivityRow = { ActivityType: string; TotalMenit: number; MinStart: Date; MaxEnd: Date };
+type UtilisasiTotalRow = { TotalMenit: number };
+type UtilisasiActivityTotalRow = { ActivityType: string; TotalMenit: number };
+type WindowBoundsRow = { MinStart: Date | null; MaxEnd: Date | null };
 
 // Shared reduction for getArmadaUtilisasiHarian and getArmadaUtilisasiPeriode
-// below — both query WO (Jadwal execution) and Activity rows the same shape,
-// just clipped to a different window (07:00-07:00 Kerja-shift day vs 14:00
-// WIB Periode Pengiriman), so the JS-side math lives in one place.
+// below — both query this armada's own WO/Activity totals plus a SHARED
+// (all-armada) window-bounds row, just clipped to a different window
+// (07:00-07:00 Kerja-shift day vs 14:00 WIB Periode Pengiriman), so the
+// JS-side math lives in one place.
 //
 // Idle redefined 2026-09-23 (per user) from "sum of Menganggur/Pencucian/
 // IsiBBM activity logs" to a computed residual: total "jam operasional
-// papan" window (earliest to latest recorded event for this armada in this
-// window, across BOTH Jadwal execution and ArmadaActivity — NOT the full
-// window duration, so time with nothing recorded at all, e.g. overnight, is
-// excluded) minus WO minus Breakdown. A manually-logged "Menganggur" entry
-// still counts as Idle under this formula (it's neither WO nor B, so it
-// falls into the residual by construction) and also extends the window's
-// bounds if it's the earliest/latest event — so a literal gap between two
-// Jadwal with NOTHING logged in between is now correctly counted as Idle
-// too, which the old sum-of-tags approach could never detect.
+// papan" window minus WO minus Breakdown for THIS armada. The window itself
+// is corrected same day (per user, after live testing showed an
+// armada with only one Jadwal that day always came out 100% effective) to
+// be the shared earliest-to-latest recorded event across EVERY armada that
+// window — the same span the Papan Pengiriman board visibly renders that
+// day/periode — rather than only this armada's own first/last event, which
+// collapses to zero-width (and therefore zero Idle) whenever an armada has
+// just one Jadwal and no logged activity.
 //
 // Breakdown reclassified same day: "Perawatan", "Pencucian", and "IsiBBM"
 // are all Breakdown now (armada isn't available for a route during any of
 // them) — previously only "Perawatan" was.
-function reduceUtilisasi(woRow: UtilisasiWoRow, activityRows: UtilisasiActivityRow[]): ArmadaUtilisasiHarian {
+function reduceUtilisasi(
+  woRow: UtilisasiTotalRow,
+  activityRows: UtilisasiActivityTotalRow[],
+  windowBounds: WindowBoundsRow
+): ArmadaUtilisasiHarian {
   const waktuOperasionalMenit = woRow.TotalMenit;
   let breakdownMenit = 0;
-  const bounds: Date[] = [];
-  if (woRow.MinStart && woRow.MaxEnd) bounds.push(woRow.MinStart, woRow.MaxEnd);
   for (const r of activityRows) {
     if (r.ActivityType === "Perawatan" || r.ActivityType === "Pencucian" || r.ActivityType === "IsiBBM") {
       breakdownMenit += r.TotalMenit;
     }
-    bounds.push(r.MinStart, r.MaxEnd);
   }
-  if (bounds.length === 0) return { waktuOperasionalMenit: 0, idleMenit: 0, breakdownMenit: 0 };
+  if (windowBounds.MinStart == null || windowBounds.MaxEnd == null) {
+    return { waktuOperasionalMenit: 0, idleMenit: 0, breakdownMenit: 0 };
+  }
 
-  const windowStartMs = Math.min(...bounds.map((d) => d.getTime()));
-  const windowEndMs = Math.max(...bounds.map((d) => d.getTime()));
-  const windowTotalMenit = Math.round((windowEndMs - windowStartMs) / 60000);
+  const windowTotalMenit = Math.round((windowBounds.MaxEnd.getTime() - windowBounds.MinStart.getTime()) / 60000);
   const idleMenit = Math.max(windowTotalMenit - waktuOperasionalMenit - breakdownMenit, 0);
 
   return { waktuOperasionalMenit, idleMenit, breakdownMenit };
@@ -3367,13 +3369,12 @@ function reduceUtilisasi(woRow: UtilisasiWoRow, activityRows: UtilisasiActivityR
 export async function getArmadaUtilisasiHarian(armadaId: number, businessDate: string): Promise<ArmadaUtilisasiHarian> {
   const pool = await getPool();
 
-  const [woResult, activityResult] = await Promise.all([
+  const [woResult, activityResult, boundsResult] = await Promise.all([
     pool
       .request()
       .input("armadaId", sql.Int, armadaId)
       .input("businessDate", sql.Date, businessDate).query(`
-        SELECT ISNULL(SUM(DATEDIFF(MINUTE, j.JamMulaiMuat, vc.CheckedAt)), 0) AS TotalMenit,
-          MIN(j.JamMulaiMuat) AS MinStart, MAX(vc.CheckedAt) AS MaxEnd
+        SELECT ISNULL(SUM(DATEDIFF(MINUTE, j.JamMulaiMuat, vc.CheckedAt)), 0) AS TotalMenit
         FROM DashboardPengirimanJadwal j
         JOIN DashboardVehicleCheck vc ON vc.JadwalID = j.JadwalID AND vc.Tipe = 'DATANG'
         WHERE j.IsDeleted = 0 AND j.ArmadaID = @armadaId AND j.JamMulaiMuat IS NOT NULL
@@ -3385,26 +3386,51 @@ export async function getArmadaUtilisasiHarian(armadaId: number, businessDate: s
       .input("armadaId", sql.Int, armadaId)
       .input("businessDate", sql.Date, businessDate).query(`
         SELECT ActivityType,
-          SUM(DATEDIFF(MINUTE, ClippedStart, ClippedEnd)) AS TotalMenit,
-          MIN(ClippedStart) AS MinStart, MAX(ClippedEnd) AS MaxEnd
-        FROM (
-          SELECT ActivityType,
+          SUM(DATEDIFF(MINUTE,
             CASE WHEN StartTime < DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
-                 THEN DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) ELSE StartTime END AS ClippedStart,
+                 THEN DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) ELSE StartTime END,
             CASE WHEN EndTime > DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
-                 THEN DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME)) ELSE EndTime END AS ClippedEnd
-          FROM DashboardArmadaActivity
-          WHERE IsDeleted = 0 AND ArmadaID = @armadaId
-            AND StartTime < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
-            AND EndTime > DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
-        ) t
+                 THEN DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME)) ELSE EndTime END
+          )) AS TotalMenit
+        FROM DashboardArmadaActivity
+        WHERE IsDeleted = 0 AND ArmadaID = @armadaId
+          AND StartTime < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+          AND EndTime > DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
         GROUP BY ActivityType
       `),
+    // Jendela BERSAMA (lintas semua armada, bukan hanya @armadaId) -- sama
+    // dengan rentang yang tampak di Papan Pengiriman hari itu, dipakai
+    // sebagai total jendela "jam operasional papan" untuk Idle di
+    // reduceUtilisasi. Diperbaiki 2026-09-23: sebelumnya jendela ini
+    // dihitung per-armada sendiri, yang kolaps jadi nol lebar (Idle selalu
+    // 0) kalau armada itu cuma punya 1 Jadwal hari itu.
+    pool.request().input("businessDate", sql.Date, businessDate).query(`
+      SELECT MIN(EventStart) AS MinStart, MAX(EventEnd) AS MaxEnd
+      FROM (
+        SELECT j.JamMulaiMuat AS EventStart, vc.CheckedAt AS EventEnd
+        FROM DashboardPengirimanJadwal j
+        JOIN DashboardVehicleCheck vc ON vc.JadwalID = j.JadwalID AND vc.Tipe = 'DATANG'
+        WHERE j.IsDeleted = 0 AND j.JamMulaiMuat IS NOT NULL
+          AND j.JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+          AND j.JamJadwal < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+        UNION ALL
+        SELECT
+          CASE WHEN StartTime < DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+               THEN DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) ELSE StartTime END,
+          CASE WHEN EndTime > DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+               THEN DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME)) ELSE EndTime END
+        FROM DashboardArmadaActivity
+        WHERE IsDeleted = 0
+          AND StartTime < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+          AND EndTime > DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+      ) t
+    `),
   ]);
 
   return reduceUtilisasi(
-    woResult.recordset[0] as UtilisasiWoRow,
-    activityResult.recordset as UtilisasiActivityRow[]
+    woResult.recordset[0] as UtilisasiTotalRow,
+    activityResult.recordset as UtilisasiActivityTotalRow[],
+    boundsResult.recordset[0] as WindowBoundsRow
   );
 }
 
@@ -3424,13 +3450,12 @@ export async function getArmadaUtilisasiHarian(armadaId: number, businessDate: s
 export async function getArmadaUtilisasiPeriode(armadaId: number, businessDate: string): Promise<ArmadaUtilisasiHarian> {
   const pool = await getPool();
 
-  const [woResult, activityResult] = await Promise.all([
+  const [woResult, activityResult, boundsResult] = await Promise.all([
     pool
       .request()
       .input("armadaId", sql.Int, armadaId)
       .input("businessDate", sql.Date, businessDate).query(`
-        SELECT ISNULL(SUM(DATEDIFF(MINUTE, ClippedStart, ClippedEnd)), 0) AS TotalMenit,
-          MIN(ClippedStart) AS MinStart, MAX(ClippedEnd) AS MaxEnd
+        SELECT ISNULL(SUM(DATEDIFF(MINUTE, ClippedStart, ClippedEnd)), 0) AS TotalMenit
         FROM (
           SELECT
             CASE WHEN j.JamMulaiMuat < DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
@@ -3449,8 +3474,7 @@ export async function getArmadaUtilisasiPeriode(armadaId: number, businessDate: 
       .input("armadaId", sql.Int, armadaId)
       .input("businessDate", sql.Date, businessDate).query(`
         SELECT ActivityType,
-          SUM(DATEDIFF(MINUTE, ClippedStart, ClippedEnd)) AS TotalMenit,
-          MIN(ClippedStart) AS MinStart, MAX(ClippedEnd) AS MaxEnd
+          SUM(DATEDIFF(MINUTE, ClippedStart, ClippedEnd)) AS TotalMenit
         FROM (
           SELECT ActivityType,
             CASE WHEN StartTime < DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
@@ -3464,10 +3488,38 @@ export async function getArmadaUtilisasiPeriode(armadaId: number, businessDate: 
         ) t
         GROUP BY ActivityType
       `),
+    // Jendela BERSAMA lintas semua armada (14:00 WIB Periode Pengiriman) --
+    // sama seperti getArmadaUtilisasiHarian di atas, lihat komentarnya.
+    pool.request().input("businessDate", sql.Date, businessDate).query(`
+      SELECT MIN(EventStart) AS MinStart, MAX(EventEnd) AS MaxEnd
+      FROM (
+        SELECT
+          CASE WHEN j.JamMulaiMuat < DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+               THEN DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) ELSE j.JamMulaiMuat END AS EventStart,
+          CASE WHEN vc.CheckedAt > DATEADD(HOUR, 14, CAST(@businessDate AS DATETIME))
+               THEN DATEADD(HOUR, 14, CAST(@businessDate AS DATETIME)) ELSE vc.CheckedAt END AS EventEnd
+        FROM DashboardPengirimanJadwal j
+        JOIN DashboardVehicleCheck vc ON vc.JadwalID = j.JadwalID AND vc.Tipe = 'DATANG'
+        WHERE j.IsDeleted = 0 AND j.JamMulaiMuat IS NOT NULL
+          AND j.JamMulaiMuat < DATEADD(HOUR, 14, CAST(@businessDate AS DATETIME))
+          AND vc.CheckedAt > DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+        UNION ALL
+        SELECT
+          CASE WHEN StartTime < DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+               THEN DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME))) ELSE StartTime END,
+          CASE WHEN EndTime > DATEADD(HOUR, 14, CAST(@businessDate AS DATETIME))
+               THEN DATEADD(HOUR, 14, CAST(@businessDate AS DATETIME)) ELSE EndTime END
+        FROM DashboardArmadaActivity
+        WHERE IsDeleted = 0
+          AND StartTime < DATEADD(HOUR, 14, CAST(@businessDate AS DATETIME))
+          AND EndTime > DATEADD(HOUR, 14, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+      ) t
+    `),
   ]);
 
   return reduceUtilisasi(
-    woResult.recordset[0] as UtilisasiWoRow,
-    activityResult.recordset as UtilisasiActivityRow[]
+    woResult.recordset[0] as UtilisasiTotalRow,
+    activityResult.recordset as UtilisasiActivityTotalRow[],
+    boundsResult.recordset[0] as WindowBoundsRow
   );
 }
