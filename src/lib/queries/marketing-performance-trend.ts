@@ -1,13 +1,9 @@
 import { getPool, sql } from "@/lib/db";
 import { getBusinessDate, monthBoundary } from "@/lib/business-date";
-import {
-  getMarketingUsers,
-  getMarketingWilayahAssignments,
-  resolveResponsibleMarketing,
-  resolveMitraOverrideSources,
-} from "@/lib/queries/marketing-wilayah";
+import { getMarketingUsers } from "@/lib/queries/marketing-wilayah";
 import { getMonthlyCapacitySnapshot } from "@/lib/queries/mitra-capacity-snapshot";
 import { getArmadaNooDailyCapacity } from "@/lib/queries/armada-noo-target";
+import { resolveAllMitraOwnership, NOO_WINDOW_DAYS } from "@/lib/queries/marketing-ownership";
 
 const KANTONG_QTY_EXPR = `SUM(CASE WHEN dod.Name LIKE '%5 KG%' THEN dod.Delivered / 2.0 ELSE dod.Delivered END)`;
 
@@ -41,6 +37,10 @@ function daysInMonth(monthStart: Date): number {
   return Math.round((monthBoundary(monthStart, 1).getTime() - monthStart.getTime()) / 86400000);
 }
 
+function addDays(d: Date, days: number): Date {
+  return new Date(d.getTime() + days * 86400000);
+}
+
 function makeAnatomy(): CategoryAnatomy {
   return { general: 0, bagQtyActual: 0, bagQtyTarget: 0, pct: null };
 }
@@ -53,19 +53,28 @@ function finalizeAnatomy(a: CategoryAnatomy): void {
   a.pct = a.bagQtyTarget > 0 ? (a.bagQtyActual / a.bagQtyTarget) * 100 : null;
 }
 
-interface MitraMeta {
+interface DailyRow {
   BusinessPartnerID: string;
-  JoinDate: string | null;
-  MarketingUserID: string | null;
-  IsCrossWilayahProposal: boolean;
+  TransDate: string;
+  QtyKantong: number;
 }
 
 // Per-Marketing (plus a company-wide `combined` row) monthly trend of
 // Existing/NOO/Total — "Matriks Performa Marketing" (spec §5). `monthsBack`
 // is 3 (default) or 12 (expanded) months ending at the current WIB business
-// month, oldest first. Only Marketing with at least one Wilayah/Kecamatan
-// assignment (or a per-mitra priority override) get a row — same rule as
-// getMarketingPerformance().
+// month, oldest first.
+//
+// NOO/Existing classification AND ownership now come from
+// resolveAllMitraOwnership() (src/lib/queries/marketing-ownership.ts) — the
+// SAME permanent-ownership + 30-day-rolling-window rule the Kinerja
+// Karyawan payroll module (getHistoriPenjualanSemuaKaryawan) uses, so a
+// Marketing's NOO qty here now matches their NOO qty on /mkesindo/kinerja
+// exactly. Confirmed with user 2026-09-24 after the two pages were found
+// showing different NOO figures for the same person/month (MKT 02,
+// September 2026: 1.320 here vs 539 on Kinerja) — root cause was two
+// independent rules (JoinDate-in-calendar-month + live Wilayah attribution
+// here, vs Pengajuan-approval-30-day-window + permanent attribution on
+// Kinerja). This file used the OLD rule until this change.
 export async function getMarketingPerformanceTrend(monthsBack: number): Promise<MarketingPerformanceTrendData> {
   const pool = await getPool();
   const businessToday = getBusinessDate();
@@ -76,18 +85,9 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
   const earliestMonthStart = monthStarts[0];
   const rangeEnd = monthBoundary(currentMonthStart, 1);
 
-  const [assignments, marketingUsers, mitraResult, dailyResult] = await Promise.all([
-    getMarketingWilayahAssignments(),
+  const [marketingUsers, ownerships, dailyResult] = await Promise.all([
     getMarketingUsers(),
-    pool.request().query(`
-      SELECT
-          BusinessPartnerID,
-          ISNULL(NULLIF(LTRIM(RTRIM(NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-          NPWPAddress AS Kecamatan,
-          JoinDate
-      FROM BusinessPartner
-      WHERE ISNULL(IsDeleted, 0) = 0
-    `),
+    resolveAllMitraOwnership(),
     pool
       .request()
       .input("rangeStart", sql.Date, earliestMonthStart)
@@ -106,46 +106,15 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
       `),
   ]);
 
-  // Single shared source for the crossWilayah/prioritas merge (and the
-  // per-source breakdown Task 3's IsCrossWilayahProposal flag needs below)
-  // — see resolveMitraOverrideSources() in marketing-wilayah.ts.
-  const { crossWilayahOverrides, prioritasOverrides, merged: mitraOverrides } = await resolveMitraOverrideSources(assignments);
-  const marketingByName = new Map(marketingUsers.map((u) => [u.Nama, u]));
-
-  const mitraMeta = new Map<string, MitraMeta>();
-  for (const r of mitraResult.recordset as { BusinessPartnerID: string; Wilayah: string; Kecamatan: string | null; JoinDate: string | null }[]) {
-    const marketingName = resolveResponsibleMarketing(r.BusinessPartnerID, r.Wilayah, r.Kecamatan, assignments, mitraOverrides);
-    const user = marketingName ? marketingByName.get(marketingName) : undefined;
-    mitraMeta.set(r.BusinessPartnerID, {
-      BusinessPartnerID: r.BusinessPartnerID,
-      JoinDate: r.JoinDate,
-      MarketingUserID: user?.UserID ?? null,
-      IsCrossWilayahProposal: crossWilayahOverrides.has(r.BusinessPartnerID) && !prioritasOverrides.has(r.BusinessPartnerID),
-    });
-  }
-
-  const actualByMitraMonth = new Map<string, Map<string, number>>();
-  for (const r of dailyResult.recordset as { BusinessPartnerID: string; TransDate: string; QtyKantong: number }[]) {
-    const rowMonthStartISO = monthBoundary(new Date(r.TransDate)).toISOString().slice(0, 10);
-    let byMonth = actualByMitraMonth.get(r.BusinessPartnerID);
-    if (!byMonth) {
-      byMonth = new Map();
-      actualByMitraMonth.set(r.BusinessPartnerID, byMonth);
-    }
-    byMonth.set(rowMonthStartISO, (byMonth.get(rowMonthStartISO) ?? 0) + r.QtyKantong);
-  }
-
-  const marketingIdsWithScope = new Set<string>();
-  for (const a of assignments) {
-    const id = marketingByName.get(a.MarketingNama)?.UserID;
-    if (id) marketingIdsWithScope.add(id);
-  }
-  for (const name of mitraOverrides.values()) {
-    const id = marketingByName.get(name)?.UserID;
-    if (id) marketingIdsWithScope.add(id);
-  }
-
+  const ownershipByMitra = new Map(ownerships.map((o) => [o.businessPartnerId, o]));
   const monthsISO = monthStarts.map((m) => m.toISOString().slice(0, 10));
+
+  // Every Marketing who owns at least one mitra gets a row — permanent
+  // ownership per Global Constraints, so this deliberately no longer
+  // requires a currently-active DashboardMarketingWilayah assignment (a
+  // Marketing who moved wilayah or left keeps their historical NOO/Existing
+  // credit and must still show up here).
+  const marketingIdsWithScope = new Set(ownerships.map((o) => o.ownerAkunId));
   const rows: MarketingTrendRow[] = [...marketingIdsWithScope].map((userId) => ({
     MarketingUserID: userId,
     MarketingNama: marketingUsers.find((u) => u.UserID === userId)?.Nama ?? "Tidak diketahui",
@@ -154,52 +123,81 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
   const rowByMarketing = new Map(rows.map((r) => [r.MarketingUserID, r]));
   const combined: MarketingTrendMonth[] = monthsISO.map((iso) => makeMonth(iso));
 
+  // Headcount (`general`): once per mitra per month it qualifies, decided
+  // purely from the NOO-window dates (not tied to whether it actually had
+  // any delivery that month) — same independence from qty the old rule
+  // had. A mitra whose window ends mid-month counts in BOTH buckets'
+  // `general` for that month (it genuinely was NOO for part of it and
+  // Existing for the rest) — same straddling rule qtyNooBerjalan/
+  // qtyExistingBerjalan already applies on /mkesindo/kinerja
+  // (marketing-collection-penjualan.ts).
   for (let i = 0; i < monthStarts.length; i++) {
     const monthStart = monthStarts[i];
-    const monthStartISO = monthsISO[i];
+    const nextMonthStart = monthBoundary(monthStart, 1);
+    for (const ownership of ownerships) {
+      if (ownership.nooStartDate == null || ownership.nooStartDate.getTime() >= nextMonthStart.getTime()) continue;
+      const windowEnd = addDays(ownership.nooStartDate, NOO_WINDOW_DAYS);
+      const isNooThisMonth = windowEnd.getTime() >= monthStart.getTime();
+      const isExistingThisMonth = windowEnd.getTime() < nextMonthStart.getTime();
+      const row = rowByMarketing.get(ownership.ownerAkunId);
+      if (isNooThisMonth) {
+        if (row) row.months[i].noo.general += 1;
+        combined[i].noo.general += 1;
+      }
+      if (isExistingThisMonth) {
+        if (row) row.months[i].existing.general += 1;
+        combined[i].existing.general += 1;
+      }
+    }
+  }
+
+  // bagQtyActual: day-granularity split — same rule
+  // marketing-collection-penjualan.ts's per-day loop uses, so a mitra
+  // whose 30-day window ends mid-month contributes to BOTH buckets that
+  // month, split by day, instead of the whole month landing in one bucket.
+  for (const r of dailyResult.recordset as DailyRow[]) {
+    const ownership = ownershipByMitra.get(r.BusinessPartnerID);
+    if (!ownership) continue;
+    const rowDate = new Date(r.TransDate);
+    const monthIndex = monthStarts.findIndex(
+      (m) => rowDate.getTime() >= m.getTime() && rowDate.getTime() < monthBoundary(m, 1).getTime()
+    );
+    if (monthIndex < 0) continue;
+    if (ownership.nooStartDate && rowDate.getTime() < ownership.nooStartDate.getTime()) continue; // before mitra existed
+    const nooWindowEnd = ownership.nooStartDate ? addDays(ownership.nooStartDate, NOO_WINDOW_DAYS) : null;
+    const isNoo = nooWindowEnd != null && rowDate.getTime() <= nooWindowEnd.getTime();
+    const bucket = isNoo ? "noo" : "existing";
+
+    const row = rowByMarketing.get(ownership.ownerAkunId);
+    if (row) row.months[monthIndex][bucket].bagQtyActual += r.QtyKantong;
+    combined[monthIndex][bucket].bagQtyActual += r.QtyKantong;
+  }
+
+  // bagQtyTarget: Existing's daily-capacity-based target (added once per
+  // row per month it counts as Existing at all — same non-prorated
+  // precision the old rule used), plus NOO's own shared target figure
+  // (unchanged — still one flat figure per row per month, never per-mitra).
+  for (let i = 0; i < monthStarts.length; i++) {
+    const monthStart = monthStarts[i];
     const nextMonthStart = monthBoundary(monthStart, 1);
     const days = daysInMonth(monthStart);
-
     const [snapshot, nooDailyCapacity] = await Promise.all([
       getMonthlyCapacitySnapshot(monthStart),
       getArmadaNooDailyCapacity(monthStart.getTime() === currentMonthStart.getTime() ? businessToday : nextMonthStart),
     ]);
     const targetNooThisMonth = nooDailyCapacity * days;
 
-    for (const meta of mitraMeta.values()) {
-      if (!meta.MarketingUserID) continue;
-      // A cross-wilayah-proposed mitra is permanently NOO regardless of
-      // JoinDate (per the accepted design), so it must never be skipped by
-      // the null/future-JoinDate guard below — that guard only applies to
-      // non-cross-wilayah mitra, for whom JoinDate is the sole NOO signal.
-      if (!meta.IsCrossWilayahProposal && (meta.JoinDate == null || new Date(meta.JoinDate).getTime() >= nextMonthStart.getTime())) continue;
-      const isNoo = meta.IsCrossWilayahProposal || (meta.JoinDate != null && new Date(meta.JoinDate).getTime() >= monthStart.getTime());
-      const actual = actualByMitraMonth.get(meta.BusinessPartnerID)?.get(monthStartISO) ?? 0;
-      const capacity = snapshot.get(meta.BusinessPartnerID) ?? 0;
-
-      const row = rowByMarketing.get(meta.MarketingUserID);
-      if (row) {
-        const bucket = isNoo ? row.months[i].noo : row.months[i].existing;
-        bucket.general += 1;
-        bucket.bagQtyActual += actual;
-        // capacity is a DAILY figure (BusinessPartner.Capacity, snapshotted
-        // — see getMonthlyCapacitySnapshot) while bagQtyActual accumulates
-        // the WHOLE month's DO qty, so it must be scaled by `days` to be
-        // comparable — the same daily->monthly scaling NOO's own target
-        // already does a few lines below (targetNooThisMonth). Without
-        // this, Existing's pct compared a monthly total against a bare
-        // daily-target sum and read as 1000%+.
-        if (!isNoo) bucket.bagQtyTarget += (capacity ?? 0) * days;
-      }
-
-      const combinedBucket = isNoo ? combined[i].noo : combined[i].existing;
-      combinedBucket.general += 1;
-      combinedBucket.bagQtyActual += actual;
-      if (!isNoo) combinedBucket.bagQtyTarget += (capacity ?? 0) * days;
+    for (const ownership of ownerships) {
+      if (ownership.nooStartDate == null || ownership.nooStartDate.getTime() >= nextMonthStart.getTime()) continue;
+      const windowEnd = addDays(ownership.nooStartDate, NOO_WINDOW_DAYS);
+      const isExistingThisMonth = windowEnd.getTime() < nextMonthStart.getTime();
+      if (!isExistingThisMonth) continue;
+      const capacity = snapshot.get(ownership.businessPartnerId) ?? 0;
+      const row = rowByMarketing.get(ownership.ownerAkunId);
+      if (row) row.months[i].existing.bagQtyTarget += capacity * days;
+      combined[i].existing.bagQtyTarget += capacity * days;
     }
 
-    // Target NOO is one shared figure added once per row per month (never
-    // per-mitra) — see Global Constraints.
     for (const row of rows) row.months[i].noo.bagQtyTarget = targetNooThisMonth;
     combined[i].noo.bagQtyTarget = targetNooThisMonth;
   }
