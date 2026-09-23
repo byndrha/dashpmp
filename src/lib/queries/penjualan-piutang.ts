@@ -142,6 +142,11 @@ async function getPendapatanByMonth(
 export async function getPenjualanTrend(kode: string): Promise<PenjualanTrendData> {
   const { start, end, keys } = monthsWindow();
 
+  // Kantong sengaja hanya dari "utama" (tidak digabung dengan "logistik" seperti Pendapatan
+  // di bawah): verifikasi live membuktikan PMP_Pemesanan pmputra di utama dan logistik
+  // mirror-duplicate data fisik yang sama (bukan dua order book independen) — menjumlahkan
+  // keduanya akan double-count setiap kantong. Sama seperti precedent di
+  // hpp-bersih-pmputra.ts / hpp-bersih-pmpersada.ts yang juga sumber kantong dari utama saja.
   const [kantongUtama, pendapatanUtama, pendapatanLogistik] = await Promise.all([
     getKantongByMonth(kode, "utama", start, end),
     getPendapatanByMonth(kode, "utama", start, end),
