@@ -21,6 +21,7 @@ import {
   getMaxSalesOrderTransDateForDeliveries,
   checkArmadaConflict,
   getArmadaUtilisasiHarian,
+  getArmadaUtilisasiPeriode,
   type DriverStopRow,
   type StopDeliveryProof,
   type AvailableSalesOrder,
@@ -279,6 +280,10 @@ export async function getArmadaActivitiesAction(businessDate: string): Promise<A
 
 export async function getArmadaUtilisasiHarianAction(armadaId: number, businessDate: string): Promise<ArmadaUtilisasiHarian> {
   return getArmadaUtilisasiHarian(armadaId, businessDate);
+}
+
+export async function getArmadaUtilisasiPeriodeAction(armadaId: number, businessDate: string): Promise<ArmadaUtilisasiHarian> {
+  return getArmadaUtilisasiPeriode(armadaId, businessDate);
 }
 
 export async function createArmadaActivityAction(input: {

@@ -72,6 +72,7 @@ import {
   getDriverPositionAction,
   getIstirahatForJadwalAction,
   getArmadaUtilisasiHarianAction,
+  getArmadaUtilisasiPeriodeAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
@@ -337,6 +338,11 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // priceLevels/pabrik above. Null while loading/unavailable (armadaId not
   // resolved yet), same "not yet computable" treatment poin 1-3 already use.
   const [utilisasiHarian, setUtilisasiHarian] = useState<ArmadaUtilisasiHarian | null>(null);
+  // For Efektifitas Armada poin 5 (Utility Effectiveness Per Periode) --
+  // same WO/Idle/Breakdown shape as poin 4, but windowed to the 14:00 WIB
+  // Periode Pengiriman `businessDate` belongs to instead of the 07:00-07:00
+  // Kerja-shift day (added 2026-09-23, see getArmadaUtilisasiPeriode).
+  const [utilisasiPeriode, setUtilisasiPeriode] = useState<ArmadaUtilisasiHarian | null>(null);
   // Live driver GPS for RouteMap's rotating truck marker — polled every 10s
   // once Mulai Muat is done, see the effect below. Null hides the marker.
   const [driverPosition, setDriverPosition] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -508,6 +514,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       .catch(() => setPabrik(null));
     getPriceLevelOptionsAction().then(setPriceLevels);
     Promise.resolve(armadaId != null ? getArmadaUtilisasiHarianAction(armadaId, businessDate) : null).then(setUtilisasiHarian);
+    Promise.resolve(armadaId != null ? getArmadaUtilisasiPeriodeAction(armadaId, businessDate) : null).then(setUtilisasiPeriode);
   }, [jadwalId, armadaId, businessDate]);
 
   // Live driver position for RouteMap's rotating truck marker — starts
@@ -1042,6 +1049,16 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     return utilisasiHarian.waktuOperasionalMenit / total;
   }, [utilisasiHarian]);
 
+  // Poin 5 -- Utility Effectiveness Per Periode (confirmed with user
+  // 2026-09-23): same WO / (WO + Idle + B) shape as poin 4, windowed to the
+  // 14:00 WIB Periode Pengiriman instead of the whole Kerja-shift day.
+  const utilityEffectivenessPeriode = useMemo(() => {
+    if (utilisasiPeriode == null) return null;
+    const total = utilisasiPeriode.waktuOperasionalMenit + utilisasiPeriode.idleMenit + utilisasiPeriode.breakdownMenit;
+    if (total <= 0) return null;
+    return utilisasiPeriode.waktuOperasionalMenit / total;
+  }, [utilisasiPeriode]);
+
   // Aggregate bongkar time across every stop in the current order — the
   // per-stop "~X menit" label (SortableStopRow) shows this same function's
   // result for one stop; this is the sum across all of them, feeding the
@@ -1420,6 +1437,30 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                       ) : (
                         <p className="text-muted-foreground">
                           Belum bisa dihitung — belum ada data WO/Idle/Breakdown armada ini hari ini.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 border-t pt-2.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      5
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">
+                        Utility Effectiveness Per Periode — WO &divide; (WO + Idle + B), khusus Periode Pengiriman {formatDate(businessDate)}
+                      </p>
+                      {utilisasiPeriode != null && utilityEffectivenessPeriode != null ? (
+                        <p className="tabular-nums">
+                          {formatDurationMinutes(utilisasiPeriode.waktuOperasionalMenit)} &divide;{" "}
+                          ({formatDurationMinutes(utilisasiPeriode.waktuOperasionalMenit)} + {formatDurationMinutes(utilisasiPeriode.idleMenit)} +{" "}
+                          {formatDurationMinutes(utilisasiPeriode.breakdownMenit)}) ={" "}
+                          <span className="font-semibold text-primary">
+                            {(utilityEffectivenessPeriode * 100).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Belum bisa dihitung — belum ada data WO/Idle/Breakdown armada ini pada periode ini.
                         </p>
                       )}
                     </div>
