@@ -241,7 +241,6 @@ export function KinerjaMarketingSubTab() {
   const roster = useMemo(() => (ownMitraId && data ? (data.allMitraByMarketing[ownMitraId] ?? []) : []), [ownMitraId, data]);
 
   const todayISO = data?.todayISO ?? "";
-  const currentMonthStartISO = todayISO ? `${todayISO.slice(0, 7)}-01` : "";
 
   // Distinct Wilayah values across the caller's own roster, for the filter
   // dropdown below — client-side only, not a separate query (unlike the
@@ -259,15 +258,12 @@ export function KinerjaMarketingSubTab() {
   // style; no new abstraction).
   const searchLower = search.trim().toLowerCase();
 
-  // 3-way split, replacing the old existing/NOO split now that
-  // IsPriorityOverride/IsCrossWilayahProposal live directly on each roster
-  // row (Task 3): Prioritas wins over both other buckets (no double-listing
-  // — both other filters explicitly exclude it), Semua Mitra is the
-  // JoinDate-based "existing" collapse minus Prioritas and cross-wilayah
-  // mitra, and Mitra NOO now also picks up cross-wilayah mitra regardless of
-  // JoinDate (a cross-wilayah Pengajuan owner counts as NOO every month it's
-  // resolved into this scope, same rule marketing-performance-trend.ts's
-  // isNoo applies historically).
+  // 3-way split — Prioritas wins over both other buckets (no
+  // double-listing, both other filters explicitly exclude it), Semua
+  // Mitra/Mitra NOO split purely on IsCurrentlyNoo (see
+  // marketing-performance.ts / marketing-ownership.ts's resolveHybridOwner,
+  // confirmed with user 2026-09-24 — replaces the old JoinDate/
+  // IsCrossWilayahProposal-based split).
   const prioritasRoster = useMemo(
     () =>
       roster
@@ -279,27 +275,18 @@ export function KinerjaMarketingSubTab() {
   const semuaMitraRoster = useMemo(
     () =>
       roster
-        .filter(
-          (m) =>
-            !m.IsPriorityOverride &&
-            !m.IsCrossWilayahProposal &&
-            (!m.JoinDate || new Date(m.JoinDate).getTime() < new Date(currentMonthStartISO).getTime())
-        )
+        .filter((m) => !m.IsPriorityOverride && !m.IsCurrentlyNoo)
         .filter((m) => (!searchLower || m.Name.toLowerCase().includes(searchLower)) && (!wilayahFilter || m.Wilayah === wilayahFilter))
         .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
-    [roster, currentMonthStartISO, searchLower, wilayahFilter]
+    [roster, searchLower, wilayahFilter]
   );
   const nooRoster = useMemo(
     () =>
       roster
-        .filter(
-          (m) =>
-            !m.IsPriorityOverride &&
-            (m.IsCrossWilayahProposal || (!!m.JoinDate && new Date(m.JoinDate).getTime() >= new Date(currentMonthStartISO).getTime()))
-        )
+        .filter((m) => !m.IsPriorityOverride && m.IsCurrentlyNoo)
         .filter((m) => (!searchLower || m.Name.toLowerCase().includes(searchLower)) && (!wilayahFilter || m.Wilayah === wilayahFilter))
         .sort((a, b) => (b.Capacity ?? 0) - (a.Capacity ?? 0)),
-    [roster, currentMonthStartISO, searchLower, wilayahFilter]
+    [roster, searchLower, wilayahFilter]
   );
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
