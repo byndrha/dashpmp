@@ -135,7 +135,18 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
     const monthStart = monthStarts[i];
     const nextMonthStart = monthBoundary(monthStart, 1);
     for (const ownership of ownerships) {
-      if (ownership.nooStartDate == null || ownership.nooStartDate.getTime() >= nextMonthStart.getTime()) continue;
+      if (ownership.nooStartDate == null) {
+        // No JoinDate and no Pengajuan — permanently, unconditionally
+        // Existing every month (matches the qty loop's own unconditional
+        // existing bucketing for bagQtyActual just below, and
+        // marketing-ownership.ts's documented "always Existing" intent for
+        // this null case).
+        const row = rowByMarketing.get(ownership.ownerAkunId);
+        if (row) row.months[i].existing.general += 1;
+        combined[i].existing.general += 1;
+        continue;
+      }
+      if (ownership.nooStartDate.getTime() >= nextMonthStart.getTime()) continue;
       const windowEnd = addDays(ownership.nooStartDate, NOO_WINDOW_DAYS);
       const isNooThisMonth = windowEnd.getTime() >= monthStart.getTime();
       const isExistingThisMonth = windowEnd.getTime() < nextMonthStart.getTime();
@@ -188,7 +199,17 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
     const targetNooThisMonth = nooDailyCapacity * days;
 
     for (const ownership of ownerships) {
-      if (ownership.nooStartDate == null || ownership.nooStartDate.getTime() >= nextMonthStart.getTime()) continue;
+      if (ownership.nooStartDate == null) {
+        // No JoinDate and no Pengajuan — permanently, unconditionally
+        // Existing every month (same "always Existing" treatment as the
+        // headcount loop above and the qty loop below).
+        const capacity = snapshot.get(ownership.businessPartnerId) ?? 0;
+        const row = rowByMarketing.get(ownership.ownerAkunId);
+        if (row) row.months[i].existing.bagQtyTarget += capacity * days;
+        combined[i].existing.bagQtyTarget += capacity * days;
+        continue;
+      }
+      if (ownership.nooStartDate.getTime() >= nextMonthStart.getTime()) continue;
       const windowEnd = addDays(ownership.nooStartDate, NOO_WINDOW_DAYS);
       const isExistingThisMonth = windowEnd.getTime() < nextMonthStart.getTime();
       if (!isExistingThisMonth) continue;
