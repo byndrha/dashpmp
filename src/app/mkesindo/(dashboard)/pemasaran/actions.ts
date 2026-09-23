@@ -17,11 +17,7 @@ import {
   removeMarketingMitra,
 } from "@/lib/queries/marketing-wilayah";
 import { setWilayahPotentialTarget } from "@/lib/queries/wilayah-potential-target";
-import {
-  getMarketingVisitLogForDate,
-  saveMarketingVisitLog,
-  type MarketingVisitLogEntry,
-} from "@/lib/queries/marketing-visit-log";
+import { getMarketingVisitLogForDate, type MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { STAFF_ROLE_ID } from "@/lib/roles";
@@ -174,20 +170,6 @@ export async function getMarketingVisitLogAction(
     if (!session?.user?.id) throw new AppError("Unauthorized");
 
     return getMarketingVisitLogForDate(businessPartnerId, dateISO);
-  });
-}
-
-export async function saveMarketingVisitLogAction(input: {
-  businessPartnerId: string;
-  dateISO: string;
-  hasilKunjungan: string | null;
-}): Promise<ActionResult<void>> {
-  return runAction(async () => {
-    const session = await auth();
-    const userId = session?.user?.id;
-    if (!userId) throw new AppError("Unauthorized");
-
-    await saveMarketingVisitLog({ ...input, userId });
   });
 }
 

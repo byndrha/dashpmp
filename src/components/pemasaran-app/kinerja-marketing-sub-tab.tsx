@@ -6,19 +6,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FotoThumbnail } from "@/components/produksi/foto-thumbnail";
 import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/lib/format";
-import {
-  getKinerjaMarketingAction,
-  getKinerjaMarketingTrendAction,
-  getVisitLogDetailAction,
-  saveVisitLogAction,
-} from "@/app/mkesindo/pemasaran-app/actions";
+import { getKinerjaMarketingAction, getKinerjaMarketingTrendAction, getVisitLogDetailAction } from "@/app/mkesindo/pemasaran-app/actions";
 import type { KinerjaMarketingData } from "@/app/mkesindo/pemasaran-app/actions";
+import type { MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
 import { subscribeKunjunganConfirmed } from "@/lib/kunjungan-refresh-bus";
 import type { MarketingPerformanceTrendData } from "@/lib/queries/marketing-performance-trend";
 import type { PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
@@ -127,7 +122,7 @@ function SummaryCard({ label, general, actual, target }: { label: string; genera
     <Card>
       <CardContent className="flex flex-col gap-0.5 p-3">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-display text-lg font-semibold tabular-nums">{formatQty(general)} outlet</p>
+        <p className="font-display text-lg font-semibold tabular-nums">{formatQty(general)} mitra</p>
         <p className="text-xs tabular-nums text-muted-foreground">
           {formatQty(actual)}/{formatQty(target)} kantong{pct != null ? ` (${pct.toFixed(0)}%)` : ""}
         </p>
@@ -162,14 +157,16 @@ export function KinerjaMarketingSubTab() {
   const [activeDay, setActiveDay] = useState<{ businessPartnerId: string; mitraName: string; dateISO: string } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [hasilKunjungan, setHasilKunjungan] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
-  // Read fresh after an await so a save/fetch for a day the user has since
+  // Dialog "Hasil Kunjungan" sekarang MURNI tampilan (bukan lagi form catat
+  // manual) -- inputasi teks digantikan sepenuhnya oleh alur "Tambah
+  // Kunjungan" (GPS+foto), sesuai permintaan user 2026-09-23. Entry lengkap
+  // (termasuk foto/IsTerverifikasi) disimpan, bukan cuma teksnya.
+  const [entry, setEntry] = useState<MarketingVisitLogEntry | null>(null);
+  // Read fresh after an await so a fetch for a day the user has since
   // closed the dialog for (or clicked a different box on) can't paint stale
   // state over the wrong dialog — same guard pattern as
   // log-kunjungan-sub-tab.tsx's editingIdRef, keyed per mitra+date here.
   const activeKeyRef = useRef<string | null>(null);
-  const [savePending, startSaveTransition] = useTransition();
   const [hasEntry, setHasEntry] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -217,8 +214,7 @@ export function KinerjaMarketingSubTab() {
     const key = `${businessPartnerId}|${dateISO}`;
     activeKeyRef.current = key;
     setActiveDay({ businessPartnerId, mitraName, dateISO });
-    setHasilKunjungan("");
-    setSaveError(null);
+    setEntry(null);
     setDetailError(null);
     setDetailLoading(true);
     getVisitLogDetailAction(businessPartnerId, dateISO).then((result) => {
@@ -229,7 +225,7 @@ export function KinerjaMarketingSubTab() {
         return;
       }
       if (result.data) {
-        setHasilKunjungan(result.data.HasilKunjungan ?? "");
+        setEntry(result.data);
         setHasEntry((prev) => new Set(prev).add(key));
       }
     });
@@ -239,28 +235,6 @@ export function KinerjaMarketingSubTab() {
     activeKeyRef.current = null;
     setActiveDay(null);
     setDetailError(null);
-    setSaveError(null);
-  }
-
-  function handleSaveVisitLog(formData: FormData) {
-    if (!activeDay) return;
-    const { businessPartnerId, dateISO } = activeDay;
-    const key = `${businessPartnerId}|${dateISO}`;
-    const note = String(formData.get("note") ?? "").trim();
-    setSaveError(null);
-    startSaveTransition(async () => {
-      const result = await saveVisitLogAction({ businessPartnerId, dateISO, hasilKunjungan: note || null });
-      // Dialog may have closed or moved to a different mitra+date while this
-      // save was in flight — only touch state if it's still showing the
-      // mitra+date this request was actually for.
-      if (activeKeyRef.current !== key) return;
-      if (!result.success) {
-        setSaveError(result.error);
-        return;
-      }
-      setHasEntry((prev) => new Set(prev).add(key));
-      closeDay();
-    });
   }
 
   const ownMitraId = data?.cells[0]?.MarketingUserID;
@@ -534,25 +508,23 @@ export function KinerjaMarketingSubTab() {
             </div>
           ) : detailError ? (
             <p className="text-xs text-destructive">{detailError}</p>
+          ) : !entry?.HasilKunjungan ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">Belum ada catatan kunjungan untuk tanggal ini.</p>
           ) : (
-            <form action={handleSaveVisitLog} className="flex flex-col gap-3">
-              <Label htmlFor="note" className="sr-only">
-                Hasil Kunjungan
-              </Label>
-              <Textarea
-                id="note"
-                name="note"
-                rows={4}
-                defaultValue={hasilKunjungan}
-                placeholder="Catat hasil kunjungan ke mitra ini..."
-              />
-              {saveError && <p className="text-xs text-destructive">{saveError}</p>}
-              <DialogFooter>
-                <Button type="submit" disabled={savePending}>
-                  {savePending ? "Menyimpan..." : "Simpan"}
-                </Button>
-              </DialogFooter>
-            </form>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm whitespace-pre-wrap">{entry.HasilKunjungan}</p>
+              {entry.IsTerverifikasi && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    <CheckCircle2 className="size-3" /> Terverifikasi
+                  </span>
+                  <div className="flex gap-2">
+                    <FotoThumbnail path={entry.FotoTampakDepanPath} alt="Foto Lokasi" size={80} />
+                    <FotoThumbnail path={entry.FotoPenagihanPath} alt="Foto Hasil" size={80} />
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>

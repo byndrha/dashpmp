@@ -3,7 +3,7 @@
 import { requireMarketing } from "@/lib/require-access";
 import { getVisitLogStatusForMarketing } from "@/lib/queries/marketing-visit-log-status";
 import { getSalesDayComparisonForMarketing } from "@/lib/queries/sales-overview-marketing";
-import { getMarketingVisitLogForDate, saveMarketingVisitLog, type MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
+import { getMarketingVisitLogForDate, type MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
 import {
   getMarketingPerformance,
   type MarketingPerformanceData,
@@ -135,24 +135,6 @@ export async function getVisitLogDetailAction(
       throw new AppError("Anda tidak memiliki akses ke mitra ini.");
     }
     return getMarketingVisitLogForDate(businessPartnerId, dateISO);
-  });
-}
-
-export async function saveVisitLogAction(input: {
-  businessPartnerId: string;
-  dateISO: string;
-  hasilKunjungan: string | null;
-}): Promise<ActionResult<void>> {
-  return runAction(async () => {
-    const session = await requireMarketing();
-    // Same ownership check as getVisitLogDetailAction above — without it,
-    // one marketing rep could overwrite a colleague's visit-log note by
-    // calling this action with a businessPartnerId outside their own scope.
-    const roster = await getVisitLogStatusForMarketing(session.user.id, input.dateISO);
-    if (!roster.some((r) => r.BusinessPartnerID === input.businessPartnerId)) {
-      throw new AppError("Anda tidak memiliki akses ke mitra ini.");
-    }
-    await saveMarketingVisitLog({ ...input, userId: session.user.id });
   });
 }
 

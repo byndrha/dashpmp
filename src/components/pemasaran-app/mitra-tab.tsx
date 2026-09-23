@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Pencil, Plus, Search } from "lucide-react";
+import { History, Loader2, Pencil, Plus, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
+import { RiwayatPengajuanSheet } from "@/components/pemasaran-app/riwayat-pengajuan-sheet";
 import { getMitraListAction, getPriceLevelOptionsAction, getWilayahDeliveryAction } from "@/app/mkesindo/pemasaran-app/actions";
 import { formatRupiah } from "@/lib/format";
 import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
@@ -21,6 +22,7 @@ export function MitraTab() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"daftar" | "wilayah">("daftar");
   const [detailMitraId, setDetailMitraId] = useState<string | null>(null);
+  const [riwayatOpen, setRiwayatOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,9 +81,14 @@ export function MitraTab() {
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">{mitra.length} mitra terdaftar</p>
-        <Button size="sm" render={<Link href="/mkesindo/pemasaran-app/pengajuan/baru" />} className="gap-1.5">
-          <Plus className="size-3.5" /> Ajukan Mitra
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" render={<Link href="/mkesindo/pemasaran-app/pengajuan/baru" />} className="gap-1.5">
+            <Plus className="size-3.5" /> Ajukan Mitra
+          </Button>
+          <Button size="icon" variant="outline" onClick={() => setRiwayatOpen(true)} title="Riwayat Pengajuan">
+            <History className="size-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-1.5">
@@ -150,6 +157,7 @@ export function MitraTab() {
       )}
 
       <MitraDetailDialog businessPartnerId={detailMitraId} onOpenChange={(open) => !open && setDetailMitraId(null)} />
+      {riwayatOpen && <RiwayatPengajuanSheet onClose={() => setRiwayatOpen(false)} />}
     </div>
   );
 }

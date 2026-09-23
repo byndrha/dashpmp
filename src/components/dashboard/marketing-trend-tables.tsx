@@ -21,7 +21,7 @@ function formatMonthLabel(monthStartISO: string): string {
 function AnatomyCell({ anatomy }: { anatomy: Anatomy }) {
   return (
     <div className="flex flex-col items-center gap-0.5 text-[11px] tabular-nums">
-      <span className="font-semibold">{formatQty(anatomy.general)} outlet</span>
+      <span className="font-semibold">{formatQty(anatomy.general)} mitra</span>
       <span className="text-muted-foreground">
         {formatQty(anatomy.bagQtyActual)}/{formatQty(anatomy.bagQtyTarget)}
       </span>

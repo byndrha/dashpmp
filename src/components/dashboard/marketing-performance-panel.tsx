@@ -7,21 +7,21 @@ import { ArrowUp, ArrowDown, Star, Users, ChevronDown, Loader2, Search, CheckCir
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MitraDetailDialog } from "@/components/dashboard/mitra-detail-dialog";
 import { MatriksPerformaTable, PangsaPasarTable, TrendExpandButton } from "@/components/dashboard/marketing-trend-tables";
+import { FotoThumbnail } from "@/components/produksi/foto-thumbnail";
 import { cn } from "@/lib/utils";
 import type { MarketingPerformanceData, MarketingScopeCell, MarketingScopeAllMitra } from "@/lib/queries/marketing-performance";
+import type { MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
 import type { MarketingKPIRow } from "@/lib/queries/mitra-pengajuan";
 import type { MarketingMitraAssignment } from "@/lib/queries/marketing-wilayah";
 import type { MarketingTrendRow } from "@/lib/queries/marketing-performance-trend";
 import type { PangsaPasarRow } from "@/lib/queries/pangsa-pasar-trend";
 import {
   getMarketingVisitLogAction,
-  saveMarketingVisitLogAction,
   getMarketingTrendDataAction,
   type MarketingTrendBundle,
 } from "@/app/mkesindo/(dashboard)/pemasaran/actions";
@@ -141,8 +141,11 @@ function MitraDayCell({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hasEntry, setHasEntry] = useState(false);
-  const [hasilKunjungan, setHasilKunjungan] = useState("");
-  const [pending, startTransition] = useTransition();
+  // Popover ini sekarang MURNI tampilan (bukan lagi form catat manual) --
+  // inputasi teks digantikan sepenuhnya oleh alur "Tambah Kunjungan"
+  // (GPS+foto), sesuai permintaan user 2026-09-23. Entry lengkap (termasuk
+  // foto/IsTerverifikasi) disimpan, bukan cuma teksnya.
+  const [entry, setEntry] = useState<MarketingVisitLogEntry | null>(null);
   const delta = isPast && prevQty != null ? qty - prevQty : null;
 
   function handleOpenChange(next: boolean) {
@@ -156,25 +159,9 @@ function MitraDayCell({
           return;
         }
         setHasEntry(!!result.data);
-        setHasilKunjungan(result.data?.HasilKunjungan ?? "");
+        setEntry(result.data);
       })
       .finally(() => setLoading(false));
-  }
-
-  function handleSave() {
-    startTransition(async () => {
-      const result = await saveMarketingVisitLogAction({
-        businessPartnerId,
-        dateISO,
-        hasilKunjungan: hasilKunjungan.trim() || null,
-      });
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      setHasEntry(true);
-      setOpen(false);
-    });
   }
 
   return (
@@ -225,21 +212,25 @@ function MitraDayCell({
             <Loader2 className="size-3.5 animate-spin" />
             Memuat...
           </div>
+        ) : !entry?.HasilKunjungan ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">Belum ada catatan kunjungan untuk tanggal ini.</p>
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-1">
               <Label className="text-[10px] text-muted-foreground">Hasil Kunjungan</Label>
-              <Textarea
-                value={hasilKunjungan}
-                onChange={(e) => setHasilKunjungan(e.target.value)}
-                rows={3}
-                className="text-xs"
-                placeholder="Apa hasil kunjungan ke mitra ini..."
-              />
+              <p className="text-xs whitespace-pre-wrap">{entry.HasilKunjungan}</p>
             </div>
-            <Button size="sm" disabled={pending} onClick={handleSave} className="mt-1">
-              {pending ? "Menyimpan..." : "Simpan"}
-            </Button>
+            {entry.IsTerverifikasi && (
+              <div className="flex flex-col gap-1">
+                <span className="flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                  <CheckCircle2 className="size-3" /> Terverifikasi
+                </span>
+                <div className="flex gap-2">
+                  <FotoThumbnail path={entry.FotoTampakDepanPath} alt="Foto Lokasi" size={64} />
+                  <FotoThumbnail path={entry.FotoPenagihanPath} alt="Foto Hasil" size={64} />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </PopoverContent>
