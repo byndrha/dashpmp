@@ -3523,3 +3523,29 @@ export async function getArmadaUtilisasiPeriode(armadaId: number, businessDate: 
     boundsResult.recordset[0] as WindowBoundsRow
   );
 }
+
+// Feeds route-validation-dialog.tsx's "Cek Berangkat"/"Cek Datang" placeholder
+// text (added 2026-09-23, per user): a check still missing shows "Menunggu
+// Inspeksi" while it could still happen, or "Tidak dilaksanakan" once it no
+// longer can — defined as this armada having already started loading
+// (JamMulaiMuat set) its chronologically NEXT Jadwal, at which point the
+// window to record a missed Cek Berangkat/Datang for THIS Jadwal is closed.
+// Joins on ArmadaID (not a businessDate window) since the next Jadwal can
+// fall on a later calendar day.
+export async function getArmadaNextJadwalStarted(currentJadwalId: number): Promise<boolean> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("currentJadwalId", sql.Int, currentJadwalId).query(`
+      SELECT TOP 1 next.JamMulaiMuat
+      FROM DashboardPengirimanJadwal cur
+      JOIN DashboardPengirimanJadwal next
+        ON next.ArmadaID = cur.ArmadaID AND next.IsDeleted = 0 AND next.JadwalID <> cur.JadwalID
+        AND next.JamJadwal > cur.JamJadwal
+      WHERE cur.JadwalID = @currentJadwalId AND cur.IsDeleted = 0
+      ORDER BY next.JamJadwal ASC
+    `);
+
+  const row = result.recordset[0] as { JamMulaiMuat: Date | null } | undefined;
+  return row?.JamMulaiMuat != null;
+}

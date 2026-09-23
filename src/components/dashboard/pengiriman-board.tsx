@@ -1438,7 +1438,6 @@ export function PengirimanBoard({
   businessDate,
   todayISO,
   expeditionOptions,
-  isSatpam,
 }: {
   armada: ArmadaRow[];
   jadwal: JadwalCardData[];
@@ -1450,9 +1449,6 @@ export function PengirimanBoard({
   businessDate: string;
   todayISO: string;
   expeditionOptions: ExpeditionVehicleOption[];
-  // Current session's Satpam flag, resolved server-side by the page —
-  // threaded straight through to RouteValidationDialog/VehicleCheckPanel.
-  isSatpam: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -1924,7 +1920,6 @@ export function PengirimanBoard({
         kapasitasMaks={openArmada?.KapasitasMaks ?? null}
         jenisBBM={openArmada?.JenisBBM ?? null}
         biayaBBMPerLiter={openArmada?.BiayaBBMPerLiter ?? null}
-        isSatpam={isSatpam}
         onOpenChange={(open) => !open && setDetailJadwalId(null)}
         onDeleted={() => setDetailJadwalId(null)}
         salesOrderEditSignal={salesOrderEditSignal}

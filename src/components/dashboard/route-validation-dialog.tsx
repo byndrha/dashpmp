@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VerticalTimeline, VerticalTimelineItem } from "@/components/ui/vertical-timeline";
-import { CheckSummary } from "@/components/vehicle-check-summary";
+import { CheckSummary, TIPE_LABEL } from "@/components/vehicle-check-summary";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -43,17 +43,10 @@ import type {
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { MultiPointRoute } from "@/lib/osrm";
 import type { FuelType } from "@/lib/armada-fuel";
-import { VehicleCheckDialog } from "@/components/dashboard/vehicle-check-dialog";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
 import { StopDeliveryProofDialog } from "@/components/dashboard/stop-delivery-proof-dialog";
 import { StopSalesInvoiceDialog } from "@/components/dashboard/stop-sales-invoice-dialog";
-import type {
-  VehicleCheckRow,
-  VehicleCheckTipe,
-  FuelBar,
-  VehicleCheckPhoto,
-  JenisFotoKendaraan,
-} from "@/lib/vehicle-check-types";
+import type { VehicleCheckRow } from "@/lib/vehicle-check-types";
 import {
   getJadwalDetailAction,
   updateJadwalUrutanAction,
@@ -66,13 +59,13 @@ import {
   selesaiMuatAction,
   konfirmasiBerangkatAction,
   getVehicleChecksForJadwalAction,
-  createVehicleCheckAction,
   checkArmadaConflictAction,
   getPriceLevelOptionsAction,
   getDriverPositionAction,
   getIstirahatForJadwalAction,
   getArmadaUtilisasiHarianAction,
   getArmadaUtilisasiPeriodeAction,
+  getArmadaNextJadwalStartedAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
@@ -269,10 +262,6 @@ interface RouteValidationDialogProps {
   // the Armada hasn't had these fields filled in yet.
   jenisBBM: FuelType | null;
   biayaBBMPerLiter: number | null;
-  // Current session's Satpam flag, resolved server-side by the caller —
-  // gates whether VehicleCheckPanel shows an editable form or a read-only
-  // summary/placeholder.
-  isSatpam: boolean;
   onOpenChange: (open: boolean) => void;
   // Fired after a successful "Batalkan Draft" so the caller can close this
   // dialog (it has no Jadwal left to show once deleted).
@@ -304,7 +293,6 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       kapasitasMaks,
       jenisBBM,
       biayaBBMPerLiter,
-      isSatpam,
       onOpenChange,
       onDeleted,
       onEditSalesOrder,
@@ -315,6 +303,12 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<DriverStopRow[]>([]);
   const [vehicleChecks, setVehicleChecks] = useState<VehicleCheckRow[]>([]);
+  // Whether this armada already started loading (JamMulaiMuat) its
+  // chronologically next Jadwal -- decides whether a still-missing
+  // Berangkat/Datang check shows "Menunggu Inspeksi" (still could happen)
+  // or "Tidak dilaksanakan" (window closed), fetched alongside vehicleChecks
+  // in the same jadwalId-keyed effect below.
+  const [nextJadwalStarted, setNextJadwalStarted] = useState(false);
   // Every istirahat session logged against this Jadwal — feeds the Riwayat
   // Status popover's time summary (Task 11), fetched alongside
   // vehicleChecks in the same jadwalId-keyed effect below.
@@ -452,6 +446,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     if (jadwalId == null) {
       setOrder([]);
       setVehicleChecks([]);
+      setNextJadwalStarted(false);
       setIstirahatSessions([]);
       return;
     }
@@ -463,6 +458,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       })
       .finally(() => setLoading(false));
     getVehicleChecksForJadwalAction(jadwalId).then(setVehicleChecks);
+    getArmadaNextJadwalStartedAction(jadwalId).then(setNextJadwalStarted);
     getIstirahatForJadwalAction(jadwalId).then(setIstirahatSessions);
   }, [jadwalId]);
 
@@ -878,34 +874,6 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     });
   }
 
-  async function handleUploadVehiclePhoto(file: File, jenisFoto: JenisFotoKendaraan): Promise<string> {
-    if (armadaId == null) throw new Error("Armada tidak diketahui.");
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("armadaId", String(armadaId));
-    formData.append("jenisFoto", jenisFoto);
-    const res = await fetch("/api/mkesindo/upload/satpam-check", { method: "POST", body: formData });
-    const data = (await res.json()) as { path?: string; error?: string };
-    if (!res.ok || !data.path) throw new Error(data.error ?? "Gagal mengunggah foto.");
-    return data.path;
-  }
-
-  async function handleSubmitVehicleCheck(input: {
-    tipe: VehicleCheckTipe;
-    odometerKM: number;
-    fuelBar: FuelBar;
-    muatanQty: number;
-    remark: string | null;
-    photos: VehicleCheckPhoto[];
-  }): Promise<void> {
-    if (jadwalId == null) return;
-    const result = await createVehicleCheckAction({ jadwalId, ...input });
-    if (!result.success) {
-      throw new Error(result.error);
-    }
-    const rows = await getVehicleChecksForJadwalAction(jadwalId);
-    setVehicleChecks(rows);
-  }
 
   const isDraft = jadwal?.Status === "Draft";
   const isWaitingDeparture = jadwal?.Status === "Terbit" && jadwal?.JamAktualBerangkat == null;
@@ -1661,26 +1629,21 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
               </div>
             )}
 
-            {!isDraft && vehicleChecks.length > 0 && (
+            {!isDraft && (
               <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-muted-foreground">Hasil Inspeksi Kendaraan (Satpam)</p>
-                <div className="flex flex-col gap-2">
-                  {vehicleChecks.map((c) => (
-                    <CheckSummary key={c.vehicleCheckId} check={c} />
-                  ))}
-                </div>
+                {(["BERANGKAT", "DATANG"] as const).map((tipe) => {
+                  const check = vehicleChecks.find((c) => c.tipe === tipe);
+                  if (check) return <CheckSummary key={tipe} check={check} />;
+                  return (
+                    <div key={tipe} className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-xs">
+                      <span className="font-medium">{TIPE_LABEL[tipe]}</span>
+                      <span className="text-muted-foreground">
+                        {nextJadwalStarted ? "Tidak dilaksanakan" : "Menunggu Inspeksi"}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-
-            {!isDraft && jadwalId != null && armadaId != null && (
-              <VehicleCheckDialog
-                jadwalId={jadwalId}
-                armadaId={armadaId}
-                isSatpam={isSatpam}
-                onUploadPhoto={handleUploadVehiclePhoto}
-                onSubmitCheck={handleSubmitVehicleCheck}
-                checks={vehicleChecks}
-              />
             )}
 
             {error && <p className="text-xs text-destructive">{error}</p>}
