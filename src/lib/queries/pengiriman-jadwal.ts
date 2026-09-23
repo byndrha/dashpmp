@@ -8,6 +8,7 @@ import { estimateTravelMinutes, estimateTripMinutes, estimateOneWayTravelMinutes
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { enqueuePrintJob } from "@/lib/queries/print-queue";
+import { postDeliveryOrderRealtime, postSalesInvoiceRealtime } from "@/lib/queries/gl-posting-backfill";
 import {
   getBusinessDateISO,
   getNaiveWibTransDate,
@@ -2140,6 +2141,7 @@ export async function createSalesInvoiceForStop(
   const siVoucherSeq = await nextSIVoucherSeq(transaction, params.yearMonth);
   const siVoucherNo = `MKE/SI/${siVoucherSeq}/${params.yearMonth}/${DOC_SUFFIX}`;
   const totalAmount = soDetails.reduce((sum, sod) => sum + sod.Amount, 0);
+  const siTransDate = getNaiveWibTransDate();
   await new sql.Request(transaction)
     .input("id", sql.VarChar(16), salesInvoiceId)
     .input("voucherNo", sql.VarChar(128), siVoucherNo)
@@ -2173,7 +2175,7 @@ export async function createSalesInvoiceForStop(
     // NOT be sufficient on its own to make the desktop ERP detect these
     // invoices — this is the second, independently-tested fix for that
     // same underlying symptom.
-    .input("transDate", sql.DateTime, getNaiveWibTransDate())
+    .input("transDate", sql.DateTime, siTransDate)
     .input("salesmanId", sql.VarChar(16), params.salesmanId).query(`
       INSERT INTO SalesInvoice
         (SalesInvoiceID, VoucherNo, ReferenceNo, TaxNo, TransDate, DueDate, Notes, TermOfPaymentID,
@@ -2228,6 +2230,18 @@ export async function createSalesInvoiceForStop(
            0, @amount, @name, @amount, @amount, '', '', 0, NULL)
       `);
   }
+
+  await postSalesInvoiceRealtime(transaction, {
+    voucherNo: siVoucherNo,
+    documentId: salesInvoiceId,
+    transDate: siTransDate,
+    branchId: BRANCH_ID,
+    departmentId: DEPARTMENT_ID,
+    businessPartnerId: so.BusinessPartnerID,
+    currencyId: "",
+    rate: 1,
+    deliveryOrderId: params.deliveryOrderId,
+  });
 
   await new sql.Request(transaction)
     .input("detailId", sql.Int, params.jadwalDetailId)
@@ -2418,6 +2432,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
       const deliveryOrderId = await nextDeliveryOrderId(transaction);
       const voucherSeq = await nextDOVoucherSeq(transaction, yearMonth);
       const voucherNo = `MKE/DO/${voucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
+      const doTransDate = getNaiveWibTransDate();
 
       await new sql.Request(transaction)
         .input("id", sql.VarChar(16), deliveryOrderId)
@@ -2429,7 +2444,7 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         .input("vehicleNo", sql.VarChar(50), doVehicleNo)
         .input("expeditionId", sql.VarChar(16), doExpeditionId)
         .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID)
-        .input("transDate", sql.DateTime, getNaiveWibTransDate())
+        .input("transDate", sql.DateTime, doTransDate)
         .input("dueDate", sql.DateTime, so.DueDate).query(`
           INSERT INTO DeliveryOrder
             (DeliveryOrderID, VoucherNo, TransDate, BranchID, DepartmentID, BusinessPartnerID, Notes, SalesOrderID,
@@ -2463,6 +2478,18 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
                0, @amount, @qty, @name, @qty, NULL, 0, @soDetailId)
           `);
       }
+
+      await postDeliveryOrderRealtime(transaction, {
+        voucherNo,
+        documentId: deliveryOrderId,
+        transDate: doTransDate,
+        branchId: BRANCH_ID,
+        departmentId: DEPARTMENT_ID,
+        businessPartnerId: so.BusinessPartnerID,
+        currencyId: "",
+        rate: 1,
+        deliveryOrderId: null,
+      });
 
       // DeliveryOrderID must be persisted before createSalesInvoiceForStop's
       // own UPDATE touches this same row (that UPDATE only sets
