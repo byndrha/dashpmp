@@ -77,7 +77,7 @@ const BATAS_DATA_NORMAL = "2026-09-12";
 // bukan COUNT(*) baris hasil JOIN, supaya voucher dengan >1 baris detail
 // untuk item yang sama tidak dihitung berlebih. Setelah kedua perbaikan:
 // 20/20 sample cocok pada run validasi ulang (lihat task-2-report.md).
-async function buildItemAccountMapping(pool: sql.ConnectionPool): Promise<Map<string, ItemAccountMapping>> {
+async function buildItemAccountMapping(pool: sql.ConnectionPool | sql.Transaction): Promise<Map<string, ItemAccountMapping>> {
   const pendapatan = await pool.request().input("batas", sql.Date, BATAS_DATA_NORMAL).query(`
     WITH Ranked AS (
       SELECT sid.ItemID, coa.AccountNo,
@@ -159,6 +159,24 @@ async function buildItemAccountMapping(pool: sql.ConnectionPool): Promise<Map<st
   return mapping;
 }
 
+// Pemetaan Item->Akun dibangun dari data historis SEBELUM tanggal tetap
+// BATAS_DATA_NORMAL -- karena batasnya tetap (bukan "N hari terakhir"),
+// hasilnya konstan selamanya, jadi aman di-cache in-memory selama proses
+// server hidup. Dipakai jalur backlog manual (computeBacklogForDate) DAN
+// jalur posting real-time (postDeliveryOrderRealtime/postSalesInvoiceRealtime
+// di bawah) supaya keduanya selalu memakai mapping yang identik dan tidak
+// menghitung ulang query mahal ini (beberapa scan+join atas GeneralLedger
+// 1,9 juta+ baris) di setiap pembuatan dokumen.
+let cachedItemAccountMapping: Map<string, ItemAccountMapping> | null = null;
+export async function getItemAccountMappingCached(
+  poolOrTx: sql.ConnectionPool | sql.Transaction
+): Promise<Map<string, ItemAccountMapping>> {
+  if (!cachedItemAccountMapping) {
+    cachedItemAccountMapping = await buildItemAccountMapping(poolOrTx);
+  }
+  return cachedItemAccountMapping;
+}
+
 // null berarti baris ItemAverage TIDAK ADA (bukan bernilai 0) -- pemanggil
 // wajib skip dokumen, tidak boleh fallback ke 0. Lihat Review Focus.
 //
@@ -176,7 +194,7 @@ async function buildItemAccountMapping(pool: sql.ConnectionPool): Promise<Map<st
 // produksi -- hanya muncul saat memvalidasi ulang dokumen historis yang
 // Average bulannya sudah bergerak sejak tanggal posting aslinya.
 async function getItemAverage(
-  pool: sql.ConnectionPool,
+  pool: sql.ConnectionPool | sql.Transaction,
   itemId: string,
   year: number,
   month: number
@@ -191,7 +209,7 @@ async function getItemAverage(
   return row ? row.Average : null;
 }
 
-interface DokumenBacklog {
+export interface DokumenBacklog {
   voucherNo: string;
   documentId: string;
   transDate: Date;
@@ -334,7 +352,7 @@ async function voucherNoUntukDeliveryOrderIds(
 }
 
 async function hitungGLDeliveryOrder(
-  pool: sql.ConnectionPool,
+  pool: sql.ConnectionPool | sql.Transaction,
   doc: DokumenBacklog,
   mapping: Map<string, ItemAccountMapping>
 ): Promise<{ lines: GLLine[] } | { alasan: string }> {
@@ -370,7 +388,7 @@ async function hitungGLDeliveryOrder(
 }
 
 async function hitungGLSalesInvoice(
-  pool: sql.ConnectionPool,
+  pool: sql.ConnectionPool | sql.Transaction,
   doc: DokumenBacklog,
   mapping: Map<string, ItemAccountMapping>
 ): Promise<{ lines: GLLine[] } | { alasan: string }> {
@@ -445,7 +463,7 @@ async function hitungGLSalesInvoice(
 
 export async function computeBacklogForDate(tanggal: string): Promise<BacklogPreview> {
   const pool = await getPool();
-  const mapping = await buildItemAccountMapping(pool);
+  const mapping = await getItemAccountMappingCached(pool);
 
   const postable: ComputedDoc[] = [];
   const skipped: BacklogSkip[] = [];
@@ -664,6 +682,64 @@ export interface BacklogPostResultItem {
 // yang dipakai bersama itu berisiko nyata eskalasi ke page/table lock yang
 // tertahan sepanjang durasi transaksi -- risiko ini belum pernah diuji thd
 // ERP sungguhan, jadi dihindari sepenuhnya, bukan cuma diminimalkan.
+// Bagian "tulis baris GeneralLedger" dari postSatuDokumen, diekstrak supaya
+// dipakai bersama oleh backlog manual (postSatuDokumen, yang menambahkan
+// audit trail DashboardGLPostingBackfill di atas ini) dan posting real-time
+// (postDeliveryOrderRealtime/postSalesInvoiceRealtime di bawah, yang TIDAK
+// menulis ke DashboardGLPostingBackfill -- tabel itu khusus audit "siapa
+// mengklik Proses kapan", tidak relevan untuk dokumen yang ter-posting
+// otomatis saat dibuat). Applock HARUS sudah diakuisisi oleh pemanggil
+// sebelum memanggil ini (lihat acquireGLPostingApplock).
+async function tulisBarisGL(
+  transaction: sql.Transaction,
+  doc: {
+    voucherNo: string;
+    docType: DocType;
+    transDate: Date;
+    branchId: string;
+    departmentId: string;
+    businessPartnerId: string | null;
+    currencyId: string;
+    rate: number;
+    lines: GLLine[];
+  },
+  memo: string
+): Promise<{ posted: true; glId: string } | { posted: false; alasan: string }> {
+  const cekUlang = await new sql.Request(transaction)
+    .input("v", sql.VarChar(64), doc.voucherNo)
+    .input("t", sql.VarChar(20), doc.docType)
+    .query(`SELECT TOP 1 1 AS ada FROM GeneralLedger WHERE VoucherNo = @v AND [Type] = @t`);
+  if (cekUlang.recordset.length > 0) {
+    return { posted: false, alasan: "Sudah ter-posting (terdeteksi ulang saat commit)" };
+  }
+
+  const glId = await nextGeneralLedgerId(transaction);
+  for (const line of doc.lines) {
+    const chartOfAccountId = await getChartOfAccountId(transaction, line.accountNo);
+    await new sql.Request(transaction)
+      .input("id", sql.VarChar(16), glId)
+      .input("branchId", sql.VarChar(16), doc.branchId)
+      .input("departmentId", sql.VarChar(16), doc.departmentId)
+      .input("voucherNo", sql.VarChar(64), doc.voucherNo)
+      .input("transDate", sql.DateTime, doc.transDate)
+      .input("docType", sql.VarChar(20), doc.docType)
+      .input("chartOfAccountId", sql.VarChar(16), chartOfAccountId)
+      .input("debit", sql.Decimal(18, 6), line.debit)
+      .input("credit", sql.Decimal(18, 6), line.credit)
+      .input("memo", sql.VarChar(255), memo)
+      .input("businessPartnerId", sql.VarChar(16), doc.businessPartnerId)
+      .input("currencyId", sql.VarChar(16), doc.currencyId)
+      .input("rate", sql.Decimal(18, 6), doc.rate)
+      .query(`
+        INSERT INTO GeneralLedger
+          (ID, BranchID, DepartmentID, VoucherNo, TransDate, [Type], ChartOfAccountID, Debit, Credit, Memo, BusinessPartnerID, CurrencyID, Rate)
+        VALUES
+          (@id, @branchId, @departmentId, @voucherNo, @transDate, @docType, @chartOfAccountId, @debit, @credit, @memo, @businessPartnerId, @currencyId, @rate)
+      `);
+  }
+  return { posted: true, glId };
+}
+
 async function postSatuDokumen(
   pool: sql.ConnectionPool,
   doc: ComputedDoc,
@@ -677,17 +753,13 @@ async function postSatuDokumen(
     // acquireGLPostingApplock's own comment di atas.
     await acquireGLPostingApplock(transaction);
 
-    const cekUlang = await new sql.Request(transaction)
-      .input("v", sql.VarChar(64), doc.voucherNo)
-      .input("t", sql.VarChar(20), doc.docType)
-      .query(`SELECT TOP 1 1 AS ada FROM GeneralLedger WHERE VoucherNo = @v AND [Type] = @t`);
-    if (cekUlang.recordset.length > 0) {
+    const memo = `[DASHPMP-BACKFILL] ${tanggalProses}`;
+    const hasilTulis = await tulisBarisGL(transaction, doc, memo);
+    if (!hasilTulis.posted) {
       await transaction.rollback();
-      return { voucherNo: doc.voucherNo, docType: doc.docType, status: "GAGAL", alasan: "Sudah ter-posting (terdeteksi ulang saat commit)" };
+      return { voucherNo: doc.voucherNo, docType: doc.docType, status: "GAGAL", alasan: hasilTulis.alasan };
     }
 
-    const glId = await nextGeneralLedgerId(transaction);
-    const memo = `[DASHPMP-BACKFILL] ${tanggalProses}`;
     const insertHeader = await new sql.Request(transaction)
       .input("voucherNo", sql.VarChar(64), doc.voucherNo)
       .input("docType", sql.VarChar(20), doc.docType)
@@ -702,31 +774,9 @@ async function postSatuDokumen(
     const backfillId = (insertHeader.recordset[0] as { BackfillID: number }).BackfillID;
 
     for (const line of doc.lines) {
-      const chartOfAccountId = await getChartOfAccountId(transaction, line.accountNo);
-      await new sql.Request(transaction)
-        .input("id", sql.VarChar(16), glId)
-        .input("branchId", sql.VarChar(16), doc.branchId)
-        .input("departmentId", sql.VarChar(16), doc.departmentId)
-        .input("voucherNo", sql.VarChar(64), doc.voucherNo)
-        .input("transDate", sql.DateTime, doc.transDate)
-        .input("docType", sql.VarChar(20), doc.docType)
-        .input("chartOfAccountId", sql.VarChar(16), chartOfAccountId)
-        .input("debit", sql.Decimal(18, 6), line.debit)
-        .input("credit", sql.Decimal(18, 6), line.credit)
-        .input("memo", sql.VarChar(255), memo)
-        .input("businessPartnerId", sql.VarChar(16), doc.businessPartnerId)
-        .input("currencyId", sql.VarChar(16), doc.currencyId)
-        .input("rate", sql.Decimal(18, 6), doc.rate)
-        .query(`
-          INSERT INTO GeneralLedger
-            (ID, BranchID, DepartmentID, VoucherNo, TransDate, [Type], ChartOfAccountID, Debit, Credit, Memo, BusinessPartnerID, CurrencyID, Rate)
-          VALUES
-            (@id, @branchId, @departmentId, @voucherNo, @transDate, @docType, @chartOfAccountId, @debit, @credit, @memo, @businessPartnerId, @currencyId, @rate)
-        `);
-
       await new sql.Request(transaction)
         .input("backfillId", sql.Int, backfillId)
-        .input("glId", sql.VarChar(16), glId)
+        .input("glId", sql.VarChar(16), hasilTulis.glId)
         .input("accountNo", sql.VarChar(20), line.accountNo)
         .input("debit", sql.Decimal(18, 6), line.debit)
         .input("credit", sql.Decimal(18, 6), line.credit)
