@@ -13,3 +13,12 @@ export const STAFF_ROLE_ID = 2;
 // requested independently of who approves/rejects Pengajuan Mitra, so
 // changing one must not silently change the other.
 export const WILAYAH_MANAGER_ROLE_IDS = [3, 4, 1004];
+
+// Both "Accounting" peran rows that exist in the live Postgres `peran`
+// table (id 4 for MKEsindo, id 1009 duplicated for the other PT-scoped
+// account sets under the same multi-company setup — confirmed live
+// 2026-09-23) — used to grant Accounting the "Proses" action on Kesehatan
+// Posting GL (/mkesindo/pnl) without also granting the unrelated Kode
+// Ambil-Alih Mulai/Selesai Muat permission (see requireGLBacklogAccess in
+// require-access.ts).
+export const ACCOUNTING_ROLE_IDS = [4, 1009];

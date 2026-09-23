@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canView, type ModuleKey } from "@/lib/permissions";
-import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
+import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS, ACCOUNTING_ROLE_IDS } from "@/lib/roles";
 
 // An account has cross-PT authority if it's superadmin, OR its Perusahaan
 // is "PMP Group" itself (accountScope "direktur", the holding level above
@@ -201,6 +201,25 @@ export async function requireManagerKeAtas() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canAccessAllPT(session.user) && !session.user.bolehGenerateKodeAmbilAlih) {
+    redirect("/akses-ditolak");
+  }
+  return session;
+}
+
+// Gerbang untuk aksi "Proses" di kartu Kesehatan Posting GL (/mkesindo/pnl)
+// -- Manager ke atas (sama kondisi dengan requireManagerKeAtas) ATAU role
+// Accounting. Sengaja DIPISAH dari requireManagerKeAtas (bukan menambahkan
+// Accounting ke situ) supaya akses ini tidak ikut memberi akses ke fitur
+// Kode Ambil-Alih Mulai/Selesai Muat yang tidak berhubungan sama sekali
+// dengan posting GL. Diminta user 2026-09-23.
+export async function requireGLBacklogAccess() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (
+    !canAccessAllPT(session.user) &&
+    !session.user.bolehGenerateKodeAmbilAlih &&
+    !ACCOUNTING_ROLE_IDS.includes(session.user.roleId)
+  ) {
     redirect("/akses-ditolak");
   }
   return session;

@@ -11,6 +11,7 @@ import { getBackfillRingkasanPerTanggal } from "@/lib/queries/gl-posting-backfil
 import { getAkunNamaMap } from "@/lib/queries/akun";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { requireModuleAccess, canAccessAllPT } from "@/lib/require-access";
+import { ACCOUNTING_ROLE_IDS } from "@/lib/roles";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -42,11 +43,12 @@ export default async function PnLPage({
   searchParams: Promise<DashboardSearchParams>;
 }) {
   const session = await requireModuleAccess("pnl");
-  // Sama persis dengan gerbang tampil ikon kode ambil-alih di
-  // mkesindo/(dashboard)/layout.tsx -- disamakan sengaja karena Task 4's
-  // action (previewGLBacklogAction/postGLBacklogAction) digerbangi oleh
-  // requireManagerKeAtas(), yang punya kondisi akses yang sama.
-  const bolehProsesGLBacklog = canAccessAllPT(session.user) || session.user.bolehGenerateKodeAmbilAlih;
+  // Sama persis dengan requireGLBacklogAccess() yang menggerbangi
+  // previewGLBacklogAction/postGLBacklogAction -- Manager ke atas (lewat
+  // bolehGenerateKodeAmbilAlih, dipinjam dari fitur Kode Ambil-Alih) ATAU
+  // role Accounting, ditambahkan atas permintaan user 2026-09-23.
+  const bolehProsesGLBacklog =
+    canAccessAllPT(session.user) || session.user.bolehGenerateKodeAmbilAlih || ACCOUNTING_ROLE_IDS.includes(session.user.roleId);
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();

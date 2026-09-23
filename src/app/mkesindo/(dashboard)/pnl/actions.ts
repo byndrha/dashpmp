@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { requireManagerKeAtas } from "@/lib/require-access";
+import { requireGLBacklogAccess } from "@/lib/require-access";
 import { setCOABudget } from "@/lib/queries/keuangan-detail";
 import {
   saveCashFlowDailyFigures,
@@ -89,14 +89,14 @@ export async function getHPPBersihAction(year: number): Promise<ActionResult<HPP
 
 export async function previewGLBacklogAction(tanggal: string): Promise<ActionResult<BacklogPreview>> {
   return runAction(async () => {
-    await requireManagerKeAtas();
+    await requireGLBacklogAccess();
     return computeBacklogForDate(tanggal);
   });
 }
 
 export async function postGLBacklogAction(tanggal: string): Promise<ActionResult<BacklogPostResult>> {
   return runAction(async () => {
-    const session = await requireManagerKeAtas();
+    const session = await requireGLBacklogAccess();
     const result = await postBacklogForDate(tanggal, Number(session.user.id));
     revalidatePath("/mkesindo/pnl");
     return result;
