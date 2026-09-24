@@ -71,7 +71,7 @@ async function getKantongByMonth(
 // (BranchID "011"), confirmed live 18 Sep 2026 via accounting cross-check.
 // Every query against pmpersada+logistik must filter to this branch or its
 // totals silently include PMPakis's own transactions too.
-const PMPERSADA_OWN_BRANCH_ID = "012";
+export const PMPERSADA_OWN_BRANCH_ID = "012";
 
 interface PenjualanAccountConfig {
   kode: string;
@@ -182,7 +182,7 @@ export interface PiutangSummaryData {
   months: PiutangTrendMonth[];
 }
 
-interface PiutangAccountConfig {
+export interface PiutangAccountConfig {
   kode: string;
   label: CompanyKoneksiLabel;
   accountNo: string;
@@ -197,14 +197,22 @@ interface PiutangAccountConfig {
 // Account "1114 Piutang Lainnya" (pmpersada/logistik) is deliberately
 // excluded -- confirmed by accounting to be an inter-company (PMPutra <->
 // PMPersada) receivable, not a customer/Agen receivable.
-const PIUTANG_ACCOUNTS: PiutangAccountConfig[] = [
+// pmpakis/utama row added by the Mitra module plan (2026-09-24): confirmed
+// live via GeneralLedger that FINAC_ES_PAKIS's account 1111 is named
+// "Piutang Agen" with real activity (27,121 rows, ~Rp24.2bn debit /
+// ~Rp23.9bn credit) -- a genuinely active, dedicated Piutang account, not a
+// guess. This row is otherwise unused by getPiutangSummary/getPenjualanTrend
+// (pmpakis has no Penjualan/Piutang aggregate page of its own) -- it exists
+// solely for mitra-es-balok.ts's per-Agen getPiutangBaruAgen.
+export const PIUTANG_ACCOUNTS: PiutangAccountConfig[] = [
   { kode: "pmputra", label: "utama", accountNo: "1115" }, // "Piutang Agen"
   { kode: "pmputra", label: "logistik", accountNo: "1111" }, // "Piutang Jasa Usaha"
   { kode: "pmpersada", label: "utama", accountNo: "1115" }, // "Piutang Agen"
   { kode: "pmpersada", label: "logistik", accountNo: "1111", requiresBranchFilter: true }, // "Piutang Reguler"
+  { kode: "pmpakis", label: "utama", accountNo: "1111" }, // "Piutang Agen"
 ];
 
-function getPiutangAccount(kode: string, label: CompanyKoneksiLabel): PiutangAccountConfig {
+export function getPiutangAccount(kode: string, label: CompanyKoneksiLabel): PiutangAccountConfig {
   const entry = PIUTANG_ACCOUNTS.find((a) => a.kode === kode && a.label === label);
   if (!entry) throw new Error(`No Piutang account configured for kode="${kode}" label="${label}"`);
   return entry;
