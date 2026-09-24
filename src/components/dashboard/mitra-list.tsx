@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Phone, MapPin, Package, Filter, Ban, RotateCcw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Plus, Pencil, Trash2, Phone, MapPin, Package, Filter, Ban, RotateCcw, LayoutGrid, List } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Pagination } from "@/components/dashboard/pagination";
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
 import { WilayahSelect } from "@/components/dashboard/wilayah-select";
 import { KecamatanSelect } from "@/components/dashboard/kecamatan-select";
@@ -46,7 +45,15 @@ import type { MarketingUserOption } from "@/lib/queries/marketing-wilayah";
 
 const PEMILIK_NONE = "__none__";
 
-const PAGE_SIZE = 12;
+// Shared by both the initial page load and every subsequent auto-load
+// triggered by the scroll sentinel — see the IntersectionObserver effect
+// in MitraList below.
+const BATCH_SIZE = 12;
+
+// Per-browser only (not synced anywhere) — remembers grid vs baris across
+// visits/reloads for this viewer. Confirmed with user 2026-09-24.
+const VIEW_MODE_STORAGE_KEY = "mitra-view-mode";
+type ViewMode = "grid" | "baris";
 
 const CAPACITY_BUCKETS = [
   { value: "all", label: "Kapasitas" },
@@ -423,7 +430,23 @@ export function MitraList({
   const [kapasitas, setKapasitas] = useState("all");
   const [pin, setPin] = useState("all");
   const [status, setStatus] = useState("all");
-  const [page, setPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
+  // Starts at "grid" for both SSR and the first client render (avoids a
+  // hydration mismatch), then reads the stored preference once on mount —
+  // deliberately NOT mirrored by a reactive write-effect (that races with
+  // this same read-on-mount effect: the write-effect would fire during the
+  // same mount commit with the stale "grid" closure and clobber whatever
+  // was just read from storage). setViewModePersisted below is the only
+  // place that writes, and only in response to an actual user click.
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  useEffect(() => {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    if (stored === "grid" || stored === "baris") setViewMode(stored);
+  }, []);
+  function setViewModePersisted(mode: ViewMode) {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+  }
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MitraRow | null>(null);
   const [pending, startTransition] = useTransition();
@@ -472,11 +495,31 @@ export function MitraList({
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
-    setPage(1);
+    setVisibleCount(BATCH_SIZE);
   }
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const visibleRows = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  // Lazy-load sentinel: an empty div at the bottom of the list. Once it
+  // scrolls into view, grow visibleCount by one more batch — repeats until
+  // every filtered mitra is shown. rootMargin gives it a head start so the
+  // next batch is already loading before the user hits the literal bottom.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((c) => Math.min(c + BATCH_SIZE, filtered.length));
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [filtered.length]);
 
   function handleCreate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
     setFormError(null);
@@ -697,25 +740,48 @@ export function MitraList({
           </Select>
           </div>
         </div>
-        <Button
-          onClick={() => {
-            setFormError(null);
-            setCreating(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Tambah Mitra
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-md border p-0.5">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="icon"
+              className="size-7"
+              title="Tampilan grid"
+              onClick={() => setViewModePersisted("grid")}
+            >
+              <LayoutGrid className="size-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === "baris" ? "secondary" : "ghost"}
+              size="icon"
+              className="size-7"
+              title="Tampilan baris"
+              onClick={() => setViewModePersisted("baris")}
+            >
+              <List className="size-3.5" />
+            </Button>
+          </div>
+          <Button
+            onClick={() => {
+              setFormError(null);
+              setCreating(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Tambah Mitra
+          </Button>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Menampilkan {pageRows.length} dari {filtered.length} mitra.
+        Menampilkan {visibleRows.length} dari {filtered.length} mitra.
       </p>
 
       {listError && <p className="text-xs text-destructive">{listError}</p>}
 
+      {viewMode === "grid" ? (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {pageRows.map((m) => (
+        {visibleRows.map((m) => (
           <Card key={m.BusinessPartnerID} className={cn("py-3.5", m.IsSuspended && "opacity-60")}>
             <CardContent className="flex flex-col gap-2 px-4">
               <div className="flex items-start justify-between gap-2">
@@ -798,12 +864,95 @@ export function MitraList({
             </CardContent>
           </Card>
         ))}
-        {pageRows.length === 0 && (
+        {visibleRows.length === 0 && (
           <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Tidak ada mitra ditemukan.</p>
         )}
       </div>
+      ) : (
+      <div className="flex flex-col divide-y rounded-lg border">
+        {visibleRows.map((m) => (
+          <div
+            key={m.BusinessPartnerID}
+            className={cn("flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm", m.IsSuspended && "opacity-60")}
+          >
+            <div className="min-w-40 flex-1">
+              <p className="truncate font-medium">{m.Name}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                  {m.PartnerType}
+                </Badge>
+                <Badge variant={m.MarketingNama ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
+                  {m.MarketingNama ?? "Belum Ditentukan"}
+                </Badge>
+                {m.IsSuspended && (
+                  <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                    Nonaktif
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <Phone className="size-3" /> {m.Kontak || "-"}
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <MapPin className="size-3" />
+              {m.Wilayah || "-"}
+              {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              Harga:{" "}
+              <span className="text-foreground">
+                {m.PriceLevel != null && priceByLevel.has(m.PriceLevel)
+                  ? formatRupiah(priceByLevel.get(m.PriceLevel)!)
+                  : "-"}
+              </span>
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              Tenggat: <span className="text-foreground">{m.TermOfPaymentName ?? "-"}</span>
+            </span>
+            <span className={cn("inline-flex shrink-0 items-center gap-1 text-xs", m.Capacity == null && "text-muted-foreground")}>
+              <Package className="size-3" />
+              {m.Capacity != null ? `${m.Capacity.toLocaleString("id-ID")} kantong/hari` : "Kapasitas belum diisi"}
+            </span>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                title={m.IsSuspended ? "Aktifkan" : "Nonaktifkan"}
+                onClick={() => handleToggleSuspend(m)}
+              >
+                {m.IsSuspended ? (
+                  <RotateCcw className="size-3.5" />
+                ) : (
+                  <Ban className="size-3.5 text-muted-foreground" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => {
+                  setFormError(null);
+                  setEditing(m);
+                }}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => handleDelete(m)}>
+                <Trash2 className="size-3.5 text-destructive" />
+              </Button>
+            </div>
+          </div>
+        ))}
+        {visibleRows.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada mitra ditemukan.</p>
+        )}
+      </div>
+      )}
 
-      <Pagination page={page} pageCount={pageCount} onChange={setPage} />
+      <div ref={sentinelRef} className="h-1" />
+      {hasMore && <p className="py-2 text-center text-xs text-muted-foreground">Memuat lagi...</p>}
 
       <MitraFormDialog
         open={creating}
