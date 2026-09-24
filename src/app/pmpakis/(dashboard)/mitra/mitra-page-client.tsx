@@ -6,9 +6,10 @@ import { toast } from "sonner";
 import { MitraEsBalokList } from "@/components/dashboard/mitra-es-balok-list";
 import { MitraEsBalokDetailDialog } from "@/components/dashboard/mitra-es-balok-detail-dialog";
 import { MitraEsBalokFormDialog, emptyMitraForm } from "@/components/dashboard/mitra-es-balok-form-dialog";
-import type { MitraCard, MitraDetailData, WilayahOption } from "@/lib/queries/mitra-es-balok";
+import type { MitraCard, MitraDetailData, SumberAgen, WilayahOption } from "@/lib/queries/mitra-es-balok";
 import {
   getMitraDetailAction,
+  getWilayahOptionsAction,
   createMitraAction,
   updateMitraAction,
   setMitraSuspendedAction,
@@ -17,17 +18,30 @@ import {
 
 const KODE = "pmpakis";
 
-export function MitraPageClient({ cards, wilayahOptions }: { cards: MitraCard[]; wilayahOptions: WilayahOption[] }) {
+export function MitraPageClient({ cards, wilayahOptions: initialWilayahOptions }: { cards: MitraCard[]; wilayahOptions: WilayahOption[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<MitraCard | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editTarget, setEditTarget] = useState<MitraDetailData | null>(null);
+  // Starts from the page-load fetch ("utama"), but is refetched whenever the
+  // create form's Sumber selector changes -- pmpersada's/pmpakis's "logistik"
+  // Wilayah options live in a different physical database than "utama"'s.
+  const [wilayahOptions, setWilayahOptions] = useState<WilayahOption[]>(initialWilayahOptions);
+
+  async function handleSumberChange(sumber: SumberAgen) {
+    try {
+      setWilayahOptions(await getWilayahOptionsAction(sumber));
+    } catch {
+      toast.error("Gagal memuat daftar Wilayah untuk sumber ini.");
+    }
+  }
 
   function handleAddNew() {
     setFormMode("create");
     setEditTarget(null);
+    setWilayahOptions(initialWilayahOptions); // reset to "utama"'s list -- create always starts on "utama"
     setFormOpen(true);
   }
 
@@ -97,7 +111,7 @@ export function MitraPageClient({ cards, wilayahOptions }: { cards: MitraCard[];
             ? {
                 nama: editTarget.nama,
                 telepon: editTarget.telepon ?? "",
-                wilayahId: null,
+                wilayahId: editTarget.wilayahId,
                 alamat: editTarget.alamat ?? "",
                 hargaBalokKecil: editTarget.hargaBalokKecil,
                 hargaBalokBesar: editTarget.hargaBalokBesar,
@@ -112,6 +126,7 @@ export function MitraPageClient({ cards, wilayahOptions }: { cards: MitraCard[];
             : null
         }
         wilayahOptions={wilayahOptions}
+        onSumberChange={handleSumberChange}
         onSubmit={async (input, sumber, location) => {
           if (formMode === "create") {
             await createMitraAction(sumber, input, location);

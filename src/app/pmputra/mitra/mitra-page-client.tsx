@@ -97,7 +97,7 @@ export function MitraPageClient({ cards, wilayahOptions }: { cards: MitraCard[];
             ? {
                 nama: editTarget.nama,
                 telepon: editTarget.telepon ?? "",
-                wilayahId: null,
+                wilayahId: editTarget.wilayahId,
                 alamat: editTarget.alamat ?? "",
                 hargaBalokKecil: editTarget.hargaBalokKecil,
                 hargaBalokBesar: editTarget.hargaBalokBesar,

@@ -38,6 +38,7 @@ export interface MitraCard {
   telepon: string | null;
   isActive: boolean;
   wilayah: string | null;
+  wilayahId: string | null;
   alamat: string | null;
   hargaBalokKecil: number;
   hargaBalokBesar: number;
@@ -55,6 +56,7 @@ interface AgenRow {
   BalokBesar: number;
   MaksimumHutang: number;
   Wilayah: string | null;
+  WilayahId: string | null;
   Alamat: string | null;
   Latitude: number | null;
   Longitude: number | null;
@@ -70,7 +72,7 @@ async function getAgenRows(kode: string, sumber: SumberAgen): Promise<AgenRow[]>
   const pool = await getCompanyPool(physKode, label);
   const result = await pool.request().query(`
     SELECT a.AgenID, a.Nama, a.Telepon, a.IsActive, a.BalokKecil, a.BalokBesar, a.MaksimumHutang,
-           w.Nama AS Wilayah, ad.Address1 AS Alamat, loc.Latitude, loc.Longitude
+           w.Nama AS Wilayah, ad.RegionID AS WilayahId, ad.Address1 AS Alamat, loc.Latitude, loc.Longitude
     FROM PMP_Agen a
     LEFT JOIN PMP_AgenDetail ad ON ad.AgenID = a.AgenID AND ISNULL(ad.IsDeleted,0) = 0
     LEFT JOIN PMP_Wilayah w ON w.WilayahID = ad.RegionID
@@ -89,6 +91,7 @@ function toCard(row: AgenRow, sumber: SumberAgen): MitraCard {
     telepon: row.Telepon || null,
     isActive: row.IsActive,
     wilayah: row.Wilayah,
+    wilayahId: row.WilayahId,
     alamat: row.Alamat,
     hargaBalokKecil: row.BalokKecil,
     hargaBalokBesar: row.BalokBesar,
@@ -513,6 +516,20 @@ export async function updateMitra(kode: string, sumber: SumberAgen, agenId: stri
         throw err;
       }
     });
+  } else {
+    // Both Wilayah and Alamat were cleared by the caller. The MERGE branch
+    // above never runs in this case, so any existing PMP_AgenDetail row
+    // would otherwise keep its stale Address1/RegionID forever despite the
+    // form showing them empty. Explicitly blank the row instead (kept, not
+    // soft-deleted, so AgenDetailID stays stable for auditability) -- no
+    // ID generation or insert here, so this doesn't need withIdRetry.
+    await pool
+      .request()
+      .input("id", sql.VarChar(16), agenId)
+      .query(`
+        UPDATE PMP_AgenDetail SET Address1 = NULL, RegionID = NULL, ModifiedDate = GETDATE()
+        WHERE AgenID = @id AND ISNULL(IsDeleted,0) = 0
+      `);
   }
 }
 

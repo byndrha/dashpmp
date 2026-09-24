@@ -30,6 +30,7 @@ export function MitraEsBalokFormDialog({
   initialLocation,
   wilayahOptions,
   onSubmit,
+  onSumberChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -40,6 +41,11 @@ export function MitraEsBalokFormDialog({
   initialLocation: AgenLocationValue | null;
   wilayahOptions: WilayahOption[];
   onSubmit: (input: MitraInput, sumber: SumberAgen, location: AgenLocationValue | null) => Promise<void>;
+  // Called whenever the Sumber selector changes in create mode, so the
+  // caller can refetch Wilayah options for the newly-selected sumber --
+  // wilayahOptions is a static list this dialog does not fetch itself
+  // (see the pmpersada/pmpakis "logistik" Wilayah bug this closes).
+  onSumberChange?: (sumber: SumberAgen) => void;
 }) {
   const [form, setForm] = useState<MitraInput>(initial);
   const [sumber, setSumber] = useState<SumberAgen>(initialSumber);
@@ -85,7 +91,14 @@ export function MitraEsBalokFormDialog({
           {needsSumberChoice && mode === "create" && (
             <div className="flex flex-col gap-1.5">
               <Label>Sumber</Label>
-              <Select value={sumber} onValueChange={(v) => setSumber((v ?? "utama") as SumberAgen)}>
+              <Select
+                value={sumber}
+                onValueChange={(v) => {
+                  const next = (v ?? "utama") as SumberAgen;
+                  setSumber(next);
+                  onSumberChange?.(next);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue>{() => (sumber === "utama" ? "Utama" : "Logistik (Bersama)")}</SelectValue>
                 </SelectTrigger>
