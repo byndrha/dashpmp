@@ -15,9 +15,21 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AgenLocationField, type AgenLocationValue } from "@/components/dashboard/agen-location-field";
 import type { MitraInput, SumberAgen, WilayahOption } from "@/lib/queries/mitra-es-balok";
+import { SEGMENTASI_OPTIONS, type Segmentasi } from "@/lib/segmentasi-mitra";
 
 export function emptyMitraForm(): MitraInput {
-  return { nama: "", telepon: "", wilayahId: null, alamat: "", hargaBalokKecil: 0, hargaBalokBesar: 0, maksimumHutang: 0 };
+  return {
+    nama: "",
+    telepon: "",
+    wilayahId: null,
+    alamat: "",
+    hargaBalokKecil: 0,
+    hargaBalokBesar: 0,
+    maksimumHutang: 0,
+    kapasitasBalokKecil: null,
+    kapasitasBalokBesar: null,
+    segmentasi: null,
+  };
 }
 
 export function MitraEsBalokFormDialog({
@@ -53,6 +65,9 @@ export function MitraEsBalokFormDialog({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const needsSumberChoice = kode !== "pmputra";
+  // PMPakis only sells Balok Kecil -- Balok Besar harga/kapasitas is never
+  // asked for or shown here. User decision 2026-09-24.
+  const isPmpakis = kode === "pmpakis";
 
   useEffect(() => {
     if (open) {
@@ -71,7 +86,8 @@ export function MitraEsBalokFormDialog({
     setSubmitting(true);
     setFormError(null);
     try {
-      await onSubmit(form, sumber, location);
+      const payload = isPmpakis ? { ...form, hargaBalokBesar: 0, kapasitasBalokBesar: null } : form;
+      await onSubmit(payload, sumber, location);
       onOpenChange(false);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Gagal menyimpan Mitra.");
@@ -153,7 +169,7 @@ export function MitraEsBalokFormDialog({
             <Label>Alamat</Label>
             <Input value={form.alamat} onChange={(e) => setForm({ ...form, alamat: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={isPmpakis ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
             <div className="flex flex-col gap-1.5">
               <Label>Harga Balok Kecil</Label>
               <Input
@@ -162,14 +178,16 @@ export function MitraEsBalokFormDialog({
                 onChange={(e) => setForm({ ...form, hargaBalokKecil: Number(e.target.value) })}
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Harga Balok Besar</Label>
-              <Input
-                type="number"
-                value={form.hargaBalokBesar}
-                onChange={(e) => setForm({ ...form, hargaBalokBesar: Number(e.target.value) })}
-              />
-            </div>
+            {!isPmpakis && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Harga Balok Besar</Label>
+                <Input
+                  type="number"
+                  value={form.hargaBalokBesar}
+                  onChange={(e) => setForm({ ...form, hargaBalokBesar: Number(e.target.value) })}
+                />
+              </div>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Batas Hutang</Label>
@@ -178,6 +196,47 @@ export function MitraEsBalokFormDialog({
               value={form.maksimumHutang}
               onChange={(e) => setForm({ ...form, maksimumHutang: Number(e.target.value) })}
             />
+          </div>
+          <div className={isPmpakis ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
+            <div className="flex flex-col gap-1.5">
+              <Label>Kapasitas Balok Kecil (/hari)</Label>
+              <Input
+                type="number"
+                value={form.kapasitasBalokKecil ?? ""}
+                onChange={(e) => setForm({ ...form, kapasitasBalokKecil: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            </div>
+            {!isPmpakis && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Kapasitas Balok Besar (/hari)</Label>
+                <Input
+                  type="number"
+                  value={form.kapasitasBalokBesar ?? ""}
+                  onChange={(e) => setForm({ ...form, kapasitasBalokBesar: e.target.value === "" ? null : Number(e.target.value) })}
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Segmentasi</Label>
+            <Select
+              value={form.segmentasi ?? "__none__"}
+              onValueChange={(v) => setForm({ ...form, segmentasi: !v || v === "__none__" ? null : (v as Segmentasi) })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih Segmentasi">
+                  {() => SEGMENTASI_OPTIONS.find((s) => s.value === form.segmentasi)?.label ?? "Belum ditentukan"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Belum ditentukan</SelectItem>
+                {SEGMENTASI_OPTIONS.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <AgenLocationField value={location} onChange={setLocation} />

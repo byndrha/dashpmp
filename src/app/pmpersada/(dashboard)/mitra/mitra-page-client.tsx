@@ -6,15 +6,8 @@ import { toast } from "sonner";
 import { MitraEsBalokList } from "@/components/dashboard/mitra-es-balok-list";
 import { MitraEsBalokDetailDialog } from "@/components/dashboard/mitra-es-balok-detail-dialog";
 import { MitraEsBalokFormDialog, emptyMitraForm } from "@/components/dashboard/mitra-es-balok-form-dialog";
-import type { MitraCard, MitraDetailData, SumberAgen, WilayahOption } from "@/lib/queries/mitra-es-balok";
-import {
-  getMitraDetailAction,
-  getWilayahOptionsAction,
-  createMitraAction,
-  updateMitraAction,
-  setMitraSuspendedAction,
-  deleteMitraAction,
-} from "./actions";
+import type { MitraCard, SumberAgen, WilayahOption } from "@/lib/queries/mitra-es-balok";
+import { getWilayahOptionsAction, createMitraAction, updateMitraAction, setMitraSuspendedAction, deleteMitraAction } from "./actions";
 
 const KODE = "pmpersada";
 
@@ -24,7 +17,7 @@ export function MitraPageClient({ cards, wilayahOptions: initialWilayahOptions }
   const [detailOpen, setDetailOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [editTarget, setEditTarget] = useState<MitraDetailData | null>(null);
+  const [editTarget, setEditTarget] = useState<MitraCard | null>(null);
   // Starts from the page-load fetch ("utama"), but is refetched whenever the
   // create form's Sumber selector changes -- pmpersada's/pmpakis's "logistik"
   // Wilayah options live in a different physical database than "utama"'s.
@@ -45,16 +38,11 @@ export function MitraPageClient({ cards, wilayahOptions: initialWilayahOptions }
     setFormOpen(true);
   }
 
-  function handleEdit(data: MitraDetailData) {
+  function handleEdit(card: MitraCard) {
     setDetailOpen(false);
     setFormMode("edit");
-    setEditTarget(data);
+    setEditTarget(card);
     setFormOpen(true);
-  }
-
-  async function handleEditFromCard(card: MitraCard) {
-    const detail = await getMitraDetailAction(card.sumber, card.agenId);
-    if (detail) handleEdit(detail);
   }
 
   async function handleSuspendToggle(card: MitraCard) {
@@ -86,20 +74,12 @@ export function MitraPageClient({ cards, wilayahOptions: initialWilayahOptions }
           setSelected(card);
           setDetailOpen(true);
         }}
-        onEdit={handleEditFromCard}
+        onEdit={handleEdit}
         onSuspendToggle={handleSuspendToggle}
         onDelete={handleDelete}
       />
 
-      <MitraEsBalokDetailDialog
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        kode={KODE}
-        sumber={selected?.sumber ?? "utama"}
-        agenId={selected?.agenId ?? null}
-        fetchDetail={(_, sumber, agenId) => getMitraDetailAction(sumber, agenId)}
-        onEdit={handleEdit}
-      />
+      <MitraEsBalokDetailDialog open={detailOpen} onOpenChange={setDetailOpen} kode={KODE} data={selected} onEdit={handleEdit} />
 
       <MitraEsBalokFormDialog
         open={formOpen}
@@ -116,6 +96,9 @@ export function MitraPageClient({ cards, wilayahOptions: initialWilayahOptions }
                 hargaBalokKecil: editTarget.hargaBalokKecil,
                 hargaBalokBesar: editTarget.hargaBalokBesar,
                 maksimumHutang: editTarget.maksimumHutang,
+                kapasitasBalokKecil: editTarget.kapasitasBalokKecil,
+                kapasitasBalokBesar: editTarget.kapasitasBalokBesar,
+                segmentasi: editTarget.segmentasi,
               }
             : emptyMitraForm()
         }
