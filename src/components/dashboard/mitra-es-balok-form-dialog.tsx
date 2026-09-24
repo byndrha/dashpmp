@@ -45,6 +45,7 @@ export function MitraEsBalokFormDialog({
   const [sumber, setSumber] = useState<SumberAgen>(initialSumber);
   const [location, setLocation] = useState<AgenLocationValue | null>(initialLocation);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const needsSumberChoice = kode !== "pmputra";
 
   useEffect(() => {
@@ -56,14 +57,18 @@ export function MitraEsBalokFormDialog({
       setForm(initial);
       setSumber(initialSumber);
       setLocation(initialLocation);
+      setFormError(null);
     }
   }, [open, initial, initialSumber, initialLocation]);
 
   async function handleSubmit() {
     setSubmitting(true);
+    setFormError(null);
     try {
       await onSubmit(form, sumber, location);
       onOpenChange(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Gagal menyimpan Mitra.");
     } finally {
       setSubmitting(false);
     }
@@ -157,6 +162,8 @@ export function MitraEsBalokFormDialog({
           </div>
 
           <AgenLocationField value={location} onChange={setLocation} />
+
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
         </div>
 
         <DialogFooter>
