@@ -470,36 +470,49 @@ export async function updateMitra(kode: string, sumber: SumberAgen, agenId: stri
       WHERE AgenID = @id
     `);
 
-  const existingDetail = await pool
-    .request()
-    .input("id", sql.VarChar(16), agenId)
-    .query(`SELECT AgenDetailID FROM PMP_AgenDetail WHERE AgenID = @id AND ISNULL(IsDeleted,0) = 0`);
-
-  if (existingDetail.recordset.length > 0) {
-    await pool
-      .request()
-      .input("id", sql.VarChar(16), agenId)
-      .input("address1", sql.VarChar(256), input.alamat)
-      .input("regionId", sql.VarChar(16), input.wilayahId)
-      .query(`UPDATE PMP_AgenDetail SET Address1 = @address1, RegionID = @regionId, ModifiedDate = GETDATE() WHERE AgenID = @id AND ISNULL(IsDeleted,0) = 0`);
-  } else if (input.wilayahId || input.alamat) {
-    const transaction = new sql.Transaction(pool);
-    await transaction.begin();
-    try {
-      const agenDetailId = await withIdRetry(() => nextSequentialId(transaction, "PMP_AgenDetail", "AgenDetailID"));
-      await new sql.Request(transaction)
-        .input("detailId", sql.VarChar(16), agenDetailId)
-        .input("id", sql.VarChar(16), agenId)
-        .input("address1", sql.VarChar(256), input.alamat)
-        .input("regionId", sql.VarChar(16), input.wilayahId).query(`
-          INSERT INTO PMP_AgenDetail (AgenDetailID, AgenID, Address1, RegionID, IsDeleted, ModifiedDate)
-          VALUES (@detailId, @id, @address1, @regionId, 0, GETDATE())
-        `);
-      await transaction.commit();
-    } catch (err) {
-      await transaction.rollback();
-      throw err;
-    }
+  // Only touches PMP_AgenDetail when the caller actually supplied
+  // wilayah/alamat -- if both are empty/null, this Agen simply has no
+  // detail row and updateMitra leaves it that way (matches createMitra's
+  // same "only create AgenDetail if there's something to put in it" rule).
+  //
+  // Uses a single atomic MERGE ... WITH (HOLDLOCK) instead of a separate
+  // SELECT-then-branch (check-then-act), because two near-simultaneous
+  // updateMitra calls on the same Agen that both see "no existing row" via
+  // a plain SELECT would both take the INSERT branch and create two active
+  // AgenDetail rows -- confirmed live via a concurrency test. HOLDLOCK
+  // serializes concurrent MERGE statements against matching rows, which is
+  // the standard Microsoft-documented pattern for preventing this race.
+  if (input.wilayahId || input.alamat) {
+    await withIdRetry(async () => {
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
+      try {
+        // Computed unconditionally, inside the transaction, even though
+        // it's only USED by the MERGE's INSERT branch -- if the WHEN
+        // MATCHED branch fires instead, this ID is simply wasted (a small,
+        // harmless gap in the sequence), which is far preferable to a
+        // second round-trip after learning whether MATCHED fired.
+        const agenDetailId = await nextSequentialId(transaction, "PMP_AgenDetail", "AgenDetailID");
+        await new sql.Request(transaction)
+          .input("id", sql.VarChar(16), agenId)
+          .input("detailId", sql.VarChar(16), agenDetailId)
+          .input("address1", sql.VarChar(256), input.alamat)
+          .input("regionId", sql.VarChar(16), input.wilayahId).query(`
+            MERGE PMP_AgenDetail WITH (HOLDLOCK) AS target
+            USING (SELECT @id AS AgenID) AS src
+            ON target.AgenID = src.AgenID AND ISNULL(target.IsDeleted,0) = 0
+            WHEN MATCHED THEN
+              UPDATE SET Address1 = @address1, RegionID = @regionId, ModifiedDate = GETDATE()
+            WHEN NOT MATCHED THEN
+              INSERT (AgenDetailID, AgenID, Address1, RegionID, IsDeleted, ModifiedDate)
+              VALUES (@detailId, @id, @address1, @regionId, 0, GETDATE());
+          `);
+        await transaction.commit();
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    });
   }
 }
 
