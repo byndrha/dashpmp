@@ -534,3 +534,29 @@ export async function deleteMitra(kode: string, sumber: SumberAgen, agenId: stri
     .input("id", sql.VarChar(16), agenId)
     .query(`UPDATE PMP_Agen SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE AgenID = @id`);
 }
+
+export async function setAgenLocation(
+  kode: string,
+  sumber: SumberAgen,
+  agenId: string,
+  input: { latitude: number; longitude: number; alamat: string | null; userId: string }
+): Promise<void> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), agenId)
+    .input("lat", sql.Decimal(10, 7), input.latitude)
+    .input("lng", sql.Decimal(10, 7), input.longitude)
+    .input("alamat", sql.VarChar(512), input.alamat)
+    .input("userId", sql.VarChar(16), input.userId).query(`
+      MERGE DashboardAgenLocation AS target
+      USING (SELECT @id AS AgenID) AS src
+      ON target.AgenID = src.AgenID
+      WHEN MATCHED THEN
+        UPDATE SET Latitude = @lat, Longitude = @lng, Alamat = @alamat, UpdatedAt = GETDATE()
+      WHEN NOT MATCHED THEN
+        INSERT (AgenID, Latitude, Longitude, Alamat, CreatedByUserID)
+        VALUES (@id, @lat, @lng, @alamat, @userId);
+    `);
+}
