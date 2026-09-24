@@ -49,6 +49,7 @@ export function MitraEsBalokDetailDialog({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     if (!open || !agenId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setData(null);
@@ -56,8 +57,15 @@ export function MitraEsBalokDetailDialog({
     }
     setLoading(true);
     fetchDetail(kode, sumber, agenId)
-      .then(setData)
-      .finally(() => setLoading(false));
+      .then((result) => {
+        if (!cancelled) setData(result);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, kode, sumber, agenId, fetchDetail]);
 
   const isSharedLogistik = sumber === "logistik" && (kode === "pmpersada" || kode === "pmpakis");
