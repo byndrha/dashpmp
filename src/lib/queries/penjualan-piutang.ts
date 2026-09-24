@@ -1,6 +1,7 @@
 // src/lib/queries/penjualan-piutang.ts
 import { sql } from "@/lib/db";
 import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
+import { resolveAgenKoneksi, type SumberAgen } from "@/lib/queries/mitra-es-balok";
 
 const MONTHS_BACK = 12;
 
@@ -170,125 +171,378 @@ export async function getPenjualanTrend(kode: string): Promise<PenjualanTrendDat
 
 export interface PiutangTrendMonth {
   month: string;
-  piutangBaru: number; // GL Debit on the Piutang account this month
-  piutangTertagih: number; // GL Credit on the Piutang account this month
+  piutangBaru: number; // Pesanan - Retur this month (utama + logistik combined)
+  piutangTertagih: number; // Pembayaran this month, on Pemesanan + on PMP_Pembayaran
   netMovement: number; // piutangBaru - piutangTertagih
 }
 
 export interface PiutangSummaryData {
-  totalPiutangSaatIni: number; // GL balance as of today, utama + logistik
-  totalPiutangUtama: number;
-  totalPiutangLogistik: number;
+  totalPiutangSaatIni: number; // SUM over agents with a positive net balance ("Hutang")
+  totalTabunganSaatIni: number; // SUM over agents with a negative net balance ("Tabungan"), as a positive number
   months: PiutangTrendMonth[];
 }
 
-export interface PiutangAccountConfig {
-  kode: string;
-  label: CompanyKoneksiLabel;
-  accountNo: string;
-  requiresBranchFilter?: boolean;
+// This whole section replaces an earlier GL-account-balance approach
+// (GeneralLedger account "1115 Piutang Agen" etc) that, for pmputra,
+// UNDER-reported the true figure by ~Rp42jt (dashboard showed
+// Rp276.283.689; reported by user 2026-09-24). The user then shared TWO
+// candidate ERP report queries -- a per-Agen "Kartu Piutang" script (whose
+// company-wide total didn't reconcile, since it's designed for one Agen at
+// a time) and finally the actual "Rekening Agen Gabungan" export query,
+// confirmed live to reproduce the reported figures almost exactly
+// (TotalTabunganAwal matched to the Rupiah: Rp40.505.700). This is a literal
+// translation of THAT query.
+//
+// Critical modeling detail this query captures that the GL approach missed:
+// each Agen's balance is signed (PiutangSaldoAwal - TabunganSaldoAwal can be
+// negative, meaning that Agen is in savings surplus, not debt) -- and the
+// company-wide "Piutang"/"Hutang" total is the sum of only the
+// POSITIVE-balance Agents, while "Tabungan" is the sum of the (absolute
+// value of) negative-balance Agents. Netting all Agents together into one
+// signed company-wide number (as an earlier draft of this fix did) silently
+// cancels genuine debt against genuine savings across different Agents,
+// which is not how the ERP's own report presents it.
+//
+// Baseline (PiutangSaldoAwal - TabunganSaldoAwal) is summed from BOTH
+// "utama" and "logistik" PMP_Agen here -- unlike the Mitra module's own
+// rule (identity/baseline fields are utama-only), confirmed live that this
+// specific report adds both databases' baseline fields together.
+
+interface AgenNetRow {
+  AgenID: string;
+  Net: number;
 }
 
-// Confirmed live with accounting at both PTs (17-18 Sep 2026) -- each row is
-// 100% traceable to PMP_PEMESANAN. The pmpersada+logistik row needs
-// requiresBranchFilter: this database is shared with PMPakis (see
-// PMPERSADA_OWN_BRANCH_ID above, defined earlier in this file by Task 1) --
-// without it, this account's balance also includes PMPakis's own piutang.
-// Account "1114 Piutang Lainnya" (pmpersada/logistik) is deliberately
-// excluded -- confirmed by accounting to be an inter-company (PMPutra <->
-// PMPersada) receivable, not a customer/Agen receivable.
-// pmpakis/utama row added by the Mitra module plan (2026-09-24): confirmed
-// live via GeneralLedger that FINAC_ES_PAKIS's account 1111 is named
-// "Piutang Agen" with real activity (27,121 rows, ~Rp24.2bn debit /
-// ~Rp23.9bn credit) -- a genuinely active, dedicated Piutang account, not a
-// guess. This row is otherwise unused by getPiutangSummary/getPenjualanTrend
-// (pmpakis has no Penjualan/Piutang aggregate page of its own) -- it exists
-// solely for mitra-es-balok.ts's per-Agen getPiutangBaruAgen.
-export const PIUTANG_ACCOUNTS: PiutangAccountConfig[] = [
-  { kode: "pmputra", label: "utama", accountNo: "1115" }, // "Piutang Agen"
-  { kode: "pmputra", label: "logistik", accountNo: "1111" }, // "Piutang Jasa Usaha"
-  { kode: "pmpersada", label: "utama", accountNo: "1115" }, // "Piutang Agen"
-  { kode: "pmpersada", label: "logistik", accountNo: "1111", requiresBranchFilter: true }, // "Piutang Reguler"
-  { kode: "pmpakis", label: "utama", accountNo: "1111" }, // "Piutang Agen"
-];
+// All aggregation happens in SQL (GROUP BY AgenID) -- PMP_Pemesanan alone
+// has 200,000+ rows per database; pulling raw rows into Node and summing
+// them there (an earlier version of this function did that) saturated the
+// shared connection pool and briefly starved every other page's queries.
+// Each of these three queries returns at most ~250 rows (one per Agen).
 
-export function getPiutangAccount(kode: string, label: CompanyKoneksiLabel): PiutangAccountConfig {
-  const entry = PIUTANG_ACCOUNTS.find((a) => a.kode === kode && a.label === label);
-  if (!entry) throw new Error(`No Piutang account configured for kode="${kode}" label="${label}"`);
-  return entry;
-}
-
-// Current balance (Debit-normal asset account) -- no date filter, matches
-// balance-sheet-pmputra.ts's own "as of today" pattern for AsetLancar.
-async function getPiutangBalance(kode: string, label: CompanyKoneksiLabel): Promise<number> {
-  const pool = await getCompanyPool(kode, label);
-  const account = getPiutangAccount(kode, label);
-  const request = pool.request().input("accountNo", sql.VarChar(16), account.accountNo);
-  if (account.requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
-  const result = await request.query(`
-    SELECT ISNULL(SUM(gl.Debit),0) AS TotalDebit, ISNULL(SUM(gl.Credit),0) AS TotalCredit
-    FROM GeneralLedger gl
-    JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
-    WHERE coa.AccountNo = @accountNo
-      ${account.requiresBranchFilter ? "AND gl.BranchID = @branchId" : ""}
+async function getAgenBaselineNet(kode: string, sumber: SumberAgen): Promise<AgenNetRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const result = await pool.request().query(`
+    SELECT AgenID, SUM(PiutangSaldoAwal - TabunganSaldoAwal) AS Net
+    FROM PMP_Agen WHERE IsDeleted = 0 GROUP BY AgenID
   `);
-  const r = result.recordset[0] as { TotalDebit: number; TotalCredit: number };
-  return r.TotalDebit - r.TotalCredit;
+  return result.recordset as AgenNetRow[];
 }
 
-async function getPiutangMovementByMonth(
+async function getPemesananNetByAgen(kode: string, sumber: SumberAgen): Promise<AgenNetRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request();
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID, SUM(
+      (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
+      + (BalokBesarRealisasi - ISNULL(BalokBesarRetur,0)) * BalokBesarHarga
+      - ISNULL(Pembayaran,0)
+    ) AS Net
+    FROM PMP_Pemesanan
+    WHERE IsDeleted = 0
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY AgenID
+  `);
+  return result.recordset as AgenNetRow[];
+}
+
+async function getPembayaranNetByAgen(kode: string, sumber: SumberAgen): Promise<AgenNetRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request();
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID, SUM(ISNULL(Tarikan,0) - ISNULL(Pembayaran,0)) AS Net
+    FROM PMP_Pembayaran
+    WHERE IsDeleted = 0
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY AgenID
+  `);
+  return result.recordset as AgenNetRow[];
+}
+
+interface MonthMovementRow {
+  Bulan: string;
+  Baru: number;
+  Tertagih: number;
+}
+
+// Bounded to the 12-month trend window -- unlike the per-agent balance
+// queries above, this one legitimately needs per-row date bucketing, so it
+// stays server-side via CONVERT(...,120) grouping rather than a full fetch.
+async function getPemesananMovementByMonth(
   kode: string,
-  label: CompanyKoneksiLabel,
+  sumber: SumberAgen,
   start: Date,
   end: Date
-): Promise<Map<string, { baru: number; tertagih: number }>> {
-  const pool = await getCompanyPool(kode, label);
-  const account = getPiutangAccount(kode, label);
-  const request = pool
-    .request()
-    .input("accountNo", sql.VarChar(16), account.accountNo)
-    .input("start", sql.DateTime, start)
-    .input("end", sql.DateTime, end);
-  if (account.requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+): Promise<MonthMovementRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
   const result = await request.query(`
-      SELECT CONVERT(varchar(7), gl.TransDate, 120) AS Bulan,
-             SUM(gl.Debit) AS Baru, SUM(gl.Credit) AS Tertagih
-      FROM GeneralLedger gl
-      JOIN ChartOfAccount coa ON coa.ChartOfAccountID = gl.ChartOfAccountID
-      WHERE coa.AccountNo = @accountNo
-        AND gl.TransDate >= @start AND gl.TransDate < @end
-        ${account.requiresBranchFilter ? "AND gl.BranchID = @branchId" : ""}
-      GROUP BY CONVERT(varchar(7), gl.TransDate, 120)
-    `);
-  const map = new Map<string, { baru: number; tertagih: number }>();
-  for (const r of result.recordset as { Bulan: string; Baru: number; Tertagih: number }[]) {
-    map.set(r.Bulan, { baru: r.Baru, tertagih: r.Tertagih });
-  }
-  return map;
+    SELECT CONVERT(varchar(7), Tanggal, 120) AS Bulan,
+           SUM(BalokKecilRealisasi * BalokKecilHarga + BalokBesarRealisasi * BalokBesarHarga
+             - ISNULL(BalokKecilRetur,0) * BalokKecilHarga - ISNULL(BalokBesarRetur,0) * BalokBesarHarga) AS Baru,
+           SUM(ISNULL(Pembayaran,0)) AS Tertagih
+    FROM PMP_Pemesanan
+    WHERE IsDeleted = 0 AND Tanggal >= @start AND Tanggal < @end
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY CONVERT(varchar(7), Tanggal, 120)
+  `);
+  return result.recordset as MonthMovementRow[];
+}
+
+async function getPembayaranMovementByMonth(
+  kode: string,
+  sumber: SumberAgen,
+  start: Date,
+  end: Date
+): Promise<MonthMovementRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT CONVERT(varchar(7), Tanggal, 120) AS Bulan,
+           SUM(ISNULL(Tarikan,0)) AS Baru, SUM(ISNULL(Pembayaran,0)) AS Tertagih
+    FROM PMP_Pembayaran
+    WHERE IsDeleted = 0 AND Tanggal >= @start AND Tanggal < @end
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY CONVERT(varchar(7), Tanggal, 120)
+  `);
+  return result.recordset as MonthMovementRow[];
 }
 
 export async function getPiutangSummary(kode: string): Promise<PiutangSummaryData> {
   const { start, end, keys } = monthsWindow();
+  const sources: SumberAgen[] = ["utama", "logistik"];
 
-  const [totalPiutangUtama, totalPiutangLogistik, movementUtama, movementLogistik] = await Promise.all([
-    getPiutangBalance(kode, "utama"),
-    getPiutangBalance(kode, "logistik"),
-    getPiutangMovementByMonth(kode, "utama", start, end),
-    getPiutangMovementByMonth(kode, "logistik", start, end),
-  ]);
+  const [baselineBySource, pemesananNetBySource, pembayaranNetBySource, pemesananMonthBySource, pembayaranMonthBySource] =
+    await Promise.all([
+      Promise.all(sources.map((s) => getAgenBaselineNet(kode, s))),
+      Promise.all(sources.map((s) => getPemesananNetByAgen(kode, s))),
+      Promise.all(sources.map((s) => getPembayaranNetByAgen(kode, s))),
+      Promise.all(sources.map((s) => getPemesananMovementByMonth(kode, s, start, end))),
+      Promise.all(sources.map((s) => getPembayaranMovementByMonth(kode, s, start, end))),
+    ]);
+
+  const netByAgen = new Map<string, number>();
+  function addNet(agenId: string, delta: number) {
+    netByAgen.set(agenId, (netByAgen.get(agenId) ?? 0) + delta);
+  }
+  for (const rows of [...baselineBySource, ...pemesananNetBySource, ...pembayaranNetBySource]) {
+    for (const r of rows) addNet(r.AgenID, r.Net);
+  }
+
+  let totalPiutangSaatIni = 0;
+  let totalTabunganSaatIni = 0;
+  for (const net of netByAgen.values()) {
+    if (net >= 0) totalPiutangSaatIni += net;
+    else totalTabunganSaatIni += -net;
+  }
+
+  const movementByMonth = new Map<string, { baru: number; tertagih: number }>();
+  function addMovement(bulan: string, baru: number, tertagih: number) {
+    const cur = movementByMonth.get(bulan) ?? { baru: 0, tertagih: 0 };
+    movementByMonth.set(bulan, { baru: cur.baru + baru, tertagih: cur.tertagih + tertagih });
+  }
+  for (const rows of [...pemesananMonthBySource, ...pembayaranMonthBySource]) {
+    for (const r of rows) addMovement(r.Bulan, r.Baru, r.Tertagih);
+  }
 
   const months: PiutangTrendMonth[] = keys.map((key) => {
-    const mU = movementUtama.get(key) ?? { baru: 0, tertagih: 0 };
-    const mL = movementLogistik.get(key) ?? { baru: 0, tertagih: 0 };
-    const piutangBaru = mU.baru + mL.baru;
-    const piutangTertagih = mU.tertagih + mL.tertagih;
-    return { month: key, piutangBaru, piutangTertagih, netMovement: piutangBaru - piutangTertagih };
+    const m = movementByMonth.get(key) ?? { baru: 0, tertagih: 0 };
+    return { month: key, piutangBaru: m.baru, piutangTertagih: m.tertagih, netMovement: m.baru - m.tertagih };
   });
 
-  return {
-    totalPiutangSaatIni: totalPiutangUtama + totalPiutangLogistik,
-    totalPiutangUtama,
-    totalPiutangLogistik,
-    months,
-  };
+  return { totalPiutangSaatIni, totalTabunganSaatIni, months };
+}
+
+export interface PiutangPerAgenRow {
+  agenId: string;
+  nama: string;
+  tabunganAwal: number;
+  hutangAwal: number;
+  pesanan: number;
+  retur: number;
+  pembayaran: number;
+  tarikan: number;
+  saldoAkhir: number; // signed: positive = Hutang, negative = Tabungan
+}
+
+interface AgenRosterRow {
+  AgenID: string;
+  Nama: string;
+}
+
+// The roster (which AgenID/Nama pairs exist at all) comes from "utama"
+// only, matching the reference query's own INNER JOIN against
+// FINAC_ES_PO.PMP_Agen -- an AgenID that exists only in "logistik" (never
+// in "utama") has no row in this per-Agen table, same limitation the
+// reference query itself has. It's still counted in getPiutangSummary's
+// company-wide totals above, which key off AgenID directly rather than an
+// utama-rooted roster.
+async function getAgenRoster(kode: string): Promise<AgenRosterRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, "utama");
+  const pool = await getCompanyPool(physKode, label);
+  const result = await pool.request().query(`SELECT AgenID, Nama FROM PMP_Agen WHERE IsDeleted = 0`);
+  return result.recordset as AgenRosterRow[];
+}
+
+interface AgenPeriodRow {
+  AgenID: string;
+  Pesanan: number;
+  Retur: number;
+  Pembayaran: number;
+}
+
+async function getPemesananPeriodByAgen(kode: string, sumber: SumberAgen, start: Date, end: Date): Promise<AgenPeriodRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID,
+           SUM(BalokKecilRealisasi * BalokKecilHarga + BalokBesarRealisasi * BalokBesarHarga) AS Pesanan,
+           SUM(ISNULL(BalokKecilRetur,0) * BalokKecilHarga + ISNULL(BalokBesarRetur,0) * BalokBesarHarga) AS Retur,
+           SUM(ISNULL(Pembayaran,0)) AS Pembayaran
+    FROM PMP_Pemesanan
+    WHERE IsDeleted = 0 AND Tanggal BETWEEN @start AND @end
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY AgenID
+  `);
+  return result.recordset as AgenPeriodRow[];
+}
+
+interface AgenPembayaranPeriodRow {
+  AgenID: string;
+  Pembayaran: number;
+  Tarikan: number;
+}
+
+async function getPembayaranPeriodByAgen(
+  kode: string,
+  sumber: SumberAgen,
+  start: Date,
+  end: Date
+): Promise<AgenPembayaranPeriodRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID, SUM(ISNULL(Pembayaran,0)) AS Pembayaran, SUM(ISNULL(Tarikan,0)) AS Tarikan
+    FROM PMP_Pembayaran
+    WHERE IsDeleted = 0 AND Tanggal BETWEEN @start AND @end
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY AgenID
+  `);
+  return result.recordset as AgenPembayaranPeriodRow[];
+}
+
+// Per-Agen breakdown matching the reference "Rekening Agen Gabungan" export
+// column-for-column: Tabungan Awal, Hutang Awal, Pesanan, Retur, Pembayaran,
+// Tarikan, Saldo Akhir -- for a caller-chosen [start, end) period. "Awal"
+// figures are the Agen's signed balance immediately before `start` (same
+// baseline+cumulative-before-start formula as getPiutangSummary), split into
+// the two always-non-negative display columns the reference report uses.
+export async function getPiutangPerAgen(kode: string, start: Date, end: Date): Promise<PiutangPerAgenRow[]> {
+  const sources: SumberAgen[] = ["utama", "logistik"];
+
+  const [roster, baselineBySource, pemesananBeforeBySource, pembayaranBeforeBySource, pemesananPeriodBySource, pembayaranPeriodBySource] =
+    await Promise.all([
+      getAgenRoster(kode),
+      Promise.all(sources.map((s) => getAgenBaselineNet(kode, s))),
+      Promise.all(sources.map((s) => getPemesananNetByAgenBefore(kode, s, start))),
+      Promise.all(sources.map((s) => getPembayaranNetByAgenBefore(kode, s, start))),
+      Promise.all(sources.map((s) => getPemesananPeriodByAgen(kode, s, start, end))),
+      Promise.all(sources.map((s) => getPembayaranPeriodByAgen(kode, s, start, end))),
+    ]);
+
+  const saldoAwalByAgen = new Map<string, number>();
+  function addAwal(agenId: string, delta: number) {
+    saldoAwalByAgen.set(agenId, (saldoAwalByAgen.get(agenId) ?? 0) + delta);
+  }
+  for (const rows of [...baselineBySource, ...pemesananBeforeBySource, ...pembayaranBeforeBySource]) {
+    for (const r of rows) addAwal(r.AgenID, r.Net);
+  }
+
+  const periodByAgen = new Map<string, { pesanan: number; retur: number; pembayaran: number; tarikan: number }>();
+  function addPeriod(agenId: string, delta: { pesanan?: number; retur?: number; pembayaran?: number; tarikan?: number }) {
+    const cur = periodByAgen.get(agenId) ?? { pesanan: 0, retur: 0, pembayaran: 0, tarikan: 0 };
+    periodByAgen.set(agenId, {
+      pesanan: cur.pesanan + (delta.pesanan ?? 0),
+      retur: cur.retur + (delta.retur ?? 0),
+      pembayaran: cur.pembayaran + (delta.pembayaran ?? 0),
+      tarikan: cur.tarikan + (delta.tarikan ?? 0),
+    });
+  }
+  for (const rows of pemesananPeriodBySource) {
+    for (const r of rows) addPeriod(r.AgenID, { pesanan: r.Pesanan, retur: r.Retur, pembayaran: r.Pembayaran });
+  }
+  for (const rows of pembayaranPeriodBySource) {
+    for (const r of rows) addPeriod(r.AgenID, { pembayaran: r.Pembayaran, tarikan: r.Tarikan });
+  }
+
+  return roster.map((agen) => {
+    const saldoAwal = saldoAwalByAgen.get(agen.AgenID) ?? 0;
+    const period = periodByAgen.get(agen.AgenID) ?? { pesanan: 0, retur: 0, pembayaran: 0, tarikan: 0 };
+    const saldoAkhir = saldoAwal + period.pesanan - period.retur - period.pembayaran + period.tarikan;
+    return {
+      agenId: agen.AgenID,
+      nama: agen.Nama,
+      tabunganAwal: saldoAwal < 0 ? -saldoAwal : 0,
+      hutangAwal: saldoAwal >= 0 ? saldoAwal : 0,
+      pesanan: period.pesanan,
+      retur: period.retur,
+      pembayaran: period.pembayaran,
+      tarikan: period.tarikan,
+      saldoAkhir,
+    };
+  });
+}
+
+async function getPemesananNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID, SUM(
+      (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
+      + (BalokBesarRealisasi - ISNULL(BalokBesarRetur,0)) * BalokBesarHarga
+      - ISNULL(Pembayaran,0)
+    ) AS Net
+    FROM PMP_Pemesanan
+    WHERE IsDeleted = 0 AND Tanggal < @start
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY AgenID
+  `);
+  return result.recordset as AgenNetRow[];
+}
+
+async function getPembayaranNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID, SUM(ISNULL(Tarikan,0) - ISNULL(Pembayaran,0)) AS Net
+    FROM PMP_Pembayaran
+    WHERE IsDeleted = 0 AND Tanggal < @start
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+    GROUP BY AgenID
+  `);
+  return result.recordset as AgenNetRow[];
 }

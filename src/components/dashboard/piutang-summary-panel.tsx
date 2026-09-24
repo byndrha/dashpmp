@@ -1,5 +1,5 @@
 // src/components/dashboard/piutang-summary-panel.tsx
-import { Landmark, Warehouse, Truck } from "lucide-react";
+import { Landmark, PiggyBank } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -16,10 +16,9 @@ function formatMonthLabel(monthKey: string): string {
 export function PiutangSummaryPanel({ data }: { data: PiutangSummaryData }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Total Piutang Saat Ini" value={formatRupiah(data.totalPiutangSaatIni)} icon={Landmark} />
-        <KpiCard label="Piutang — Utama" value={formatRupiah(data.totalPiutangUtama)} icon={Warehouse} />
-        <KpiCard label="Piutang — Logistik" value={formatRupiah(data.totalPiutangLogistik)} icon={Truck} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <KpiCard label="Total Piutang (Hutang) Saat Ini" value={formatRupiah(data.totalPiutangSaatIni)} icon={Landmark} />
+        <KpiCard label="Total Tabungan Saat Ini" value={formatRupiah(data.totalTabunganSaatIni)} icon={PiggyBank} />
       </div>
       <Card>
         <CardHeader>
