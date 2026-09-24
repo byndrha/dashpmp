@@ -202,7 +202,11 @@ export function MitraEsBalokList({
                   {c.telepon}
                 </p>
               )}
-              {c.wilayah && <p className="text-xs text-muted-foreground">{c.wilayah}</p>}
+              {(c.wilayah || c.alamat) && (
+                <p className="text-xs text-muted-foreground">
+                  {[c.alamat, c.wilayah].filter(Boolean).join(", ")}
+                </p>
+              )}
               <div className="mt-1 flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">
                   {formatRupiah(c.hargaBalokKecil)} / {formatRupiah(c.hargaBalokBesar)}
