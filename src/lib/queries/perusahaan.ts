@@ -79,6 +79,22 @@ export async function listPerusahaan(): Promise<PerusahaanRow[]> {
   }));
 }
 
+// Looks up one company's Pabrik pin (set via /grup/perusahaan) by its
+// Postgres-directory kode ("pmpakis"/"pmpersada"/"pmputra"/...) -- used to
+// center a company-scoped map on that company's own location instead of a
+// hardcoded fallback. Returns null when the company has no Pabrik pin set
+// yet (Draft companies, or ones never given a location).
+export async function getPabrikLocationByKode(kode: string): Promise<{ latitude: number; longitude: number } | null> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("kode", sql.VarChar(32), kode)
+    .query(`SELECT PabrikLatitude, PabrikLongitude FROM DashboardPerusahaan WHERE Kode = @kode AND IsDeleted = 0`);
+  const row = result.recordset[0] as { PabrikLatitude: number | null; PabrikLongitude: number | null } | undefined;
+  if (!row || row.PabrikLatitude == null || row.PabrikLongitude == null) return null;
+  return { latitude: row.PabrikLatitude, longitude: row.PabrikLongitude };
+}
+
 export async function listPerusahaanForSwitcher(): Promise<PerusahaanSwitcherEntry[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
