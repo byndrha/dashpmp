@@ -1,6 +1,6 @@
 // src/lib/kinerja/marketing-collection-penjualan.ts
 import { getPool } from "@/lib/db";
-import { resolveAllMitraOwnership, type MitraOwnership } from "@/lib/kinerja/marketing-collection-attribution";
+import { resolveAllMitraOwnership, NOO_WINDOW_DAYS, type MitraOwnership } from "@/lib/queries/marketing-ownership";
 import { applyQtyStrategy } from "@/lib/kinerja/qty-strategy";
 import { monthBoundary, getBusinessDate } from "@/lib/business-date";
 import { listAkun } from "@/lib/queries/akun";
@@ -74,14 +74,6 @@ function daysInMonthKey(mk: string): number {
   const [year, month] = mk.split("-").map(Number);
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
-
-// A mitra counts as NOO for exactly 30 days starting the WIB business-date
-// their Pengajuan was approved (MitraOwnership.nooStartDate) — confirmed
-// with user 2026-09-16 via a worked example (approved 20 Sep -> NOO through
-// 20 Oct inclusive, Existing from 21 Oct onward). This window can straddle
-// a calendar-month boundary, so a mitra can contribute to NOO totals in TWO
-// separate months before becoming permanently Existing.
-const NOO_WINDOW_DAYS = 30;
 
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86400000);

@@ -1,11 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { getBusinessDate, getBusinessDateISO, getBusinessDateWithRollover, monthBoundary } from "@/lib/business-date";
-import {
-  getMarketingUsers,
-  getMarketingWilayahAssignments,
-  resolveResponsibleMarketing,
-  resolveMitraOverrideSources,
-} from "@/lib/queries/marketing-wilayah";
+import { getMarketingUsers, getMarketingWilayahAssignments, resolveMitraOverrideSources } from "@/lib/queries/marketing-wilayah";
+import { resolveAllMitraOwnership, resolveHybridOwner } from "@/lib/queries/marketing-ownership";
 
 // One (Marketing, Wilayah, Kecamatan) bucket — kept unaggregated (not
 // collapsed straight to one row per Marketing) so the panel can filter by
@@ -33,11 +29,14 @@ export interface MarketingScopeAllMitra {
   Capacity: number | null;
   JoinDate: string | null;
   PriceLevel: number | null;
-  // A mitra qualifying via cross-wilayah Pengajuan ownership (Task 2) counts
-  // as NOO every month it's resolved into this scope, not just its JoinDate
-  // month — see marketing-performance-trend.ts's isNoo for the same rule
-  // applied historically.
-  IsCrossWilayahProposal: boolean;
+  // Whether this mitra is currently within its 30-day NOO window (see
+  // resolveHybridOwner in marketing-ownership.ts) as of the moment this
+  // data was fetched — replaces the old JoinDate-in-current-month check
+  // client components used to do themselves. Confirmed with user
+  // 2026-09-24: a mitra still NOO stays attributed to whoever registered
+  // it even outside its own Wilayah/Kecamatan coverage; once Existing it
+  // follows live Wilayah/Kecamatan instead.
+  IsCurrentlyNoo: boolean;
   // Shown separately in the roster as "Mitra Prioritas", same admin-set
   // DashboardMarketingMitra override desktop already curates.
   IsPriorityOverride: boolean;
@@ -104,7 +103,10 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   // per-source breakdown Task 3's IsCrossWilayahProposal/IsPriorityOverride
   // flags need below) — see resolveMitraOverrideSources() in
   // marketing-wilayah.ts.
-  const { crossWilayahOverrides, prioritasOverrides, merged: mitraOverrides } = await resolveMitraOverrideSources(assignments);
+  const { prioritasOverrides } = await resolveMitraOverrideSources(assignments);
+  const ownerships = await resolveAllMitraOwnership();
+  const ownershipByMitra = new Map(ownerships.map((o) => [o.businessPartnerId, o]));
+  const today = getBusinessDate();
 
   const pool = await getPool();
   // Always the 1st of the current WIB business month, self-correcting as
@@ -182,14 +184,28 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
   ]);
 
   const marketingByName = new Map(marketingUsers.map((u) => [u.Nama, u]));
+  const akunIdToNama = new Map(marketingUsers.map((u) => [u.UserID, u.Nama]));
   const cellKey = (marketingUserId: string, wilayah: string, kecamatan: string | null) =>
     `${marketingUserId}|${wilayah}|${kecamatan ?? ""}`;
   const cells = new Map<string, MarketingScopeCell>();
 
-  function getCell(businessPartnerId: string, wilayah: string, kecamatan: string | null): MarketingScopeCell | null {
-    const marketingName = resolveResponsibleMarketing(businessPartnerId, wilayah, kecamatan, assignments, mitraOverrides);
-    if (!marketingName) return null;
-    const user = marketingByName.get(marketingName);
+  function getCell(
+    businessPartnerId: string,
+    wilayah: string,
+    kecamatan: string | null
+  ): { cell: MarketingScopeCell; isCurrentlyNoo: boolean } | null {
+    const resolved = resolveHybridOwner(
+      businessPartnerId,
+      wilayah,
+      kecamatan,
+      assignments,
+      prioritasOverrides,
+      ownershipByMitra,
+      akunIdToNama,
+      today
+    );
+    if (!resolved.marketingNama) return null;
+    const user = marketingByName.get(resolved.marketingNama);
     if (!user) return null;
     const key = cellKey(user.UserID, wilayah, kecamatan);
     let cell = cells.get(key);
@@ -204,7 +220,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       };
       cells.set(key, cell);
     }
-    return cell;
+    return { cell, isCurrentlyNoo: resolved.isCurrentlyNoo };
   }
 
   // Full roster per Marketing, for the "seluruh mitra" collapse — built
@@ -222,8 +238,9 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     JoinDate: string | null;
     PriceLevel: number | null;
   }[]) {
-    const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
-    if (!cell) continue;
+    const resolved = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
+    if (!resolved) continue;
+    const { cell, isCurrentlyNoo } = resolved;
     if (r.Capacity) cell.TargetHarian += r.Capacity;
     resolvedMarketingByMitra.set(r.BusinessPartnerID, cell.MarketingUserID);
     const roster = allMitraByMarketing.get(cell.MarketingUserID) ?? [];
@@ -235,7 +252,7 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
       Capacity: r.Capacity,
       JoinDate: r.JoinDate,
       PriceLevel: r.PriceLevel,
-      IsCrossWilayahProposal: crossWilayahOverrides.has(r.BusinessPartnerID) && !prioritasOverrides.has(r.BusinessPartnerID),
+      IsCurrentlyNoo: isCurrentlyNoo,
       IsPriorityOverride: prioritasOverrides.has(r.BusinessPartnerID),
     });
     allMitraByMarketing.set(cell.MarketingUserID, roster);
@@ -256,8 +273,9 @@ export async function getMarketingPerformance(): Promise<MarketingPerformanceDat
     TransDate: string;
     QtyKantong: number;
   }[]) {
-    const cell = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
-    if (!cell) continue;
+    const resolved = getCell(r.BusinessPartnerID, r.Wilayah, r.Kecamatan);
+    if (!resolved) continue;
+    const { cell } = resolved;
     const dayIndex = Math.round((new Date(r.TransDate).getTime() - rangeStart.getTime()) / 86400000);
     if (dayIndex < 0 || dayIndex >= periodDays) continue;
     cell.DailyQty[dayIndex] += r.QtyKantong;

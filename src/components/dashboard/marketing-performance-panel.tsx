@@ -388,40 +388,31 @@ function MarketingCard({
   const kunjungan = kpi?.Kunjungan ?? 0;
   const konversiPct = kpi && kpi.Kunjungan > 0 ? (kpi.Konversi / kpi.Kunjungan) * 100 : 0;
 
-  const currentMonthStartISO = `${todayISO.slice(0, 7)}-01`;
-  // JoinDate arrives from the server as a real JS Date at runtime (the
-  // underlying BusinessPartner.JoinDate column is SQL datetime — the mssql
-  // driver returns a Date object, and React's RSC serialization preserves
-  // Date instances across the server/client boundary), even though its
-  // declared type is `string | null`. Comparing a Date directly against an
-  // ISO string via `<`/`>=` always evaluates false (Date coerces to its
-  // numeric timestamp, the string fails ToNumber). Normalize both sides
-  // through `new Date(...)` before comparing — this also works unchanged if
-  // JoinDate genuinely is a string at runtime, since `new Date(dateObj)`
-  // clones a Date input as-is. Matches the same normalization already used
-  // in marketing-performance-trend.ts/pangsa-pasar-trend.ts.
-  // IsCrossWilayahProposal is optional here (not just on MarketingScopeAllMitra)
-  // because mitraPrioritas is MarketingMitraAssignment[] — the admin-curated
-  // Prioritas list, which by the precedence rule (marketing-performance.ts /
-  // marketing-performance-trend.ts) never carries the cross-wilayah flag in
-  // the first place, so an absent field correctly falls back to JoinDate-only
-  // bucketing for that list.
-  const isExisting = (m: { JoinDate: string | null; IsCrossWilayahProposal?: boolean }) =>
-    (!m.JoinDate || new Date(m.JoinDate).getTime() < new Date(currentMonthStartISO).getTime()) && !m.IsCrossWilayahProposal;
-  const isNoo = (m: { JoinDate: string | null; IsCrossWilayahProposal?: boolean }) =>
-    (!!m.JoinDate && new Date(m.JoinDate).getTime() >= new Date(currentMonthStartISO).getTime()) || !!m.IsCrossWilayahProposal;
+  // NOO/Existing status now comes straight from the server
+  // (MarketingScopeAllMitra.IsCurrentlyNoo, see marketing-performance.ts /
+  // marketing-ownership.ts) instead of being recomputed here from
+  // JoinDate — confirmed with user 2026-09-24. mitraPrioritas
+  // (MarketingMitraAssignment[]) has no NOO/Existing concept of its own —
+  // the admin-curated Prioritas list always stays permanently attributed
+  // regardless of status (same 2026-09-24 decision), so it's shown here
+  // unconditionally rather than filtered through isExisting/isNoo (this
+  // also fixes a pre-existing gap: a Prioritas mitra whose JoinDate fell
+  // in the current month used to silently disappear from this section
+  // entirely).
+  const isExisting = (m: MarketingScopeAllMitra) => !m.IsCurrentlyNoo;
+  const isNoo = (m: MarketingScopeAllMitra) => !!m.IsCurrentlyNoo;
 
   const sortedMitra = useMemo(
-    () => [...mitraPrioritas].filter((m) => isExisting(m)).sort(compareCapacityDesc),
-    [mitraPrioritas, currentMonthStartISO]
+    () => [...mitraPrioritas].sort(compareCapacityDesc),
+    [mitraPrioritas]
   );
   const sortedAllMitra = useMemo(
     () => [...allMitra].filter((m) => isExisting(m)).sort(compareCapacityDesc),
-    [allMitra, currentMonthStartISO]
+    [allMitra]
   );
   const sortedNooMitra = useMemo(
     () => [...allMitra].filter((m) => isNoo(m)).sort(compareCapacityDesc),
-    [allMitra, currentMonthStartISO]
+    [allMitra]
   );
   const showPrioritas = open || forceOpen;
   const showAll = openAll || forceOpen;
