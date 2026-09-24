@@ -521,6 +521,21 @@ export function MitraList({
     return () => observer.disconnect();
   }, [filtered.length]);
 
+  // Background auto-load: independent of the scroll sentinel above — keeps
+  // growing visibleCount on a timer even while the user isn't scrolling, so
+  // more of the (already client-side) filtered list is ready to render the
+  // moment they do scroll. Confirmed with user 2026-09-24. Stops scheduling
+  // once everything filtered is already visible (hasMore false); restarts
+  // automatically whenever a filter change makes hasMore true again, since
+  // the effect re-runs on every hasMore/filtered.length change.
+  useEffect(() => {
+    if (!hasMore) return;
+    const timer = setInterval(() => {
+      setVisibleCount((c) => Math.min(c + BATCH_SIZE, filtered.length));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [hasMore, filtered.length]);
+
   function handleCreate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
     setFormError(null);
     startTransition(async () => {
