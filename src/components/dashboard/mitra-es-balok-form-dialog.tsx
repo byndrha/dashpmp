@@ -87,7 +87,7 @@ export function MitraEsBalokFormDialog({
               <Label>Sumber</Label>
               <Select value={sumber} onValueChange={(v) => setSumber((v ?? "utama") as SumberAgen)}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>{() => (sumber === "utama" ? "Utama" : "Logistik (Bersama)")}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="utama">Utama</SelectItem>
@@ -118,7 +118,13 @@ export function MitraEsBalokFormDialog({
               onValueChange={(v) => setForm({ ...form, wilayahId: !v || v === "__none__" ? null : v })}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Pilih Wilayah" />
+                <SelectValue placeholder="Pilih Wilayah">
+                  {() =>
+                    !form.wilayahId
+                      ? "Tidak ada"
+                      : (wilayahOptions.find((w) => w.wilayahId === form.wilayahId)?.nama ?? "Pilih Wilayah")
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Tidak ada</SelectItem>
