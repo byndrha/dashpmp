@@ -105,7 +105,9 @@ export function MitraEsBalokList({
             }}
           >
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Sumber" />
+              <SelectValue>
+                {() => (sumberFilter === "all" ? "Semua Sumber" : sumberFilter === "utama" ? "Utama" : "Logistik (Bersama)")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Sumber</SelectItem>
@@ -122,7 +124,9 @@ export function MitraEsBalokList({
           }}
         >
           <SelectTrigger className="w-36">
-            <SelectValue placeholder="Status" />
+            <SelectValue>
+              {() => (statusFilter === "all" ? "Semua Status" : statusFilter === "aktif" ? "Aktif" : "Nonaktif")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua Status</SelectItem>
@@ -138,7 +142,7 @@ export function MitraEsBalokList({
           }}
         >
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Wilayah" />
+            <SelectValue>{() => (wilayahFilter === "all" ? "Semua Wilayah" : wilayahFilter)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua Wilayah</SelectItem>
