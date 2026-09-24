@@ -358,3 +358,166 @@ export async function getMitraDetail(kode: string, sumber: SumberAgen, agenId: s
     pembayaranEstimasiBulanIni: pembayaran.jumlah,
   };
 }
+
+export interface MitraInput {
+  nama: string;
+  telepon: string;
+  wilayahId: string | null;
+  alamat: string;
+  hargaBalokKecil: number;
+  hargaBalokBesar: number;
+  maksimumHutang: number;
+}
+
+// Computes the next '01'+sequential ID for either PMP_Agen.AgenID or
+// PMP_AgenDetail.AgenDetailID -- both tables share this exact generation
+// rule (confirmed live: '01' + MAX(TRY_CAST(SUBSTRING(id,3,10) AS INT))+1,
+// no padding, no per-group scoping despite the misleading-looking
+// MitraBisnisID column). Runs inside the caller's already-open transaction
+// so the MAX() read and the INSERT that follows are atomic within that
+// transaction, but a genuinely concurrent second transaction can still
+// compute the same "next" value before either commits -- that's what the
+// 2627-retry loop in createMitra is for, not this function.
+async function nextSequentialId(transaction: sql.Transaction, tableName: "PMP_Agen" | "PMP_AgenDetail", idColumn: string): Promise<string> {
+  const result = await new sql.Request(transaction).query(`
+    SELECT '01' + CAST(ISNULL(MAX(TRY_CAST(SUBSTRING(${idColumn},3,10) AS INT)), 0) + 1 AS VARCHAR) AS NextId
+    FROM ${tableName}
+  `);
+  return (result.recordset[0] as { NextId: string }).NextId;
+}
+
+const MAX_ID_RETRY_ATTEMPTS = 5;
+const SQL_PK_VIOLATION = 2627;
+
+// Retries the whole (compute-ID, insert) pair on a PK collision (error
+// 2627) -- confirmed live that AgenID/AgenDetailID are plain varchar PKs,
+// NOT identity columns, so a duplicate insert fails loudly rather than
+// silently duplicating, and two near-simultaneous creates CAN legitimately
+// race to compute the same "next" ID before either commits.
+async function withIdRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_ID_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const isPkViolation = typeof err === "object" && err !== null && "number" in err && (err as { number: number }).number === SQL_PK_VIOLATION;
+      if (!isPkViolation) throw err;
+    }
+  }
+  throw new Error(`Gagal membuat ID unik setelah ${MAX_ID_RETRY_ATTEMPTS} percobaan: ${String(lastErr)}`);
+}
+
+export async function createMitra(kode: string, sumber: SumberAgen, input: MitraInput): Promise<string> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+
+  return withIdRetry(async () => {
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      const agenId = await nextSequentialId(transaction, "PMP_Agen", "AgenID");
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), agenId)
+        .input("nama", sql.VarChar(128), input.nama)
+        .input("telepon", sql.VarChar(16), input.telepon)
+        .input("kecil", sql.Decimal(18, 2), input.hargaBalokKecil)
+        .input("besar", sql.Decimal(18, 2), input.hargaBalokBesar)
+        .input("maksHutang", sql.Decimal(18, 2), input.maksimumHutang).query(`
+          INSERT INTO PMP_Agen
+            (AgenID, Nama, MitraBisnisID, Telepon, IsActive, BalokKecil, BalokBesar, MaksimumHutang,
+             PiutangSaatIni, PiutangSaldoAwal, TabunganSaatIni, TabunganSaldoAwal, IsDeleted, ModifiedDate)
+          VALUES
+            (@id, @nama, '011', @telepon, 1, @kecil, @besar, @maksHutang, 0, 0, 0, 0, 0, GETDATE())
+        `);
+
+      if (input.wilayahId || input.alamat) {
+        const agenDetailId = await nextSequentialId(transaction, "PMP_AgenDetail", "AgenDetailID");
+        await new sql.Request(transaction)
+          .input("detailId", sql.VarChar(16), agenDetailId)
+          .input("id", sql.VarChar(16), agenId)
+          .input("address1", sql.VarChar(256), input.alamat)
+          .input("regionId", sql.VarChar(16), input.wilayahId).query(`
+            INSERT INTO PMP_AgenDetail (AgenDetailID, AgenID, Address1, RegionID, IsDeleted, ModifiedDate)
+            VALUES (@detailId, @id, @address1, @regionId, 0, GETDATE())
+          `);
+      }
+
+      await transaction.commit();
+      return agenId;
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  });
+}
+
+export async function updateMitra(kode: string, sumber: SumberAgen, agenId: string, input: MitraInput): Promise<void> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), agenId)
+    .input("nama", sql.VarChar(128), input.nama)
+    .input("telepon", sql.VarChar(16), input.telepon)
+    .input("kecil", sql.Decimal(18, 2), input.hargaBalokKecil)
+    .input("besar", sql.Decimal(18, 2), input.hargaBalokBesar)
+    .input("maksHutang", sql.Decimal(18, 2), input.maksimumHutang).query(`
+      UPDATE PMP_Agen SET
+        Nama = @nama, Telepon = @telepon, BalokKecil = @kecil, BalokBesar = @besar,
+        MaksimumHutang = @maksHutang, ModifiedDate = GETDATE()
+      WHERE AgenID = @id
+    `);
+
+  const existingDetail = await pool
+    .request()
+    .input("id", sql.VarChar(16), agenId)
+    .query(`SELECT AgenDetailID FROM PMP_AgenDetail WHERE AgenID = @id AND ISNULL(IsDeleted,0) = 0`);
+
+  if (existingDetail.recordset.length > 0) {
+    await pool
+      .request()
+      .input("id", sql.VarChar(16), agenId)
+      .input("address1", sql.VarChar(256), input.alamat)
+      .input("regionId", sql.VarChar(16), input.wilayahId)
+      .query(`UPDATE PMP_AgenDetail SET Address1 = @address1, RegionID = @regionId, ModifiedDate = GETDATE() WHERE AgenID = @id AND ISNULL(IsDeleted,0) = 0`);
+  } else if (input.wilayahId || input.alamat) {
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      const agenDetailId = await withIdRetry(() => nextSequentialId(transaction, "PMP_AgenDetail", "AgenDetailID"));
+      await new sql.Request(transaction)
+        .input("detailId", sql.VarChar(16), agenDetailId)
+        .input("id", sql.VarChar(16), agenId)
+        .input("address1", sql.VarChar(256), input.alamat)
+        .input("regionId", sql.VarChar(16), input.wilayahId).query(`
+          INSERT INTO PMP_AgenDetail (AgenDetailID, AgenID, Address1, RegionID, IsDeleted, ModifiedDate)
+          VALUES (@detailId, @id, @address1, @regionId, 0, GETDATE())
+        `);
+      await transaction.commit();
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  }
+}
+
+export async function setMitraSuspended(kode: string, sumber: SumberAgen, agenId: string, isActive: boolean): Promise<void> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), agenId)
+    .input("isActive", sql.Bit, isActive)
+    .query(`UPDATE PMP_Agen SET IsActive = @isActive, ModifiedDate = GETDATE() WHERE AgenID = @id`);
+}
+
+export async function deleteMitra(kode: string, sumber: SumberAgen, agenId: string): Promise<void> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  await pool
+    .request()
+    .input("id", sql.VarChar(16), agenId)
+    .query(`UPDATE PMP_Agen SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE AgenID = @id`);
+}
