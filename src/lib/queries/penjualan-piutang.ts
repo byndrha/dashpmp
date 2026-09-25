@@ -2,6 +2,7 @@
 import { sql } from "@/lib/db";
 import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
 import { resolveAgenKoneksi, type SumberAgen } from "@/lib/queries/mitra-es-balok";
+import type { Segmentasi } from "@/lib/segmentasi-mitra";
 
 const MONTHS_BACK = 12;
 
@@ -365,6 +366,14 @@ export async function getPiutangSummary(kode: string): Promise<PiutangSummaryDat
   return { totalPiutangSaatIni, totalTabunganSaatIni, months };
 }
 
+export interface PiutangTransaksiRow {
+  noDokumen: string;
+  tanggal: string; // ISO date (yyyy-MM-dd)
+  balokKecil: number;
+  balokBesar: number;
+  total: number; // Rupiah, net of Retur
+}
+
 export interface PiutangPerAgenRow {
   agenId: string;
   nama: string;
@@ -375,11 +384,21 @@ export interface PiutangPerAgenRow {
   pembayaran: number;
   tarikan: number;
   saldoAkhir: number; // signed: positive = Hutang, negative = Tabungan
+  segmentasi: Segmentasi | null;
+  latitude: number | null;
+  longitude: number | null;
+  // Pesanan transactions within [start, end), newest first -- the
+  // Rekening Agen Gabungan report only has the totals; this per-transaction
+  // breakdown is an addition for the card's collapsed transaction list.
+  transaksi: PiutangTransaksiRow[];
 }
 
 interface AgenRosterRow {
   AgenID: string;
   Nama: string;
+  Segmentasi: Segmentasi | null;
+  Latitude: number | null;
+  Longitude: number | null;
 }
 
 // The roster (which AgenID/Nama pairs exist at all) comes from "utama"
@@ -388,11 +407,20 @@ interface AgenRosterRow {
 // in "utama") has no row in this per-Agen table, same limitation the
 // reference query itself has. It's still counted in getPiutangSummary's
 // company-wide totals above, which key off AgenID directly rather than an
-// utama-rooted roster.
+// utama-rooted roster. Segmentasi/Lokasi are the same dashboard-owned
+// DashboardAgenProfil/DashboardAgenLocation tables the Mitra module reads
+// (see mitra-es-balok.ts's getAgenRows) -- joined here so the per-Agen
+// Piutang card can show them without a second round trip per card.
 async function getAgenRoster(kode: string): Promise<AgenRosterRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, "utama");
   const pool = await getCompanyPool(physKode, label);
-  const result = await pool.request().query(`SELECT AgenID, Nama FROM PMP_Agen WHERE IsDeleted = 0`);
+  const result = await pool.request().query(`
+    SELECT a.AgenID, a.Nama, prof.Segmentasi, loc.Latitude, loc.Longitude
+    FROM PMP_Agen a
+    LEFT JOIN DashboardAgenProfil prof ON prof.AgenID = a.AgenID
+    LEFT JOIN DashboardAgenLocation loc ON loc.AgenID = a.AgenID
+    WHERE a.IsDeleted = 0
+  `);
   return result.recordset as AgenRosterRow[];
 }
 
@@ -420,6 +448,44 @@ async function getPemesananPeriodByAgen(kode: string, sumber: SumberAgen, start:
     GROUP BY AgenID
   `);
   return result.recordset as AgenPeriodRow[];
+}
+
+interface PemesananTransaksiSqlRow {
+  AgenID: string;
+  NoDokumen: string;
+  Tanggal: Date;
+  BalokKecil: number;
+  BalokBesar: number;
+  Total: number;
+}
+
+// Raw (unaggregated) Pesanan rows within the period, for the per-Agen
+// card's collapsed transaction list -- NoDokumen is already stored in the
+// ERP's own "PMP/SO/nnnnnn/yyyy-MM/GE/HO" format, so it's used as-is with
+// no reconstruction. Same net-of-Retur Total formula as
+// getPemesananPeriodByAgen (Pesanan minus Retur), not the gross figure.
+async function getPemesananTransaksiRows(
+  kode: string,
+  sumber: SumberAgen,
+  start: Date,
+  end: Date
+): Promise<PemesananTransaksiSqlRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID, NoDokumen, Tanggal,
+           (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) AS BalokKecil,
+           (BalokBesarRealisasi - ISNULL(BalokBesarRetur,0)) AS BalokBesar,
+           (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
+             + (BalokBesarRealisasi - ISNULL(BalokBesarRetur,0)) * BalokBesarHarga AS Total
+    FROM PMP_Pemesanan
+    WHERE IsDeleted = 0 AND Tanggal BETWEEN @start AND @end
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+  `);
+  return result.recordset as PemesananTransaksiSqlRow[];
 }
 
 interface AgenPembayaranPeriodRow {
@@ -458,15 +524,23 @@ async function getPembayaranPeriodByAgen(
 export async function getPiutangPerAgen(kode: string, start: Date, end: Date): Promise<PiutangPerAgenRow[]> {
   const sources: SumberAgen[] = ["utama", "logistik"];
 
-  const [roster, baselineBySource, pemesananBeforeBySource, pembayaranBeforeBySource, pemesananPeriodBySource, pembayaranPeriodBySource] =
-    await Promise.all([
-      getAgenRoster(kode),
-      Promise.all(sources.map((s) => getAgenBaselineNet(kode, s))),
-      Promise.all(sources.map((s) => getPemesananNetByAgenBefore(kode, s, start))),
-      Promise.all(sources.map((s) => getPembayaranNetByAgenBefore(kode, s, start))),
-      Promise.all(sources.map((s) => getPemesananPeriodByAgen(kode, s, start, end))),
-      Promise.all(sources.map((s) => getPembayaranPeriodByAgen(kode, s, start, end))),
-    ]);
+  const [
+    roster,
+    baselineBySource,
+    pemesananBeforeBySource,
+    pembayaranBeforeBySource,
+    pemesananPeriodBySource,
+    pembayaranPeriodBySource,
+    transaksiBySource,
+  ] = await Promise.all([
+    getAgenRoster(kode),
+    Promise.all(sources.map((s) => getAgenBaselineNet(kode, s))),
+    Promise.all(sources.map((s) => getPemesananNetByAgenBefore(kode, s, start))),
+    Promise.all(sources.map((s) => getPembayaranNetByAgenBefore(kode, s, start))),
+    Promise.all(sources.map((s) => getPemesananPeriodByAgen(kode, s, start, end))),
+    Promise.all(sources.map((s) => getPembayaranPeriodByAgen(kode, s, start, end))),
+    Promise.all(sources.map((s) => getPemesananTransaksiRows(kode, s, start, end))),
+  ]);
 
   const saldoAwalByAgen = new Map<string, number>();
   function addAwal(agenId: string, delta: number) {
@@ -493,6 +567,45 @@ export async function getPiutangPerAgen(kode: string, start: Date, end: Date): P
     for (const r of rows) addPeriod(r.AgenID, { pembayaran: r.Pembayaran, tarikan: r.Tarikan });
   }
 
+  // Same NoDokumen can appear in BOTH "utama" and "logistik" -- utama and
+  // logistik PMP_Pemesanan mirror the same physical order with different
+  // Harga components (see getPemesananPeriodByAgen's own additive-Harga
+  // formula, verified against the real ERP total), not two separate orders.
+  // Displaying them as two card rows would show the same document twice
+  // with two partial Rupiah amounts, so rows sharing (AgenID, NoDokumen) are
+  // merged here: Total sums across sources (matches the aggregate), qty is
+  // taken from whichever source is seen first ("utama" is processed first
+  // since `sources` lists it before "logistik") since it's the same
+  // physical quantity on both sides, not additive.
+  const transaksiKeyed = new Map<string, PiutangTransaksiRow & { agenId: string }>();
+  for (const rows of transaksiBySource) {
+    for (const r of rows) {
+      const key = `${r.AgenID}|${r.NoDokumen}`;
+      const existing = transaksiKeyed.get(key);
+      if (existing) {
+        existing.total += r.Total;
+        continue;
+      }
+      transaksiKeyed.set(key, {
+        agenId: r.AgenID,
+        noDokumen: r.NoDokumen,
+        tanggal: new Date(r.Tanggal).toISOString().slice(0, 10),
+        balokKecil: r.BalokKecil,
+        balokBesar: r.BalokBesar,
+        total: r.Total,
+      });
+    }
+  }
+  const transaksiByAgen = new Map<string, PiutangTransaksiRow[]>();
+  for (const { agenId, ...item } of transaksiKeyed.values()) {
+    const list = transaksiByAgen.get(agenId) ?? [];
+    list.push(item);
+    transaksiByAgen.set(agenId, list);
+  }
+  for (const list of transaksiByAgen.values()) {
+    list.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  }
+
   return roster.map((agen) => {
     const saldoAwal = saldoAwalByAgen.get(agen.AgenID) ?? 0;
     const period = periodByAgen.get(agen.AgenID) ?? { pesanan: 0, retur: 0, pembayaran: 0, tarikan: 0 };
@@ -507,6 +620,10 @@ export async function getPiutangPerAgen(kode: string, start: Date, end: Date): P
       pembayaran: period.pembayaran,
       tarikan: period.tarikan,
       saldoAkhir,
+      segmentasi: agen.Segmentasi,
+      latitude: agen.Latitude,
+      longitude: agen.Longitude,
+      transaksi: transaksiByAgen.get(agen.AgenID) ?? [],
     };
   });
 }

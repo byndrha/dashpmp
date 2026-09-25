@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,9 @@ import { Pagination } from "@/components/dashboard/pagination";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SEGMENTASI_OPTIONS } from "@/lib/segmentasi-mitra";
 import type { XlsxColumn } from "@/lib/export-xlsx";
-import type { PiutangPerAgenRow } from "@/lib/queries/penjualan-piutang";
+import type { PiutangPerAgenRow, PiutangTransaksiRow } from "@/lib/queries/penjualan-piutang";
 
 const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Agen", key: "nama", width: 26 },
@@ -69,23 +70,79 @@ function SortToggle({
   );
 }
 
+const COLLAPSED_PREVIEW_COUNT = 2;
+
+function segmentasiLabel(value: PiutangPerAgenRow["segmentasi"]): string | null {
+  if (!value) return null;
+  return SEGMENTASI_OPTIONS.find((s) => s.value === value)?.label ?? null;
+}
+
+function formatTanggalPendek(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-1.5">
+      <div className="min-w-0">
+        <p className="font-data truncate text-[11px] text-muted-foreground">{item.noDokumen}</p>
+        <p className="text-[11px] text-muted-foreground">
+          {formatTanggalPendek(item.tanggal)}
+          {item.balokKecil !== 0 && ` · Kecil ${item.balokKecil.toLocaleString("id-ID")}`}
+          {item.balokBesar !== 0 && ` · Besar ${item.balokBesar.toLocaleString("id-ID")}`}
+        </p>
+      </div>
+      <span className="shrink-0 text-xs font-semibold tabular-nums">{formatRupiah(item.total)}</span>
+    </div>
+  );
+}
+
 function AgenCard({ row }: { row: PiutangPerAgenRow }) {
   const status = statusOf(row);
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = row.transaksi.length > COLLAPSED_PREVIEW_COUNT;
+  const visibleTransaksi = expanded ? row.transaksi : row.transaksi.slice(0, COLLAPSED_PREVIEW_COUNT);
+  const segLabel = segmentasiLabel(row.segmentasi);
+  const hasPin = row.latitude != null && row.longitude != null;
+
   return (
     <Card className="py-3.5">
       <CardContent className="flex flex-col gap-2 px-4">
         <div className="flex items-start justify-between gap-2">
-          <p className="truncate font-medium">{row.nama}</p>
-          <Badge
-            variant="outline"
-            className={cn(
-              "h-5 shrink-0 px-1.5 text-[10px]",
-              status === "hutang" && "border-destructive/40 text-destructive",
-              status === "tabungan" && "border-primary/40 text-primary"
+          <div className="min-w-0">
+            <p className="truncate font-medium">{row.nama}</p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+              <Badge variant={segLabel ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
+                {segLabel ?? "Belum Ditentukan"}
+              </Badge>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {hasPin && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                title="Lihat di Google Maps"
+                onClick={() =>
+                  window.open(`https://www.google.com/maps?q=${row.latitude},${row.longitude}`, "_blank", "noopener,noreferrer")
+                }
+              >
+                <MapPin className="size-3.5" />
+              </Button>
             )}
-          >
-            {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
-          </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
+                "h-5 px-1.5 text-[10px]",
+                status === "hutang" && "border-destructive/40 text-destructive",
+                status === "tabungan" && "border-primary/40 text-primary"
+              )}
+            >
+              {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
+            </Badge>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-t pt-2 text-xs">
@@ -108,6 +165,24 @@ function AgenCard({ row }: { row: PiutangPerAgenRow }) {
             Tarikan: <span className="text-foreground">{formatRupiah(row.tarikan)}</span>
           </span>
         </div>
+
+        {row.transaksi.length > 0 && (
+          <div className="divide-y divide-border border-t">
+            {visibleTransaksi.map((item) => (
+              <TransaksiRow key={item.noDokumen} item={item} />
+            ))}
+          </div>
+        )}
+        {hasMore && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center justify-center gap-1 pt-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            {expanded ? "Sembunyikan" : `+${row.transaksi.length - COLLAPSED_PREVIEW_COUNT} transaksi lainnya`}
+            <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
+          </button>
+        )}
 
         <div className="flex items-center justify-between border-t pt-2">
           <span className="text-xs text-muted-foreground">Saldo Akhir</span>
