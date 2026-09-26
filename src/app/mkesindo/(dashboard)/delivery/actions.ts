@@ -24,12 +24,15 @@ import {
   getArmadaUtilisasiPeriode,
   getArmadaNextJadwalStarted,
   getJadwalTotalRetur,
+  getArmadaOperationalStatuses,
   type DriverStopRow,
   type StopDeliveryProof,
   type AvailableSalesOrder,
   type ArmadaConflictInfo,
   type ArmadaUtilisasiHarian,
+  type ArmadaOperationalStatus,
 } from "@/lib/queries/pengiriman-jadwal";
+import { getBusinessDateISO } from "@/lib/business-date";
 import { getLatestDriverPosition, type DriverPosition } from "@/lib/queries/akun-lokasi";
 import {
   getArmadaActivities,
@@ -635,5 +638,19 @@ export async function getVehicleTrailAction(armadaId: number, hoursBack: number)
   return runAction(async () => {
     await requireModuleAccess("delivery");
     return getVehicleTrail(armadaId, hoursBack);
+  });
+}
+
+// Powers the GPS Kendaraan tooltip's operational-status line ("Dalam
+// Pengiriman ke: <mitra>", dsb) — returned as a plain array (not a Map)
+// since that's what crosses the server action boundary cleanly; the client
+// rebuilds a Map keyed by armadaId.
+export async function getArmadaOperationalStatusesAction(
+  armadaIds: number[]
+): Promise<ActionResult<{ armadaId: number; status: ArmadaOperationalStatus }[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    const statuses = await getArmadaOperationalStatuses(armadaIds, getBusinessDateISO());
+    return [...statuses.entries()].map(([armadaId, status]) => ({ armadaId, status }));
   });
 }

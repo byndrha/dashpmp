@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Printer } from "lucide-react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getOpenDeliveries, getDriverOptions } from "@/lib/queries/delivery";
-import { getPengirimanBoard } from "@/lib/queries/pengiriman-jadwal";
+import { getPengirimanBoard, getArmadaOperationalStatuses } from "@/lib/queries/pengiriman-jadwal";
 import { getKendalaReports } from "@/lib/queries/driver-kendala";
 import { getArmadaActivities } from "@/lib/queries/armada-activity";
 import { getDriverProfiles } from "@/lib/queries/driver-profile";
@@ -68,6 +68,18 @@ export default async function DeliveryPage({
     getLatestVehiclePositions(),
   ]);
 
+  // Best-effort: the GPS tooltip's status line is a nice-to-have on top of
+  // the page's core delivery-management purpose, so a slow/failing MSSQL
+  // round-trip here must never take down the whole page — fall back to "no
+  // status known" (an empty array) rather than letting the error propagate.
+  const armadaIdsWithGps = [...new Set(vehiclePositions.map((v) => v.armadaId).filter((id) => id != null))];
+  const armadaStatuses = await getArmadaOperationalStatuses(armadaIdsWithGps, boardDate)
+    .then((map) => [...map.entries()].map(([armadaId, status]) => ({ armadaId, status })))
+    .catch((err) => {
+      console.warn("[delivery/page] Gagal mengambil status operasional armada untuk tooltip GPS:", err);
+      return [];
+    });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -86,7 +98,7 @@ export default async function DeliveryPage({
       <PengirimanTabs
         terbukaPanel={<OpenDeliveriesPanel rows={rows} />}
         kendalaPanel={<KendalaReportPanel rows={kendalaReports} />}
-        gpsPanel={<VehicleGpsPanelLoader initialPositions={vehiclePositions} />}
+        gpsPanel={<VehicleGpsPanelLoader initialPositions={vehiclePositions} initialArmadaStatuses={armadaStatuses} />}
         papanPanel={
           <PengirimanBoard
             armada={board.armada}

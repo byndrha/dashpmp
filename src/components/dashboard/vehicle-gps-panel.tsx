@@ -4,7 +4,16 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import L from "leaflet";
-import { AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  PauseCircle,
+  PackageOpen,
+  Clock,
+  Truck,
+  Undo2,
+  CheckCircle2,
+  Wrench,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,8 +25,10 @@ import {
   getVehiclePositionsAction,
   getVehicleTrailAction,
   syncVehicleGpsPositionsAction,
+  getArmadaOperationalStatusesAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { VehiclePositionRow, VehicleTrailPoint } from "@/lib/queries/armada-gps";
+import type { ArmadaOperationalStatus } from "@/lib/queries/pengiriman-jadwal";
 
 // Client-only polling: 45s, within the plan's 30-60s spec range and matching
 // print-queue-poller.tsx's own interval pattern. No server cron exists yet
@@ -35,6 +46,40 @@ const PROVIDER_LABELS: Record<VehiclePositionRow["provider"], string> = {
   hino: "Hino Connect",
   solofleet: "SoloFleet",
 };
+
+// One entry per ArmadaOperationalStatus["kind"] — label, badge color, and
+// icon shown on both the map popup and the side-list card. Colors follow
+// this app's existing semantic palette (muted=idle, amber=in-progress-prep,
+// primary=core delivery activity, destructive=needs attention).
+const STATUS_META: Record<
+  ArmadaOperationalStatus["kind"],
+  { label: string; badgeClassName: string; Icon: typeof PauseCircle }
+> = {
+  diam: { label: "Diam", badgeClassName: "bg-muted text-muted-foreground", Icon: PauseCircle },
+  proses_muat: { label: "Proses Muat", badgeClassName: "bg-amber-500/15 text-amber-600 dark:text-amber-400", Icon: PackageOpen },
+  menunggu_keberangkatan: {
+    label: "Menunggu Keberangkatan",
+    badgeClassName: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+    Icon: Clock,
+  },
+  dalam_pengiriman: { label: "Dalam Pengiriman", badgeClassName: "bg-primary/15 text-primary", Icon: Truck },
+  perjalanan_kembali: {
+    label: "Perjalanan Kembali",
+    badgeClassName: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+    Icon: Undo2,
+  },
+  tiba: { label: "Tiba", badgeClassName: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", Icon: CheckCircle2 },
+  maintenance: { label: "Maintenance", badgeClassName: "bg-destructive/15 text-destructive", Icon: Wrench },
+};
+
+// "Dalam Pengiriman ke: <mitra>" / "Status Maintenance Lainnya: <detail>" —
+// the two kinds whose display text needs the status's own payload, not just
+// its kind.
+function statusDetailText(status: ArmadaOperationalStatus): string | null {
+  if (status.kind === "dalam_pengiriman") return status.mitraTujuan ? `ke: ${status.mitraTujuan}` : null;
+  if (status.kind === "maintenance") return status.label;
+  return null;
+}
 
 // Same identity key the query layer itself dedupes on (provider,
 // external_vehicle_id) — always device identity, never armadaId. A vehicle
@@ -64,8 +109,66 @@ function truckIcon(headingDeg: number, connected: boolean) {
   });
 }
 
-export function VehicleGpsPanel({ initialPositions }: { initialPositions: VehiclePositionRow[] }) {
+// Redesigned map popup: plate + provider as the header, a colored status
+// badge (with icon) as the primary content, then a quiet meta row for
+// speed/last-update — replaces the earlier plain stacked-paragraph version.
+function VehiclePopupContent({
+  v,
+  status,
+  otherProvider,
+}: {
+  v: VehiclePositionRow;
+  status: ArmadaOperationalStatus | undefined;
+  otherProvider: string | null;
+}) {
+  const meta = status ? STATUS_META[status.kind] : null;
+  const detail = status ? statusDetailText(status) : null;
+  return (
+    <div className="w-56 overflow-hidden rounded-lg">
+      <div className="flex items-center justify-between gap-2 bg-foreground/[0.03] px-3 py-2 dark:bg-white/5">
+        <span className="text-sm font-semibold">{v.plateRaw}</span>
+        <Badge variant="secondary" className="text-[10px]">
+          {PROVIDER_LABELS[v.provider]}
+        </Badge>
+      </div>
+      <div className="flex flex-col gap-2 px-3 py-2.5">
+        {meta ? (
+          <div className={cn("flex items-start gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium", meta.badgeClassName)}>
+            <meta.Icon className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              {meta.label}
+              {detail && <span className="font-normal"> {detail}</span>}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+            <PauseCircle className="size-3.5" />
+            Belum terhubung ke Armada
+          </div>
+        )}
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>{v.speedKmh != null ? `${Math.round(v.speedKmh)} km/h` : "Kecepatan tidak diketahui"}</span>
+          <span>{formatRelativeTime(v.recordedAt)}</span>
+        </div>
+        {otherProvider && (
+          <p className="text-[11px] text-muted-foreground">Juga dilacak: {otherProvider}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function VehicleGpsPanel({
+  initialPositions,
+  initialArmadaStatuses,
+}: {
+  initialPositions: VehiclePositionRow[];
+  initialArmadaStatuses: { armadaId: number; status: ArmadaOperationalStatus }[];
+}) {
   const [positions, setPositions] = useState<VehiclePositionRow[]>(initialPositions);
+  const [armadaStatuses, setArmadaStatuses] = useState<Map<number, ArmadaOperationalStatus>>(
+    () => new Map(initialArmadaStatuses.map((s) => [s.armadaId, s.status]))
+  );
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [hoursBack, setHoursBack] = useState(1);
@@ -137,7 +240,15 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
         setFailedProviders(syncResult.data.filter((s) => !s.ok).map((s) => s.provider));
       }
       const posResult = await getVehiclePositionsAction();
-      if (!cancelled && posResult.success) setPositions(posResult.data);
+      if (cancelled || !posResult.success) return;
+      setPositions(posResult.data);
+
+      const armadaIds = [...new Set(posResult.data.map((p) => p.armadaId).filter((id): id is number => id != null))];
+      if (armadaIds.length === 0) return;
+      const statusResult = await getArmadaOperationalStatusesAction(armadaIds);
+      if (!cancelled && statusResult.success) {
+        setArmadaStatuses(new Map(statusResult.data.map((s) => [s.armadaId, s.status])));
+      }
     }
     // Fire an immediate sync on mount so the tab shows fresh data right away,
     // rather than waiting up to POLL_INTERVAL_MS for the first refresh.
@@ -188,15 +299,12 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
                   else markerRefs.current.delete(vehicleKey(v));
                 }}
               >
-                <Popup>
-                  <div className="text-sm">
-                    <p className="font-medium">{v.plateRaw}</p>
-                    <p className="text-muted-foreground">{PROVIDER_LABELS[v.provider]}</p>
-                    <p className="text-muted-foreground">Update {formatRelativeTime(v.recordedAt)}</p>
-                    {otherProviderLabel(v) && (
-                      <p className="text-muted-foreground">Juga dilacak: {otherProviderLabel(v)}</p>
-                    )}
-                  </div>
+                <Popup minWidth={220} className="[&_.leaflet-popup-content-wrapper]:p-0 [&_.leaflet-popup-content]:m-0">
+                  <VehiclePopupContent
+                    v={v}
+                    status={v.armadaId != null ? armadaStatuses.get(v.armadaId) : undefined}
+                    otherProvider={otherProviderLabel(v)}
+                  />
                 </Popup>
               </Marker>
             ))}
@@ -240,13 +348,16 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
               const key = vehicleKey(v);
               const isSelected = key === selectedKey;
               const isUnmatched = v.armadaId == null;
+              const status = v.armadaId != null ? armadaStatuses.get(v.armadaId) : undefined;
+              const meta = status ? STATUS_META[status.kind] : null;
+              const detail = status ? statusDetailText(status) : null;
               return (
                 <button
                   key={key}
                   type="button"
                   onClick={() => handleSelect(v)}
                   className={cn(
-                    "flex flex-col gap-1 rounded-md border p-2.5 text-left text-sm transition-colors hover:bg-accent",
+                    "flex flex-col gap-1.5 rounded-md border p-2.5 text-left text-sm transition-colors hover:bg-accent",
                     isSelected && "border-primary bg-accent"
                   )}
                 >
@@ -254,10 +365,20 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
                     <span className="font-medium">{v.plateRaw}</span>
                     <Badge variant="secondary">{PROVIDER_LABELS[v.provider]}</Badge>
                   </div>
-                  {isUnmatched && (
+                  {isUnmatched ? (
                     <Badge variant="outline" className="w-fit text-muted-foreground">
                       Belum terhubung ke Armada
                     </Badge>
+                  ) : (
+                    meta && (
+                      <div className={cn("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium w-fit", meta.badgeClassName)}>
+                        <meta.Icon className="size-3.5 shrink-0" />
+                        <span>
+                          {meta.label}
+                          {detail && <span className="font-normal"> {detail}</span>}
+                        </span>
+                      </div>
+                    )
                   )}
                   {otherProviderLabel(v) && (
                     <p className="text-xs text-muted-foreground">Juga dilacak: {otherProviderLabel(v)}</p>

@@ -6,6 +6,9 @@ import { formatDate, formatTime } from "@/lib/format";
 import { estimateDeliveryMinutes, CONFIRMATION_MINUTES_PER_STOP } from "@/lib/delivery-duration";
 import { estimateTravelMinutes, estimateTripMinutes, estimateOneWayTravelMinutes, haversineKm, type LatLng } from "@/lib/route-estimate";
 import { getJamKembaliAktualMap } from "@/lib/queries/vehicle-check";
+import { getArmadaActivities } from "@/lib/queries/armada-activity";
+import { ARMADA_ACTIVITY_LABEL } from "@/lib/armada-activity-types";
+import type { ArmadaStatus } from "@/lib/armada-status";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
 import { enqueuePrintJob } from "@/lib/queries/print-queue";
 import { postDeliveryOrderRealtime, postSalesInvoiceRealtime } from "@/lib/queries/gl-posting-backfill";
@@ -3603,4 +3606,137 @@ export async function getArmadaNextJadwalStarted(currentJadwalId: number): Promi
 
   const row = result.recordset[0] as { JamMulaiMuat: Date | null } | undefined;
   return row?.JamMulaiMuat != null;
+}
+
+// Operational status for the GPS Kendaraan tab's map tooltip (delivery/
+// vehicle-gps-panel.tsx) — a coarser, driver-facing read of "what is this
+// truck doing right now" than the board's own segment labels, using the
+// exact vocabulary requested for that tooltip.
+export type ArmadaOperationalStatus =
+  | { kind: "diam" }
+  | { kind: "proses_muat" }
+  | { kind: "menunggu_keberangkatan" }
+  | { kind: "dalam_pengiriman"; mitraTujuan: string | null }
+  | { kind: "perjalanan_kembali" }
+  | { kind: "tiba" }
+  | { kind: "maintenance"; label: string };
+
+// Deliberately its own lightweight query set rather than reusing
+// getPengirimanBoard() — that function also computes OSRM routes and
+// farthest-stop lookups for the whole day's board, which this tooltip (and
+// its ~45s poll refresh, see vehicle-gps-panel.tsx) doesn't need and
+// shouldn't pay for repeatedly.
+export async function getArmadaOperationalStatuses(
+  armadaIds: number[],
+  businessDate: string
+): Promise<Map<number, ArmadaOperationalStatus>> {
+  const statuses = new Map<number, ArmadaOperationalStatus>();
+  if (armadaIds.length === 0) return statuses;
+
+  const pool = await getPool();
+
+  const armadaRequest = pool.request();
+  const armadaPlaceholders = armadaIds.map((id, i) => {
+    armadaRequest.input(`aid${i}`, sql.Int, id);
+    return `@aid${i}`;
+  });
+  const jadwalRequest = pool.request();
+  const jadwalPlaceholders = armadaIds.map((id, i) => {
+    jadwalRequest.input(`jaid${i}`, sql.Int, id);
+    return `@jaid${i}`;
+  });
+  jadwalRequest.input("businessDate", sql.Date, businessDate);
+
+  const [armadaResult, jadwalResult, activities] = await Promise.all([
+    armadaRequest.query(
+      `SELECT ArmadaID, Status FROM DashboardArmada WHERE ArmadaID IN (${armadaPlaceholders.join(",")}) AND IsDeleted = 0`
+    ),
+    jadwalRequest.query(`
+      SELECT JadwalID, ArmadaID, Status, CreatedDate, JamMulaiMuat, JamSelesaiMuat, JamAktualBerangkat
+      FROM DashboardPengirimanJadwal
+      WHERE IsDeleted = 0
+        AND ArmadaID IN (${jadwalPlaceholders.join(",")})
+        -- Same 14:00 WIB rollover window as getPengirimanBoard's own businessDate filter.
+        AND JamJadwal >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
+        AND JamJadwal < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
+    `),
+    getArmadaActivities(businessDate),
+  ]);
+
+  const armadaStatusById = new Map(
+    (armadaResult.recordset as { ArmadaID: number; Status: ArmadaStatus }[]).map((r) => [r.ArmadaID, r.Status])
+  );
+  const jadwalRows = jadwalResult.recordset as {
+    JadwalID: number;
+    ArmadaID: number;
+    Status: JadwalStatus;
+    CreatedDate: Date;
+    JamMulaiMuat: Date | null;
+    JamSelesaiMuat: Date | null;
+    JamAktualBerangkat: Date | null;
+  }[];
+  const jamKembaliMap = await getJamKembaliAktualMap(jadwalRows.map((j) => j.JadwalID));
+
+  const now = new Date();
+  // Armada whose stop-completion state still needs a lookup (departed, not
+  // yet returned) — collected here and resolved in one parallel batch below
+  // instead of one sequential getDriverJadwalStops() call per armada, so
+  // this function's total latency doesn't scale linearly with how many
+  // vehicles are currently out on delivery.
+  const pendingStopLookup: { armadaId: number; jadwalId: number }[] = [];
+
+  for (const armadaId of armadaIds) {
+    const armadaStatus = armadaStatusById.get(armadaId);
+    if (armadaStatus && armadaStatus !== "Baik") {
+      statuses.set(armadaId, { kind: "maintenance", label: armadaStatus });
+      continue;
+    }
+    const activity = activities.find(
+      (a) => a.ArmadaID === armadaId && new Date(a.StartTime) <= now && now <= new Date(a.EndTime)
+    );
+    if (activity) {
+      statuses.set(armadaId, { kind: "maintenance", label: ARMADA_ACTIVITY_LABEL[activity.ActivityType] });
+      continue;
+    }
+
+    const jadwalForArmada = jadwalRows.filter((j) => j.ArmadaID === armadaId);
+    const active =
+      jadwalForArmada.find((j) => j.Status === "Terbit" && jamKembaliMap.get(j.JadwalID) == null) ??
+      [...jadwalForArmada.filter((j) => j.Status === "Draft")].sort(
+        (a, b) => b.CreatedDate.getTime() - a.CreatedDate.getTime()
+      )[0] ??
+      null;
+
+    if (!active) {
+      statuses.set(armadaId, { kind: "diam" });
+      continue;
+    }
+    if (active.Status === "Draft") {
+      statuses.set(armadaId, active.JamMulaiMuat ? { kind: "proses_muat" } : { kind: "diam" });
+      continue;
+    }
+    if (!active.JamAktualBerangkat) {
+      statuses.set(armadaId, { kind: "menunggu_keberangkatan" });
+      continue;
+    }
+    if (jamKembaliMap.get(active.JadwalID)) {
+      statuses.set(armadaId, { kind: "tiba" });
+      continue;
+    }
+
+    pendingStopLookup.push({ armadaId, jadwalId: active.JadwalID });
+  }
+
+  await Promise.all(
+    pendingStopLookup.map(async ({ armadaId, jadwalId }) => {
+      const stops = await getDriverJadwalStops(jadwalId);
+      const nextStop = stops.find((s) => s.JamSelesai == null);
+      statuses.set(
+        armadaId,
+        nextStop ? { kind: "dalam_pengiriman", mitraTujuan: nextStop.CustomerName } : { kind: "perjalanan_kembali" }
+      );
+    })
+  );
+
+  return statuses;
 }

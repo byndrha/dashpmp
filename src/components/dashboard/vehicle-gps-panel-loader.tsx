@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { VehiclePositionRow } from "@/lib/queries/armada-gps";
+import type { ArmadaOperationalStatus } from "@/lib/queries/pengiriman-jadwal";
 
 // VehicleGpsPanel calls L.divIcon() (Leaflet) at render time for its truck
 // marker icons, which crashes with "window is not defined" if statically
@@ -18,6 +19,12 @@ const VehicleGpsPanel = dynamic(
   { ssr: false, loading: () => <Skeleton className="h-96 w-full rounded-lg" /> }
 );
 
-export function VehicleGpsPanelLoader({ initialPositions }: { initialPositions: VehiclePositionRow[] }) {
-  return <VehicleGpsPanel initialPositions={initialPositions} />;
+export function VehicleGpsPanelLoader({
+  initialPositions,
+  initialArmadaStatuses,
+}: {
+  initialPositions: VehiclePositionRow[];
+  initialArmadaStatuses: { armadaId: number; status: ArmadaOperationalStatus }[];
+}) {
+  return <VehicleGpsPanel initialPositions={initialPositions} initialArmadaStatuses={initialArmadaStatuses} />;
 }
