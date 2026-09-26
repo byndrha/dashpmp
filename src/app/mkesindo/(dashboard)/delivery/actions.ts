@@ -88,6 +88,13 @@ import {
 } from "@/lib/queries/retur-resale";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { verifikasiDanPakaiKodeAmbilAlih } from "@/lib/queries/kode-ambil-alih";
+import { syncVehicleGpsPositions, type ProviderSyncStatus } from "@/lib/gps-providers/sync";
+import {
+  getLatestVehiclePositions,
+  getVehicleTrail,
+  type VehiclePositionRow,
+  type VehicleTrailPoint,
+} from "@/lib/queries/armada-gps";
 
 export async function createArmadaAction(input: ArmadaInput): Promise<ActionResult<number>> {
   return runAction(async () => {
@@ -598,5 +605,35 @@ export async function jualUlangRetailAction(
     const result = await jualUlangRetail(stopDeliveryItemId, qty, lokasiLat, lokasiLng, jadwalId, Number(session.user.id), "DISPATCHER");
     revalidatePath("/mkesindo/delivery");
     return result;
+  });
+}
+
+// GPS Kendaraan (Hino Connect / SoloFleet) — read/sync actions for the
+// vehicle-position panel (Task 12) and the delivery page's initial fetch
+// (Task 13). Follows the requireModuleAccess("delivery") convention used by
+// every other action in this file.
+//
+// Client-side polling only — this project has no server cron.
+// TODO(user, reminder requested 2026-09-26): migrate to a server-side
+// scheduled sync (API route + external scheduler) so positions keep
+// updating when no one has the tab open.
+export async function syncVehicleGpsPositionsAction(): Promise<ActionResult<ProviderSyncStatus[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return syncVehicleGpsPositions();
+  });
+}
+
+export async function getVehiclePositionsAction(): Promise<ActionResult<VehiclePositionRow[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getLatestVehiclePositions();
+  });
+}
+
+export async function getVehicleTrailAction(armadaId: number, hoursBack: number): Promise<ActionResult<VehicleTrailPoint[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getVehicleTrail(armadaId, hoursBack);
   });
 }
