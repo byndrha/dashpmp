@@ -9,6 +9,7 @@ import { solofleetProvider } from "@/lib/gps-providers/solofleet";
 import { normalizePlate } from "@/lib/gps-providers/types";
 import { getArmadaList } from "@/lib/queries/armada";
 import { insertVehiclePositions, cleanupOldVehiclePositions } from "@/lib/queries/armada-gps";
+import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 
 export interface ProviderSyncStatus {
   provider: "hino" | "solofleet";
@@ -18,6 +19,13 @@ export interface ProviderSyncStatus {
 }
 
 export async function syncVehicleGpsPositions(): Promise<ProviderSyncStatus[]> {
+  // Only MKEsindo has the /mkesindo/delivery Armada dashboard today, so
+  // that's the only PT whose vehicles this sync can match against. When
+  // GPS Kendaraan is extended to another PT's delivery page, this becomes a
+  // loop over each PT that has the feature (each with its own Armada list
+  // and its own perusahaan_id passed to fetchPositions/resolveGpsKredensial).
+  const perusahaanId = await getMkesindoPerusahaanId();
+
   // Step 1: build the plate -> armadaId map once per sync, from the live
   // ERP Armada list (MSSQL), skipping rows with a blank/null PlatNomor.
   const armadaList = await getArmadaList();
@@ -33,7 +41,7 @@ export async function syncVehicleGpsPositions(): Promise<ProviderSyncStatus[]> {
   const statuses: ProviderSyncStatus[] = [];
   for (const p of providers) {
     try {
-      const positions = await p.fetchPositions();
+      const positions = await p.fetchPositions(perusahaanId);
       await insertVehiclePositions(positions, armadaByPlate);
       statuses.push({ provider: p.provider, ok: true, error: null, syncedAt: new Date().toISOString() });
     } catch (err) {

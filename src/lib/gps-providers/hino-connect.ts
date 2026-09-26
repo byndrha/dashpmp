@@ -87,8 +87,8 @@ interface HinoClustersResponse {
  * resulting session. Throws AppError on any failure (missing credentials or
  * a rejected login), never logging the password.
  */
-async function login(): Promise<string> {
-  const kredensial = await resolveGpsKredensial("hino");
+async function login(perusahaanId: number): Promise<string> {
+  const kredensial = await resolveGpsKredensial(perusahaanId, "hino");
   if (!kredensial) {
     throw new AppError("Kredensial GPS Hino Connect belum dikonfigurasi.");
   }
@@ -133,8 +133,8 @@ async function login(): Promise<string> {
   return accessToken;
 }
 
-async function fetchPositions(): Promise<NormalizedVehiclePosition[]> {
-  const accessToken = await login();
+async function fetchPositions(perusahaanId: number): Promise<NormalizedVehiclePosition[]> {
+  const accessToken = await login(perusahaanId);
 
   const response = await fetch(CLUSTERS_URL, {
     method: "POST",

@@ -17,7 +17,10 @@ export interface NormalizedVehiclePosition {
 
 export interface VehicleGpsProvider {
   readonly provider: "hino" | "solofleet";
-  fetchPositions(): Promise<NormalizedVehiclePosition[]>;
+  // Each PT (MKEsindo, PMPutra, ...) has its own Hino Connect / SoloFleet
+  // account — perusahaanId selects which PT's stored credentials to log in
+  // with, not a shared account for the whole app.
+  fetchPositions(perusahaanId: number): Promise<NormalizedVehiclePosition[]>;
 }
 
 /**

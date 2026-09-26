@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Pencil, Trash2, MapPin, Building2, Wallet } from "lucide-react";
+import { Plus, Pencil, Trash2, MapPin, Building2, Wallet, Satellite } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import type { GDriveKoneksiRow } from "@/lib/queries/perusahaan-gdrive";
 import type { ChartOfAccountOption } from "@/lib/queries/chart-of-account";
 import { PerusahaanFormDialog } from "@/components/dashboard/perusahaan-form-dialog";
 import { PaymentMethodDialog } from "@/components/dashboard/payment-method-dialog";
+import { GpsKendaraanKredensialDialog } from "@/components/dashboard/gps-kendaraan-kredensial-form";
 import {
   createPerusahaanAction,
   updatePerusahaanAction,
@@ -48,17 +49,21 @@ export function PerusahaanList({
 }) {
   const [target, setTarget] = useState<PerusahaanRow | "new" | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<PerusahaanRow | null>(null);
+  const [gpsTarget, setGpsTarget] = useState<PerusahaanRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const searchParams = useSearchParams();
   const gdriveStatus = searchParams.get("gdrive");
 
-  // metode_pembayaran is keyed by the Postgres perusahaan.id (same id
-  // KoneksiRow/GDriveKoneksiRow use), not PerusahaanRow's MSSQL PerusahaanID —
-  // resolve it via the shared Kode link, same lookup PerusahaanFormDialog
-  // uses for direktoriId. null when the row isn't linked yet.
+  // metode_pembayaran/gps_kendaraan_kredensial are keyed by the Postgres
+  // perusahaan.id (same id KoneksiRow/GDriveKoneksiRow use), not
+  // PerusahaanRow's MSSQL PerusahaanID — resolve it via the shared Kode
+  // link, same lookup PerusahaanFormDialog uses for direktoriId. null when
+  // the row isn't linked yet.
   const paymentPerusahaanId =
     paymentTarget != null ? (perusahaanDirektoriOptions.find((o) => o.kode === paymentTarget.Kode)?.id ?? null) : null;
+  const gpsPerusahaanId =
+    gpsTarget != null ? (perusahaanDirektoriOptions.find((o) => o.kode === gpsTarget.Kode)?.id ?? null) : null;
 
   function handleSubmit(input: PerusahaanInput, koneksiBlocks: UpsertKoneksiInput[]) {
     setError(null);
@@ -159,6 +164,16 @@ export function PerusahaanList({
                     variant="ghost"
                     size="icon"
                     className="size-7"
+                    disabled={!r.Kode}
+                    title={r.Kode ? "Kredensial GPS Kendaraan" : "Tautkan ke Perusahaan (Postgres) dulu untuk mengatur GPS Kendaraan"}
+                    onClick={() => setGpsTarget(r)}
+                  >
+                    <Satellite className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
                     onClick={() => {
                       setError(null);
                       setTarget(r);
@@ -214,6 +229,13 @@ export function PerusahaanList({
         perusahaanNama={paymentTarget?.Nama ?? ""}
         chartOfAccountOptions={chartOfAccountOptions}
         onOpenChange={(open) => !open && setPaymentTarget(null)}
+      />
+
+      <GpsKendaraanKredensialDialog
+        key={gpsTarget ? `gps-${gpsTarget.PerusahaanID}` : "gps-closed"}
+        perusahaanId={gpsPerusahaanId}
+        perusahaanNama={gpsTarget?.Nama ?? ""}
+        onOpenChange={(open) => !open && setGpsTarget(null)}
       />
     </div>
   );

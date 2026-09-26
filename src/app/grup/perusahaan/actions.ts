@@ -19,7 +19,12 @@ import {
   type UpsertSnapBiKredensialInput,
 } from "@/lib/queries/metode-pembayaran";
 import { uploadFile } from "@/lib/storage/google-drive";
-import { upsertGpsKredensial, type UpsertGpsKredensialInput } from "@/lib/queries/gps-kendaraan-kredensial";
+import {
+  upsertGpsKredensial,
+  listGpsKredensialByPerusahaan,
+  type UpsertGpsKredensialInput,
+  type GpsKredensialRow,
+} from "@/lib/queries/gps-kendaraan-kredensial";
 
 function assertValid(input: PerusahaanInput) {
   if (!input.nama.trim()) throw new AppError("Nama PT wajib diisi.");
@@ -151,6 +156,13 @@ export async function upsertSnapBiKredensialAction(input: UpsertSnapBiKredensial
     }
     await upsertSnapBiKredensial(input);
     revalidatePath("/grup/perusahaan");
+  });
+}
+
+export async function listGpsKredensialByPerusahaanAction(perusahaanId: number): Promise<ActionResult<GpsKredensialRow[]>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    return listGpsKredensialByPerusahaan(perusahaanId);
   });
 }
 
