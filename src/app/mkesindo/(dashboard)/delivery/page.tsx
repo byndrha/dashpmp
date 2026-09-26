@@ -9,6 +9,7 @@ import { getArmadaActivities } from "@/lib/queries/armada-activity";
 import { getDriverProfiles } from "@/lib/queries/driver-profile";
 import { getExpeditionVehicleOptions } from "@/lib/queries/expedition";
 import { getWilayahList } from "@/lib/queries/wilayah";
+import { getLatestVehiclePositions } from "@/lib/queries/armada-gps";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { Button } from "@/components/ui/button";
 import { FilterBar } from "@/components/dashboard/filter-bar";
@@ -17,6 +18,15 @@ import { PengirimanBoard } from "@/components/dashboard/pengiriman-board";
 import { PengirimanTabs } from "@/components/dashboard/pengiriman-tabs";
 import { KendalaReportPanel } from "@/components/dashboard/kendala-report-panel";
 import { PrintQueuePoller } from "@/components/dashboard/print-queue-poller";
+// VehicleGpsPanel internally calls L.divIcon() (Leaflet) at render time,
+// which crashes with "window is not defined" if statically imported into
+// this server component. `dynamic(..., { ssr: false })` (same pattern as
+// RouteMap in route-validation-dialog.tsx) can't live here directly though —
+// this Next.js version refuses `ssr: false` inside a Server Component
+// (node_modules/next/dist/docs/01-app/02-guides/lazy-loading.md: "ssr: false
+// option is not supported in Server Components"), so that dynamic() call is
+// hosted in this tiny "use client" wrapper instead.
+import { VehicleGpsPanelLoader } from "@/components/dashboard/vehicle-gps-panel-loader";
 
 export const metadata: Metadata = { title: "Pengiriman" };
 
@@ -36,17 +46,27 @@ export default async function DeliveryPage({
   const boardDate =
     params.pengirimanDate && /^\d{4}-\d{2}-\d{2}$/.test(params.pengirimanDate) ? params.pengirimanDate : todayISO;
 
-  const [rows, wilayahList, board, drivers, activities, driverProfiles, expeditionOptions, kendalaReports] =
-    await Promise.all([
-      getOpenDeliveries(wilayah),
-      getWilayahList(),
-      getPengirimanBoard(boardDate),
-      getDriverOptions(),
-      getArmadaActivities(boardDate),
-      getDriverProfiles(),
-      getExpeditionVehicleOptions(),
-      getKendalaReports(),
-    ]);
+  const [
+    rows,
+    wilayahList,
+    board,
+    drivers,
+    activities,
+    driverProfiles,
+    expeditionOptions,
+    kendalaReports,
+    vehiclePositions,
+  ] = await Promise.all([
+    getOpenDeliveries(wilayah),
+    getWilayahList(),
+    getPengirimanBoard(boardDate),
+    getDriverOptions(),
+    getArmadaActivities(boardDate),
+    getDriverProfiles(),
+    getExpeditionVehicleOptions(),
+    getKendalaReports(),
+    getLatestVehiclePositions(),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -66,6 +86,7 @@ export default async function DeliveryPage({
       <PengirimanTabs
         terbukaPanel={<OpenDeliveriesPanel rows={rows} />}
         kendalaPanel={<KendalaReportPanel rows={kendalaReports} />}
+        gpsPanel={<VehicleGpsPanelLoader initialPositions={vehiclePositions} />}
         papanPanel={
           <PengirimanBoard
             armada={board.armada}

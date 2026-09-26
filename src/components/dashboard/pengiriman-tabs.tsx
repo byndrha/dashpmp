@@ -7,6 +7,7 @@ const TABS = [
   { value: "papan", label: "Papan Pengiriman" },
   { value: "terbuka", label: "Pengiriman Terbuka" },
   { value: "kendala", label: "Laporan Kendala" },
+  { value: "gps", label: "GPS Kendaraan" },
 ] as const;
 
 // Same pattern as piutang-tabs.tsx: pure client-side tab state, no URL
@@ -16,10 +17,12 @@ export function PengirimanTabs({
   terbukaPanel,
   papanPanel,
   kendalaPanel,
+  gpsPanel,
 }: {
   terbukaPanel: React.ReactNode;
   papanPanel: React.ReactNode;
   kendalaPanel: React.ReactNode;
+  gpsPanel: React.ReactNode;
 }) {
   const [activeTab, setActiveTab] = useState<string>("papan");
 
@@ -35,6 +38,7 @@ export function PengirimanTabs({
       <TabsContent value="papan">{papanPanel}</TabsContent>
       <TabsContent value="terbuka">{terbukaPanel}</TabsContent>
       <TabsContent value="kendala">{kendalaPanel}</TabsContent>
+      <TabsContent value="gps">{gpsPanel}</TabsContent>
     </Tabs>
   );
 }
