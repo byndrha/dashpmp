@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, HandCoins, MapPin } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Download, HandCoins, MapPin } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Pagination } from "@/components/dashboard/pagination";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { PiutangBayarDialog } from "@/components/dashboard/piutang-bayar-dialog";
 import { formatRupiah } from "@/lib/format";
+import { utcInstantToWibDisplay } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import { SEGMENTASI_OPTIONS } from "@/lib/segmentasi-mitra";
 import type { XlsxColumn } from "@/lib/export-xlsx";
@@ -29,6 +31,11 @@ const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Saldo Akhir", key: "saldoAkhir", type: "number", width: 16 },
 ];
 
+const MONTH_NAMES = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
 type SortKey = "Nama" | "SaldoAkhir" | "Pesanan";
 type StatusFilter = "all" | "hutang" | "tabungan" | "lunas";
 
@@ -38,6 +45,33 @@ function statusOf(row: PiutangPerAgenRow): StatusFilter {
   if (row.saldoAkhir > 0) return "hutang";
   if (row.saldoAkhir < 0) return "tabungan";
   return "lunas";
+}
+
+// "yyyy/MM/dd - HH:mm WIB" for a TRUE UTC instant (e.g. `new Date()` at
+// fetch time) -- utcInstantToWibDisplay shifts it +7h so reading its raw
+// UTC-component getters below gives the correct WIB wall-clock, same
+// pattern formatDateWib/formatTimeWib rely on for naive-WIB values.
+function formatUpdateStamp(date: Date): string {
+  const wib = utcInstantToWibDisplay(date);
+  const y = wib.getUTCFullYear();
+  const m = String(wib.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(wib.getUTCDate()).padStart(2, "0");
+  const hh = String(wib.getUTCHours()).padStart(2, "0");
+  const mm = String(wib.getUTCMinutes()).padStart(2, "0");
+  return `${y}/${m}/${d} - ${hh}:${mm} WIB`;
+}
+
+// "September 2026" for a single-month range, or "dd/MM/yy - dd/MM/yy" when
+// the chosen range spans more than one calendar month.
+function formatPeriodeLabel(startISO: string, endISO: string): string {
+  const [sy, sm] = startISO.split("-").map(Number);
+  const [ey, em] = endISO.split("-").map(Number);
+  if (sy === ey && sm === em) return `${MONTH_NAMES[sm - 1]} ${sy}`;
+  const short = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
+  return `${short(startISO)} - ${short(endISO)}`;
 }
 
 function SortToggle({
@@ -84,28 +118,48 @@ function formatTanggalPendek(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+const TIPE_LABEL: Record<PiutangTransaksiRow["tipe"], string> = {
+  pesanan: "Pesanan",
+  pembayaran: "Pembayaran",
+  tarikan: "Tarikan",
+};
+
+// Each entry is its own boxed chip (item + amount on a shared background)
+// per explicit request -- Pesanan/Tarikan add to Hutang (shown plain),
+// Pembayaran reduces it (shown as a negative, tinted like the Tabungan
+// convention used elsewhere on this card).
 function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
+  const isReduction = item.jumlah < 0;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-1.5">
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-md bg-muted px-2.5 py-2">
       <div className="min-w-0">
-        <p className="font-data truncate text-[11px] text-muted-foreground">{item.noDokumen}</p>
+        <p className="font-data truncate text-[11px] text-muted-foreground">
+          {TIPE_LABEL[item.tipe]} · {item.noDokumen}
+        </p>
         <p className="text-[11px] text-muted-foreground">
           {formatTanggalPendek(item.tanggal)}
           {item.balokKecil !== 0 && ` · Kecil ${item.balokKecil.toLocaleString("id-ID")}`}
           {item.balokBesar !== 0 && ` · Besar ${item.balokBesar.toLocaleString("id-ID")}`}
         </p>
       </div>
-      <span className="shrink-0 text-xs font-semibold tabular-nums">{formatRupiah(item.total)}</span>
+      <span className={cn("shrink-0 text-xs font-semibold tabular-nums", isReduction ? "text-primary" : "text-foreground")}>
+        {isReduction ? "-" : ""}
+        {formatRupiah(Math.abs(item.jumlah))}
+      </span>
     </div>
   );
 }
 
 function AgenCard({
   row,
+  periodeLabel,
+  lastUpdated,
   fetchBayarContext,
   submitBayar,
 }: {
   row: PiutangPerAgenRow;
+  periodeLabel: string;
+  lastUpdated: Date;
   fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
   submitBayar: (
     agenId: string,
@@ -117,76 +171,90 @@ function AgenCard({
   const status = statusOf(row);
   const [expanded, setExpanded] = useState(false);
   const [bayarOpen, setBayarOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const captureRef = useRef<HTMLDivElement>(null);
   const hasMore = row.transaksi.length > COLLAPSED_PREVIEW_COUNT;
   const visibleTransaksi = expanded ? row.transaksi : row.transaksi.slice(0, COLLAPSED_PREVIEW_COUNT);
   const segLabel = segmentasiLabel(row.segmentasi);
   const hasPin = row.latitude != null && row.longitude != null;
 
+  const jumlahPesanan = row.transaksi.filter((t) => t.tipe === "pesanan").length;
+  const totalPembayaranTarikan = row.pembayaran + row.tarikan;
+
+  async function handleExportPng() {
+    if (!captureRef.current) return;
+    setExporting(true);
+    try {
+      const { toBlob } = await import("html-to-image");
+      const blob = await toBlob(captureRef.current, {
+        pixelRatio: 2,
+        backgroundColor: "#0a0a0a",
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.captureHide === "true"),
+      });
+      if (!blob) throw new Error("Gagal membuat gambar.");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `piutang-${row.nama.toLowerCase().replace(/\s+/g, "-")}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Gagal mengekspor kartu ke PNG.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <>
-    <Card className="py-3.5">
+    <Card className="py-3.5" ref={captureRef}>
       <CardContent className="flex flex-col gap-2 px-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate font-medium">{row.nama}</p>
+            <p className="text-[10px] text-muted-foreground">Update {formatUpdateStamp(lastUpdated)}</p>
             <div className="mt-0.5 flex flex-wrap items-center gap-1">
               <Badge variant={segLabel ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
                 {segLabel ?? "Belum Ditentukan"}
               </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "h-5 px-1.5 text-[10px]",
+                  status === "hutang" && "border-destructive/40 text-destructive",
+                  status === "tabungan" && "border-primary/40 text-primary"
+                )}
+              >
+                {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
+              </Badge>
+              {hasPin && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-5"
+                  title="Lihat di Google Maps"
+                  data-capture-hide="true"
+                  onClick={() =>
+                    window.open(`https://www.google.com/maps?q=${row.latitude},${row.longitude}`, "_blank", "noopener,noreferrer")
+                  }
+                >
+                  <MapPin className="size-3" />
+                </Button>
+              )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {hasPin && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                title="Lihat di Google Maps"
-                onClick={() =>
-                  window.open(`https://www.google.com/maps?q=${row.latitude},${row.longitude}`, "_blank", "noopener,noreferrer")
-                }
-              >
-                <MapPin className="size-3.5" />
-              </Button>
-            )}
-            <Badge
-              variant="outline"
-              className={cn(
-                "h-5 px-1.5 text-[10px]",
-                status === "hutang" && "border-destructive/40 text-destructive",
-                status === "tabungan" && "border-primary/40 text-primary"
-              )}
-            >
-              {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
-            </Badge>
+          <div className="shrink-0 text-right">
+            <p className="text-[10px] text-muted-foreground">Piutang Awal</p>
+            <p className="font-display text-sm font-semibold tabular-nums">{formatRupiah(row.hutangAwal)}</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">Tabungan Awal</p>
+            <p className="font-display text-sm font-semibold tabular-nums">{formatRupiah(row.tabunganAwal)}</p>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-t pt-2 text-xs">
-          <span className="text-muted-foreground">
-            Tabungan Awal: <span className="text-foreground">{formatRupiah(row.tabunganAwal)}</span>
-          </span>
-          <span className="text-muted-foreground">
-            Hutang Awal: <span className="text-foreground">{formatRupiah(row.hutangAwal)}</span>
-          </span>
-          <span className="text-muted-foreground">
-            Pesanan: <span className="text-foreground">{formatRupiah(row.pesanan)}</span>
-          </span>
-          <span className="text-muted-foreground">
-            Retur: <span className="text-foreground">{formatRupiah(row.retur)}</span>
-          </span>
-          <span className="text-muted-foreground">
-            Pembayaran: <span className="text-foreground">{formatRupiah(row.pembayaran)}</span>
-          </span>
-          <span className="text-muted-foreground">
-            Tarikan: <span className="text-foreground">{formatRupiah(row.tarikan)}</span>
-          </span>
         </div>
 
         {row.transaksi.length > 0 && (
-          <div className="divide-y divide-border border-t">
-            {visibleTransaksi.map((item) => (
-              <TransaksiRow key={item.noDokumen} item={item} />
+          <div className="flex flex-col gap-1.5 border-t pt-2">
+            {visibleTransaksi.map((item, i) => (
+              <TransaksiRow key={`${item.noDokumen}-${item.tipe}-${i}`} item={item} />
             ))}
           </div>
         )}
@@ -195,18 +263,31 @@ function AgenCard({
             type="button"
             onClick={() => setExpanded((v) => !v)}
             className="flex items-center justify-center gap-1 pt-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+            data-capture-hide="true"
           >
             {expanded ? "Sembunyikan" : `+${row.transaksi.length - COLLAPSED_PREVIEW_COUNT} transaksi lainnya`}
             <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
           </button>
         )}
 
-        <div className="flex items-center justify-between border-t pt-2">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-2 text-xs">
           <div>
-            <span className="text-xs text-muted-foreground">Saldo Akhir</span>
+            <p className="text-muted-foreground">Jumlah Pesanan</p>
+            <p className="font-semibold tabular-nums">{jumlahPesanan} Item</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Total Pesanan</p>
+            <p className="font-semibold tabular-nums">{formatRupiah(row.pesanan)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">T. Pembayaran/Tarikan</p>
+            <p className="font-semibold tabular-nums">{formatRupiah(totalPembayaranTarikan)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Sisa Hutang</p>
             <p
               className={cn(
-                "font-display text-base font-semibold tabular-nums",
+                "font-semibold tabular-nums",
                 row.saldoAkhir > 0 && "text-destructive",
                 row.saldoAkhir < 0 && "text-primary"
               )}
@@ -214,10 +295,22 @@ function AgenCard({
               {formatRupiah(Math.abs(row.saldoAkhir))}
             </p>
           </div>
-          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setBayarOpen(true)}>
-            <HandCoins className="size-3" />
-            Bayar
-          </Button>
+        </div>
+
+        <div className="flex items-center justify-between border-t pt-2">
+          <p className="text-[11px] text-muted-foreground">
+            {row.transaksi.length} Entri - Periode {periodeLabel}
+          </p>
+          <div className="flex items-center gap-1.5" data-capture-hide="true">
+            <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={handleExportPng} disabled={exporting}>
+              <Download className="size-3" />
+              {exporting ? "..." : "Export .PNG"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setBayarOpen(true)}>
+              <HandCoins className="size-3" />
+              Bayar
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -268,6 +361,7 @@ export function PiutangPerAgenTable({
   const [startDate, setStartDate] = useState(monthStartISO());
   const [endDate, setEndDate] = useState(todayISO());
   const [rows, setRows] = useState(initialRows);
+  const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -282,6 +376,7 @@ export function PiutangPerAgenTable({
     startTransition(async () => {
       try {
         setRows(await fetchAction(startDate, endDate));
+        setLastUpdated(new Date());
         setPage(1);
       } catch {
         setError("Gagal memuat data periode ini.");
@@ -301,6 +396,7 @@ export function PiutangPerAgenTable({
   ) {
     const results = await submitBayar(agenId, jumlah, kasBank, catatan);
     setRows(await fetchAction(startDate, endDate));
+    setLastUpdated(new Date());
     return results;
   }
 
@@ -337,6 +433,7 @@ export function PiutangPerAgenTable({
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const periodeLabel = formatPeriodeLabel(startDate, endDate);
 
   const exportRows = useMemo(
     () =>
@@ -405,7 +502,14 @@ export function PiutangPerAgenTable({
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {pageRows.map((r) => (
-          <AgenCard key={r.agenId} row={r} fetchBayarContext={fetchBayarContext} submitBayar={handleBayar} />
+          <AgenCard
+            key={r.agenId}
+            row={r}
+            periodeLabel={periodeLabel}
+            lastUpdated={lastUpdated}
+            fetchBayarContext={fetchBayarContext}
+            submitBayar={handleBayar}
+          />
         ))}
         {pageRows.length === 0 && <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Tidak ada data.</p>}
       </div>

@@ -369,9 +369,13 @@ export async function getPiutangSummary(kode: string): Promise<PiutangSummaryDat
 export interface PiutangTransaksiRow {
   noDokumen: string;
   tanggal: string; // ISO date (yyyy-MM-dd)
-  balokKecil: number;
-  balokBesar: number;
-  total: number; // Rupiah, net of Retur
+  tipe: "pesanan" | "pembayaran" | "tarikan";
+  balokKecil: number; // only meaningful for tipe="pesanan"
+  balokBesar: number; // only meaningful for tipe="pesanan"
+  // Signed to match the Saldo Akhir formula: Pesanan and Tarikan both ADD
+  // to Hutang (positive), Pembayaran REDUCES it (negative) -- so a card's
+  // running feed can be summed top-to-bottom and land on Saldo Akhir.
+  jumlah: number;
 }
 
 export interface PiutangPerAgenRow {
@@ -488,6 +492,38 @@ async function getPemesananTransaksiRows(
   return result.recordset as PemesananTransaksiSqlRow[];
 }
 
+interface PembayaranTransaksiSqlRow {
+  AgenID: string;
+  NoDokumen: string;
+  Tanggal: Date;
+  Pembayaran: number;
+  Tarikan: number;
+}
+
+// Raw (unaggregated) Pembayaran/Tarikan rows within the period -- merged
+// with getPemesananTransaksiRows into one chronological list per Agen (see
+// getPiutangPerAgen below). Each real row carries either Pembayaran or
+// Tarikan, never both (confirmed live 2026-09-26 sampling PMP_Pembayaran).
+async function getPembayaranTransaksiRows(
+  kode: string,
+  sumber: SumberAgen,
+  start: Date,
+  end: Date
+): Promise<PembayaranTransaksiSqlRow[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  const result = await request.query(`
+    SELECT AgenID, NoDokumen, Tanggal, ISNULL(Pembayaran,0) AS Pembayaran, ISNULL(Tarikan,0) AS Tarikan
+    FROM PMP_Pembayaran
+    WHERE IsDeleted = 0 AND Tanggal BETWEEN @start AND @end
+      ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
+  `);
+  return result.recordset as PembayaranTransaksiSqlRow[];
+}
+
 interface AgenPembayaranPeriodRow {
   AgenID: string;
   Pembayaran: number;
@@ -532,6 +568,7 @@ export async function getPiutangPerAgen(kode: string, start: Date, end: Date): P
     pemesananPeriodBySource,
     pembayaranPeriodBySource,
     transaksiBySource,
+    pembayaranTransaksiBySource,
   ] = await Promise.all([
     getAgenRoster(kode),
     Promise.all(sources.map((s) => getAgenBaselineNet(kode, s))),
@@ -540,6 +577,7 @@ export async function getPiutangPerAgen(kode: string, start: Date, end: Date): P
     Promise.all(sources.map((s) => getPemesananPeriodByAgen(kode, s, start, end))),
     Promise.all(sources.map((s) => getPembayaranPeriodByAgen(kode, s, start, end))),
     Promise.all(sources.map((s) => getPemesananTransaksiRows(kode, s, start, end))),
+    Promise.all(sources.map((s) => getPembayaranTransaksiRows(kode, s, start, end))),
   ]);
 
   const saldoAwalByAgen = new Map<string, number>();
@@ -583,17 +621,50 @@ export async function getPiutangPerAgen(kode: string, start: Date, end: Date): P
       const key = `${r.AgenID}|${r.NoDokumen}`;
       const existing = transaksiKeyed.get(key);
       if (existing) {
-        existing.total += r.Total;
+        existing.jumlah += r.Total;
         continue;
       }
       transaksiKeyed.set(key, {
         agenId: r.AgenID,
         noDokumen: r.NoDokumen,
         tanggal: new Date(r.Tanggal).toISOString().slice(0, 10),
+        tipe: "pesanan",
         balokKecil: r.BalokKecil,
         balokBesar: r.BalokBesar,
-        total: r.Total,
+        jumlah: r.Total,
       });
+    }
+  }
+  // Pembayaran/Tarikan rows are genuinely independent real transactions per
+  // database (unlike Pesanan, they're never mirrored across utama/logistik
+  // for the same physical event), so no merge-by-NoDokumen is needed here --
+  // each row just becomes its own entry. Signed per the interface's own
+  // convention: Pembayaran reduces Hutang (negative), Tarikan adds to it
+  // (positive), matching the Saldo Akhir formula.
+  for (const rows of pembayaranTransaksiBySource) {
+    for (const r of rows) {
+      if (r.Pembayaran > 0) {
+        transaksiKeyed.set(`${r.AgenID}|${r.NoDokumen}|P`, {
+          agenId: r.AgenID,
+          noDokumen: r.NoDokumen,
+          tanggal: new Date(r.Tanggal).toISOString().slice(0, 10),
+          tipe: "pembayaran",
+          balokKecil: 0,
+          balokBesar: 0,
+          jumlah: -r.Pembayaran,
+        });
+      }
+      if (r.Tarikan > 0) {
+        transaksiKeyed.set(`${r.AgenID}|${r.NoDokumen}|T`, {
+          agenId: r.AgenID,
+          noDokumen: r.NoDokumen,
+          tanggal: new Date(r.Tanggal).toISOString().slice(0, 10),
+          tipe: "tarikan",
+          balokKecil: 0,
+          balokBesar: 0,
+          jumlah: r.Tarikan,
+        });
+      }
     }
   }
   const transaksiByAgen = new Map<string, PiutangTransaksiRow[]>();
