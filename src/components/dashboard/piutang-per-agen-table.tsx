@@ -134,13 +134,18 @@ function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
     <div className="flex items-center justify-between gap-2 rounded-md bg-muted px-2.5 py-2">
       <div className="min-w-0">
         <p className="font-data truncate text-[11px] text-muted-foreground">{item.noDokumen}</p>
-        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span>
-            {formatTanggalPendek(item.tanggal)}
-            {item.balokKecil !== 0 && ` · Kecil ${item.balokKecil.toLocaleString("id-ID")}`}
-            {item.balokBesar !== 0 && ` · Besar ${item.balokBesar.toLocaleString("id-ID")}`}
+        <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>{formatTanggalPendek(item.tanggal)}</span>
+          <span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+            {TIPE_LABEL[item.tipe]}
           </span>
-          <span className="font-medium text-foreground">{TIPE_LABEL[item.tipe]}</span>
+          {(item.balokKecil !== 0 || item.balokBesar !== 0) && (
+            <span>
+              {item.balokKecil !== 0 && `Kecil ${item.balokKecil.toLocaleString("id-ID")}`}
+              {item.balokKecil !== 0 && item.balokBesar !== 0 && " · "}
+              {item.balokBesar !== 0 && `Besar ${item.balokBesar.toLocaleString("id-ID")}`}
+            </span>
+          )}
         </p>
       </div>
       <span className={cn("shrink-0 text-xs font-semibold tabular-nums", isReduction ? "text-primary" : "text-foreground")}>
