@@ -3,7 +3,7 @@ import { getPiutangSummary, getPiutangPerAgen } from "@/lib/queries/penjualan-pi
 import { requirePmputra } from "@/lib/require-access";
 import { PiutangSummaryPanel } from "@/components/dashboard/piutang-summary-panel";
 import { PiutangPerAgenTable } from "@/components/dashboard/piutang-per-agen-table";
-import { getPiutangPerAgenAction } from "./actions";
+import { getPiutangPerAgenAction, getPiutangBayarContextAction, bayarPiutangAction } from "./actions";
 
 function monthStart(): Date {
   const d = new Date();
@@ -34,7 +34,12 @@ export default async function PmputraPiutangPage() {
         <h2 className="font-display text-lg font-semibold">Rincian per Agen</h2>
         <p className="text-sm text-muted-foreground">Tabungan/Hutang Awal, Pesanan, Retur, Pembayaran, Tarikan, dan Saldo Akhir.</p>
       </div>
-      <PiutangPerAgenTable initialRows={perAgen} fetchAction={getPiutangPerAgenAction} />
+      <PiutangPerAgenTable
+        initialRows={perAgen}
+        fetchAction={getPiutangPerAgenAction}
+        fetchBayarContext={getPiutangBayarContextAction}
+        submitBayar={bayarPiutangAction}
+      />
     </div>
   );
 }

@@ -180,7 +180,11 @@ export interface MitraInput {
 // transaction, but a genuinely concurrent second transaction can still
 // compute the same "next" value before either commits -- that's what the
 // 2627-retry loop in createMitra is for, not this function.
-async function nextSequentialId(transaction: sql.Transaction, tableName: "PMP_Agen" | "PMP_AgenDetail", idColumn: string): Promise<string> {
+export async function nextSequentialId(
+  transaction: sql.Transaction,
+  tableName: "PMP_Agen" | "PMP_AgenDetail" | "PMP_Pembayaran",
+  idColumn: string
+): Promise<string> {
   const result = await new sql.Request(transaction).query(`
     SELECT '01' + CAST(ISNULL(MAX(TRY_CAST(SUBSTRING(${idColumn},3,10) AS INT)), 0) + 1 AS VARCHAR) AS NextId
     FROM ${tableName}
@@ -196,7 +200,7 @@ const SQL_PK_VIOLATION = 2627;
 // NOT identity columns, so a duplicate insert fails loudly rather than
 // silently duplicating, and two near-simultaneous creates CAN legitimately
 // race to compute the same "next" ID before either commits.
-async function withIdRetry<T>(fn: () => Promise<T>): Promise<T> {
+export async function withIdRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt < MAX_ID_RETRY_ATTEMPTS; attempt++) {
     try {

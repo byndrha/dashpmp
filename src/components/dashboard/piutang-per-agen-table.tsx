@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, MapPin } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, HandCoins, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,11 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Pagination } from "@/components/dashboard/pagination";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
+import { PiutangBayarDialog } from "@/components/dashboard/piutang-bayar-dialog";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SEGMENTASI_OPTIONS } from "@/lib/segmentasi-mitra";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { PiutangPerAgenRow, PiutangTransaksiRow } from "@/lib/queries/penjualan-piutang";
+import type { PiutangBayarContext, BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
 
 const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Agen", key: "nama", width: 26 },
@@ -98,15 +100,30 @@ function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
   );
 }
 
-function AgenCard({ row }: { row: PiutangPerAgenRow }) {
+function AgenCard({
+  row,
+  fetchBayarContext,
+  submitBayar,
+}: {
+  row: PiutangPerAgenRow;
+  fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
+  submitBayar: (
+    agenId: string,
+    jumlah: number,
+    kasBank: { utama?: string; logistik?: string },
+    catatan: string | null
+  ) => Promise<BayarPiutangResult[]>;
+}) {
   const status = statusOf(row);
   const [expanded, setExpanded] = useState(false);
+  const [bayarOpen, setBayarOpen] = useState(false);
   const hasMore = row.transaksi.length > COLLAPSED_PREVIEW_COUNT;
   const visibleTransaksi = expanded ? row.transaksi : row.transaksi.slice(0, COLLAPSED_PREVIEW_COUNT);
   const segLabel = segmentasiLabel(row.segmentasi);
   const hasPin = row.latitude != null && row.longitude != null;
 
   return (
+    <>
     <Card className="py-3.5">
       <CardContent className="flex flex-col gap-2 px-4">
         <div className="flex items-start justify-between gap-2">
@@ -185,19 +202,34 @@ function AgenCard({ row }: { row: PiutangPerAgenRow }) {
         )}
 
         <div className="flex items-center justify-between border-t pt-2">
-          <span className="text-xs text-muted-foreground">Saldo Akhir</span>
-          <span
-            className={cn(
-              "font-display text-base font-semibold tabular-nums",
-              row.saldoAkhir > 0 && "text-destructive",
-              row.saldoAkhir < 0 && "text-primary"
-            )}
-          >
-            {formatRupiah(Math.abs(row.saldoAkhir))}
-          </span>
+          <div>
+            <span className="text-xs text-muted-foreground">Saldo Akhir</span>
+            <p
+              className={cn(
+                "font-display text-base font-semibold tabular-nums",
+                row.saldoAkhir > 0 && "text-destructive",
+                row.saldoAkhir < 0 && "text-primary"
+              )}
+            >
+              {formatRupiah(Math.abs(row.saldoAkhir))}
+            </p>
+          </div>
+          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setBayarOpen(true)}>
+            <HandCoins className="size-3" />
+            Bayar
+          </Button>
         </div>
       </CardContent>
     </Card>
+
+    <PiutangBayarDialog
+      open={bayarOpen}
+      onOpenChange={setBayarOpen}
+      agenNama={row.nama}
+      fetchContext={() => fetchBayarContext(row.agenId)}
+      onSubmit={(jumlah, kasBank, catatan) => submitBayar(row.agenId, jumlah, kasBank, catatan)}
+    />
+    </>
   );
 }
 
@@ -220,9 +252,18 @@ function monthStartISO(): string {
 export function PiutangPerAgenTable({
   initialRows,
   fetchAction,
+  fetchBayarContext,
+  submitBayar,
 }: {
   initialRows: PiutangPerAgenRow[];
   fetchAction: (startDate: string, endDate: string) => Promise<PiutangPerAgenRow[]>;
+  fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
+  submitBayar: (
+    agenId: string,
+    jumlah: number,
+    kasBank: { utama?: string; logistik?: string },
+    catatan: string | null
+  ) => Promise<BayarPiutangResult[]>;
 }) {
   const [startDate, setStartDate] = useState(monthStartISO());
   const [endDate, setEndDate] = useState(todayISO());
@@ -246,6 +287,21 @@ export function PiutangPerAgenTable({
         setError("Gagal memuat data periode ini.");
       }
     });
+  }
+
+  // Refreshes the whole list after a successful payment -- Saldo Akhir and
+  // the transaction list both change for the affected Agen, and re-running
+  // the same fetchAction (current date range) is simpler than patching one
+  // row's derived fields client-side.
+  async function handleBayar(
+    agenId: string,
+    jumlah: number,
+    kasBank: { utama?: string; logistik?: string },
+    catatan: string | null
+  ) {
+    const results = await submitBayar(agenId, jumlah, kasBank, catatan);
+    setRows(await fetchAction(startDate, endDate));
+    return results;
   }
 
   function handleSort(key: SortKey) {
@@ -349,7 +405,7 @@ export function PiutangPerAgenTable({
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {pageRows.map((r) => (
-          <AgenCard key={r.agenId} row={r} />
+          <AgenCard key={r.agenId} row={r} fetchBayarContext={fetchBayarContext} submitBayar={handleBayar} />
         ))}
         {pageRows.length === 0 && <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Tidak ada data.</p>}
       </div>
