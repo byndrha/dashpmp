@@ -156,22 +156,36 @@ async function fetchPositions(): Promise<NormalizedVehiclePosition[]> {
   const clusters = payload.data ?? [];
   const devices = clusters.flatMap((cluster) => cluster.devices ?? []);
 
-  return devices
-    .filter((d) => d.plate !== d.vin) // Discovery: some devices report VIN as a placeholder plate — skip these entirely.
-    .map((d): NormalizedVehiclePosition => ({
-      provider: "hino",
-      externalVehicleId: d.vehicleId,
-      plateRaw: d.plate,
-      latitude: d.vehicleLastInfo.latitude_deg,
-      longitude: d.vehicleLastInfo.longitude_deg,
-      speedKmh: d.vehicleLastInfo.speed_kmh,
-      heading: d.vehicleLastInfo.heading_deg,
-      // Hino's payload has no reliable ignition boolean — only the coarser
-      // vehicleState (MOVING/IDLE/OFF) — so leave null rather than guessing.
-      ignitionOn: null,
-      recordedAtUtc: normalizeToUtc(d.vehicleLastInfo.lastTransmissionTimestamp),
-      rawPayload: d,
-    }));
+  const positions: NormalizedVehiclePosition[] = [];
+  for (const d of devices) {
+    // Discovery: some devices report VIN as a placeholder plate — skip these entirely.
+    if (d.plate === d.vin) continue;
+    try {
+      positions.push({
+        provider: "hino",
+        externalVehicleId: d.vehicleId,
+        plateRaw: d.plate,
+        latitude: d.vehicleLastInfo.latitude_deg,
+        longitude: d.vehicleLastInfo.longitude_deg,
+        speedKmh: d.vehicleLastInfo.speed_kmh,
+        heading: d.vehicleLastInfo.heading_deg,
+        // Hino's payload has no reliable ignition boolean — only the coarser
+        // vehicleState (MOVING/IDLE/OFF) — so leave null rather than guessing.
+        ignitionOn: null,
+        recordedAtUtc: normalizeToUtc(d.vehicleLastInfo.lastTransmissionTimestamp),
+        rawPayload: d,
+      });
+    } catch (err) {
+      // One malformed device (missing vehicleLastInfo, bad timestamp, etc.)
+      // shouldn't zero out the whole provider's sync cycle — skip it and
+      // keep processing the rest.
+      console.warn(
+        `[hino-connect] Melewati device (vehicleId=${d?.vehicleId ?? "unknown"}) karena gagal dipetakan:`,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+  return positions;
 }
 
 export const hinoConnectProvider: VehicleGpsProvider = {

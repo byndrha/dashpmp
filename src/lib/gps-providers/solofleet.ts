@@ -193,21 +193,32 @@ async function fetchPositions(): Promise<NormalizedVehiclePosition[]> {
   const payload = (await vehiclesResponse.json()) as SoloFleetResponse;
   const vehicles = payload.vehicles ?? [];
 
-  return vehicles.map((v): NormalizedVehiclePosition => {
-    const ignitionOn = v.IP1 === 1 ? true : v.IP1 === 0 ? false : null;
-    return {
-      provider: "solofleet",
-      externalVehicleId: String(v.deviceid ?? v.vehicleid),
-      plateRaw: v.alias,
-      latitude: v.y,
-      longitude: v.x,
-      speedKmh: v.spd ?? null,
-      heading: v.course ?? null,
-      ignitionOn,
-      recordedAtUtc: normalizeToUtc(v.lastupdated),
-      rawPayload: v,
-    };
-  });
+  const positions: NormalizedVehiclePosition[] = [];
+  for (const v of vehicles) {
+    try {
+      const ignitionOn = v.IP1 === 1 ? true : v.IP1 === 0 ? false : null;
+      positions.push({
+        provider: "solofleet",
+        externalVehicleId: String(v.deviceid ?? v.vehicleid),
+        plateRaw: v.alias,
+        latitude: v.y,
+        longitude: v.x,
+        speedKmh: v.spd ?? null,
+        heading: v.course ?? null,
+        ignitionOn,
+        recordedAtUtc: normalizeToUtc(v.lastupdated),
+        rawPayload: v,
+      });
+    } catch (err) {
+      // One malformed vehicle record shouldn't zero out the whole provider's
+      // sync cycle — skip it and keep processing the rest.
+      console.warn(
+        `[solofleet] Melewati vehicle (vehicleid=${v?.vehicleid ?? "unknown"}) karena gagal dipetakan:`,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+  return positions;
 }
 
 export const solofleetProvider: VehicleGpsProvider = {

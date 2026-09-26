@@ -106,15 +106,24 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
   // TabsContent panels mounted, so switching away from the "GPS Kendaraan"
   // tab naturally stops this interval via the cleanup function below.
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let cancelled = false;
+    async function pollOnce() {
       const syncResult = await syncVehicleGpsPositionsAction();
+      if (cancelled) return;
       if (syncResult.success) {
         setFailedProviders(syncResult.data.filter((s) => !s.ok).map((s) => s.provider));
       }
       const posResult = await getVehiclePositionsAction();
-      if (posResult.success) setPositions(posResult.data);
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+      if (!cancelled && posResult.success) setPositions(posResult.data);
+    }
+    // Fire an immediate sync on mount so the tab shows fresh data right away,
+    // rather than waiting up to POLL_INTERVAL_MS for the first refresh.
+    void pollOnce();
+    const interval = setInterval(pollOnce, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   return (

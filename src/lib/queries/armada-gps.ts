@@ -31,26 +31,35 @@ export async function insertVehiclePositions(
   const pool = getPgPool();
   for (const position of positions) {
     const armadaId = armadaByPlate.get(normalizePlate(position.plateRaw)) ?? null;
-    await pool.query(
-      `INSERT INTO armada_gps_riwayat
-         (provider, external_vehicle_id, plat_nomor_raw, plat_nomor_normalized, armada_id,
-          latitude, longitude, speed_kmh, heading, ignition_on, recorded_at, raw_payload)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [
-        position.provider,
-        position.externalVehicleId,
-        position.plateRaw,
-        normalizePlate(position.plateRaw),
-        armadaId,
-        position.latitude,
-        position.longitude,
-        position.speedKmh,
-        position.heading,
-        position.ignitionOn,
-        position.recordedAtUtc,
-        JSON.stringify(position.rawPayload),
-      ]
-    );
+    try {
+      await pool.query(
+        `INSERT INTO armada_gps_riwayat
+           (provider, external_vehicle_id, plat_nomor_raw, plat_nomor_normalized, armada_id,
+            latitude, longitude, speed_kmh, heading, ignition_on, recorded_at, raw_payload)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          position.provider,
+          position.externalVehicleId,
+          position.plateRaw,
+          normalizePlate(position.plateRaw),
+          armadaId,
+          position.latitude,
+          position.longitude,
+          position.speedKmh,
+          position.heading,
+          position.ignitionOn,
+          position.recordedAtUtc,
+          JSON.stringify(position.rawPayload),
+        ]
+      );
+    } catch (err) {
+      // One bad row (e.g. an invalid/NaN recorded_at) shouldn't abort the
+      // rest of the batch — log and continue with the remaining positions.
+      console.warn(
+        `[armada-gps] Gagal insert posisi (provider=${position.provider}, externalVehicleId=${position.externalVehicleId}):`,
+        err instanceof Error ? err.message : err
+      );
+    }
   }
 }
 
