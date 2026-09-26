@@ -158,9 +158,12 @@ async function fetchPositions(): Promise<NormalizedVehiclePosition[]> {
 
   const positions: NormalizedVehiclePosition[] = [];
   for (const d of devices) {
-    // Discovery: some devices report VIN as a placeholder plate — skip these entirely.
-    if (d.plate === d.vin) continue;
     try {
+      // Discovery: some devices report VIN as a placeholder plate — skip these entirely.
+      // Inside the try so a malformed top-level device record (null/undefined,
+      // or missing `plate`/`vin` themselves) is caught below instead of
+      // throwing straight out of fetchPositions().
+      if (d.plate === d.vin) continue;
       positions.push({
         provider: "hino",
         externalVehicleId: d.vehicleId,
