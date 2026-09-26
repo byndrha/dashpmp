@@ -246,11 +246,13 @@ async function fetchPositions(perusahaanId: number): Promise<NormalizedVehiclePo
   const positions: NormalizedVehiclePosition[] = [];
   for (const d of devices) {
     try {
-      // Discovery: some devices report VIN as a placeholder plate — skip these entirely.
-      // Inside the try so a malformed top-level device record (null/undefined,
-      // or missing `plate`/`vin` themselves) is caught below instead of
-      // throwing straight out of fetchPositions().
-      if (d.plate === d.vin) continue;
+      // Some devices genuinely have no plate registered in Hino Connect yet
+      // (it falls back to showing the VIN as a placeholder) — per the user,
+      // these are real vehicles without a plate assigned, not junk data, so
+      // they're included as-is. Nothing to normalizePlate()-match against a
+      // real Armada plate, so armada-gps.ts's existing unmatched-device
+      // handling naturally shows them with a "Belum terhubung ke Armada"
+      // badge, same as any other unmatched device.
       positions.push({
         provider: "hino",
         externalVehicleId: d.vehicleId,
