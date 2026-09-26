@@ -6,6 +6,7 @@ const RETENTION_DAYS = 14;
 export interface VehiclePositionRow {
   armadaId: number | null;
   provider: "hino" | "solofleet";
+  externalVehicleId: string;
   plateRaw: string;
   latitude: number;
   longitude: number;
@@ -63,18 +64,20 @@ export async function insertVehiclePositions(
   }
 }
 
-// Latest ping per distinct physical device. Grouping by
-// COALESCE(armada_id::text, provider || ':' || external_vehicle_id) — rather
-// than by armada_id alone — keeps two different devices visible even if they
-// somehow resolved to the same armada_id (matching collision), while still
-// deduping repeated pings from the same device down to its single latest one.
-// Unmatched devices (armada_id NULL) are grouped by their own provider +
-// external_vehicle_id, so each one still shows up as its own row.
+// Latest ping per distinct physical device — grouped by (provider,
+// external_vehicle_id) ALWAYS, never by armada_id. A vehicle tracked by two
+// providers at once (both a Hino Connect and a SoloFleet device installed)
+// is a real, confirmed case (e.g. two of MKEsindo's trucks) and must show as
+// two separate rows/markers, one per provider — the user explicitly asked
+// for both sources to stay visible rather than the fresher one silently
+// hiding the other. Grouping by device identity alone already guarantees no
+// two different physical devices ever collapse into one row, matched or not.
 export async function getLatestVehiclePositions(): Promise<VehiclePositionRow[]> {
   const pool = getPgPool();
   const result = await pool.query<{
     armada_id: number | null;
     provider: "hino" | "solofleet";
+    external_vehicle_id: string;
     plat_nomor_raw: string;
     latitude: number;
     longitude: number;
@@ -82,14 +85,15 @@ export async function getLatestVehiclePositions(): Promise<VehiclePositionRow[]>
     heading: number | null;
     recorded_at: Date;
   }>(
-    `SELECT DISTINCT ON (COALESCE(armada_id::text, provider || ':' || external_vehicle_id))
-            armada_id, provider, plat_nomor_raw, latitude, longitude, speed_kmh, heading, recorded_at
+    `SELECT DISTINCT ON (provider, external_vehicle_id)
+            armada_id, provider, external_vehicle_id, plat_nomor_raw, latitude, longitude, speed_kmh, heading, recorded_at
      FROM armada_gps_riwayat
-     ORDER BY COALESCE(armada_id::text, provider || ':' || external_vehicle_id), recorded_at DESC`
+     ORDER BY provider, external_vehicle_id, recorded_at DESC`
   );
   return result.rows.map((r) => ({
     armadaId: r.armada_id,
     provider: r.provider,
+    externalVehicleId: r.external_vehicle_id,
     plateRaw: r.plat_nomor_raw,
     latitude: r.latitude,
     longitude: r.longitude,

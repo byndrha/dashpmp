@@ -36,11 +36,12 @@ const PROVIDER_LABELS: Record<VehiclePositionRow["provider"], string> = {
   solofleet: "SoloFleet",
 };
 
-// Same identity key the query layer itself dedupes on (COALESCE(armada_id,
-// provider||external_vehicle_id)) — armadaId alone can't be a React key
-// since several unmatched devices all carry armadaId: null.
+// Same identity key the query layer itself dedupes on (provider,
+// external_vehicle_id) — always device identity, never armadaId. A vehicle
+// tracked by two providers at once shares one armadaId across two rows on
+// purpose (see armada-gps.ts), so armadaId alone can never be used as a key.
 function vehicleKey(v: VehiclePositionRow): string {
-  return v.armadaId != null ? `armada:${v.armadaId}` : `${v.provider}:${v.plateRaw}`;
+  return `${v.provider}:${v.externalVehicleId}`;
 }
 
 // Top-down truck icon, adapted from route-map.tsx's truckIcon — same shape,
@@ -75,6 +76,28 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
 
   const tile = TILE_SOURCES[mapStyle];
   const selected = useMemo(() => positions.find((p) => vehicleKey(p) === selectedKey) ?? null, [positions, selectedKey]);
+
+  // Which armada currently have more than one provider reporting a position
+  // (a truck with both a Hino Connect and a SoloFleet device installed) —
+  // surfaced as a small note on each of that armada's rows/markers so it's
+  // clear the other row isn't a duplicate, it's the other device.
+  const providersByArmada = useMemo(() => {
+    const map = new Map<number, Set<string>>();
+    for (const p of positions) {
+      if (p.armadaId == null) continue;
+      if (!map.has(p.armadaId)) map.set(p.armadaId, new Set());
+      map.get(p.armadaId)!.add(p.provider);
+    }
+    return map;
+  }, [positions]);
+
+  function otherProviderLabel(v: VehiclePositionRow): string | null {
+    if (v.armadaId == null) return null;
+    const providers = providersByArmada.get(v.armadaId);
+    if (!providers || providers.size < 2) return null;
+    const other = [...providers].find((p) => p !== v.provider);
+    return other ? PROVIDER_LABELS[other as VehiclePositionRow["provider"]] : null;
+  }
 
   function handleSelect(v: VehiclePositionRow) {
     setSelectedKey(vehicleKey(v));
@@ -170,6 +193,9 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
                     <p className="font-medium">{v.plateRaw}</p>
                     <p className="text-muted-foreground">{PROVIDER_LABELS[v.provider]}</p>
                     <p className="text-muted-foreground">Update {formatRelativeTime(v.recordedAt)}</p>
+                    {otherProviderLabel(v) && (
+                      <p className="text-muted-foreground">Juga dilacak: {otherProviderLabel(v)}</p>
+                    )}
                   </div>
                 </Popup>
               </Marker>
@@ -232,6 +258,9 @@ export function VehicleGpsPanel({ initialPositions }: { initialPositions: Vehicl
                     <Badge variant="outline" className="w-fit text-muted-foreground">
                       Belum terhubung ke Armada
                     </Badge>
+                  )}
+                  {otherProviderLabel(v) && (
+                    <p className="text-xs text-muted-foreground">Juga dilacak: {otherProviderLabel(v)}</p>
                   )}
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>{v.speedKmh != null ? `${Math.round(v.speedKmh)} km/h` : "Kecepatan tidak diketahui"}</span>
