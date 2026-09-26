@@ -105,8 +105,40 @@ Retensi: hapus baris dengan `recorded_at` lebih tua dari 14 hari, dijalankan set
 - `src/lib/queries/armada-gps.ts` — query DB baru (insert riwayat, get posisi terkini, get jejak rute per rentang waktu, cleanup retensi)
 - `src/lib/crypto-secret.ts` — tambah fungsi `encryptGpsCredential`/`decryptGpsCredential` dengan kunci turunan baru (purpose-specific, terpisah dari kunci lain di file ini)
 - `src/lib/gps-providers/types.ts` — interface `VehicleGpsProvider`
-- `src/lib/gps-providers/hino-connect.ts` — adapter Hino Connect (detail endpoint diisi setelah Discovery)
-- `src/lib/gps-providers/solofleet.ts` — adapter SoloFleet (detail endpoint diisi setelah Discovery)
+- `src/lib/gps-providers/hino-connect.ts` — adapter Hino Connect (endpoint & auth sudah ditemukan, lihat "Hasil Discovery" di bawah)
+- `src/lib/gps-providers/solofleet.ts` — adapter SoloFleet (endpoint & auth sudah ditemukan, lihat "Hasil Discovery" di bawah)
+
+## Hasil Discovery (2026-09-26, inspect Network tab bersama user)
+
+### Hino Connect
+- Backend riil: `https://be-pub-sg-hino.gazellecomputing.com` (bukan connect.hino.co.id — itu cuma frontend Angular SPA)
+- Auth: **AWS Cognito** (user pool `ap-southeast-1_D0GwdGbuB`, app client `keguk4gegt09c9kmfa5rvb1b8`), token disimpan di `localStorage['_gazelle_session'].token` (JWT access token, `Authorization: Bearer <token>`, exp ~18 jam dari `iat`).
+  - Login programatik server-side perlu library `amazon-cognito-identity-js` (atau panggil `InitiateAuth` Cognito langsung) dengan flow SRP — **BUKAN** auth sederhana user/password POST biasa. Perlu dicek saat implementasi apakah app client mengizinkan `USER_PASSWORD_AUTH` (lebih simpel) atau wajib `USER_SRP_AUTH`.
+- Endpoint data posisi: `POST /mapproxy/map/clusters`
+  ```json
+  // body:
+  { "boundingBox": { "topLeftCorner": {"lon":103.09,"lat":-1.90}, "bottomRightCorner": {"lon":114.89,"lat":-11.79} },
+    "fleets": [], "deviceListMaxLen": 25, "zoomLevel": 7, "hideExpired": true }
+  ```
+  Response: `data[]` berisi cluster per geohash, tiap cluster punya `devices[]`:
+  ```json
+  { "vehicleId": "132450", "deviceId": "140535", "plate": "AE 8072 SQ", "vin": "...", "type": "TRUCK",
+    "vehicleLastInfo": { "vehicleState": "MOVING", "lastTransmissionTimestamp": "2026-09-26T06:43:06Z",
+      "latitude_deg": -7.79, "longitude_deg": 111.51, "heading_deg": 30, "speed_kmh": 23, "distance_m": 63893100 } }
+  ```
+  Catatan: `plate` kadang berisi VIN (bukan plat nomor asli) untuk kendaraan yang belum di-setup platnya di Hino Connect — kendaraan ini akan otomatis masuk kategori "Belum terhubung ke Armada" karena tidak match apapun. Bounding box cukup pakai batas Indonesia tetap (tidak perlu dinamis per viewport) + `deviceListMaxLen` besar agar semua kendaraan balik tanpa clustering berlebih.
+
+### SoloFleet
+- Auth: cookie session ASP.NET klasik (form login `/Account/Login`) — jauh lebih simpel dari Hino, tidak perlu SRP/JWT. Login programatik = POST form biasa (username, password, mungkin antiforgery token — cek saat implementasi).
+- Endpoint data posisi: `GET https://www.solofleet.com/Vehicle/vehiclelivewithoutzonetripNewModelCondense` (no body/query param, cookie session cukup)
+  Response:
+  ```json
+  { "vehicles": [ { "vehicleid": "PP50", "alias": "AE 8072 SQ", "y": -7.7729111, "x": 111.5264816,
+      "spd": 11, "course": 4, "lastupdated": "2026-09-26T13:46:45+07:00", "gpstimeISO": 1790405205,
+      "City": "Madiun", "Province": "Jawa Timur", "deviceid": "0861128068142121", "gstat": 1 } ] }
+  ```
+  Catatan: `y`/`x` = lat/lon, `alias` = plat nomor (field match langsung), `lastupdated` sudah dalam **waktu lokal WIB** (`+07:00`) bukan UTC — beda dari Hino yang UTC (`Z`). Adapter WAJIB menormalkan keduanya ke UTC sebelum simpan ke `recorded_at`, supaya tidak kena masalah serupa [[transdate-wib-utc-boundary-bug]] (bug WIB/UTC yang pernah terjadi di desktop-ERP).
+  - Ada juga `socketio.solofleet.com` (Socket.IO) untuk push real-time — di luar scope tahap awal (client-side polling), tapi dicatat sebagai opsi upgrade non-polling di masa depan.
 - `src/app/mkesindo/(dashboard)/delivery/actions.ts` — tambah `syncVehicleGpsPositions()`, `getVehiclePositionsAction()`, `getVehicleTrailAction(armadaId, rangeHours)`
 - `src/components/dashboard/pengiriman-tabs.tsx` — tambah tab ke-4 `"gps"` / "GPS Kendaraan"
 - `src/components/dashboard/vehicle-gps-panel.tsx` — peta + daftar kendaraan + poller
