@@ -131,15 +131,16 @@ const TIPE_LABEL: Record<PiutangTransaksiRow["tipe"], string> = {
 function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
   const isReduction = item.jumlah < 0;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-md bg-muted px-2.5 py-2">
+    <div className="flex items-center justify-between gap-2 rounded-md bg-muted px-2.5 py-2">
       <div className="min-w-0">
-        <p className="font-data truncate text-[11px] text-muted-foreground">
-          {TIPE_LABEL[item.tipe]} · {item.noDokumen}
-        </p>
-        <p className="text-[11px] text-muted-foreground">
-          {formatTanggalPendek(item.tanggal)}
-          {item.balokKecil !== 0 && ` · Kecil ${item.balokKecil.toLocaleString("id-ID")}`}
-          {item.balokBesar !== 0 && ` · Besar ${item.balokBesar.toLocaleString("id-ID")}`}
+        <p className="font-data truncate text-[11px] text-muted-foreground">{item.noDokumen}</p>
+        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>
+            {formatTanggalPendek(item.tanggal)}
+            {item.balokKecil !== 0 && ` · Kecil ${item.balokKecil.toLocaleString("id-ID")}`}
+            {item.balokBesar !== 0 && ` · Besar ${item.balokBesar.toLocaleString("id-ID")}`}
+          </span>
+          <span className="font-medium text-foreground">{TIPE_LABEL[item.tipe]}</span>
         </p>
       </div>
       <span className={cn("shrink-0 text-xs font-semibold tabular-nums", isReduction ? "text-primary" : "text-foreground")}>
