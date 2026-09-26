@@ -5,18 +5,21 @@ import { listPerusahaanDirektori } from "@/lib/queries/akun";
 import { listAllKoneksi } from "@/lib/queries/perusahaan-koneksi";
 import { listAllGDriveKoneksi } from "@/lib/queries/perusahaan-gdrive";
 import { getChartOfAccountOptions } from "@/lib/queries/chart-of-account";
+import { listGpsKredensial } from "@/lib/queries/gps-kendaraan-kredensial";
 import { PerusahaanList } from "@/components/dashboard/perusahaan-list";
+import { GpsKendaraanKredensialForm } from "@/components/dashboard/gps-kendaraan-kredensial-form";
 
 export const metadata: Metadata = { title: "Perusahaan" };
 
 export default async function PerusahaanPage() {
   await requireGrupAccess();
-  const [rows, perusahaanDirektoriOptions, koneksi, gdriveKoneksi, chartOfAccountOptions] = await Promise.all([
+  const [rows, perusahaanDirektoriOptions, koneksi, gdriveKoneksi, chartOfAccountOptions, gpsKredensial] = await Promise.all([
     listPerusahaan(),
     listPerusahaanDirektori(),
     listAllKoneksi(),
     listAllGDriveKoneksi(),
     getChartOfAccountOptions(),
+    listGpsKredensial(),
   ]);
 
   return (
@@ -33,6 +36,7 @@ export default async function PerusahaanPage() {
         gdriveKoneksi={gdriveKoneksi}
         chartOfAccountOptions={chartOfAccountOptions}
       />
+      <GpsKendaraanKredensialForm existing={gpsKredensial} />
     </div>
   );
 }

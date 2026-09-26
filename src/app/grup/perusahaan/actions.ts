@@ -19,6 +19,7 @@ import {
   type UpsertSnapBiKredensialInput,
 } from "@/lib/queries/metode-pembayaran";
 import { uploadFile } from "@/lib/storage/google-drive";
+import { upsertGpsKredensial, type UpsertGpsKredensialInput } from "@/lib/queries/gps-kendaraan-kredensial";
 
 function assertValid(input: PerusahaanInput) {
   if (!input.nama.trim()) throw new AppError("Nama PT wajib diisi.");
@@ -149,6 +150,17 @@ export async function upsertSnapBiKredensialAction(input: UpsertSnapBiKredensial
       throw new AppError("Semua field kredensial Snap BI wajib diisi.");
     }
     await upsertSnapBiKredensial(input);
+    revalidatePath("/grup/perusahaan");
+  });
+}
+
+export async function upsertGpsKredensialAction(input: UpsertGpsKredensialInput): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await requireGrupAccess();
+    if (!input.username.trim()) {
+      throw new AppError("Username wajib diisi untuk setiap kredensial GPS Kendaraan.");
+    }
+    await upsertGpsKredensial(input, session.user.id ? String(session.user.id) : null);
     revalidatePath("/grup/perusahaan");
   });
 }
