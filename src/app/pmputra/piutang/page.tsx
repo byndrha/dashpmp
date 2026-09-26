@@ -3,7 +3,13 @@ import { getPiutangSummary, getPiutangPerAgen } from "@/lib/queries/penjualan-pi
 import { requirePmputra } from "@/lib/require-access";
 import { PiutangSummaryPanel } from "@/components/dashboard/piutang-summary-panel";
 import { PiutangPerAgenTable } from "@/components/dashboard/piutang-per-agen-table";
-import { getPiutangPerAgenAction, getPiutangBayarContextAction, bayarPiutangAction } from "./actions";
+import {
+  getPiutangPerAgenAction,
+  getPiutangBayarContextAction,
+  bayarPiutangAction,
+  getPiutangTarikContextAction,
+  tarikPiutangAction,
+} from "./actions";
 
 function monthStart(): Date {
   const d = new Date();
@@ -39,6 +45,8 @@ export default async function PmputraPiutangPage() {
         fetchAction={getPiutangPerAgenAction}
         fetchBayarContext={getPiutangBayarContextAction}
         submitBayar={bayarPiutangAction}
+        fetchTarikContext={getPiutangTarikContextAction}
+        submitTarik={tarikPiutangAction}
       />
     </div>
   );

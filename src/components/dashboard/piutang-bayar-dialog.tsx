@@ -10,29 +10,50 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatRupiah } from "@/lib/format";
 import { computeProportionalAllocation } from "@/lib/piutang-allocation";
-import type { PiutangBayarContext, BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
+import type { BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
 
 const SUMBER_LABEL: Record<"utama" | "logistik", string> = { utama: "Utama", logistik: "Logistik" };
 
-// Payment is auto-split across "utama"/"logistik" by each source's own
-// Hutang (never using one source's Tabungan to offset the other's Hutang --
-// different PT, COA, and rekening bank, per user decision 2026-09-26).
-// Kas Bank is asked only for whichever source(s) the live preview actually
-// allocates money to.
+// The dialog is shared by "Bayar" (mitra pays down Hutang) and "Tarik"
+// (mitra withdraws its own Tabungan surplus) -- both use the exact same
+// proportional-allocation-by-source UI, differing only in which field of
+// the fetched context is the per-source "capacity" and in copy/wording.
+type Mode = "bayar" | "tarik";
+
+interface DialogContext {
+  capacityUtama: number;
+  capacityLogistik: number;
+  kasBankUtama: { chartOfAccountId: string; nama: string }[];
+  kasBankLogistik: { chartOfAccountId: string; nama: string }[];
+}
+
+const MODE_COPY: Record<Mode, { title: string; capacityLabel: string; amountLabel: string; submitLabel: string; successNoun: string }> = {
+  bayar: { title: "Bayar", capacityLabel: "Hutang", amountLabel: "Jumlah Pembayaran", submitLabel: "Simpan Pembayaran", successNoun: "Pembayaran" },
+  tarik: { title: "Tarik", capacityLabel: "Tabungan", amountLabel: "Jumlah Penarikan", submitLabel: "Simpan Penarikan", successNoun: "Penarikan" },
+};
+
+// Amount is auto-split across "utama"/"logistik" by each source's own
+// capacity (Hutang for Bayar, Tabungan for Tarik) -- never using one
+// source's surplus to offset the other's shortfall, different PT, COA, and
+// rekening bank, per user decision 2026-09-26. Kas Bank is asked only for
+// whichever source(s) the live preview actually allocates money to.
 export function PiutangBayarDialog({
   open,
   onOpenChange,
+  mode = "bayar",
   agenNama,
   fetchContext,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  mode?: Mode;
   agenNama: string;
-  fetchContext: () => Promise<PiutangBayarContext>;
+  fetchContext: () => Promise<DialogContext>;
   onSubmit: (jumlah: number, kasBank: { utama?: string; logistik?: string }, catatan: string | null) => Promise<BayarPiutangResult[]>;
 }) {
-  const [context, setContext] = useState<PiutangBayarContext | null>(null);
+  const copy = MODE_COPY[mode];
+  const [context, setContext] = useState<DialogContext | null>(null);
   const [loadingContext, setLoadingContext] = useState(false);
   const [jumlah, setJumlah] = useState("");
   const [kasBankUtama, setKasBankUtama] = useState<string | null>(null);
@@ -64,7 +85,7 @@ export function PiutangBayarDialog({
   const jumlahNum = Number(jumlah) || 0;
   const allocation = useMemo(() => {
     if (!context || jumlahNum <= 0) return [];
-    return computeProportionalAllocation(context.hutangUtama, context.hutangLogistik, jumlahNum);
+    return computeProportionalAllocation(context.capacityUtama, context.capacityLogistik, jumlahNum);
   }, [context, jumlahNum]);
 
   const needsUtamaKasBank = allocation.some((a) => a.sumber === "utama");
@@ -72,7 +93,7 @@ export function PiutangBayarDialog({
 
   async function handleSubmit() {
     if (jumlahNum <= 0) {
-      setError("Jumlah pembayaran harus lebih dari 0.");
+      setError(`${copy.amountLabel} harus lebih dari 0.`);
       return;
     }
     if (needsUtamaKasBank && !kasBankUtama) {
@@ -92,11 +113,11 @@ export function PiutangBayarDialog({
         catatan.trim() || null
       );
       toast.success(
-        `Pembayaran tercatat: ${results.map((r) => `${SUMBER_LABEL[r.sumber]} ${formatRupiah(r.jumlah)} (${r.noDokumen})`).join(", ")}`
+        `${copy.successNoun} tercatat: ${results.map((r) => `${SUMBER_LABEL[r.sumber]} ${formatRupiah(r.jumlah)} (${r.noDokumen})`).join(", ")}`
       );
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal mencatat pembayaran.");
+      setError(err instanceof Error ? err.message : `Gagal mencatat ${copy.successNoun.toLowerCase()}.`);
     } finally {
       setSubmitting(false);
     }
@@ -106,7 +127,7 @@ export function PiutangBayarDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Bayar — {agenNama}</DialogTitle>
+          <DialogTitle>{copy.title} — {agenNama}</DialogTitle>
         </DialogHeader>
 
         {loadingContext ? (
@@ -115,15 +136,15 @@ export function PiutangBayarDialog({
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3 rounded-md border p-3 text-xs">
               <span className="text-muted-foreground">
-                Hutang Utama: <span className="text-foreground">{formatRupiah(context.hutangUtama)}</span>
+                {copy.capacityLabel} Utama: <span className="text-foreground">{formatRupiah(context.capacityUtama)}</span>
               </span>
               <span className="text-muted-foreground">
-                Hutang Logistik: <span className="text-foreground">{formatRupiah(context.hutangLogistik)}</span>
+                {copy.capacityLabel} Logistik: <span className="text-foreground">{formatRupiah(context.capacityLogistik)}</span>
               </span>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label>Jumlah Pembayaran</Label>
+              <Label>{copy.amountLabel}</Label>
               <Input type="number" value={jumlah} onChange={(e) => setJumlah(e.target.value)} placeholder="0" />
             </div>
 
@@ -195,7 +216,7 @@ export function PiutangBayarDialog({
             Batal
           </Button>
           <Button onClick={handleSubmit} disabled={submitting || loadingContext || !context}>
-            {submitting ? "Menyimpan..." : "Simpan Pembayaran"}
+            {submitting ? "Menyimpan..." : copy.submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Download, HandCoins, MapPin } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Banknote, ChevronDown, Clock, Copy, CreditCard, Download, FileText, MapPin, Package, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Pagination } from "@/components/dashboard/pagination";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { PiutangBayarDialog } from "@/components/dashboard/piutang-bayar-dialog";
@@ -18,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { SEGMENTASI_OPTIONS } from "@/lib/segmentasi-mitra";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { PiutangPerAgenRow, PiutangTransaksiRow } from "@/lib/queries/penjualan-piutang";
-import type { PiutangBayarContext, BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
+import type { PiutangBayarContext, PiutangTarikContext, BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
 
 const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Agen", key: "nama", width: 26 },
@@ -47,8 +48,8 @@ function statusOf(row: PiutangPerAgenRow): StatusFilter {
   return "lunas";
 }
 
-// "yyyy/MM/dd - HH:mm WIB" for a TRUE UTC instant (e.g. `new Date()` at
-// fetch time) -- utcInstantToWibDisplay shifts it +7h so reading its raw
+// "dd/MM/yyyy • HH:mm" for a TRUE UTC instant (e.g. `new Date()` at fetch
+// time) -- utcInstantToWibDisplay shifts it +7h so reading its raw
 // UTC-component getters below gives the correct WIB wall-clock, same
 // pattern formatDateWib/formatTimeWib rely on for naive-WIB values.
 function formatUpdateStamp(date: Date): string {
@@ -58,7 +59,7 @@ function formatUpdateStamp(date: Date): string {
   const d = String(wib.getUTCDate()).padStart(2, "0");
   const hh = String(wib.getUTCHours()).padStart(2, "0");
   const mm = String(wib.getUTCMinutes()).padStart(2, "0");
-  return `${y}/${m}/${d} - ${hh}:${mm} WIB`;
+  return `${d}/${m}/${y} • ${hh}:${mm}`;
 }
 
 // "September 2026" for a single-month range, or "dd/MM/yy - dd/MM/yy" when
@@ -119,39 +120,59 @@ function formatTanggalPendek(iso: string): string {
 }
 
 const TIPE_LABEL: Record<PiutangTransaksiRow["tipe"], string> = {
-  pesanan: "Pesanan",
+  pesanan: "Pemesanan",
   pembayaran: "Pembayaran",
   tarikan: "Tarikan",
 };
 
-// Each entry is its own boxed chip (item + amount on a shared background)
-// per explicit request -- Pesanan/Tarikan add to Hutang (shown plain),
-// Pembayaran reduces it (shown as a negative, tinted like the Tabungan
-// convention used elsewhere on this card).
+// Pemesanan = order fulfilled (primary/green), Pembayaran = payment
+// received (warning/amber), Tarikan = savings withdrawal, i.e. debt goes
+// up (destructive/red) -- three semantic tokens already used elsewhere in
+// this app (see aging-table.tsx's STATUS_BADGE), not new custom colors.
+const TIPE_BADGE_CLASS: Record<PiutangTransaksiRow["tipe"], string> = {
+  pesanan: "bg-primary/15 text-primary",
+  pembayaran: "bg-warning/15 text-warning",
+  tarikan: "bg-destructive/15 text-destructive",
+};
+
+// Bordered card per transaction, per the reference design: doc icon + full
+// NoDokumen and a colored tipe pill on top, date + a merged qty chip
+// ("Kecil 230") and the signed amount below. Pesanan/Tarikan add to Hutang
+// (shown plain), Pembayaran reduces it (shown negative, tinted primary like
+// the Tabungan convention used elsewhere on this card). Padding kept tight
+// (px-2/py-1.5, gap-1) so the box stays compact rather than tall.
 function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
   const isReduction = item.jumlah < 0;
   return (
-    <div className="flex items-center justify-between gap-2 rounded-md bg-muted px-2.5 py-2">
-      <div className="min-w-0">
-        <p className="font-data truncate text-[11px] text-muted-foreground">{item.noDokumen}</p>
-        <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span>{formatTanggalPendek(item.tanggal)}</span>
-          <span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-            {TIPE_LABEL[item.tipe]}
-          </span>
-          {(item.balokKecil !== 0 || item.balokBesar !== 0) && (
-            <span>
-              {item.balokKecil !== 0 && `Kecil ${item.balokKecil.toLocaleString("id-ID")}`}
-              {item.balokKecil !== 0 && item.balokBesar !== 0 && " · "}
-              {item.balokBesar !== 0 && `Besar ${item.balokBesar.toLocaleString("id-ID")}`}
+    <div className="flex flex-col gap-1 rounded-lg border px-2 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1">
+          <FileText className="size-3 shrink-0 text-muted-foreground" />
+          <span className="font-data truncate text-[10px] text-muted-foreground">{item.noDokumen}</span>
+        </span>
+        <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium", TIPE_BADGE_CLASS[item.tipe])}>
+          {TIPE_LABEL[item.tipe]}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-foreground">
+          <span className="shrink-0">{formatTanggalPendek(item.tanggal)}</span>
+          {item.balokKecil !== 0 && (
+            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+              Kecil <span className="font-semibold text-foreground">{item.balokKecil.toLocaleString("id-ID")}</span>
             </span>
           )}
-        </p>
+          {item.balokBesar !== 0 && (
+            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+              Besar <span className="font-semibold text-foreground">{item.balokBesar.toLocaleString("id-ID")}</span>
+            </span>
+          )}
+        </span>
+        <span className={cn("font-data shrink-0 text-xs font-semibold tabular-nums", isReduction ? "text-primary" : "text-foreground")}>
+          {isReduction ? "-" : ""}
+          {formatRupiah(Math.abs(item.jumlah))}
+        </span>
       </div>
-      <span className={cn("shrink-0 text-xs font-semibold tabular-nums", isReduction ? "text-primary" : "text-foreground")}>
-        {isReduction ? "-" : ""}
-        {formatRupiah(Math.abs(item.jumlah))}
-      </span>
     </div>
   );
 }
@@ -162,12 +183,21 @@ function AgenCard({
   lastUpdated,
   fetchBayarContext,
   submitBayar,
+  fetchTarikContext,
+  submitTarik,
 }: {
   row: PiutangPerAgenRow;
   periodeLabel: string;
   lastUpdated: Date;
   fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
   submitBayar: (
+    agenId: string,
+    jumlah: number,
+    kasBank: { utama?: string; logistik?: string },
+    catatan: string | null
+  ) => Promise<BayarPiutangResult[]>;
+  fetchTarikContext: (agenId: string) => Promise<PiutangTarikContext>;
+  submitTarik: (
     agenId: string,
     jumlah: number,
     kasBank: { utama?: string; logistik?: string },
@@ -184,20 +214,63 @@ function AgenCard({
   const segLabel = segmentasiLabel(row.segmentasi);
   const hasPin = row.latitude != null && row.longitude != null;
 
-  const jumlahPesanan = row.transaksi.filter((t) => t.tipe === "pesanan").length;
-  const totalPembayaranTarikan = row.pembayaran + row.tarikan;
+  // Total quantity ordered (Balok Kecil/Besar), not a count of documents --
+  // derived from the already-fetched transaksi list rather than a new
+  // backend field, since each pesanan entry already carries its own
+  // net-of-Retur qty.
+  const pesananItems = row.transaksi.filter((t) => t.tipe === "pesanan");
+  const totalKecil = pesananItems.reduce((sum, t) => sum + t.balokKecil, 0);
+  const totalBesar = pesananItems.reduce((sum, t) => sum + t.balokBesar, 0);
+  const pembayaranCount = row.transaksi.filter((t) => t.tipe === "pembayaran").length;
 
-  async function handleExportPng() {
-    if (!captureRef.current) return;
-    setExporting(true);
+  async function captureCardPng(): Promise<Blob> {
+    if (!captureRef.current) throw new Error("Kartu tidak ditemukan.");
+    // The collapsed preview hides transaksi beyond COLLAPSED_PREVIEW_COUNT --
+    // a shared card export should still show everything, so force-expand
+    // before capturing and restore the user's own collapsed/expanded state
+    // afterward. Double rAF waits for React to commit and the browser to
+    // paint the taller layout before html-to-image reads it.
+    const wasExpanded = expanded;
+    if (hasMore && !wasExpanded) {
+      setExpanded(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    }
     try {
       const { toBlob } = await import("html-to-image");
+      // Read the Card's own actual rendered background instead of a
+      // hardcoded color -- the app has multiple palettes and a light/dark
+      // mode, so a fixed value (e.g. pure black) mismatches whenever the
+      // viewer isn't on that one specific theme.
+      const bg = getComputedStyle(captureRef.current).backgroundColor;
       const blob = await toBlob(captureRef.current, {
         pixelRatio: 2,
-        backgroundColor: "#0a0a0a",
+        backgroundColor: bg,
         filter: (node) => !(node instanceof HTMLElement && node.dataset.captureHide === "true"),
       });
       if (!blob) throw new Error("Gagal membuat gambar.");
+      return blob;
+    } finally {
+      if (hasMore && !wasExpanded) setExpanded(false);
+    }
+  }
+
+  async function handleCopyPng() {
+    setExporting(true);
+    try {
+      const blob = await captureCardPng();
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      toast.success("Gambar disalin ke clipboard.");
+    } catch {
+      toast.error("Gagal menyalin kartu ke clipboard.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDownloadPng() {
+    setExporting(true);
+    try {
+      const blob = await captureCardPng();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -205,7 +278,7 @@ function AgenCard({
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error("Gagal mengekspor kartu ke PNG.");
+      toast.error("Gagal mengunduh kartu.");
     } finally {
       setExporting(false);
     }
@@ -213,55 +286,108 @@ function AgenCard({
 
   return (
     <>
-    <Card className="py-3.5" ref={captureRef}>
+    <div className="relative">
+      {/* A sibling of Card, not a descendant -- Card's own `overflow-hidden`
+          (see components/ui/card.tsx) clips anything positioned outside its
+          bounds, so a button meant to float over the corner has to live
+          outside that clipped box to stay visible. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute -left-2 -top-2 z-10 size-6 rounded-full bg-background shadow-sm"
+              title="Bagikan"
+              data-capture-hide="true"
+              disabled={exporting}
+            />
+          }
+        >
+          <Share2 className="size-3" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" data-capture-hide="true">
+          <DropdownMenuItem onClick={handleCopyPng}>
+            <Copy className="size-3.5" />
+            Salin
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleDownloadPng}>
+            <Download className="size-3.5" />
+            Unduh
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Card className="pt-3.5 pb-0" ref={captureRef}>
       <CardContent className="flex flex-col gap-2 px-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate font-medium">{row.nama}</p>
-            <p className="text-[10px] text-muted-foreground">Update {formatUpdateStamp(lastUpdated)}</p>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1">
-              <Badge variant={segLabel ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
-                {segLabel ?? "Belum Ditentukan"}
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "h-5 px-1.5 text-[10px]",
-                  status === "hutang" && "border-destructive/40 text-destructive",
-                  status === "tabungan" && "border-primary/40 text-primary"
-                )}
-              >
-                {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
-              </Badge>
-              {hasPin && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-5"
-                  title="Lihat di Google Maps"
-                  data-capture-hide="true"
-                  onClick={() =>
-                    window.open(`https://www.google.com/maps?q=${row.latitude},${row.longitude}`, "_blank", "noopener,noreferrer")
-                  }
+            <p className="truncate text-sm font-bold">{row.nama}</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Clock className="size-3" />
+                {formatUpdateStamp(lastUpdated)}
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <Badge variant={segLabel ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
+                  {segLabel ?? "Belum Ditentukan"}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "h-5 gap-1 px-1.5 text-[10px]",
+                    status === "hutang" && "border-destructive/40 text-destructive",
+                    status === "tabungan" && "border-primary/40 text-primary"
+                  )}
                 >
-                  <MapPin className="size-3" />
-                </Button>
-              )}
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      status === "hutang" && "bg-destructive",
+                      status === "tabungan" && "bg-primary",
+                      status === "lunas" && "bg-muted-foreground"
+                    )}
+                  />
+                  {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
+                </Badge>
+                {hasPin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-5"
+                    title="Lihat di Google Maps"
+                    data-capture-hide="true"
+                    onClick={() =>
+                      window.open(`https://www.google.com/maps?q=${row.latitude},${row.longitude}`, "_blank", "noopener,noreferrer")
+                    }
+                  >
+                    <MapPin className="size-3" />
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="shrink-0 text-right">
+          <div className="shrink-0 border-l pl-2.5 text-right">
             <p className="text-[10px] text-muted-foreground">Piutang Awal</p>
             <p className="font-display text-sm font-semibold tabular-nums">{formatRupiah(row.hutangAwal)}</p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">Tabungan Awal</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">Tabungan Awal</p>
             <p className="font-display text-sm font-semibold tabular-nums">{formatRupiah(row.tabunganAwal)}</p>
           </div>
         </div>
 
         {row.transaksi.length > 0 && (
-          <div className="flex flex-col gap-1.5 border-t pt-2">
-            {visibleTransaksi.map((item, i) => (
-              <TransaksiRow key={`${item.noDokumen}-${item.tipe}-${i}`} item={item} />
-            ))}
+          // -mx-4 cancels CardContent's own px-4 so these boxes sit snug
+          // against the card's edge, then px-2 re-adds just enough inset to
+          // avoid touching the border outright.
+          <div className="-mx-4 border-t px-2 pt-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
+              <p className="min-w-0 truncate whitespace-nowrap text-[10px] font-semibold uppercase text-muted-foreground">
+                {pesananItems.length} Pemesanan · {pembayaranCount} Pembayaran
+              </p>
+              <p className="shrink-0 text-muted-foreground">{periodeLabel}</p>
+            </div>
+            <div className="flex flex-col gap-1">
+              {visibleTransaksi.map((item, i) => (
+                <TransaksiRow key={`${item.noDokumen}-${item.tipe}-${i}`} item={item} />
+              ))}
+            </div>
           </div>
         )}
         {hasMore && (
@@ -276,57 +402,91 @@ function AgenCard({
           </button>
         )}
 
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-2 text-xs">
-          <div>
-            <p className="text-muted-foreground">Jumlah Pesanan</p>
-            <p className="font-semibold tabular-nums">{jumlahPesanan} Item</p>
+        <div className="-mx-2 rounded-lg border px-2.5 py-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-semibold">
+              <Package className="size-3.5 text-primary" />
+              Total Pemesanan
+            </span>
+            <span className="font-data text-sm font-semibold tabular-nums">{formatRupiah(row.pesanan)}</span>
           </div>
-          <div>
-            <p className="text-muted-foreground">Total Pesanan</p>
-            <p className="font-semibold tabular-nums">{formatRupiah(row.pesanan)}</p>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <div className="flex flex-1 items-center justify-between rounded border bg-muted/40 px-2.5 py-1.5">
+              <span className="font-semibold tabular-nums">{totalKecil.toLocaleString("id-ID")}</span>
+              <span className="text-[10px] text-muted-foreground">Es Balok Kecil</span>
+            </div>
+            <div className="flex flex-1 items-center justify-between rounded border bg-muted/40 px-2.5 py-1.5">
+              <span className="font-semibold tabular-nums">{totalBesar.toLocaleString("id-ID")}</span>
+              <span className="text-[10px] text-muted-foreground">Es Balok Besar</span>
+            </div>
           </div>
-          <div>
-            <p className="text-muted-foreground">T. Pembayaran/Tarikan</p>
-            <p className="font-semibold tabular-nums">{formatRupiah(totalPembayaranTarikan)}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Sisa Hutang</p>
-            <p
-              className={cn(
-                "font-semibold tabular-nums",
-                row.saldoAkhir > 0 && "text-destructive",
-                row.saldoAkhir < 0 && "text-primary"
-              )}
-            >
-              {formatRupiah(Math.abs(row.saldoAkhir))}
-            </p>
+          <div className="-mx-2.5 mt-2 grid grid-cols-2 divide-x border-t pt-1.5">
+            <div className="flex items-center gap-1 pl-2.5">
+              <span className="text-muted-foreground">Terbayar</span>
+              <span className="font-semibold text-primary">{formatRupiah(row.pembayaran)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-1 pl-2.5 pr-2.5">
+              <span className="text-muted-foreground">Tarikan</span>
+              <span className="font-semibold text-foreground">{formatRupiah(row.tarikan)}</span>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-t pt-2">
-          <p className="text-[11px] text-muted-foreground">
-            {row.transaksi.length} Entri - Periode {periodeLabel}
-          </p>
-          <div className="flex items-center gap-1.5" data-capture-hide="true">
-            <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={handleExportPng} disabled={exporting}>
-              <Download className="size-3" />
-              {exporting ? "..." : "Export .PNG"}
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setBayarOpen(true)}>
-              <HandCoins className="size-3" />
-              Bayar
-            </Button>
+        <div
+          className={cn(
+            // Card itself carries no bottom padding (pb-0, see its own
+            // className) specifically so this bar can reach the card's
+            // bottom edge without a negative-margin bleed -- html-to-image's
+            // cloned-node export doesn't reliably reproduce negative-margin
+            // overlap into a padding area, so the padding is removed at the
+            // source instead. rounded-b-xl matches Card's own corner radius
+            // since the bar now touches that edge.
+            "-mx-4 flex items-center justify-between gap-2 rounded-b-xl px-4 py-2.5",
+            row.saldoAkhir >= 0 ? "bg-destructive/10" : "bg-primary/10"
+          )}
+        >
+          <div className="flex flex-wrap items-baseline gap-1.5">
+            <span className={cn("size-1.5 shrink-0 self-center rounded-full", row.saldoAkhir >= 0 ? "bg-destructive" : "bg-primary")} />
+            <span className={cn("text-[11px] font-semibold uppercase", row.saldoAkhir >= 0 ? "text-destructive" : "text-primary")}>
+              {row.saldoAkhir >= 0 ? "Sisa Hutang" : "Tabungan"}
+            </span>
+            <span className={cn("font-data text-sm font-bold tabular-nums", row.saldoAkhir >= 0 ? "text-destructive" : "text-primary")}>
+              {formatRupiah(Math.abs(row.saldoAkhir))}
+            </span>
           </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-7 shrink-0 gap-1 bg-background px-2.5 text-[11px] text-foreground hover:bg-background/90"
+            data-capture-hide="true"
+            onClick={() => setBayarOpen(true)}
+          >
+            {row.saldoAkhir < 0 ? <Banknote className="size-3" /> : <CreditCard className="size-3" />}
+            {row.saldoAkhir < 0 ? "Tarik" : "Bayar"}
+          </Button>
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </div>
 
     <PiutangBayarDialog
       open={bayarOpen}
       onOpenChange={setBayarOpen}
+      mode={row.saldoAkhir < 0 ? "tarik" : "bayar"}
       agenNama={row.nama}
-      fetchContext={() => fetchBayarContext(row.agenId)}
-      onSubmit={(jumlah, kasBank, catatan) => submitBayar(row.agenId, jumlah, kasBank, catatan)}
+      fetchContext={async () => {
+        if (row.saldoAkhir < 0) {
+          const c = await fetchTarikContext(row.agenId);
+          return { capacityUtama: c.tabunganUtama, capacityLogistik: c.tabunganLogistik, kasBankUtama: c.kasBankUtama, kasBankLogistik: c.kasBankLogistik };
+        }
+        const c = await fetchBayarContext(row.agenId);
+        return { capacityUtama: c.hutangUtama, capacityLogistik: c.hutangLogistik, kasBankUtama: c.kasBankUtama, kasBankLogistik: c.kasBankLogistik };
+      }}
+      onSubmit={(jumlah, kasBank, catatan) =>
+        row.saldoAkhir < 0
+          ? submitTarik(row.agenId, jumlah, kasBank, catatan)
+          : submitBayar(row.agenId, jumlah, kasBank, catatan)
+      }
     />
     </>
   );
@@ -353,11 +513,20 @@ export function PiutangPerAgenTable({
   fetchAction,
   fetchBayarContext,
   submitBayar,
+  fetchTarikContext,
+  submitTarik,
 }: {
   initialRows: PiutangPerAgenRow[];
   fetchAction: (startDate: string, endDate: string) => Promise<PiutangPerAgenRow[]>;
   fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
   submitBayar: (
+    agenId: string,
+    jumlah: number,
+    kasBank: { utama?: string; logistik?: string },
+    catatan: string | null
+  ) => Promise<BayarPiutangResult[]>;
+  fetchTarikContext: (agenId: string) => Promise<PiutangTarikContext>;
+  submitTarik: (
     agenId: string,
     jumlah: number,
     kasBank: { utama?: string; logistik?: string },
@@ -401,6 +570,20 @@ export function PiutangPerAgenTable({
     catatan: string | null
   ) {
     const results = await submitBayar(agenId, jumlah, kasBank, catatan);
+    setRows(await fetchAction(startDate, endDate));
+    setLastUpdated(new Date());
+    return results;
+  }
+
+  // Mirrors handleBayar for a Tabungan withdrawal -- same full-refresh
+  // rationale (Saldo Akhir and the transaction list both change).
+  async function handleTarik(
+    agenId: string,
+    jumlah: number,
+    kasBank: { utama?: string; logistik?: string },
+    catatan: string | null
+  ) {
+    const results = await submitTarik(agenId, jumlah, kasBank, catatan);
     setRows(await fetchAction(startDate, endDate));
     setLastUpdated(new Date());
     return results;
@@ -515,6 +698,8 @@ export function PiutangPerAgenTable({
             lastUpdated={lastUpdated}
             fetchBayarContext={fetchBayarContext}
             submitBayar={handleBayar}
+            fetchTarikContext={fetchTarikContext}
+            submitTarik={handleTarik}
           />
         ))}
         {pageRows.length === 0 && <p className="col-span-full py-8 text-center text-sm text-muted-foreground">Tidak ada data.</p>}

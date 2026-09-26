@@ -173,8 +173,9 @@ export async function getPenjualanTrend(kode: string): Promise<PenjualanTrendDat
 export interface PiutangTrendMonth {
   month: string;
   piutangBaru: number; // Pesanan - Retur this month (utama + logistik combined)
-  piutangTertagih: number; // Pembayaran this month, on Pemesanan + on PMP_Pembayaran
-  netMovement: number; // piutangBaru - piutangTertagih
+  piutangPembayaran: number; // Pembayaran this month, on Pemesanan (down payment) + on PMP_Pembayaran
+  piutangTarikan: number; // Tarikan this month, from PMP_Pembayaran only
+  netMovement: number; // piutangBaru - piutangPembayaran + piutangTarikan
 }
 
 export interface PiutangSummaryData {
@@ -266,10 +267,16 @@ async function getPembayaranNetByAgen(kode: string, sumber: SumberAgen): Promise
   return result.recordset as AgenNetRow[];
 }
 
-interface MonthMovementRow {
+interface PemesananMovementRow {
   Bulan: string;
   Baru: number;
-  Tertagih: number;
+  Pembayaran: number;
+}
+
+interface PembayaranMovementRow {
+  Bulan: string;
+  Pembayaran: number;
+  Tarikan: number;
 }
 
 // Bounded to the 12-month trend window -- unlike the per-agent balance
@@ -280,7 +287,7 @@ async function getPemesananMovementByMonth(
   sumber: SumberAgen,
   start: Date,
   end: Date
-): Promise<MonthMovementRow[]> {
+): Promise<PemesananMovementRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
   const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
@@ -290,13 +297,13 @@ async function getPemesananMovementByMonth(
     SELECT CONVERT(varchar(7), Tanggal, 120) AS Bulan,
            SUM(BalokKecilRealisasi * BalokKecilHarga + BalokBesarRealisasi * BalokBesarHarga
              - ISNULL(BalokKecilRetur,0) * BalokKecilHarga - ISNULL(BalokBesarRetur,0) * BalokBesarHarga) AS Baru,
-           SUM(ISNULL(Pembayaran,0)) AS Tertagih
+           SUM(ISNULL(Pembayaran,0)) AS Pembayaran
     FROM PMP_Pemesanan
     WHERE IsDeleted = 0 AND Tanggal >= @start AND Tanggal < @end
       ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
     GROUP BY CONVERT(varchar(7), Tanggal, 120)
   `);
-  return result.recordset as MonthMovementRow[];
+  return result.recordset as PemesananMovementRow[];
 }
 
 async function getPembayaranMovementByMonth(
@@ -304,7 +311,7 @@ async function getPembayaranMovementByMonth(
   sumber: SumberAgen,
   start: Date,
   end: Date
-): Promise<MonthMovementRow[]> {
+): Promise<PembayaranMovementRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
   const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
@@ -312,13 +319,13 @@ async function getPembayaranMovementByMonth(
   if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
   const result = await request.query(`
     SELECT CONVERT(varchar(7), Tanggal, 120) AS Bulan,
-           SUM(ISNULL(Tarikan,0)) AS Baru, SUM(ISNULL(Pembayaran,0)) AS Tertagih
+           SUM(ISNULL(Pembayaran,0)) AS Pembayaran, SUM(ISNULL(Tarikan,0)) AS Tarikan
     FROM PMP_Pembayaran
     WHERE IsDeleted = 0 AND Tanggal >= @start AND Tanggal < @end
       ${requiresBranchFilter ? "AND BranchID = @branchId" : ""}
     GROUP BY CONVERT(varchar(7), Tanggal, 120)
   `);
-  return result.recordset as MonthMovementRow[];
+  return result.recordset as PembayaranMovementRow[];
 }
 
 export async function getPiutangSummary(kode: string): Promise<PiutangSummaryData> {
@@ -349,18 +356,31 @@ export async function getPiutangSummary(kode: string): Promise<PiutangSummaryDat
     else totalTabunganSaatIni += -net;
   }
 
-  const movementByMonth = new Map<string, { baru: number; tertagih: number }>();
-  function addMovement(bulan: string, baru: number, tertagih: number) {
-    const cur = movementByMonth.get(bulan) ?? { baru: 0, tertagih: 0 };
-    movementByMonth.set(bulan, { baru: cur.baru + baru, tertagih: cur.tertagih + tertagih });
+  const movementByMonth = new Map<string, { baru: number; pembayaran: number; tarikan: number }>();
+  function addMovement(bulan: string, baru: number, pembayaran: number, tarikan: number) {
+    const cur = movementByMonth.get(bulan) ?? { baru: 0, pembayaran: 0, tarikan: 0 };
+    movementByMonth.set(bulan, {
+      baru: cur.baru + baru,
+      pembayaran: cur.pembayaran + pembayaran,
+      tarikan: cur.tarikan + tarikan,
+    });
   }
-  for (const rows of [...pemesananMonthBySource, ...pembayaranMonthBySource]) {
-    for (const r of rows) addMovement(r.Bulan, r.Baru, r.Tertagih);
+  for (const rows of pemesananMonthBySource) {
+    for (const r of rows) addMovement(r.Bulan, r.Baru, r.Pembayaran, 0);
+  }
+  for (const rows of pembayaranMonthBySource) {
+    for (const r of rows) addMovement(r.Bulan, 0, r.Pembayaran, r.Tarikan);
   }
 
   const months: PiutangTrendMonth[] = keys.map((key) => {
-    const m = movementByMonth.get(key) ?? { baru: 0, tertagih: 0 };
-    return { month: key, piutangBaru: m.baru, piutangTertagih: m.tertagih, netMovement: m.baru - m.tertagih };
+    const m = movementByMonth.get(key) ?? { baru: 0, pembayaran: 0, tarikan: 0 };
+    return {
+      month: key,
+      piutangBaru: m.baru,
+      piutangPembayaran: m.pembayaran,
+      piutangTarikan: m.tarikan,
+      netMovement: m.baru - m.pembayaran + m.tarikan,
+    };
   });
 
   return { totalPiutangSaatIni, totalTabunganSaatIni, months };

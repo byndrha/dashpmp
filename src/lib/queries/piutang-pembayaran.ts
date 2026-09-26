@@ -137,6 +137,31 @@ export async function getPiutangBayarContext(kode: string, agenId: string): Prom
   };
 }
 
+export interface PiutangTarikContext {
+  tabunganUtama: number;
+  tabunganLogistik: number;
+  kasBankUtama: KasBankOption[];
+  kasBankLogistik: KasBankOption[];
+}
+
+// Fetched when the "Tarik" dialog opens -- the current per-source Tabungan
+// (surplus balance, i.e. a negative net) available to withdraw, and each
+// source's own Kas Bank options (the account the withdrawal is paid out
+// from).
+export async function getPiutangTarikContext(kode: string, agenId: string): Promise<PiutangTarikContext> {
+  const sources: SumberAgen[] = ["utama", "logistik"];
+  const [netBySource, kasBankBySource] = await Promise.all([
+    Promise.all(sources.map((s) => getAgenNetNow(kode, s, agenId))),
+    Promise.all(sources.map((s) => getKasBankOptions(kode, s))),
+  ]);
+  return {
+    tabunganUtama: Math.max(-netBySource[0], 0),
+    tabunganLogistik: Math.max(-netBySource[1], 0),
+    kasBankUtama: kasBankBySource[0],
+    kasBankLogistik: kasBankBySource[1],
+  };
+}
+
 async function nextNoDokumenAT(transaction: sql.Transaction, monthKey: string): Promise<string> {
   const result = await new sql.Request(transaction)
     .input("pattern", sql.VarChar(64), `PMP/AT/%/${monthKey}/GE/%`)
@@ -194,6 +219,54 @@ async function insertPembayaran(
   });
 }
 
+// Same table/document-numbering as insertPembayaran, but populates
+// `Tarikan` instead of `Pembayaran` -- both columns live on PMP_Pembayaran
+// and share one NoDokumen sequence (PMP/AT/...), matching the ERP
+// desktop's own Pembayaran/Tarikan tabs.
+async function insertTarikan(
+  kode: string,
+  sumber: SumberAgen,
+  agenId: string,
+  jumlah: number,
+  chartOfAccountId: string,
+  catatan: string | null
+): Promise<string> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const branchId = branchIdForInsert(kode, sumber);
+  const suffix = documentSuffix(kode, sumber);
+  const monthKey = new Date().toISOString().slice(0, 7);
+
+  return withIdRetry(async () => {
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      const pembayaranId = await nextSequentialId(transaction, "PMP_Pembayaran", "PembayaranID");
+      const seq = await nextNoDokumenAT(transaction, monthKey);
+      const noDokumen = `PMP/AT/${seq}/${monthKey}/GE/${suffix}`;
+      await new sql.Request(transaction)
+        .input("id", sql.VarChar(16), pembayaranId)
+        .input("noDokumen", sql.VarChar(64), noDokumen)
+        .input("agenId", sql.VarChar(16), agenId)
+        .input("branchId", sql.VarChar(16), branchId)
+        .input("departmentId", sql.VarChar(16), DEPARTMENT_ID)
+        .input("coa", sql.VarChar(16), chartOfAccountId)
+        .input("jumlah", sql.Decimal(18, 2), jumlah)
+        .input("catatan", sql.VarChar(256), catatan).query(`
+          INSERT INTO PMP_Pembayaran
+            (PembayaranID, NoDokumen, Tanggal, BranchID, DepartmentID, AgenID, ChartOfAccountID, Piutang, Pembayaran, Tabungan, Tarikan, Catatan, IsDeleted, ModifiedDate)
+          VALUES
+            (@id, @noDokumen, GETDATE(), @branchId, @departmentId, @agenId, @coa, 0, 0, 0, @jumlah, @catatan, 0, GETDATE())
+        `);
+      await transaction.commit();
+      return noDokumen;
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  });
+}
+
 export interface BayarPiutangResult {
   sumber: SumberAgen;
   jumlah: number;
@@ -228,6 +301,42 @@ export async function bayarPiutang(
     const coa = item.sumber === "utama" ? kasBank.utama : kasBank.logistik;
     if (!coa) throw new Error(`Kas Bank untuk sumber "${item.sumber}" belum dipilih.`);
     const noDokumen = await insertPembayaran(kode, item.sumber, agenId, item.jumlah, coa, catatan);
+    results.push({ sumber: item.sumber, jumlah: item.jumlah, noDokumen });
+  }
+  return results;
+}
+
+// Records a Mitra's withdrawal of its own Tabungan (surplus balance),
+// automatically split across "utama"/"logistik" by each source's own
+// current Tabungan -- mirrors bayarPiutang's proportional-split design, but
+// a withdrawal can never exceed the combined Tabungan available (there is
+// no "logistik absorbs the excess" case here, since there is nothing to
+// route -- the Mitra simply cannot withdraw savings that don't exist).
+export async function tarikPiutang(
+  kode: string,
+  agenId: string,
+  jumlah: number,
+  kasBank: { utama?: string; logistik?: string },
+  catatan: string | null
+): Promise<BayarPiutangResult[]> {
+  if (jumlah <= 0) throw new Error("Jumlah penarikan harus lebih dari 0.");
+
+  const [netUtama, netLogistik] = await Promise.all([
+    getAgenNetNow(kode, "utama", agenId),
+    getAgenNetNow(kode, "logistik", agenId),
+  ]);
+  const tabunganUtama = Math.max(-netUtama, 0);
+  const tabunganLogistik = Math.max(-netLogistik, 0);
+  if (jumlah > tabunganUtama + tabunganLogistik) {
+    throw new Error("Jumlah penarikan melebihi total tabungan Mitra saat ini.");
+  }
+  const plan: AllocationItem[] = computeProportionalAllocation(tabunganUtama, tabunganLogistik, jumlah);
+
+  const results: BayarPiutangResult[] = [];
+  for (const item of plan) {
+    const coa = item.sumber === "utama" ? kasBank.utama : kasBank.logistik;
+    if (!coa) throw new Error(`Kas Bank untuk sumber "${item.sumber}" belum dipilih.`);
+    const noDokumen = await insertTarikan(kode, item.sumber, agenId, item.jumlah, coa, catatan);
     results.push({ sumber: item.sumber, jumlah: item.jumlah, noDokumen });
   }
   return results;

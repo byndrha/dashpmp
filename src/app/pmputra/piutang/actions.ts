@@ -2,7 +2,7 @@
 "use server";
 
 import { getPiutangPerAgen } from "@/lib/queries/penjualan-piutang";
-import { getPiutangBayarContext, bayarPiutang } from "@/lib/queries/piutang-pembayaran";
+import { getPiutangBayarContext, bayarPiutang, getPiutangTarikContext, tarikPiutang } from "@/lib/queries/piutang-pembayaran";
 import { requirePmputra } from "@/lib/require-access";
 
 const KODE = "pmputra";
@@ -28,4 +28,19 @@ export async function bayarPiutangAction(
 ) {
   await requirePmputra();
   return bayarPiutang(KODE, agenId, jumlah, kasBank, catatan);
+}
+
+export async function getPiutangTarikContextAction(agenId: string) {
+  await requirePmputra();
+  return getPiutangTarikContext(KODE, agenId);
+}
+
+export async function tarikPiutangAction(
+  agenId: string,
+  jumlah: number,
+  kasBank: { utama?: string; logistik?: string },
+  catatan: string | null
+) {
+  await requirePmputra();
+  return tarikPiutang(KODE, agenId, jumlah, kasBank, catatan);
 }
