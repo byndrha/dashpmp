@@ -24,7 +24,23 @@ export async function syncVehicleGpsPositions(): Promise<ProviderSyncStatus[]> {
   // GPS Kendaraan is extended to another PT's delivery page, this becomes a
   // loop over each PT that has the feature (each with its own Armada list
   // and its own perusahaan_id passed to fetchPositions/resolveGpsKredensial).
-  const perusahaanId = await getMkesindoPerusahaanId();
+  //
+  // Resolved outside the per-provider try/catch below but guarded on its
+  // own: a failure here (missing perusahaan seed row, DB hiccup) can't be
+  // isolated to "one provider" the way a login/fetch failure can — neither
+  // provider can even be attempted without it — so both providers are
+  // reported failed with the same error rather than letting the whole
+  // function throw and skip the (still-independent) retention cleanup below.
+  const providers = [hinoConnectProvider, solofleetProvider];
+  let perusahaanId: number;
+  try {
+    perusahaanId = await getMkesindoPerusahaanId();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const syncedAt = new Date().toISOString();
+    await cleanupOldVehiclePositions();
+    return providers.map((p) => ({ provider: p.provider, ok: false, error: message, syncedAt }));
+  }
 
   // Step 1: build the plate -> armadaId map once per sync, from the live
   // ERP Armada list (MSSQL), skipping rows with a blank/null PlatNomor.
@@ -37,7 +53,6 @@ export async function syncVehicleGpsPositions(): Promise<ProviderSyncStatus[]> {
 
   // Step 2: run both providers in isolated try/catch — one provider's
   // failure must never block the other's.
-  const providers = [hinoConnectProvider, solofleetProvider];
   const statuses: ProviderSyncStatus[] = [];
   for (const p of providers) {
     try {

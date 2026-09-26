@@ -1,6 +1,7 @@
 // Idempotent setup for the GPS Kendaraan tables — gps_kendaraan_kredensial
-// (one row per provider's credentials) and armada_gps_riwayat (GPS ping
-// history fetched from provider APIs). Safe to re-run.
+// (one row per PT's per-provider credentials — each PT has its own Hino
+// Connect/SoloFleet account) and armada_gps_riwayat (GPS ping history
+// fetched from provider APIs). Safe to re-run.
 //
 // Usage: npx tsx scripts/migrate-gps-kendaraan-db.ts
 import "dotenv/config";
@@ -39,19 +40,24 @@ async function main() {
     await client.query(`
       ALTER TABLE gps_kendaraan_kredensial ADD COLUMN IF NOT EXISTS perusahaan_id INTEGER REFERENCES perusahaan(id)
     `);
-    await client.query(`
-      ALTER TABLE gps_kendaraan_kredensial ALTER COLUMN perusahaan_id SET NOT NULL
-    `).catch(() => {
-      // Fails only if a pre-existing row has perusahaan_id still NULL (a
-      // real credential saved under the old single-tenant schema) — leave
-      // it nullable rather than crash the migration; the app-level queries
-      // below assume NOT NULL going forward, so any such row needs manual
-      // attention, not a silent auto-fix.
+    try {
+      await client.query(`
+        ALTER TABLE gps_kendaraan_kredensial ALTER COLUMN perusahaan_id SET NOT NULL
+      `);
+    } catch (err) {
+      // Only swallow the specific "a pre-existing row has perusahaan_id
+      // still NULL" case (a real credential saved under the old
+      // single-tenant schema) — leave it nullable rather than crash the
+      // migration, since the app-level queries assume NOT NULL going
+      // forward and any such row needs manual attention, not a silent
+      // auto-fix. Any OTHER error (permissions, connection drop, lock
+      // timeout, ...) must not be misreported as this case — rethrow it.
+      if ((err as { code?: string })?.code !== "23502") throw err;
       console.warn(
         "WARNING: gps_kendaraan_kredensial has a row with NULL perusahaan_id — could not SET NOT NULL. " +
           "Assign it to the correct PT manually, then re-run this script."
       );
-    });
+    }
     await client.query(`
       ALTER TABLE gps_kendaraan_kredensial DROP CONSTRAINT IF EXISTS gps_kendaraan_kredensial_provider_key
     `);
