@@ -82,21 +82,34 @@ export function PiutangSummaryPanel({
   const [periodSummary, setPeriodSummary] = useState<EsBalokPeriodSummary | null>(null);
   const [statusOverview, setStatusOverview] = useState<EsBalokStatusBucket[] | null>(null);
   const [loading, setLoading] = useState(showEsBalokRows);
+  const [error, setError] = useState<string | null>(null);
 
+  // Mirrors PiutangPerAgenTable's own applyRange (piutang-per-agen-table.tsx)
+  // error/catch pattern for consistency: on failure, stop the skeleton,
+  // surface a short inline message, and leave the "Terapkan" button as the
+  // retry affordance (clicking it clears the error and re-fetches).
   function loadEsBalokRows(start: string, end: string) {
     if (!fetchPeriodSummary || !fetchStatusOverview) return;
     setLoading(true);
+    setError(null);
     Promise.all([fetchPeriodSummary(start, end), fetchStatusOverview()])
       .then(([period, status]) => {
         setPeriodSummary(period);
         setStatusOverview(status);
+      })
+      .catch(() => {
+        setError("Gagal memuat data periode ini.");
       })
       .finally(() => setLoading(false));
   }
 
   // Fetch on mount when the 2 optional props are supplied; when they're
   // omitted this effect is a no-op (showEsBalokRows stays false) so
-  // existing callers see no behavior change at all.
+  // existing callers see no behavior change at all. startDate/endDate are
+  // intentionally left out of the deps array: re-running this on every
+  // keystroke in the date inputs would be wrong -- only the "Terapkan"
+  // button (which reads the current startDate/endDate state directly) is
+  // meant to trigger a refetch with the user's chosen range.
   useEffect(() => {
     if (showEsBalokRows) loadEsBalokRows(startDate, endDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,8 +153,9 @@ export function PiutangSummaryPanel({
               {loading ? "Memuat..." : "Terapkan"}
             </Button>
           </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
 
-          {loading || !periodSummary || !statusOverview ? (
+          {error ? null : loading || !periodSummary || !statusOverview ? (
             <>
               <KpiRowSkeleton />
               <KpiRowSkeleton />
