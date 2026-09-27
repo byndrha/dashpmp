@@ -1,14 +1,30 @@
 // src/components/dashboard/piutang-summary-panel.tsx
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, Landmark, PiggyBank } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Flame,
+  HandCoins,
+  Landmark,
+  Percent,
+  PiggyBank,
+  Receipt,
+  Wallet,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KpiCard } from "@/components/dashboard/kpi-card";
+import { PiutangStatusPanel } from "@/components/dashboard/piutang-status-panel";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PiutangSummaryData } from "@/lib/queries/penjualan-piutang";
+import type { EsBalokPeriodSummary, EsBalokStatusBucket } from "@/lib/queries/piutang-invoice-outstanding";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -19,7 +35,39 @@ function formatMonthLabel(monthKey: string): string {
   return `${MONTH_LABELS[Number(month) - 1]} ${year}`;
 }
 
-export function PiutangSummaryPanel({ data }: { data: PiutangSummaryData }) {
+// Same helpers as piutang-per-agen-table.tsx's own todayISO/monthStartISO --
+// copied locally rather than imported, per the task brief (this file
+// doesn't import from that one).
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function monthStartISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+// Mirrors AgingPage's own KpiRowSkeleton (3 boxes, same shape as a KpiCard)
+// so the 2 new KPI rows don't jump in height once data arrives.
+function KpiRowSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {[0, 1, 2].map((i) => (
+        <Skeleton key={i} className="h-[104px] w-full rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
+export function PiutangSummaryPanel({
+  data,
+  fetchPeriodSummary,
+  fetchStatusOverview,
+}: {
+  data: PiutangSummaryData;
+  fetchPeriodSummary?: (startDate: string, endDate: string) => Promise<EsBalokPeriodSummary>;
+  fetchStatusOverview?: () => Promise<EsBalokStatusBucket[]>;
+}) {
   const [expanded, setExpanded] = useState(false);
   // `data.months` comes in oldest-first (see monthsWindow() in
   // penjualan-piutang.ts); reversed here so the most recent month reads
@@ -27,8 +75,117 @@ export function PiutangSummaryPanel({ data }: { data: PiutangSummaryData }) {
   const monthsDesc = [...data.months].reverse();
   const visibleMonths = expanded ? monthsDesc : monthsDesc.slice(0, COLLAPSED_MONTH_COUNT);
 
+  const showEsBalokRows = fetchPeriodSummary != null && fetchStatusOverview != null;
+
+  const [startDate, setStartDate] = useState(monthStartISO());
+  const [endDate, setEndDate] = useState(todayISO());
+  const [periodSummary, setPeriodSummary] = useState<EsBalokPeriodSummary | null>(null);
+  const [statusOverview, setStatusOverview] = useState<EsBalokStatusBucket[] | null>(null);
+  const [loading, setLoading] = useState(showEsBalokRows);
+
+  function loadEsBalokRows(start: string, end: string) {
+    if (!fetchPeriodSummary || !fetchStatusOverview) return;
+    setLoading(true);
+    Promise.all([fetchPeriodSummary(start, end), fetchStatusOverview()])
+      .then(([period, status]) => {
+        setPeriodSummary(period);
+        setStatusOverview(status);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  // Fetch on mount when the 2 optional props are supplied; when they're
+  // omitted this effect is a no-op (showEsBalokRows stays false) so
+  // existing callers see no behavior change at all.
+  useEffect(() => {
+    if (showEsBalokRows) loadEsBalokRows(startDate, endDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pct =
+    periodSummary && periodSummary.totalPenjualanPeriode !== 0
+      ? (data.totalPiutangSaatIni / periodSummary.totalPenjualanPeriode) * 100
+      : 0;
+
   return (
     <div className="flex flex-col gap-4">
+      {showEsBalokRows && (
+        <>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="piutang-summary-start" className="text-xs">
+                Tanggal Awal
+              </Label>
+              <Input
+                id="piutang-summary-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="piutang-summary-end" className="text-xs">
+                Tanggal Akhir
+              </Label>
+              <Input
+                id="piutang-summary-end"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <Button onClick={() => loadEsBalokRows(startDate, endDate)} disabled={loading}>
+              {loading ? "Memuat..." : "Terapkan"}
+            </Button>
+          </div>
+
+          {loading || !periodSummary || !statusOverview ? (
+            <>
+              <KpiRowSkeleton />
+              <KpiRowSkeleton />
+              <Skeleton className="h-24 w-full rounded-lg" />
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <KpiCard label="Saldo Awal Periode" value={formatRupiah(periodSummary.saldoAwalPeriode)} icon={Wallet} />
+                <KpiCard
+                  label="Pembayaran Piutang Periode Ini"
+                  value={formatRupiah(periodSummary.totalPembayaranPeriode)}
+                  icon={HandCoins}
+                  tone="positive"
+                />
+                <KpiCard
+                  label="Rasio Piutang / Omzet"
+                  value={`${pct.toFixed(1)}%`}
+                  icon={Percent}
+                  tone={pct > 30 ? "negative" : "default"}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <KpiCard label="Total Piutang Outstanding" value={formatRupiah(data.totalPiutangSaatIni)} icon={Receipt} />
+                <KpiCard
+                  label="Sudah Jatuh Tempo"
+                  value={formatRupiah(periodSummary.sudahJatuhTempo)}
+                  icon={AlertTriangle}
+                  tone="warning"
+                />
+                <KpiCard
+                  label=">90 Hari (Kritis)"
+                  value={formatRupiah(periodSummary.kritisNominal)}
+                  icon={Flame}
+                  tone="negative"
+                />
+              </div>
+              <PiutangStatusPanel
+                buckets={statusOverview.map((b) => ({ status: b.status, count: b.mitraCount, total: b.outstanding }))}
+              />
+            </>
+          )}
+        </>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <KpiCard label="Total Piutang (Hutang) Saat Ini" value={formatRupiah(data.totalPiutangSaatIni)} icon={Landmark} />
         <KpiCard label="Total Tabungan Saat Ini" value={formatRupiah(data.totalTabunganSaatIni)} icon={PiggyBank} />
