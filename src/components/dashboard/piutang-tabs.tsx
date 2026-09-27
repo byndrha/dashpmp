@@ -3,12 +3,6 @@
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-const TABS = [
-  { value: "invoice", label: "Invoice Outstanding" },
-  { value: "pembayaran", label: "Pembayaran" },
-  { value: "prioritas", label: "Prioritas Pemulihan" },
-] as const;
-
 // Purely client-side (no URL sync): each panel prop is one React element
 // created once by the server page (each wrapped in its own <Suspense> there,
 // see piutang-sections.tsx — panels stream in independently as their own
@@ -19,14 +13,30 @@ const TABS = [
 // avoids.
 export function PiutangTabs({
   invoicePanel,
+  invoiceLabel = "Invoice Outstanding",
   pembayaranPanel,
+  pembayaranLabel = "Pembayaran",
   prioritasPanel,
 }: {
   invoicePanel: React.ReactNode;
+  // Es Balok's Piutang pages reuse this first tab slot for "Rincian per
+  // Agen" instead of a genuine per-invoice table (see piutang-per-agen-table
+  // vs es-balok-invoice-outstanding-table) — MKEsindo's own /aging page
+  // never passes this, so it keeps the original label.
+  invoiceLabel?: string;
   pembayaranPanel: React.ReactNode;
+  // Es Balok's Pembayaran tab also lists Tarikan (savings withdrawals),
+  // which has no MKEsindo equivalent — MKEsindo's own /aging page never
+  // passes this, so it keeps the original "Pembayaran" label.
+  pembayaranLabel?: string;
   prioritasPanel: React.ReactNode;
 }) {
   const [activeTab, setActiveTab] = useState<string>("invoice");
+  const TABS = [
+    { value: "invoice", label: invoiceLabel },
+    { value: "pembayaran", label: pembayaranLabel },
+    { value: "prioritas", label: "Prioritas Pemulihan" },
+  ] as const;
 
   return (
     <Tabs value={activeTab} onValueChange={(v) => typeof v === "string" && setActiveTab(v)}>

@@ -4,7 +4,6 @@ import { requirePmpersadaKeuangan } from "@/lib/require-access";
 import { PiutangSummaryPanel } from "@/components/dashboard/piutang-summary-panel";
 import { PiutangPerAgenTable } from "@/components/dashboard/piutang-per-agen-table";
 import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
-import { EsBalokInvoiceOutstandingTable } from "@/components/dashboard/es-balok-invoice-outstanding-table";
 import { EsBalokCollectionPriorityTable } from "@/components/dashboard/es-balok-collection-priority-table";
 import { getEsBalokInvoiceOutstanding } from "@/lib/queries/piutang-invoice-outstanding";
 import { getEsBalokCollectionPriority, getEsBalokPembayaranByDate } from "@/lib/queries/piutang-priority-es-balok";
@@ -82,10 +81,21 @@ export default async function PmpersadaPiutangPage() {
         fetchStatusOverview={getEsBalokStatusOverviewAction}
       />
       <PiutangTabs
-        invoicePanel={<EsBalokInvoiceOutstandingTable rows={invoiceRows} />}
+        invoiceLabel="Rincian per Agen"
+        invoicePanel={
+          <PiutangPerAgenTable
+            initialRows={perAgen}
+            fetchAction={getPiutangPerAgenAction}
+            fetchBayarContext={getPiutangBayarContextAction}
+            submitBayar={bayarPiutangAction}
+            fetchTarikContext={getPiutangTarikContextAction}
+            submitTarik={tarikPiutangAction}
+          />
+        }
         pembayaranPanel={
           <EsBalokPembayaranPanelContainer initialRows={pembayaranRows} fetchByDate={getEsBalokPembayaranByDateAction} />
         }
+        pembayaranLabel="Pembayaran & Tarikan"
         prioritasPanel={
           <EsBalokCollectionPriorityTable
             rows={priorityRows}
@@ -93,18 +103,6 @@ export default async function PmpersadaPiutangPage() {
             onRemoveTarget={removeEsBalokCollectionTargetAction}
           />
         }
-      />
-      <div>
-        <h2 className="font-display text-lg font-semibold">Rincian per Agen</h2>
-        <p className="text-sm text-muted-foreground">Tabungan/Hutang Awal, Pesanan, Retur, Pembayaran, Tarikan, dan Saldo Akhir.</p>
-      </div>
-      <PiutangPerAgenTable
-        initialRows={perAgen}
-        fetchAction={getPiutangPerAgenAction}
-        fetchBayarContext={getPiutangBayarContextAction}
-        submitBayar={bayarPiutangAction}
-        fetchTarikContext={getPiutangTarikContextAction}
-        submitTarik={tarikPiutangAction}
       />
     </div>
   );
