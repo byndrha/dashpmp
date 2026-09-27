@@ -57,9 +57,17 @@ export default async function PmputraPiutangPage() {
   // via the fetchPeriodSummary/fetchStatusOverview Server Actions passed
   // below. Calling those 2 queries again here would just be a discarded,
   // duplicate DB round trip.
+  // Must be midnight-truncated "today", NOT the current instant --
+  // getEsBalokPembayaranByDate filters a literal [@date, @date+1day) window,
+  // so passing `new Date()` (e.g. 14:32) would exclude every payment made
+  // earlier today and instead leak into tomorrow. Constructed the same way
+  // getEsBalokPembayaranByDateAction truncates its own `dateISO` input, so
+  // the initial render matches exactly what reselecting "today" in the
+  // Pembayaran date-picker would fetch.
+  const todayMidnight = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`);
   const [priorityRows, pembayaranRows] = await Promise.all([
     getEsBalokCollectionPriority(KODE, invoiceRows),
-    getEsBalokPembayaranByDate(KODE, new Date(), invoiceRows),
+    getEsBalokPembayaranByDate(KODE, todayMidnight, invoiceRows),
   ]);
 
   return (
