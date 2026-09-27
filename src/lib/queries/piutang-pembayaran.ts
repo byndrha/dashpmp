@@ -12,7 +12,7 @@ import { computeProportionalAllocation, type AllocationItem } from "@/lib/piutan
 // carrying "/GE/TB" for PMPersada's own.
 export const PMPAKIS_OWN_BRANCH_ID = "011";
 
-function branchFilterFor(kode: string, sumber: SumberAgen): string | null {
+export function branchFilterFor(kode: string, sumber: SumberAgen): string | null {
   if (sumber !== "logistik") return null;
   if (kode === "pmpersada") return PMPERSADA_OWN_BRANCH_ID;
   if (kode === "pmpakis") return PMPAKIS_OWN_BRANCH_ID;

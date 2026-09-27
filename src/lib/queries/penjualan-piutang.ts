@@ -210,7 +210,7 @@ export interface PiutangSummaryData {
 // rule (identity/baseline fields are utama-only), confirmed live that this
 // specific report adds both databases' baseline fields together.
 
-interface AgenNetRow {
+export interface AgenNetRow {
   AgenID: string;
   Net: number;
 }
@@ -221,7 +221,7 @@ interface AgenNetRow {
 // shared connection pool and briefly starved every other page's queries.
 // Each of these three queries returns at most ~250 rows (one per Agen).
 
-async function getAgenBaselineNet(kode: string, sumber: SumberAgen): Promise<AgenNetRow[]> {
+export async function getAgenBaselineNet(kode: string, sumber: SumberAgen): Promise<AgenNetRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
   const result = await pool.request().query(`
@@ -435,7 +435,7 @@ interface AgenRosterRow {
 // DashboardAgenProfil/DashboardAgenLocation tables the Mitra module reads
 // (see mitra-es-balok.ts's getAgenRows) -- joined here so the per-Agen
 // Piutang card can show them without a second round trip per card.
-async function getAgenRoster(kode: string): Promise<AgenRosterRow[]> {
+export async function getAgenRoster(kode: string): Promise<AgenRosterRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, "utama");
   const pool = await getCompanyPool(physKode, label);
   const result = await pool.request().query(`
@@ -719,7 +719,7 @@ export async function getPiutangPerAgen(kode: string, start: Date, end: Date): P
   });
 }
 
-async function getPemesananNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
+export async function getPemesananNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
   const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
@@ -739,7 +739,7 @@ async function getPemesananNetByAgenBefore(kode: string, sumber: SumberAgen, sta
   return result.recordset as AgenNetRow[];
 }
 
-async function getPembayaranNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
+export async function getPembayaranNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
   const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
