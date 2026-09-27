@@ -85,8 +85,8 @@ export async function setEsBalokCollectionTargetAction(
   agenId: string,
   input: { targetDate: string | null; targetAmount: number | null; note: string | null }
 ): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await requirePmpersadaKeuangan();
   try {
-    const session = await requirePmpersadaKeuangan();
     await setEsBalokCollectionTarget(KODE, agenId, input, String(session.user.id));
     return { success: true };
   } catch (error) {
@@ -95,8 +95,8 @@ export async function setEsBalokCollectionTargetAction(
 }
 
 export async function removeEsBalokCollectionTargetAction(agenId: string): Promise<{ success: true } | { success: false; error: string }> {
+  await requirePmpersadaKeuangan();
   try {
-    await requirePmpersadaKeuangan();
     await removeEsBalokCollectionTarget(KODE, agenId);
     return { success: true };
   } catch (error) {
