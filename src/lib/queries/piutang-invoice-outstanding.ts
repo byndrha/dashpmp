@@ -75,13 +75,28 @@ export function esBalokStatus(daysOverdue: number | null): EsBalokPiutangStatus 
 // even runs (confirmed live). 9999-12-31 is the actual max valid value.
 const MAX_DATE = new Date(9999, 11, 31);
 
-// Roster-narrowing step: only Agen with a currently-positive net balance
-// are worth fetching per-row data for. Same purpose (and same production
-// incident being avoided -- see getPiutangPerAgen's own comments in
-// penjualan-piutang.ts) as getPiutangSummary/getPiutangPerAgen's existing
-// roster-narrowing pattern; this MUST run before Part B's per-row fetch,
-// not after, or Part B still fetches every Agen's raw rows.
-async function getAgenIdsWithPositiveBalance(kode: string): Promise<Set<string>> {
+// Roster-narrowing step: only Agen with a currently-positive net balance in
+// THIS SPECIFIC SOURCE are worth fetching per-row data for. Same purpose
+// (and same production incident being avoided -- see getPiutangPerAgen's
+// own comments in penjualan-piutang.ts) as getPiutangSummary/
+// getPiutangPerAgen's existing roster-narrowing pattern; this MUST run
+// before Part B's per-row fetch, not after, or Part B still fetches every
+// Agen's raw rows.
+//
+// FIXED (code review, per-source data-loss bug): an earlier version of this
+// function combined utama+logistik net into ONE map before filtering,
+// which silently dropped any Agen whose two sources have opposite-signed
+// balances (e.g. utama = -100 credit, logistik = +50 real debt -> combined
+// = -50 -> filtered out entirely, so getRawFifoInputs never even fetched
+// that Agen's logistik rows and the genuinely-outstanding +50 never became
+// an EsBalokInvoiceRow). This is exactly the same per-source-independence
+// principle the FIFO loop itself already respects (utama and logistik are
+// legally separate PTs, one can never offset the other -- see
+// bayarPiutang/tarikPiutang in piutang-pembayaran.ts) -- the roster filter
+// must respect it too, or it undoes the FIFO's own correctness before the
+// FIFO ever runs. Returns one Agen-ID list PER source, each filtered using
+// only that source's own baseline+Pesanan+Pembayaran net.
+async function getAgenIdsWithPositiveBalance(kode: string): Promise<Record<SumberAgen, string[]>> {
   const sources: SumberAgen[] = ["utama", "logistik"];
   const [baselineBySource, pemesananNetBySource, pembayaranNetBySource] = await Promise.all([
     Promise.all(sources.map((s) => getAgenBaselineNet(kode, s))),
@@ -89,19 +104,20 @@ async function getAgenIdsWithPositiveBalance(kode: string): Promise<Set<string>>
     Promise.all(sources.map((s) => getPembayaranNetByAgenBefore(kode, s, MAX_DATE))),
   ]);
 
-  const netByAgen = new Map<string, number>();
-  function addNet(agenId: string, delta: number) {
-    netByAgen.set(agenId, (netByAgen.get(agenId) ?? 0) + delta);
-  }
-  for (const rows of [...baselineBySource, ...pemesananNetBySource, ...pembayaranNetBySource] as AgenNetRow[][]) {
-    for (const r of rows) addNet(r.AgenID, r.Net);
-  }
-
-  const positive = new Set<string>();
-  for (const [agenId, net] of netByAgen) {
-    if (net > 0) positive.add(agenId);
-  }
-  return positive;
+  const result: Record<SumberAgen, string[]> = { utama: [], logistik: [] };
+  sources.forEach((sumber, i) => {
+    const netByAgen = new Map<string, number>();
+    function addNet(agenId: string, delta: number) {
+      netByAgen.set(agenId, (netByAgen.get(agenId) ?? 0) + delta);
+    }
+    for (const rows of [baselineBySource[i], pemesananNetBySource[i], pembayaranNetBySource[i]] as AgenNetRow[][]) {
+      for (const r of rows) addNet(r.AgenID, r.Net);
+    }
+    for (const [agenId, net] of netByAgen) {
+      if (net > 0) result[sumber].push(agenId);
+    }
+  });
+  return result;
 }
 
 interface PesananRawRow {
@@ -265,13 +281,14 @@ async function getInvoiceOutstandingForSource(
 export async function getEsBalokInvoiceOutstanding(kode: string): Promise<EsBalokInvoiceRow[]> {
   const sources: SumberAgen[] = ["utama", "logistik"];
 
-  const [positiveAgenIds, roster] = await Promise.all([getAgenIdsWithPositiveBalance(kode), getAgenRoster(kode)]);
-  const agenIds = [...positiveAgenIds];
+  const [agenIdsBySource, roster] = await Promise.all([getAgenIdsWithPositiveBalance(kode), getAgenRoster(kode)]);
 
   const rosterByAgenId = new Map<string, { nama: string; segmentasi: Segmentasi | null }>();
   for (const r of roster) rosterByAgenId.set(r.AgenID, { nama: r.Nama, segmentasi: r.Segmentasi });
 
-  const bySource = await Promise.all(sources.map((s) => getInvoiceOutstandingForSource(kode, s, agenIds, rosterByAgenId)));
+  const bySource = await Promise.all(
+    sources.map((s) => getInvoiceOutstandingForSource(kode, s, agenIdsBySource[s], rosterByAgenId))
+  );
   return bySource.flat();
 }
 
