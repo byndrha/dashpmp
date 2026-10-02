@@ -168,20 +168,27 @@ const BRANCH_ID = "011";
 const DEPARTMENT_ID = "0110";
 const DOC_SUFFIX = "003/001";
 
-async function nextDeliveryOrderId(pool: sql.ConnectionPool): Promise<string> {
-  const result = await pool.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderID AS INT)) AS MaxID FROM DeliveryOrder`);
+// Semua helper next*Id/next*VoucherSeq di bawah WAJIB dipanggil dengan
+// `transaction` milik takeAwaySelesaiMuat, BUKAN `pool`. Dengan `pool`
+// (koneksi lain), SELECT MAX(...) atas tabel detail menunggu lock baris
+// detail baris-sebelumnya yang belum commit di transaksi ini (RCSI OFF) --
+// transaksi menunggu query pool, query pool menunggu transaksi, sampai
+// requestTimeout 40 dtk. Hanya kena SO dengan >=2 baris (mis. Jual + Bonus);
+// SO 1-baris lolos karena baris detail pertama belum ada saat ID dibaca.
+async function nextDeliveryOrderId(db: sql.ConnectionPool | sql.Transaction): Promise<string> {
+  const result = await db.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderID AS INT)) AS MaxID FROM DeliveryOrder`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-async function nextDeliveryOrderDetailId(pool: sql.ConnectionPool): Promise<string> {
-  const result = await pool.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderDetailID AS INT)) AS MaxID FROM DeliveryOrderDetail`);
+async function nextDeliveryOrderDetailId(db: sql.ConnectionPool | sql.Transaction): Promise<string> {
+  const result = await db.request().query(`SELECT MAX(TRY_CAST(DeliveryOrderDetailID AS INT)) AS MaxID FROM DeliveryOrderDetail`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-async function nextDOVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Promise<string> {
-  const result = await pool
+async function nextDOVoucherSeq(db: sql.ConnectionPool | sql.Transaction, yearMonth: string): Promise<string> {
+  const result = await db
     .request()
     .input("pattern", sql.VarChar(64), `MKE/DO/%/${yearMonth}/${DOC_SUFFIX}`).query(`
       SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq FROM DeliveryOrder WHERE VoucherNo LIKE @pattern
@@ -190,20 +197,20 @@ async function nextDOVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Pr
   return String(maxSeq + 1).padStart(6, "0");
 }
 
-async function nextSalesInvoiceId(pool: sql.ConnectionPool): Promise<string> {
-  const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceID AS INT)) AS MaxID FROM SalesInvoice`);
+async function nextSalesInvoiceId(db: sql.ConnectionPool | sql.Transaction): Promise<string> {
+  const result = await db.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceID AS INT)) AS MaxID FROM SalesInvoice`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-async function nextSalesInvoiceDetailId(pool: sql.ConnectionPool): Promise<string> {
-  const result = await pool.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceDetailID AS INT)) AS MaxID FROM SalesInvoiceDetail`);
+async function nextSalesInvoiceDetailId(db: sql.ConnectionPool | sql.Transaction): Promise<string> {
+  const result = await db.request().query(`SELECT MAX(TRY_CAST(SalesInvoiceDetailID AS INT)) AS MaxID FROM SalesInvoiceDetail`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(8, "0");
 }
 
-async function nextSIVoucherSeq(pool: sql.ConnectionPool, yearMonth: string): Promise<string> {
-  const result = await pool
+async function nextSIVoucherSeq(db: sql.ConnectionPool | sql.Transaction, yearMonth: string): Promise<string> {
+  const result = await db
     .request()
     .input("pattern", sql.VarChar(64), `MKE/SI/%/${yearMonth}/${DOC_SUFFIX}`).query(`
       SELECT MAX(TRY_CAST(SUBSTRING(VoucherNo, 8, 6) AS INT)) AS MaxSeq FROM SalesInvoice WHERE VoucherNo LIKE @pattern
@@ -275,8 +282,8 @@ export async function takeAwaySelesaiMuat(
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    const deliveryOrderId = await nextDeliveryOrderId(pool);
-    const doVoucherSeq = await nextDOVoucherSeq(pool, yearMonth);
+    const deliveryOrderId = await nextDeliveryOrderId(transaction);
+    const doVoucherSeq = await nextDOVoucherSeq(transaction, yearMonth);
     const doVoucherNo = `MKE/DO/${doVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
     const doTransDate = getNaiveWibTransDate();
     await new sql.Request(transaction)
@@ -302,7 +309,7 @@ export async function takeAwaySelesaiMuat(
       `);
 
     for (const sod of soDetails) {
-      const detailId = await nextDeliveryOrderDetailId(pool);
+      const detailId = await nextDeliveryOrderDetailId(transaction);
       await new sql.Request(transaction)
         .input("id", sql.VarChar(16), detailId)
         .input("doId", sql.VarChar(16), deliveryOrderId)
@@ -334,8 +341,8 @@ export async function takeAwaySelesaiMuat(
       deliveryOrderId: null,
     });
 
-    const salesInvoiceId = await nextSalesInvoiceId(pool);
-    const siVoucherSeq = await nextSIVoucherSeq(pool, yearMonth);
+    const salesInvoiceId = await nextSalesInvoiceId(transaction);
+    const siVoucherSeq = await nextSIVoucherSeq(transaction, yearMonth);
     const siVoucherNo = `MKE/SI/${siVoucherSeq}/${yearMonth}/${DOC_SUFFIX}`;
     const siTransDate = getNaiveWibTransDate();
     await new sql.Request(transaction)
@@ -379,7 +386,7 @@ export async function takeAwaySelesaiMuat(
       `);
 
     for (const sod of soDetails) {
-      const detailId = await nextSalesInvoiceDetailId(pool);
+      const detailId = await nextSalesInvoiceDetailId(transaction);
       await new sql.Request(transaction)
         .input("id", sql.VarChar(16), detailId)
         .input("siId", sql.VarChar(16), salesInvoiceId)
