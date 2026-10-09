@@ -21,6 +21,10 @@ export interface ComputedDoc {
   currencyId: string;
   rate: number;
   lines: GLLine[];
+  // true bila salah satu baris detail memakai ItemAverage bulan SEBELUMNYA
+  // (bulan dokumen belum di-closing ERP) -- lihat getItemAverage. Memo jurnal
+  // diberi "[PROVISIONAL]" supaya mudah dilacak/dibersihkan nanti.
+  provisional: boolean;
   // Hanya terisi utk docType SALESINVOICE (VoucherNo DeliveryOrder induknya,
   // sudah diresolusi oleh computeBacklogForDate). null utk DELIVERYORDER.
   // Dipakai postBacklogForDate (fix round 1, Finding 1) utk memastikan SI
@@ -228,12 +232,34 @@ export async function warmItemAccountMappingCache(
 // ItemID/Year/Month yang sama, jadi drift ini tidak bisa terjadi di alur
 // produksi -- hanya muncul saat memvalidasi ulang dokumen historis yang
 // Average bulannya sudah bergerak sejak tanggal posting aslinya.
+//
+// FALLBACK PROVISIONAL (9 Okt 2026): ERP baru membuat baris ItemAverage bulan
+// M+1 saat ia menjalankan closing bulan M (baris Sep dibuat 11 Sep 05:17 saat
+// closing Agustus; baris Okt belum ada sampai closing September). Tanpa
+// fallback, SEMUA DO/SI di awal tiap bulan di-skip (real-time maupun tombol
+// Proses) sampai accounting closing -- panel Kesehatan Posting GL merah ~10
+// hari tiap bulan. Karena itu bila baris bulan dokumen belum ada, dipakai baris
+// TERAKHIR sebelumnya (maks. BATAS_FALLBACK_BULAN bulan ke belakang, dan
+// Average > 0 -- baris berisi 0 bukan nilai yang layak dijadikan biaya) dan
+// hasilnya ditandai provisional=true -> Memo jurnal diberi "[PROVISIONAL]".
+// Dasar: Average item 019/0110 konstan 330,30/331,61 dari Mar-Sep 2026, dan
+// presedan closing Agustus: ERP menimpa jurnal dashboard tanpa duplikasi, jadi
+// jurnal provisional ikut diganti nilai resmi saat ERP closing. Bulan dokumen
+// itu SENDIRI yang sudah punya baris tetap selalu didahulukan (bukan
+// provisional).
+const BATAS_FALLBACK_BULAN = 2;
+
+interface ItemAverageHasil {
+  average: number;
+  provisional: boolean;
+}
+
 async function getItemAverage(
   pool: sql.ConnectionPool | sql.Transaction,
   itemId: string,
   year: number,
   month: number
-): Promise<number | null> {
+): Promise<ItemAverageHasil | null> {
   const result = await pool
     .request()
     .input("itemId", sql.VarChar(16), itemId)
@@ -241,7 +267,21 @@ async function getItemAverage(
     .input("month", sql.Int, month)
     .query(`SELECT TOP 1 Average FROM ItemAverage WHERE ItemID = @itemId AND Year = @year AND Month = @month AND IsDeleted = 0`);
   const row = result.recordset[0] as { Average: number } | undefined;
-  return row ? row.Average : null;
+  if (row) return { average: row.Average, provisional: false };
+
+  const fallback = await pool
+    .request()
+    .input("itemId", sql.VarChar(16), itemId)
+    .input("periode", sql.Int, year * 12 + month)
+    .input("batas", sql.Int, BATAS_FALLBACK_BULAN)
+    .query(`
+      SELECT TOP 1 Average FROM ItemAverage
+      WHERE ItemID = @itemId AND IsDeleted = 0 AND Average > 0
+        AND (Year * 12 + Month) < @periode AND (Year * 12 + Month) >= @periode - @batas
+      ORDER BY Year DESC, Month DESC
+    `);
+  const fb = fallback.recordset[0] as { Average: number } | undefined;
+  return fb ? { average: fb.Average, provisional: true } : null;
 }
 
 export interface DokumenBacklog {
@@ -390,13 +430,14 @@ async function hitungGLDeliveryOrder(
   pool: sql.ConnectionPool | sql.Transaction,
   doc: DokumenBacklog,
   mapping: Map<string, ItemAccountMapping>
-): Promise<{ lines: GLLine[] } | { alasan: string }> {
+): Promise<{ lines: GLLine[]; provisional: boolean } | { alasan: string }> {
   const detail = await pool
     .request()
     .input("id", sql.VarChar(16), doc.documentId)
     .query(`SELECT ItemID, Qty FROM DeliveryOrderDetail WHERE DeliveryOrderID = @id`);
 
   let totalBiaya = 0;
+  let provisional = false;
   const kreditPerAkun = new Map<string, number>();
   const tahun = doc.transDate.getUTCFullYear();
   const bulan = doc.transDate.getUTCMonth() + 1;
@@ -409,8 +450,9 @@ async function hitungGLDeliveryOrder(
     if (average === null) {
       return { alasan: `Item ${row.ItemID} tidak punya data ItemAverage untuk ${bulan}/${tahun}` };
     }
+    if (average.provisional) provisional = true;
 
-    const biaya = row.Qty * average;
+    const biaya = row.Qty * average.average;
     totalBiaya += biaya;
     kreditPerAkun.set(akun.persediaanAccountNo, (kreditPerAkun.get(akun.persediaanAccountNo) ?? 0) + biaya);
   }
@@ -419,14 +461,14 @@ async function hitungGLDeliveryOrder(
   for (const [accountNo, jumlah] of kreditPerAkun) {
     lines.push({ accountNo, debit: 0, credit: jumlah });
   }
-  return { lines };
+  return { lines, provisional };
 }
 
 async function hitungGLSalesInvoice(
   pool: sql.ConnectionPool | sql.Transaction,
   doc: DokumenBacklog,
   mapping: Map<string, ItemAccountMapping>
-): Promise<{ lines: GLLine[] } | { alasan: string }> {
+): Promise<{ lines: GLLine[]; provisional: boolean } | { alasan: string }> {
   if (!doc.deliveryOrderId) return { alasan: "SalesInvoice tidak punya DeliveryOrderID induk" };
   // Catatan: pengecekan "DO induk sudah ter-GL atau belum" dilakukan di
   // computeBacklogForDate (Step 5), BUKAN di sini -- fungsi ini murni
@@ -463,6 +505,7 @@ async function hitungGLSalesInvoice(
 
   let totalBiaya = 0;
   let totalPendapatan = 0;
+  let provisional = false;
   const kreditPendapatanPerAkun = new Map<string, number>();
   const debitHppPerAkun = new Map<string, number>();
   const tahun = doc.transDate.getUTCFullYear();
@@ -477,7 +520,9 @@ async function hitungGLSalesInvoice(
       return { alasan: `Item ${row.ItemID} tidak punya data ItemAverage untuk ${bulan}/${tahun}` };
     }
 
-    const biaya = row.Qty * average;
+    if (average.provisional) provisional = true;
+
+    const biaya = row.Qty * average.average;
     totalBiaya += biaya;
     totalPendapatan += row.Amount;
     kreditPendapatanPerAkun.set(
@@ -493,7 +538,7 @@ async function hitungGLSalesInvoice(
   ];
   for (const [accountNo, jumlah] of kreditPendapatanPerAkun) lines.push({ accountNo, debit: 0, credit: jumlah });
   for (const [accountNo, jumlah] of debitHppPerAkun) lines.push({ accountNo, debit: jumlah, credit: 0 });
-  return { lines };
+  return { lines, provisional };
 }
 
 export async function computeBacklogForDate(tanggal: string): Promise<BacklogPreview> {
@@ -521,6 +566,7 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
       currencyId: doc.currencyId,
       rate: doc.rate,
       lines: hasil.lines,
+      provisional: hasil.provisional,
       parentDoVoucherNo: null,
     });
   }
@@ -577,6 +623,7 @@ export async function computeBacklogForDate(tanggal: string): Promise<BacklogPre
       currencyId: doc.currencyId,
       rate: doc.rate,
       lines: hasil.lines,
+      provisional: hasil.provisional,
       parentDoVoucherNo: doVoucherNo,
     });
   }
@@ -788,7 +835,7 @@ async function postSatuDokumen(
     // acquireGLPostingApplock's own comment di atas.
     await acquireGLPostingApplock(transaction);
 
-    const memo = `[DASHPMP-BACKFILL] ${tanggalProses}`;
+    const memo = `[DASHPMP-BACKFILL] ${tanggalProses}${doc.provisional ? " [PROVISIONAL]" : ""}`;
     const hasilTulis = await tulisBarisGL(transaction, doc, memo);
     if (!hasilTulis.posted) {
       await transaction.rollback();
@@ -1022,7 +1069,7 @@ export async function postDeliveryOrderRealtime(
     const tulis = await tulisBarisGL(
       transaction,
       { ...doc, docType: "DELIVERYORDER", lines: hasil.lines },
-      "[DASHPMP-REALTIME]"
+      hasil.provisional ? "[DASHPMP-REALTIME] [PROVISIONAL]" : "[DASHPMP-REALTIME]"
     );
     return tulis.posted ? { posted: true } : { posted: false, alasan: tulis.alasan };
   } catch (err) {
@@ -1064,7 +1111,7 @@ export async function postSalesInvoiceRealtime(
     const tulis = await tulisBarisGL(
       transaction,
       { ...doc, docType: "SALESINVOICE", lines: hasil.lines },
-      "[DASHPMP-REALTIME]"
+      hasil.provisional ? "[DASHPMP-REALTIME] [PROVISIONAL]" : "[DASHPMP-REALTIME]"
     );
     return tulis.posted ? { posted: true } : { posted: false, alasan: tulis.alasan };
   } catch (err) {
