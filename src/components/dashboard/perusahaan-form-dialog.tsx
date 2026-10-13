@@ -15,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
+import { BychatIntegrasiSection } from "@/components/dashboard/bychat-integrasi-section";
 import { PERUSAHAAN_STATUSES, type PerusahaanStatus, PERUSAHAAN_JENIS_BISNIS, type PerusahaanJenisBisnis } from "@/lib/perusahaan-status";
 import type { PerusahaanRow, PerusahaanInput } from "@/lib/queries/perusahaan";
 import type { PerusahaanDirektoriOption } from "@/lib/queries/akun";
@@ -375,6 +376,8 @@ export function PerusahaanFormDialog({
               })()}
             </fieldset>
           )}
+
+          {direktoriId != null && <BychatIntegrasiSection perusahaanId={direktoriId} />}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="catatan">Catatan</Label>

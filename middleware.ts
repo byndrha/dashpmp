@@ -44,7 +44,10 @@ const { auth } = NextAuth(authConfig);
 // matcher regex alone — the matcher below only trims obvious static-asset
 // traffic for performance; the real "is this route gated" decision lives
 // here where it's easy to audit.
-const PUBLIC_PREFIXES = ["/login", "/api", "/mkesindo/invoice", "/mkesindo/payment"];
+// "/embed" = halaman iframe ByChat (Dashboard App): otoritasnya token
+// bertanda tangan ByChat yang diverifikasi di /api/bychat/*, BUKAN sesi
+// login dashpmp, jadi tidak boleh dialihkan ke /login.
+const PUBLIC_PREFIXES = ["/login", "/api", "/embed", "/kartu", "/mkesindo/invoice", "/mkesindo/payment"];
 
 // Shared across every PT and exempt from the per-PT confinement below, but
 // NOT public like PUBLIC_PREFIXES above — these still rely on their own
@@ -62,10 +65,29 @@ const SHARED_PREFIXES = ["/akses-ditolak", "/static"];
 // this fixes: driver-app and satpam-app now live inside the same layout
 // subtree they're being redirected to, and that layout has no other way to
 // know it's already looking at its own redirect target).
+// Aturan framing: HANYA /embed/* boleh dimuat di iframe dan hanya oleh
+// origin ByChat (env BYCHAT_EMBED_ORIGINS, dipisah koma; bawaan
+// https://chat.byndrha.id). Semua rute lain hanya boleh di-frame oleh
+// origin sendiri (clickjacking). Cloudflare/Coolify tidak boleh menambah
+// X-Frame-Options: DENY untuk /embed/* atau iframe akan diblokir.
+function frameAncestors(path: string): string {
+  if (path === "/embed" || path.startsWith("/embed/")) {
+    const origins = (process.env.BYCHAT_EMBED_ORIGINS || "https://chat.byndrha.id")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+    return `frame-ancestors ${origins.join(" ")}`;
+  }
+  return "frame-ancestors 'self'";
+}
+
 function passThrough(req: NextRequest) {
   const headers = new Headers(req.headers);
   headers.set("x-pathname", req.nextUrl.pathname);
-  return NextResponse.next({ request: { headers } });
+  const res = NextResponse.next({ request: { headers } });
+  res.headers.set("Content-Security-Policy", frameAncestors(req.nextUrl.pathname));
+  if (!req.nextUrl.pathname.startsWith("/embed")) res.headers.set("X-Frame-Options", "SAMEORIGIN");
+  return res;
 }
 
 export const middleware = auth((req) => {
