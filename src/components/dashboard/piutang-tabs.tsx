@@ -17,6 +17,7 @@ export function PiutangTabs({
   pembayaranPanel,
   pembayaranLabel = "Pembayaran",
   prioritasPanel,
+  penagihanPanel,
 }: {
   invoicePanel: React.ReactNode;
   // Es Balok's Piutang pages reuse this first tab slot for "Rincian per
@@ -30,13 +31,16 @@ export function PiutangTabs({
   // passes this, so it keeps the original "Pembayaran" label.
   pembayaranLabel?: string;
   prioritasPanel: React.ReactNode;
+  // Tab ekstensi ByChat (hanya MKEsindo untuk saat ini); null = tab tidak ditampilkan.
+  penagihanPanel?: React.ReactNode;
 }) {
   const [activeTab, setActiveTab] = useState<string>("invoice");
   const TABS = [
     { value: "invoice", label: invoiceLabel },
     { value: "pembayaran", label: pembayaranLabel },
     { value: "prioritas", label: "Prioritas Pemulihan" },
-  ] as const;
+    ...(penagihanPanel ? [{ value: "penagihan", label: "Penagihan ByChat" }] : []),
+  ];
 
   return (
     <Tabs value={activeTab} onValueChange={(v) => typeof v === "string" && setActiveTab(v)}>
@@ -54,6 +58,7 @@ export function PiutangTabs({
       <TabsContent value="invoice">{invoicePanel}</TabsContent>
       <TabsContent value="pembayaran">{pembayaranPanel}</TabsContent>
       <TabsContent value="prioritas">{prioritasPanel}</TabsContent>
+      {penagihanPanel && <TabsContent value="penagihan">{penagihanPanel}</TabsContent>}
     </Tabs>
   );
 }

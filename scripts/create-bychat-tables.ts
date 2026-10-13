@@ -76,7 +76,16 @@ async function main() {
     await client.query(
       `CREATE INDEX IF NOT EXISTS ix_kartu_tautan_mitra ON kartu_piutang_tautan (perusahaan_kode, mitra_id, kedaluwarsa DESC)`
     );
-    console.log("perusahaan_bychat_koneksi + bychat_kirim_audit + kartu_piutang_tautan ready.");
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS kartu_piutang_akses (
+        id BIGSERIAL PRIMARY KEY,
+        token VARCHAR(16) NOT NULL,
+        ip_hash VARCHAR(16),
+        waktu TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS ix_kartu_akses_token ON kartu_piutang_akses (token, waktu DESC)`);
+    console.log("perusahaan_bychat_koneksi + bychat_kirim_audit + kartu_piutang_tautan + kartu_piutang_akses ready.");
   } finally {
     await client.end();
   }

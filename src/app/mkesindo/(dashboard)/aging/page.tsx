@@ -7,6 +7,7 @@ import { getBusinessDateISO } from "@/lib/business-date";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PenagihanByChatPanel } from "@/components/dashboard/penagihan-bychat-panel";
 import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
 import {
   PiutangKpiRowPeriode,
@@ -110,6 +111,7 @@ export default async function AgingPage({
             <PiutangPrioritasPanel />
           </Suspense>
         }
+        penagihanPanel={<PenagihanByChatPanel />}
       />
     </div>
   );

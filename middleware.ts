@@ -87,6 +87,11 @@ function passThrough(req: NextRequest) {
   const res = NextResponse.next({ request: { headers } });
   res.headers.set("Content-Security-Policy", frameAncestors(req.nextUrl.pathname));
   if (!req.nextUrl.pathname.startsWith("/embed")) res.headers.set("X-Frame-Options", "SAMEORIGIN");
+  if (req.nextUrl.pathname === "/kartu" || req.nextUrl.pathname.startsWith("/kartu/")) {
+    res.headers.set("Cache-Control", "no-store");
+    res.headers.set("X-Robots-Tag", "noindex, nofollow");
+    res.headers.set("Referrer-Policy", "no-referrer");
+  }
   return res;
 }
 

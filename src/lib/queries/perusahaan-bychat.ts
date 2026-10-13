@@ -146,3 +146,32 @@ export async function upsertByChatKoneksi(input: UpsertByChatInput): Promise<voi
 export async function deleteByChatKoneksi(perusahaanId: number): Promise<void> {
   await getPgPool().query(`DELETE FROM perusahaan_bychat_koneksi WHERE perusahaan_id = $1`, [perusahaanId]);
 }
+
+// ------------------------------------------------------------- webhook pesan masuk
+// Rahasia webhook (dibuat otomatis oleh ByChat, satu per akun = per PT) tersimpan
+// terenkripsi; hanya server yang membacanya, tidak pernah dikembalikan ke klien.
+
+export async function getWebhookSecretByAccountId(accountId: number): Promise<{ perusahaanId: number; secret: string } | null> {
+  const r = await getPgPool().query(
+    `SELECT perusahaan_id, webhook_secret_encrypted FROM perusahaan_bychat_koneksi WHERE bychat_account_id = $1 AND aktif = TRUE`,
+    [accountId]
+  );
+  const row = r.rows[0];
+  if (!row?.webhook_secret_encrypted) return null;
+  return { perusahaanId: row.perusahaan_id, secret: decryptSecret(row.webhook_secret_encrypted) };
+}
+
+export async function adaWebhookSecret(perusahaanId: number): Promise<boolean> {
+  const r = await getPgPool().query(`SELECT webhook_secret_encrypted IS NOT NULL AS ada FROM perusahaan_bychat_koneksi WHERE perusahaan_id = $1`, [perusahaanId]);
+  return r.rows[0]?.ada === true;
+}
+
+export async function simpanWebhookSecret(perusahaanId: number, secret: string | null): Promise<void> {
+  const nilai = (secret ?? "").trim();
+  if (nilai && nilai.length < 16) throw new AppError("Rahasia webhook terlalu pendek (disalin dari ByChat, 24 karakter).");
+  const r = await getPgPool().query(
+    `UPDATE perusahaan_bychat_koneksi SET webhook_secret_encrypted = $2, updated_at = now() WHERE perusahaan_id = $1`,
+    [perusahaanId, nilai ? encryptSecret(nilai) : null]
+  );
+  if (r.rowCount === 0) throw new AppError("Simpan dulu koneksi ByChat PT ini.");
+}

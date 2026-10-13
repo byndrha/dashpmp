@@ -47,7 +47,7 @@ export async function kirimTerakhir24Jam(ptKode: string, mitraId: string): Promi
 
 interface AuditInput {
   koneksi: ResolvedByChat;
-  claims: BychatClaims;
+  agen: { id: number | null; name: string; email: string };
   mitra: MitraRingkas;
   nomor: string;
   idemKey: string;
@@ -68,7 +68,7 @@ async function catatAudit(a: AuditInput): Promise<void> {
          conversation_id, message_id, idempotency_key, status, http_status, pesan_galat, total_piutang, tanggal_posisi)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [
-        a.koneksi.perusahaanKode, a.mitra.id, a.mitra.nama, a.nomor, a.claims.agent.id, a.claims.agent.name, a.claims.agent.email,
+        a.koneksi.perusahaanKode, a.mitra.id, a.mitra.nama, a.nomor, a.agen.id, a.agen.name, a.agen.email,
         a.koneksi.bychatAccountId, a.conversationId, a.messageId, a.idemKey, a.status, a.httpStatus, a.pesanGalat, a.totalPiutang, a.tanggalPosisi,
       ]
     );
@@ -103,12 +103,25 @@ export async function kirimKartu(koneksi: ResolvedByChat, claims: BychatClaims, 
   const batas = bolehKirimUlang(await kirimTerakhir24Jam(koneksi.perusahaanKode, kartu.mitra.id), new Date(), claims.agent.role);
   if (!batas.boleh) throw new AppError(batas.alasan ?? "Batas frekuensi pengiriman tercapai.");
 
+  return kirimInti(koneksi, kartu, nomor, { id: claims.agent.id, name: claims.agent.name, email: claims.agent.email }, idemKey);
+}
+
+// Inti pengiriman (dipakai agen manual DAN penagihan otomatis): tautan -> PNG ->
+// integration_messages -> audit. Pemanggil sudah memeriksa nomor, inbox, piutang
+// dan batas frekuensi.
+export async function kirimInti(
+  koneksi: ResolvedByChat,
+  kartu: KartuPiutangData,
+  nomor: string,
+  agen: { id: number | null; name: string; email: string },
+  idemKey: string
+): Promise<KirimKartuHasil> {
   const tautan = await ambilAtauBuatTautan({
     ptKode: koneksi.perusahaanKode,
     perusahaanId: koneksi.perusahaanId,
     mitraId: kartu.mitra.id,
-    agenNama: claims.agent.name,
-    agenEmail: claims.agent.email,
+    agenNama: agen.name,
+    agenEmail: agen.email,
   });
   const png = await renderKartuPng(kartu);
   const form = new FormData();
@@ -121,10 +134,10 @@ export async function kirimKartu(koneksi: ResolvedByChat, claims: BychatClaims, 
   );
   form.append("attachments[]", new Blob([png as BlobPart], { type: "image/png" }), `kartu-piutang-${kartu.tanggalPosisi}.png`);
   form.append("idempotency_key", idemKey);
-  form.append("audit_note", `Kartu piutang dikirim oleh ${claims.agent.name} (${claims.agent.email}) via dashpmp`);
+  form.append("audit_note", `Kartu piutang dikirim oleh ${agen.name}${agen.email ? ` (${agen.email})` : ""} via dashpmp`);
   form.append("source", "dashpmp");
 
-  const dasarAudit = { koneksi, claims, mitra: kartu.mitra, nomor, idemKey, totalPiutang: kartu.totalPiutang, tanggalPosisi: kartu.tanggalPosisi };
+  const dasarAudit = { koneksi, agen, mitra: kartu.mitra, nomor, idemKey, totalPiutang: kartu.totalPiutang, tanggalPosisi: kartu.tanggalPosisi };
   try {
     const hasil = await postIntegrationMessage(koneksi.bychatUrl, koneksi.apiToken, koneksi.bychatAccountId, form);
     await catatAudit({
@@ -147,4 +160,17 @@ export async function kirimKartu(koneksi: ResolvedByChat, claims: BychatClaims, 
     });
     throw err;
   }
+}
+
+// Penagihan otomatis: tanpa token konteks/agen manusia. Nomor sudah dipilih mesin
+// dan DIVERIFIKASI cocok dengan mitra oleh getKartuPiutang. Piutang diperiksa
+// ulang tepat sebelum kirim (mitra yang sudah lunas dilewati).
+export async function kirimKartuOtomatis(koneksi: ResolvedByChat, mitraId: string, nomor: string): Promise<KirimKartuHasil> {
+  if (koneksi.inboxId == null) throw new AppError("ID inbox WhatsApp belum diatur untuk PT ini.");
+  const kartu = await getKartuPiutang(assertPtKode(koneksi.perusahaanKode), koneksi.perusahaanNama, koneksi.perusahaanId, nomor, mitraId);
+  if (kartu.totalPiutang <= 0 || kartu.faktur.length === 0) throw new AppError("SUDAH_LUNAS");
+  const terakhir = await kirimTerakhir24Jam(koneksi.perusahaanKode, kartu.mitra.id);
+  if (terakhir) throw new AppError("SUDAH_DIKIRIM_24JAM");
+  const idemKey = idempotencyKey(koneksi.perusahaanKode, kartu.mitra.id, kartu.tanggalPosisi);
+  return kirimInti(koneksi, kartu, nomor, { id: null, name: "Penagihan otomatis", email: "" }, idemKey);
 }

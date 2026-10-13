@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getPgPool } from "@/lib/pg";
 import { defaultAudience } from "@/lib/bychat/token";
 import { assertPtKode, getKartuByMitraId, type KartuPiutangData } from "@/lib/bychat/mitra";
@@ -51,7 +52,7 @@ export async function ambilAtauBuatTautan(p: {
 }
 
 // Token tak dikenal / kedaluwarsa / dicabut -> null (halaman menampilkan "tidak ditemukan").
-export async function muatKartuDariTautan(token: string): Promise<KartuPiutangData | null> {
+export async function muatKartuDariTautan(token: string, ip = ""): Promise<KartuPiutangData | null> {
   if (!formatTokenValid(token)) return null;
   const pg = getPgPool();
   const r = await pg.query(
@@ -64,5 +65,8 @@ export async function muatKartuDariTautan(token: string): Promise<KartuPiutangDa
   );
   const row = r.rows[0];
   if (!row) return null;
+  // Log akses (IP di-hash, bukan disimpan mentah); kegagalan log tidak boleh menggagalkan halaman.
+  const ipHash = createHash("sha256").update(`${process.env.AUTH_SECRET ?? ""}:${ip}`).digest("hex").slice(0, 16);
+  pg.query(`INSERT INTO kartu_piutang_akses (token, ip_hash) VALUES ($1, $2)`, [token, ipHash]).catch(() => undefined);
   return getKartuByMitraId(assertPtKode(row.perusahaan_kode), row.nama, row.perusahaan_id, row.mitra_id);
 }

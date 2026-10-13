@@ -204,3 +204,31 @@ export async function postIntegrationMessage(baseUrl: string, token: string, acc
       throw new AppError(`ByChat membalas status ${res.status}. Kartu belum terkirim.`);
   }
 }
+
+// ------------------------------------------------------------- status pesan
+
+export type StatusPesan = "sent" | "delivered" | "read" | "failed";
+export interface HasilStatusPesan {
+  status: StatusPesan | "tidak_ditemukan";
+  galat: string | null;
+}
+
+const NAMA_STATUS: StatusPesan[] = ["sent", "delivered", "read", "failed"];
+
+// Baca status satu pesan (GET .../conversations/<id>/messages, cari message_id).
+// "sent" TIDAK menjamin sampai ke WhatsApp; hanya delivered/read yang menjamin.
+// Alasan gagal ada di content_attributes.external_error.
+export async function ambilStatusPesan(baseUrl: string, token: string, accountId: number, conversationId: number, messageId: number): Promise<HasilStatusPesan> {
+  const { status, body } = await getJson(`${normalizeBaseUrl(baseUrl)}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`, token);
+  if (status === 401 || status === 403) throw new AppError("Token ByChat tidak boleh membaca pesan percakapan.");
+  if (status !== 200 || !body || typeof body !== "object") throw new AppError(`ByChat membalas status ${status} saat membaca status pesan.`);
+  const payload = (body as { payload?: unknown }).payload;
+  const daftar = Array.isArray(payload) ? (payload as Record<string, unknown>[]) : [];
+  const m = daftar.find((x) => Number(x.id) === messageId && x.private !== true);
+  if (!m) return { status: "tidak_ditemukan", galat: null };
+  const mentah = m.status;
+  const nama = typeof mentah === "number" ? NAMA_STATUS[mentah] : typeof mentah === "string" ? (mentah as StatusPesan) : undefined;
+  if (!nama || !NAMA_STATUS.includes(nama)) return { status: "sent", galat: null };
+  const ca = (m.content_attributes ?? {}) as { external_error?: unknown };
+  return { status: nama, galat: nama === "failed" && typeof ca.external_error === "string" ? ca.external_error.slice(0, 300) : null };
+}

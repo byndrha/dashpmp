@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { notFound } from "next/navigation";
+import { batasTokenGagal, batasUmum, ipDari } from "@/lib/bychat/rate-limit";
 import { muatKartuDariTautan } from "@/lib/bychat/tautan";
 import { KartuPublik } from "@/components/kartu/kartu-publik";
 
@@ -9,13 +12,13 @@ export const metadata: Metadata = { title: "Kartu Piutang", robots: { index: fal
 
 export default async function KartuPiutangPublikPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const kartu = await muatKartuDariTautan(token);
+  const ip = ipDari(await headers());
+  if (!batasUmum.coba(ip)) notFound();
+  const kartu = await muatKartuDariTautan(token, ip);
+  // Respons seragam (404) untuk token salah/kedaluwarsa/dicabut; percobaan gagal dibatasi per IP.
   if (!kartu) {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6 text-center">
-        <p className="text-sm text-muted-foreground">Tautan kartu piutang tidak ditemukan atau sudah kedaluwarsa. Hubungi admin untuk meminta tautan baru.</p>
-      </main>
-    );
+    batasTokenGagal.coba(ip);
+    notFound();
   }
   return <KartuPublik data={kartu} token={token} />;
 }

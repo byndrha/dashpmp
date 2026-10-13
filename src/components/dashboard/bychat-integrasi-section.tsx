@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import {
   getByChatIntegrasiAction,
   hapusByChatIntegrasiAction,
+  setPenagihanAktifAction,
+  simpanWebhookSecretAction,
   simpanByChatIntegrasiAction,
   ujiKoneksiByChatAction,
   type ByChatIntegrasiState,
@@ -25,6 +27,8 @@ export function BychatIntegrasiSection({ perusahaanId }: { perusahaanId: number 
   const [token, setToken] = useState("");
   const [inboxId, setInboxId] = useState("");
   const [aktif, setAktif] = useState(true);
+  const [penagihanAktif, setPenagihanAktif] = useState(false);
+  const [webhookSecret, setWebhookSecret] = useState("");
   const [uji, setUji] = useState<UjiKoneksiHasil | null>(null);
   const [pesan, setPesan] = useState<{ teks: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -39,6 +43,7 @@ export function BychatIntegrasiSection({ perusahaanId }: { perusahaanId: number 
       setAccountId(k ? String(k.bychatAccountId) : "");
       setInboxId(k?.inboxId != null ? String(k.inboxId) : "");
       setAktif(k?.aktif ?? true);
+      setPenagihanAktif(r.data.penagihanAktif);
     });
     return () => {
       batal = true;
@@ -82,6 +87,34 @@ export function BychatIntegrasiSection({ perusahaanId }: { perusahaanId: number 
       }
       setToken("");
       setPesan({ teks: "Integrasi ByChat tersimpan.", ok: true });
+      const baru = await getByChatIntegrasiAction(perusahaanId);
+      if (baru.success) setState(baru.data);
+    });
+  }
+
+  function ubahPenagihan(nilai: boolean) {
+    setPesan(null);
+    startTransition(async () => {
+      const r = await setPenagihanAktifAction(perusahaanId, nilai);
+      if (!r.success) {
+        setPesan({ teks: r.error, ok: false });
+        return;
+      }
+      setPenagihanAktif(nilai);
+      setPesan({ teks: nilai ? "Penagihan otomatis diaktifkan." : "Penagihan otomatis dimatikan.", ok: true });
+    });
+  }
+
+  function simpanWebhook(hapusRahasia: boolean) {
+    setPesan(null);
+    startTransition(async () => {
+      const r = await simpanWebhookSecretAction(perusahaanId, hapusRahasia ? "" : webhookSecret);
+      if (!r.success) {
+        setPesan({ teks: r.error, ok: false });
+        return;
+      }
+      setWebhookSecret("");
+      setPesan({ teks: hapusRahasia ? "Rahasia webhook dihapus." : "Rahasia webhook tersimpan.", ok: true });
       const baru = await getByChatIntegrasiAction(perusahaanId);
       if (baru.success) setState(baru.data);
     });
@@ -167,6 +200,42 @@ export function BychatIntegrasiSection({ perusahaanId }: { perusahaanId: number 
         <input type="checkbox" checked={aktif} onChange={(e) => setAktif(e.target.checked)} />
         Aktif
       </label>
+
+      {tersimpan && (
+        <div className="flex flex-col gap-1 rounded-md border p-2">
+          <label className="flex items-center gap-2 text-xs font-medium">
+            <input type="checkbox" checked={penagihanAktif} disabled={pending} onChange={(e) => ubahPenagihan(e.target.checked)} />
+            Penagihan otomatis
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Mengirim kartu piutang ke mitra terjadwal lewat ByChat. Bawaan mati. Hari, jam, jeda, batas harian, dan kriteria mitra diatur di modul Piutang, tab Penagihan ByChat.
+          </p>
+        </div>
+      )}
+
+      {tersimpan && (
+        <div className="flex flex-col gap-1 rounded-md border p-2">
+          <p className="text-xs font-medium">Webhook pesan masuk (opt-out otomatis)</p>
+          <p className="text-xs text-muted-foreground">
+            Administrator ByChat mendaftarkan webhook (langganan <span className="font-mono">message_created</span>) ke URL di bawah, lalu rahasianya ditempel di sini. Balasan tegas seperti “stop” / “berhenti” otomatis masuk daftar opt-out.
+          </p>
+          <p className="break-all rounded bg-muted p-1 font-mono text-xs">{state.webhookUrl}</p>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              autoComplete="off"
+              value={webhookSecret}
+              onChange={(e) => setWebhookSecret(e.target.value)}
+              placeholder={state.webhookSecretAda ? "(tersimpan — isi untuk mengganti)" : "rahasia webhook dari ByChat"}
+              className="h-8 text-xs"
+            />
+            <Button type="button" size="sm" disabled={pending || !webhookSecret.trim()} onClick={() => simpanWebhook(false)}>Simpan</Button>
+            {state.webhookSecretAda && (
+              <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => simpanWebhook(true)}>Hapus</Button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-md bg-muted p-2 text-xs">
         <p className="font-medium">URL Aplikasi Dasbor (daftarkan di ByChat akun ini)</p>

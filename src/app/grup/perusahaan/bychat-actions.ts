@@ -3,6 +3,8 @@
 import { requireGrupAccess } from "@/lib/require-access";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { ujiKoneksi, type UjiKoneksiHasil } from "@/lib/bychat/client";
+import { adaWebhookSecret, simpanWebhookSecret } from "@/lib/queries/perusahaan-bychat";
+import { getPenagihanAktif, setPenagihanAktif } from "@/lib/penagihan/repo";
 import { defaultAudience } from "@/lib/bychat/token";
 import {
   BYCHAT_URL_DEFAULT,
@@ -19,6 +21,9 @@ import {
 export interface ByChatIntegrasiState {
   konfigurasi: ByChatKoneksiRow | null;
   urlDefault: string;
+  penagihanAktif: boolean;
+  webhookSecretAda: boolean;
+  webhookUrl: string;
   embedUrl: string; // didaftarkan sebagai Dashboard App di tiap akun ByChat
 }
 
@@ -27,6 +32,9 @@ export async function getByChatIntegrasiAction(perusahaanId: number): Promise<Ac
     await requireGrupAccess();
     return {
       konfigurasi: await getByChatKoneksi(perusahaanId),
+      penagihanAktif: await getPenagihanAktif(perusahaanId),
+      webhookSecretAda: await adaWebhookSecret(perusahaanId),
+      webhookUrl: `${defaultAudience()}/api/bychat/webhook`,
       urlDefault: BYCHAT_URL_DEFAULT,
       embedUrl: `${defaultAudience()}/embed/mitra`,
     };
@@ -81,5 +89,27 @@ export async function hapusByChatIntegrasiAction(perusahaanId: number): Promise<
   return runAction(async () => {
     await requireGrupAccess();
     await deleteByChatKoneksi(perusahaanId);
+  });
+}
+
+// Tombol "Penagihan otomatis" per PT. Bawaan MATI; seluruh pengaturannya ada di
+// tab "Penagihan ByChat" modul Piutang.
+export async function setPenagihanAktifAction(perusahaanId: number, aktif: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    if (aktif) {
+      const k = await getByChatKoneksi(perusahaanId);
+      if (!k || !k.aktif) throw new AppError("Aktifkan dan simpan koneksi ByChat PT ini lebih dulu.");
+      if (k.inboxId == null) throw new AppError("Pilih inbox WhatsApp lebih dulu sebelum mengaktifkan penagihan otomatis.");
+    }
+    await setPenagihanAktif(perusahaanId, aktif);
+  });
+}
+
+// Rahasia webhook pesan masuk (disalin admin dari ByChat). Kosong = hapus.
+export async function simpanWebhookSecretAction(perusahaanId: number, secret: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireGrupAccess();
+    await simpanWebhookSecret(perusahaanId, secret);
   });
 }
