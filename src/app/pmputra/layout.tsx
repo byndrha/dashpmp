@@ -2,6 +2,7 @@ import { requirePmputra, canAccessAllPT } from "@/lib/require-access";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { PmputraSidebar } from "@/components/dashboard/pmputra-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 
@@ -27,6 +28,7 @@ export default async function PmputraLayout({ children }: { children: React.Reac
             <span className="font-medium">PT Prima Maesa Putra</span>
           </div>
           <div className="flex items-center gap-3">
+            <AppearanceMenu />
             <span className="text-sm text-muted-foreground">{session?.user?.name ?? session?.user?.username}</span>
             <SignOutButton />
           </div>

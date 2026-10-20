@@ -75,6 +75,20 @@ async function getKantongByMonth(
 // totals silently include PMPakis's own transactions too.
 export const PMPERSADA_OWN_BRANCH_ID = "012";
 
+// PMPakis's own branch inside that same shared logistik database -- sama dengan
+// PMPAKIS_OWN_BRANCH_ID di piutang-pembayaran.ts (tidak diimpor dari sana karena file itu
+// sudah mengimpor file ini).
+const PMPAKIS_OWN_BRANCH_ID_PENJUALAN = "011";
+
+// Hanya database logistik yang dipakai bersama PMPersada/PMPakis yang perlu disaring per
+// branch; semua database lain milik satu PT saja.
+function ownBranchFilter(kode: string, sumber: string): string | null {
+  if (sumber !== "logistik") return null;
+  if (kode === "pmpersada") return PMPERSADA_OWN_BRANCH_ID;
+  if (kode === "pmpakis") return PMPAKIS_OWN_BRANCH_ID_PENJUALAN;
+  return null;
+}
+
 interface PenjualanAccountConfig {
   kode: string;
   label: CompanyKoneksiLabel;
@@ -94,6 +108,9 @@ const PENJUALAN_ACCOUNTS: PenjualanAccountConfig[] = [
   { kode: "pmpersada", label: "utama", accountNo: "4004" }, // "Pendapatan Balok Kecil"
   { kode: "pmpersada", label: "utama", accountNo: "4005" }, // "Pendapatan Balok Besar"
   { kode: "pmpersada", label: "logistik", accountNo: "4001", requiresBranchFilter: true }, // "Pendapatan Reguler"
+  { kode: "pmpakis", label: "utama", accountNo: "4001" }, // "Pendapatan Balok Kecil"
+  { kode: "pmpakis", label: "utama", accountNo: "4002" }, // "Pendapatan Balok Besar"
+  { kode: "pmpakis", label: "logistik", accountNo: "4001", requiresBranchFilter: true }, // "Pendapatan Reguler"
 ];
 
 function getPenjualanAccounts(kode: string, label: CompanyKoneksiLabel): PenjualanAccountConfig[] {
@@ -115,6 +132,7 @@ async function getPendapatanByMonth(
   const pool = await getCompanyPool(kode, label);
   const accounts = getPenjualanAccounts(kode, label);
   const requiresBranchFilter = accounts.some((a) => a.requiresBranchFilter);
+  const ownBranchId = ownBranchFilter(kode, label);
 
   const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
   const accountParams = accounts.map((a, i) => {
@@ -122,7 +140,7 @@ async function getPendapatanByMonth(
     request.input(paramName, sql.VarChar(16), a.accountNo);
     return `@${paramName}`;
   });
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
 
   const result = await request.query(`
     SELECT CONVERT(varchar(7), gl.TransDate, 120) AS Bulan,
@@ -234,9 +252,10 @@ export async function getAgenBaselineNet(kode: string, sumber: SumberAgen): Prom
 async function getPemesananNetByAgen(kode: string, sumber: SumberAgen): Promise<AgenNetRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request();
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID, SUM(
       (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
@@ -254,9 +273,10 @@ async function getPemesananNetByAgen(kode: string, sumber: SumberAgen): Promise<
 async function getPembayaranNetByAgen(kode: string, sumber: SumberAgen): Promise<AgenNetRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request();
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID, SUM(ISNULL(Tarikan,0) - ISNULL(Pembayaran,0)) AS Net
     FROM PMP_Pembayaran
@@ -290,9 +310,10 @@ async function getPemesananMovementByMonth(
 ): Promise<PemesananMovementRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT CONVERT(varchar(7), Tanggal, 120) AS Bulan,
            SUM(BalokKecilRealisasi * BalokKecilHarga + BalokBesarRealisasi * BalokBesarHarga
@@ -314,9 +335,10 @@ async function getPembayaranMovementByMonth(
 ): Promise<PembayaranMovementRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT CONVERT(varchar(7), Tanggal, 120) AS Bulan,
            SUM(ISNULL(Pembayaran,0)) AS Pembayaran, SUM(ISNULL(Tarikan,0)) AS Tarikan
@@ -458,9 +480,10 @@ interface AgenPeriodRow {
 async function getPemesananPeriodByAgen(kode: string, sumber: SumberAgen, start: Date, end: Date): Promise<AgenPeriodRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID,
            SUM(BalokKecilRealisasi * BalokKecilHarga + BalokBesarRealisasi * BalokBesarHarga) AS Pesanan,
@@ -496,9 +519,10 @@ async function getPemesananTransaksiRows(
 ): Promise<PemesananTransaksiSqlRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID, NoDokumen, Tanggal,
            (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) AS BalokKecil,
@@ -532,9 +556,10 @@ async function getPembayaranTransaksiRows(
 ): Promise<PembayaranTransaksiSqlRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID, NoDokumen, Tanggal, ISNULL(Pembayaran,0) AS Pembayaran, ISNULL(Tarikan,0) AS Tarikan
     FROM PMP_Pembayaran
@@ -558,9 +583,10 @@ async function getPembayaranPeriodByAgen(
 ): Promise<AgenPembayaranPeriodRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID, SUM(ISNULL(Pembayaran,0)) AS Pembayaran, SUM(ISNULL(Tarikan,0)) AS Tarikan
     FROM PMP_Pembayaran
@@ -722,9 +748,10 @@ export async function getPiutangPerAgen(kode: string, start: Date, end: Date): P
 export async function getPemesananNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID, SUM(
       (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
@@ -742,9 +769,10 @@ export async function getPemesananNetByAgenBefore(kode: string, sumber: SumberAg
 export async function getPembayaranNetByAgenBefore(kode: string, sumber: SumberAgen, start: Date): Promise<AgenNetRow[]> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const requiresBranchFilter = kode === "pmpersada" && sumber === "logistik";
+  const ownBranchId = ownBranchFilter(kode, sumber);
+  const requiresBranchFilter = ownBranchId !== null;
   const request = pool.request().input("start", sql.DateTime, start);
-  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), PMPERSADA_OWN_BRANCH_ID);
+  if (requiresBranchFilter) request.input("branchId", sql.VarChar(16), ownBranchId);
   const result = await request.query(`
     SELECT AgenID, SUM(ISNULL(Tarikan,0) - ISNULL(Pembayaran,0)) AS Net
     FROM PMP_Pembayaran

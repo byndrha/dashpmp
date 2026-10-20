@@ -116,6 +116,14 @@ export async function requirePmpersadaKeuangan() {
   return session;
 }
 
+// Padanan requirePmpersadaKeuangan untuk PMPakis: akun operator produksi tidak boleh
+// membuka data finansial, kecuali Direktur/superadmin (canAccessAllPT).
+export async function requirePmpakisKeuangan() {
+  const session = await requirePmpakis();
+  if (session.user.isProduksi && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
+  return session;
+}
+
 export async function requireSatpam() {
   const session = await auth();
   if (!session?.user) redirect("/login");
