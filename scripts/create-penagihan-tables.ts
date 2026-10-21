@@ -93,6 +93,8 @@ async function main() {
     await client.query(`ALTER TABLE penagihan_antrean ADD COLUMN IF NOT EXISTS status_cek_jumlah INTEGER NOT NULL DEFAULT 0`);
     await client.query(`ALTER TABLE penagihan_antrean ADD COLUMN IF NOT EXISTS status_cek_pada TIMESTAMPTZ`);
     await client.query(`ALTER TABLE perusahaan_bychat_koneksi ADD COLUMN IF NOT EXISTS webhook_secret_encrypted TEXT`);
+    // Redaksi pesan pengantar (NULL = templat bawaan di kode).
+    await client.query(`ALTER TABLE penagihan_pengaturan ADD COLUMN IF NOT EXISTS templat_pesan TEXT`);
     console.log("penagihan_* ready (penagihan_aktif default FALSE).");
   } finally {
     await client.end();

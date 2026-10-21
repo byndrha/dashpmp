@@ -2,6 +2,7 @@ import { getPgPool } from "@/lib/pg";
 import { AppError } from "@/lib/action-result";
 import { normalizePhone } from "@/lib/bychat/phone";
 import { JEDA_AUTOPAUSE_MENIT, MAKS_GAGAL_BERUNTUN, PENGATURAN_AWAL, validasiPengaturan, type Kandidat, type Pengaturan } from "@/lib/penagihan/logika";
+import { TEMPLAT_AWAL } from "@/lib/penagihan/templat";
 
 // Akses Postgres untuk penagihan otomatis: pengaturan, ronde, antrean, opt-out.
 
@@ -28,6 +29,7 @@ export async function getPengaturan(perusahaanId: number): Promise<PengaturanLen
     minPiutang: Number(x.min_piutang),
     ulangHari: x.ulang_hari,
     mode: x.mode,
+    templatPesan: x.templat_pesan ?? TEMPLAT_AWAL,
     jedaSampai: x.jeda_sampai ? new Date(x.jeda_sampai) : null,
     gagalBeruntun: x.gagal_beruntun,
     tersimpan: true,
@@ -41,12 +43,12 @@ export async function simpanPengaturan(perusahaanId: number, input: Partial<Peng
   await getPgPool().query(
     `INSERT INTO penagihan_pengaturan
        (perusahaan_id, hari, jam_mulai, jam_selesai, jeda_min_dtk, jeda_maks_dtk, jeda_panjang_tiap, jeda_panjang_dtk,
-        batas_harian, min_hari_lewat, min_piutang, ulang_hari, mode, updated_oleh)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        batas_harian, min_hari_lewat, min_piutang, ulang_hari, mode, templat_pesan, updated_oleh)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      ON CONFLICT (perusahaan_id) DO UPDATE SET
        hari=$2, jam_mulai=$3, jam_selesai=$4, jeda_min_dtk=$5, jeda_maks_dtk=$6, jeda_panjang_tiap=$7, jeda_panjang_dtk=$8,
-       batas_harian=$9, min_hari_lewat=$10, min_piutang=$11, ulang_hari=$12, mode=$13, updated_oleh=$14, updated_at=now()`,
-    [perusahaanId, p.hari, p.jamMulai, p.jamSelesai, p.jedaMinDtk, p.jedaMaksDtk, p.jedaPanjangTiap, p.jedaPanjangDtk, p.batasHarian, p.minHariLewat, p.minPiutang, p.ulangHari, p.mode, oleh]
+       batas_harian=$9, min_hari_lewat=$10, min_piutang=$11, ulang_hari=$12, mode=$13, templat_pesan=$14, updated_oleh=$15, updated_at=now()`,
+    [perusahaanId, p.hari, p.jamMulai, p.jamSelesai, p.jedaMinDtk, p.jedaMaksDtk, p.jedaPanjangTiap, p.jedaPanjangDtk, p.batasHarian, p.minHariLewat, p.minPiutang, p.ulangHari, p.mode, p.templatPesan, oleh]
   );
   return p;
 }

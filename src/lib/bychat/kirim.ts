@@ -6,6 +6,7 @@ import { postIntegrationMessage } from "@/lib/bychat/client";
 import { assertPtKode, cariMitraByNomor, getKartuPiutang, nomorKanonikDariKontak, type KartuPiutangData, type MitraRingkas } from "@/lib/bychat/mitra";
 import { renderKartuPng } from "@/lib/bychat/kartu-image";
 import { bolehKirimUlang, buatPengantar, idempotencyKey, type KirimTerakhir } from "@/lib/bychat/kirim-util";
+import { getPengaturan } from "@/lib/penagihan/repo";
 import { ambilAtauBuatTautan } from "@/lib/bychat/tautan";
 
 // Orkestrasi: nomor dari klaim token (BUKAN dari klien) -> mitra di database
@@ -124,13 +125,14 @@ export async function kirimInti(
     agenEmail: agen.email,
   });
   const png = await renderKartuPng(kartu);
+  const { templatPesan } = await getPengaturan(koneksi.perusahaanId);
   const form = new FormData();
   form.append("inbox_id", String(koneksi.inboxId));
   form.append("phone", nomor);
   form.append("name", kartu.mitra.nama);
   form.append(
     "content",
-    buatPengantar({ mitra: kartu.mitra.nama, pt: kartu.ptNama, tanggal: kartu.tanggalPosisi, total: kartu.totalPiutang, jumlahFaktur: kartu.faktur.length, rekening: kartu.rekening, tautan: tautan.url })
+    buatPengantar({ mitra: kartu.mitra.nama, pt: kartu.ptNama, tanggal: kartu.tanggalPosisi, total: kartu.totalPiutang, jumlahFaktur: kartu.faktur.length, rekening: kartu.rekening, tautan: tautan.url, templat: templatPesan })
   );
   form.append("attachments[]", new Blob([png as BlobPart], { type: "image/png" }), `kartu-piutang-${kartu.tanggalPosisi}.png`);
   form.append("idempotency_key", idemKey);

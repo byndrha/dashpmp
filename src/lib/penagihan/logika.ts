@@ -1,4 +1,5 @@
 import { extractPhones } from "@/lib/bychat/phone";
+import { TEMPLAT_AWAL, validasiTemplat } from "@/lib/penagihan/templat";
 
 // Logika murni penagihan otomatis (tanpa DB/HTTP): jendela waktu WIB,
 // pemilihan kandidat, penjadwalan berjeda, validasi pengaturan.
@@ -18,6 +19,7 @@ export interface Pengaturan {
   minPiutang: number;
   ulangHari: number; // jarak minimal antar penagihan satu mitra
   mode: ModePenagihan;
+  templatPesan: string; // redaksi pesan pengantar (lihat templat.ts)
 }
 
 export const PENGATURAN_AWAL: Pengaturan = {
@@ -33,6 +35,7 @@ export const PENGATURAN_AWAL: Pengaturan = {
   minPiutang: 100000,
   ulangHari: 7,
   mode: "pratinjau",
+  templatPesan: TEMPLAT_AWAL,
 };
 
 const WIB_MS = 7 * 3600 * 1000;
@@ -156,5 +159,7 @@ export function validasiPengaturan(i: Partial<Pengaturan>): { ok: true; nilai: P
     rentang(p.ulangHari, 1, 90, "Jarak antar penagihan (hari)");
   if (galat) return { ok: false, galat };
   if (p.mode !== "pratinjau" && p.mode !== "otomatis") return { ok: false, galat: "Mode tidak dikenal." };
+  const galatTemplat = validasiTemplat(p.templatPesan);
+  if (galatTemplat) return { ok: false, galat: galatTemplat };
   return { ok: true, nilai: { ...p, hari } };
 }

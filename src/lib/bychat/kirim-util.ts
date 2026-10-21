@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { renderTemplat, TEMPLAT_AWAL } from "@/lib/penagihan/templat";
 
 // Fungsi murni untuk pengiriman kartu (mudah diuji tanpa DB/HTTP).
 
@@ -47,9 +48,9 @@ export interface RekeningTeks {
   atasNama: string;
 }
 
-// Teks pengantar yang menyertai gambar (Bahasa Indonesia, sopan, singkat).
-// Rekening ikut ditulis sebagai TEKS (bukan hanya di gambar) supaya nomornya
-// bisa disalin mitra.
+// Teks pengantar yang menyertai gambar. Redaksi berasal dari templat yang diatur
+// di tab Penagihan ByChat (bawaan: TEMPLAT_AWAL). Rekening ikut ditulis sebagai
+// TEKS (bukan hanya di gambar) supaya nomornya bisa disalin mitra.
 export function buatPengantar(p: {
   mitra: string;
   pt: string;
@@ -58,19 +59,19 @@ export function buatPengantar(p: {
   jumlahFaktur: number;
   rekening?: RekeningTeks[];
   tautan?: string;
+  templat?: string;
 }): string {
-  const baris = [
-    `Yth. ${p.mitra},`,
-    "",
-    `Berikut kartu piutang ${p.pt} per ${tglIndo(p.tanggal)}.`,
-    `Total piutang: Rp ${Math.round(p.total).toLocaleString("id-ID")} (${p.jumlahFaktur} faktur).`,
-  ];
   const rek = p.rekening ?? [];
-  if (rek.length > 0) {
-    baris.push("", "Pembayaran dapat ditransfer ke:");
-    for (const r of rek) baris.push(`${r.bank} ${r.nomorRekening}${r.atasNama ? ` a.n. ${r.atasNama}` : ""}`);
-  }
-  if (p.tautan) baris.push("", `Lihat kartu piutang (tanpa login): ${p.tautan}`);
-  baris.push("", "Mohon dicek dan dikonfirmasi pembayarannya. Terima kasih.");
-  return baris.join("\n");
+  const blokRekening = rek.length
+    ? ["Pembayaran dapat ditransfer ke:", ...rek.map((r) => `${r.bank} ${r.nomorRekening}${r.atasNama ? ` a.n. ${r.atasNama}` : ""}`)].join("\n")
+    : "";
+  return renderTemplat(p.templat ?? TEMPLAT_AWAL, {
+    mitra: p.mitra,
+    pt: p.pt,
+    tanggal: tglIndo(p.tanggal),
+    total: `Rp ${Math.round(p.total).toLocaleString("id-ID")}`,
+    jumlah_faktur: String(p.jumlahFaktur),
+    rekening: blokRekening,
+    tautan: p.tautan ?? "",
+  });
 }

@@ -19,6 +19,7 @@ import {
   type PenagihanState,
 } from "@/app/mkesindo/(dashboard)/aging/penagihan-actions";
 import type { Pengaturan } from "@/lib/penagihan/logika";
+import { PenagihanTemplatEditor } from "@/components/dashboard/penagihan-templat-editor";
 
 // Tab "Penagihan ByChat" modul Piutang (MKEsindo): semua pengaturan, ronde hari
 // ini, hasil, dan opt-out. Tombol aktif/nonaktif per PT ada di /grup/perusahaan.
@@ -255,6 +256,7 @@ export function PenagihanByChatPanel() {
               </select>
             </Kolom>
           </div>
+          <PenagihanTemplatEditor value={form.templatPesan} onChange={(v) => ubah("templatPesan", v)} />
           <p className="text-xs text-muted-foreground">
             Hanya mitra dengan nomor yang cocok tepat satu mitra yang ditagih. Perubahan berlaku mulai ronde berikutnya (ronde hari ini tidak disusun ulang).
           </p>
