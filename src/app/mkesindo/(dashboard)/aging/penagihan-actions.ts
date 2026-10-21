@@ -4,7 +4,11 @@ import { requireModuleAccess } from "@/lib/require-access";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 import { getByChatKoneksi } from "@/lib/queries/perusahaan-bychat";
+import { getPgPool } from "@/lib/pg";
+import { getRekeningPembayaran } from "@/lib/bychat/mitra";
+import { tglIndo } from "@/lib/bychat/kirim-util";
 import { susunJadwal, waktuWib, type Pengaturan } from "@/lib/penagihan/logika";
+import { CONTOH_TEMPLAT, formatBlokRekening, formatRupiah, type NilaiTemplat } from "@/lib/penagihan/templat";
 import {
   batalkanRonde, getPenagihanAktif, jadwalUlangAntrean, getPengaturan, getRonde, hapusOptout, lepasJeda, listAntrean, listOptout,
   listRiwayat, setujuiRonde, simpanPengaturan, tambahOptout, type AntreanRow,
@@ -26,6 +30,8 @@ export interface PenagihanState {
   inboxAda: boolean;
   aktif: boolean;
   pengaturan: Pengaturan;
+  contohTemplat: NilaiTemplat;
+  contohMitraAsli: boolean;
   jedaSampai: string | null;
   gagalBeruntun: number;
   ronde: { id: number; tanggal: string; status: string; disetujuiOleh: string | null } | null;
@@ -49,7 +55,23 @@ export async function getPenagihanStateAction(): Promise<ActionResult<PenagihanS
     const { jedaSampai, gagalBeruntun, tersimpan: _t, ...pengaturan } = p;
     void _t;
     const antrean = ronde ? await listAntrean(ronde.id) : [];
+    const [ptRow, rekening] = await Promise.all([
+      getPgPool().query<{ nama: string }>(`SELECT nama FROM perusahaan WHERE id = $1`, [pid]),
+      getRekeningPembayaran(pid),
+    ]);
+    // Pratinjau memakai data sungguhan (PT, rekening, tanggal hari ini). Mitra/total/jumlah faktur
+    // diambil dari kandidat pertama ronde hari ini bila ada; jika tidak, tetap contoh.
+    const kandidat = antrean.find((a) => a.nomor);
+    const contohTemplat: NilaiTemplat = {
+      ...CONTOH_TEMPLAT,
+      pt: ptRow.rows[0].nama,
+      tanggal: tglIndo(waktuWib(new Date()).tanggal),
+      rekening: formatBlokRekening(rekening),
+      ...(kandidat && { mitra: kandidat.mitraNama, total: formatRupiah(kandidat.totalPiutang), jumlah_faktur: String(kandidat.jumlahFaktur) }),
+    };
     return {
+      contohTemplat,
+      contohMitraAsli: kandidat != null,
       koneksiAda: koneksi != null && koneksi.aktif,
       inboxAda: koneksi?.inboxId != null,
       aktif,

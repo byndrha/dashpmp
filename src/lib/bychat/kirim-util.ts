@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { renderTemplat, TEMPLAT_AWAL } from "@/lib/penagihan/templat";
+import { formatBlokRekening, formatRupiah, renderTemplat, TEMPLAT_AWAL, type RekeningTeks } from "@/lib/penagihan/templat";
+
+export type { RekeningTeks };
 
 // Fungsi murni untuk pengiriman kartu (mudah diuji tanpa DB/HTTP).
 
@@ -37,16 +39,10 @@ export function bolehKirimUlang(
 }
 
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-const tglIndo = (iso: string) => {
+export const tglIndo = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
   return `${d} ${BULAN[m - 1]} ${y}`;
 };
-
-export interface RekeningTeks {
-  bank: string;
-  nomorRekening: string;
-  atasNama: string;
-}
 
 // Teks pengantar yang menyertai gambar. Redaksi berasal dari templat yang diatur
 // di tab Penagihan ByChat (bawaan: TEMPLAT_AWAL). Rekening ikut ditulis sebagai
@@ -61,17 +57,13 @@ export function buatPengantar(p: {
   tautan?: string;
   templat?: string;
 }): string {
-  const rek = p.rekening ?? [];
-  const blokRekening = rek.length
-    ? ["Pembayaran dapat ditransfer ke:", ...rek.map((r) => `${r.bank} ${r.nomorRekening}${r.atasNama ? ` a.n. ${r.atasNama}` : ""}`)].join("\n")
-    : "";
   return renderTemplat(p.templat ?? TEMPLAT_AWAL, {
     mitra: p.mitra,
     pt: p.pt,
     tanggal: tglIndo(p.tanggal),
-    total: `Rp ${Math.round(p.total).toLocaleString("id-ID")}`,
+    total: formatRupiah(p.total),
     jumlah_faktur: String(p.jumlahFaktur),
-    rekening: blokRekening,
+    rekening: formatBlokRekening(p.rekening ?? []),
     tautan: p.tautan ?? "",
   });
 }

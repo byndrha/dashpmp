@@ -4,11 +4,21 @@ import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CONTOH_TEMPLAT, MAKS_PANJANG_TEMPLAT, renderTemplat, TEMPLAT_AWAL, validasiTemplat, VARIABEL_TEMPLAT } from "@/lib/penagihan/templat";
+import { MAKS_PANJANG_TEMPLAT, renderTemplat, TEMPLAT_AWAL, validasiTemplat, VARIABEL_TEMPLAT, type NilaiTemplat } from "@/lib/penagihan/templat";
 
 // Editor redaksi pesan penagihan: kolom teks, tombol penyisip variabel, dan
 // pratinjau langsung memakai data contoh. Dipakai di tab "Penagihan ByChat".
-export function PenagihanTemplatEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function PenagihanTemplatEditor({
+  value,
+  onChange,
+  contoh,
+  mitraAsli,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  contoh: NilaiTemplat;
+  mitraAsli: boolean;
+}) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const galat = validasiTemplat(value);
 
@@ -60,8 +70,13 @@ export function PenagihanTemplatEditor({ value, onChange }: { value: string; onC
         </p>
       )}
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Pratinjau (data contoh)</Label>
-        <pre className="whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs">{galat ? "—" : renderTemplat(value, CONTOH_TEMPLAT)}</pre>
+        <Label className="text-xs">Pratinjau</Label>
+        <pre className="whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs">{galat ? "—" : renderTemplat(value, contoh)}</pre>
+        <p className="text-xs text-muted-foreground">
+          PT, tanggal, dan rekening diambil dari data sungguhan.{" "}
+          {mitraAsli ? "Mitra, total, dan jumlah faktur dari mitra pertama di ronde hari ini." : "Mitra, total, dan jumlah faktur masih contoh (belum ada ronde hari ini)."}{" "}
+          Tautan kartu dibuat saat pesan dikirim.
+        </p>
       </div>
     </div>
   );

@@ -256,7 +256,7 @@ export function PenagihanByChatPanel() {
               </select>
             </Kolom>
           </div>
-          <PenagihanTemplatEditor value={form.templatPesan} onChange={(v) => ubah("templatPesan", v)} />
+          <PenagihanTemplatEditor value={form.templatPesan} onChange={(v) => ubah("templatPesan", v)} contoh={s.contohTemplat} mitraAsli={s.contohMitraAsli} />
           <p className="text-xs text-muted-foreground">
             Hanya mitra dengan nomor yang cocok tepat satu mitra yang ditagih. Perubahan berlaku mulai ronde berikutnya (ronde hari ini tidak disusun ulang).
           </p>

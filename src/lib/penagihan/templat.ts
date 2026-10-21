@@ -17,6 +17,20 @@ export type NilaiTemplat = Record<NamaVariabel, string>;
 
 export const MAKS_PANJANG_TEMPLAT = 2000;
 
+export interface RekeningTeks {
+  bank: string;
+  nomorRekening: string;
+  atasNama: string;
+}
+
+// Nilai {rekening}: judul + satu baris per rekening; "" bila tidak ada rekening.
+export function formatBlokRekening(rek: RekeningTeks[]): string {
+  if (rek.length === 0) return "";
+  return ["Pembayaran dapat ditransfer ke:", ...rek.map((r) => `${r.bank} ${r.nomorRekening}${r.atasNama ? ` a.n. ${r.atasNama}` : ""}`)].join("\n");
+}
+
+export const formatRupiah = (n: number): string => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
+
 export const TEMPLAT_AWAL = [
   "Yth. {mitra},",
   "",
