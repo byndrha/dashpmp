@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
 import { canAccessAllPT, canAccessGrup } from "@/lib/require-access";
-import { eskristalKode } from "@/lib/tenant";
+import { tenantEskristalKodes } from "@/lib/tenant";
 import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
@@ -95,7 +95,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
   // Defense-in-depth untuk middleware.ts: dashboard ini hanya untuk akun
   // perusahaan Es Kristal yang dilayani deployment ini (atau akses lintas PT).
-  if (session?.user && !groupLevelAccess && session.user.accountScope !== eskristalKode()) {
+  if (session?.user && !groupLevelAccess && !tenantEskristalKodes().includes(session.user.accountScope)) {
     redirect("/akses-ditolak");
   }
 

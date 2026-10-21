@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
 import { getNaiveWibTransDate } from "@/lib/business-date";
+import { currentEskristalKode } from "@/lib/tenant-request";
 
 export type DocType = "SALESINVOICE" | "DELIVERYORDER";
 
@@ -723,9 +724,12 @@ export async function acquireGLPostingApplock(transaction: sql.Transaction): Pro
     `);
 }
 
+// Dikunci per tenant: bagan akun tiap database tenant bisa punya
+// ChartOfAccountID berbeda untuk AccountNo yang sama.
 const chartOfAccountIdCache = new Map<string, string>();
 async function getChartOfAccountId(poolOrTx: sql.ConnectionPool | sql.Transaction, accountNo: string): Promise<string> {
-  const cached = chartOfAccountIdCache.get(accountNo);
+  const cacheKey = `${await currentEskristalKode()}:${accountNo}`;
+  const cached = chartOfAccountIdCache.get(cacheKey);
   if (cached) return cached;
   const result = await poolOrTx
     .request()
@@ -733,7 +737,7 @@ async function getChartOfAccountId(poolOrTx: sql.ConnectionPool | sql.Transactio
     .query(`SELECT TOP 1 ChartOfAccountID FROM ChartOfAccount WHERE AccountNo = @accountNo`);
   const row = result.recordset[0] as { ChartOfAccountID: string } | undefined;
   if (!row) throw new AppError(`ChartOfAccountID untuk akun ${accountNo} tidak ditemukan`);
-  chartOfAccountIdCache.set(accountNo, row.ChartOfAccountID);
+  chartOfAccountIdCache.set(cacheKey, row.ChartOfAccountID);
   return row.ChartOfAccountID;
 }
 

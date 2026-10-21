@@ -12,10 +12,9 @@ import {
   touchAkunSesiLastSeen,
 } from "@/lib/queries/akun";
 import { fullPermissionMap } from "@/lib/permissions";
-import { deploymentHoldingKode } from "@/lib/tenant";
+import { allowedHoldingKodes, isPmpScope } from "@/lib/tenant";
 
 type AccountScope = "mkesindo" | "direktur" | "pmputra" | "pmpersada" | "pmpakis";
-const PMP_SCOPES: string[] = ["mkesindo", "direktur", "pmputra", "pmpersada", "pmpakis"];
 
 interface AuthorizedUser {
   id: string;
@@ -67,13 +66,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        // Batas tenant: deployment ini hanya melayani satu holding. Akun
-        // holding lain (mis. akun demo di situs PMP, atau akun PMP di situs
-        // demo) ditolak di sini, sebelum sesi dibuat -- jadi tidak ada guard
-        // halaman/API yang perlu tahu soal holding. Akun lama tanpa holding
-        // = PMP (semua akun sebelum tabel holding ada milik PMP Group).
+        // Batas tenant: hanya holding yang dilayani deployment ini (holding
+        // utama + TENANT_TAMBAHAN, lihat tenant.ts) yang boleh login. Akun
+        // lama tanpa holding = PMP (semua akun sebelum tabel holding ada
+        // milik PMP Group).
         const holdingKode = row.holdingKode ?? "pmp";
-        if (holdingKode !== deploymentHoldingKode()) return null;
+        if (!allowedHoldingKodes().includes(holdingKode)) return null;
 
         await recordSuccessfulLogin(row.id, ip);
 
@@ -143,8 +141,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // route /api/* (yang tidak dijaga middleware). Tidak fail-open: ini
       // tidak butuh DB. Token lama tanpa holdingKode dianggap PMP hanya bila
       // scope-nya memang PT milik PMP; scope lain ditolak.
-      const tokenHolding = token.holdingKode ?? (PMP_SCOPES.includes(String(token.accountScope)) ? "pmp" : undefined);
-      if (tokenHolding !== deploymentHoldingKode()) return null;
+      const tokenHolding = typeof token.holdingKode === "string"
+        ? token.holdingKode
+        : isPmpScope(String(token.accountScope)) ? "pmp" : null;
+      if (!tokenHolding || !allowedHoldingKodes().includes(tokenHolding)) return null;
       // Every subsequent call (no fresh `user` — just decoding an existing
       // token) is the revocation check: if this session was force-logged-out
       // from the sesi-login-aktif admin page, invalidate it immediately

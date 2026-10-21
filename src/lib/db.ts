@@ -1,6 +1,8 @@
 import sql from "mssql";
 import { resolveKoneksi } from "@/lib/queries/perusahaan-koneksi";
 import { eskristalKode } from "@/lib/tenant";
+import { currentEskristalKode } from "@/lib/tenant-request";
+import { getCompanyPool } from "@/lib/db-company";
 
 // MKEsindo's live MSSQL connection now resolves through the Postgres
 // "directory" DB (perusahaan_koneksi, kode=eskristalKode() label="utama" --
@@ -13,7 +15,16 @@ declare global {
   var _mssqlPool: Promise<sql.ConnectionPool> | undefined;
 }
 
-export function getPool(): Promise<sql.ConnectionPool> {
+// Database dipilih per sesi: akun tenant tambahan (mis. demokristal) ke
+// database perusahaannya sendiri lewat getCompanyPool(); akun PMP dan semua
+// proses tanpa sesi ke pool bawaan di bawah.
+export async function getPool(): Promise<sql.ConnectionPool> {
+  const tenant = await currentEskristalKode();
+  if (tenant !== eskristalKode()) return getCompanyPool(tenant, "utama");
+  return getDefaultPool();
+}
+
+function getDefaultPool(): Promise<sql.ConnectionPool> {
   if (!global._mssqlPool) {
     const kode = eskristalKode();
     global._mssqlPool = resolveKoneksi(kode, "utama")

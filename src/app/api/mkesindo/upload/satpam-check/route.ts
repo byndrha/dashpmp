@@ -3,7 +3,7 @@ import { uploadFile } from "@/lib/storage/google-drive";
 import { requireModuleAccess } from "@/lib/require-access";
 import { auth } from "@/lib/auth";
 import { JENIS_FOTO_LIST, type JenisFotoKendaraan } from "@/lib/queries/vehicle-check";
-import { eskristalKode } from "@/lib/tenant";
+import { currentEskristalKode } from "@/lib/tenant-request";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const bytes = await file.arrayBuffer();
-    const uploaded = await uploadFile(eskristalKode(), ["satpam-check", safeArmadaId], fileName, Buffer.from(bytes), file.type);
+    const uploaded = await uploadFile(await currentEskristalKode(), ["satpam-check", safeArmadaId], fileName, Buffer.from(bytes), file.type);
     return NextResponse.json({ path: uploaded.publicPath });
   } catch (err) {
     console.error("[upload/satpam-check] gagal mengunggah ke Google Drive:", err);

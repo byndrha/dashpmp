@@ -231,25 +231,29 @@ async function loadAllReturnIdsByDeliveryOrderId(pool: sql.ConnectionPool): Prom
 // [[mkesindo-route-restructuring]] — not a distributed cache, deliberately:
 // this process is the only reader/writer of it).
 const DOCUMENT_ID_CACHE_TTL_MS = 45_000;
-let documentIdCache: {
+// Satu entri per pool (= per database tenant): satu proses Node melayani
+// beberapa tenant sekaligus, jadi cache bersama akan menyajikan dokumen
+// tenant lain.
+const documentIdCache = new WeakMap<sql.ConnectionPool, {
   promise: Promise<[Map<string, string>, Map<string, string>, Map<string, string>]>;
   loadedAt: number;
-} | null = null;
+}>();
 
 function getDocumentIdMaps(pool: sql.ConnectionPool): Promise<[Map<string, string>, Map<string, string>, Map<string, string>]> {
-  if (documentIdCache && Date.now() - documentIdCache.loadedAt < DOCUMENT_ID_CACHE_TTL_MS) {
-    return documentIdCache.promise;
+  const cached = documentIdCache.get(pool);
+  if (cached && Date.now() - cached.loadedAt < DOCUMENT_ID_CACHE_TTL_MS) {
+    return cached.promise;
   }
   const promise = Promise.all([
     loadAllInvoiceIdsByKey(pool, "SalesOrderID"),
     loadAllInvoiceIdsByKey(pool, "REPLACE(DeliveryOrderID, '''', '')"),
     loadAllReturnIdsByDeliveryOrderId(pool),
   ]);
-  documentIdCache = { promise, loadedAt: Date.now() };
+  documentIdCache.set(pool, { promise, loadedAt: Date.now() });
   // A failed load must not poison the cache for the next 45s — clear it so
   // the next call retries instead of rethrowing the same stale error.
   promise.catch(() => {
-    if (documentIdCache?.promise === promise) documentIdCache = null;
+    if (documentIdCache.get(pool)?.promise === promise) documentIdCache.delete(pool);
   });
   return promise;
 }

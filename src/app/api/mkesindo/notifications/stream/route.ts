@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { canView } from "@/lib/permissions";
 import { notificationEventBus, NOTIFICATION_EVENT } from "@/lib/notifications/event-bus";
 import type { NotificationEvent } from "@/lib/queries/notifications";
+import { eskristalKode } from "@/lib/tenant";
+import { currentEskristalKode } from "@/lib/tenant-request";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,6 +14,11 @@ export async function GET() {
     return new Response("Unauthorized", { status: 401 });
   }
   const permissions = session.user.permissions ?? {};
+  // Pemindai notifikasi (instrumentation.ts) hanya memindai database tenant
+  // bawaan, dan event bus-nya satu untuk seluruh proses -- akun tenant lain
+  // tidak boleh menerima siarannya (mis. "SO baru" milik PMP). Mereka tetap
+  // mendapat koneksi + heartbeat, hanya tanpa event.
+  const terimaEvent = (await currentEskristalKode()) === eskristalKode();
 
   const encoder = new TextEncoder();
   let listener: ((event: NotificationEvent) => void) | null = null;
@@ -36,7 +43,7 @@ export async function GET() {
           console.warn("Notification stream enqueue failed for a stale connection:", err);
         }
       };
-      notificationEventBus.on(NOTIFICATION_EVENT, listener);
+      if (terimaEvent) notificationEventBus.on(NOTIFICATION_EVENT, listener);
       // A comment-only SSE line (ignored by EventSource's message parser)
       // sent immediately on connect — keeps idle proxies that time out a
       // response with no bytes from closing the connection prematurely,

@@ -2,7 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { getPgPool } from "@/lib/pg";
 import { encryptSecret } from "@/lib/crypto-secret";
 import { AppError } from "@/lib/action-result";
-import { eskristalKode } from "@/lib/tenant";
+import { currentEskristalKode } from "@/lib/tenant-request";
 import { PERUSAHAAN_STATUSES, type PerusahaanStatus, type PerusahaanJenisBisnis } from "@/lib/perusahaan-status";
 
 export { PERUSAHAAN_STATUSES, type PerusahaanStatus };
@@ -192,11 +192,11 @@ export async function updatePerusahaan(id: number, input: PerusahaanInput): Prom
 // queries (e.g. metode_pembayaran). Deliberately generic/standalone, not
 // aging-specific — the public invoice page reuses this too.
 //
-// Nama fungsinya dipertahankan, tapi kodenya mengikuti eskristalKode():
-// perusahaan Es Kristal yang dilayani deployment ini (demo atau MKEsindo).
+// Nama fungsinya dipertahankan, tapi kodenya mengikuti currentEskristalKode():
+// perusahaan Es Kristal milik akun yang login (demo atau MKEsindo).
 export async function getMkesindoPerusahaanId(): Promise<number> {
   const pool = getPgPool();
-  const kode = eskristalKode();
+  const kode = await currentEskristalKode();
   const result = await pool.query<{ id: number }>(`SELECT id FROM perusahaan WHERE kode = $1`, [kode]);
   const row = result.rows[0];
   if (!row) {

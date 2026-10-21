@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadFile } from "@/lib/storage/google-drive";
 import { requireDriver } from "@/lib/require-access";
-import { eskristalKode } from "@/lib/tenant";
+import { currentEskristalKode } from "@/lib/tenant-request";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const bytes = await file.arrayBuffer();
-    const uploaded = await uploadFile(eskristalKode(), ["driver-app", safeJadwalDetailId], fileName, Buffer.from(bytes), file.type);
+    const uploaded = await uploadFile(await currentEskristalKode(), ["driver-app", safeJadwalDetailId], fileName, Buffer.from(bytes), file.type);
     return NextResponse.json({ path: uploaded.publicPath });
   } catch (err) {
     console.error("[upload/driver-app] gagal mengunggah ke Google Drive:", err);

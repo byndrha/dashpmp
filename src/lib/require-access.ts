@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canView, type ModuleKey } from "@/lib/permissions";
 import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS, ACCOUNTING_ROLE_IDS } from "@/lib/roles";
-import { isPmpDeployment } from "@/lib/tenant";
+import { isPmpDeployment, isPmpScope } from "@/lib/tenant";
 
 // An account has cross-PT authority if it's superadmin, OR its Perusahaan
 // is "PMP Group" itself (accountScope "direktur", the holding level above
@@ -17,11 +17,12 @@ export function canAccessAllPT(user: { isSuperAdmin: boolean; accountScope: stri
   return user.isSuperAdmin || user.accountScope === "direktur";
 }
 
-// Akses lintas PT. Di deployment PMP identik dengan canAccessAllPT(); di
-// deployment holding lain (mis. demo) selalu false, karena halaman lintas PT
-// membaca database PT-PT milik PMP Group.
+// Akses lintas PT: hanya di deployment PMP DAN hanya untuk akun milik PMP --
+// halaman lintas PT membaca database PT-PT milik PMP Group, jadi superadmin
+// tenant tambahan (mis. holding demo yang dilayani deployment yang sama)
+// tidak pernah lolos. Untuk akun PMP identik dengan canAccessAllPT().
 export function canAccessGrup(user: { isSuperAdmin: boolean; accountScope: string }): boolean {
-  return isPmpDeployment() && canAccessAllPT(user);
+  return isPmpDeployment() && isPmpScope(user.accountScope) && canAccessAllPT(user);
 }
 
 // Permissions are baked into the JWT at sign-in (see auth.ts) rather than
@@ -77,7 +78,7 @@ export async function requireGrupAccess() {
 export async function requireGrupShellAccess() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canAccessGrup(session.user) && !(isPmpDeployment() && session.user.canAksesInventaris)) {
+  if (!canAccessGrup(session.user) && !(isPmpDeployment() && isPmpScope(session.user.accountScope) && session.user.canAksesInventaris)) {
     redirect("/akses-ditolak");
   }
   return session;
@@ -91,7 +92,7 @@ export async function requireGrupShellAccess() {
 export async function requireInventarisAccess() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canAccessGrup(session.user) && !(isPmpDeployment() && session.user.canAksesInventaris)) {
+  if (!canAccessGrup(session.user) && !(isPmpDeployment() && isPmpScope(session.user.accountScope) && session.user.canAksesInventaris)) {
     redirect("/akses-ditolak");
   }
   return session;
