@@ -4,6 +4,7 @@ import { requireModuleAccess } from "@/lib/require-access";
 import { listVendor, listVendorPerusahaanLinks } from "@/lib/queries/inventaris-vendor";
 import { getVendorRanking } from "@/lib/queries/inventaris-pengiriman";
 import { InventarisVendorList } from "@/components/dashboard/inventaris-vendor-list";
+import { eskristalKode } from "@/lib/tenant";
 
 export const metadata: Metadata = { title: "Inventaris" };
 
@@ -19,7 +20,7 @@ export default async function MkesindoInventarisPage() {
 
   const [vendorList, links] = await Promise.all([listVendor(), listVendorPerusahaanLinks()]);
   const mkesindoVendorIds = new Set(
-    links.filter((l) => l.perusahaanKode === "mkesindo").map((l) => l.vendorId)
+    links.filter((l) => l.perusahaanKode === eskristalKode()).map((l) => l.vendorId)
   );
   const vendorListMkesindo = vendorList.filter((v) => mkesindoVendorIds.has(v.id));
 

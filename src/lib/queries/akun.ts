@@ -16,6 +16,9 @@ export interface AkunAuthRow {
   peranId: number | null;
   perusahaanId: number | null;
   perusahaanKode: string | null; // null only for Direktur accounts
+  // holding.kode akun (langsung, atau lewat perusahaannya). null = akun lama
+  // yang belum ditautkan -- diperlakukan sebagai holding PMP oleh auth.ts.
+  holdingKode: string | null;
   isSuperAdmin: boolean;
   isSatpam: boolean;
   isDriver: boolean;
@@ -33,6 +36,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
   const pool = getPgPool();
   const result = await pool.query(
     `SELECT a.id, a.username, a.password_hash, a.nama, a.peran_id, a.perusahaan_id, p.kode AS perusahaan_kode,
+            COALESCE(ha.kode, hp.kode) AS holding_kode,
             COALESCE(r.is_super_admin, false) AS is_super_admin,
             COALESCE(r.is_satpam, false) AS is_satpam,
             COALESCE(r.is_driver, false) AS is_driver,
@@ -44,6 +48,8 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
             a.is_active, a.failed_login_count, a.locked_until
      FROM akun a
      LEFT JOIN perusahaan p ON p.id = a.perusahaan_id
+     LEFT JOIN holding ha ON ha.id = a.holding_id
+     LEFT JOIN holding hp ON hp.id = p.holding_id
      LEFT JOIN peran r ON r.id = a.peran_id
      WHERE a.username = $1`,
     [username]
@@ -58,6 +64,7 @@ export async function findAkunByUsername(username: string): Promise<AkunAuthRow 
     peranId: row.peran_id,
     perusahaanId: row.perusahaan_id,
     perusahaanKode: row.perusahaan_kode,
+    holdingKode: row.holding_kode,
     isSuperAdmin: row.is_super_admin,
     isSatpam: row.is_satpam,
     isDriver: row.is_driver,

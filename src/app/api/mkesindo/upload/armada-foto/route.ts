@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadFile } from "@/lib/storage/google-drive";
 import { requireModuleAccess } from "@/lib/require-access";
+import { eskristalKode } from "@/lib/tenant";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const bytes = await file.arrayBuffer();
-    const uploaded = await uploadFile("mkesindo", ["armada"], fileName, Buffer.from(bytes), file.type);
+    const uploaded = await uploadFile(eskristalKode(), ["armada"], fileName, Buffer.from(bytes), file.type);
     return NextResponse.json({ path: uploaded.publicPath });
   } catch (err) {
     console.error("[upload/armada-foto] gagal mengunggah ke Google Drive:", err);

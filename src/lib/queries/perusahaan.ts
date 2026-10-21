@@ -2,6 +2,7 @@ import { getPool, sql } from "@/lib/db";
 import { getPgPool } from "@/lib/pg";
 import { encryptSecret } from "@/lib/crypto-secret";
 import { AppError } from "@/lib/action-result";
+import { eskristalKode } from "@/lib/tenant";
 import { PERUSAHAAN_STATUSES, type PerusahaanStatus, type PerusahaanJenisBisnis } from "@/lib/perusahaan-status";
 
 export { PERUSAHAAN_STATUSES, type PerusahaanStatus };
@@ -190,13 +191,17 @@ export async function updatePerusahaan(id: number, input: PerusahaanInput): Prom
 // still needs a real perusahaanId to hand to company-scoped Postgres
 // queries (e.g. metode_pembayaran). Deliberately generic/standalone, not
 // aging-specific — the public invoice page reuses this too.
+//
+// Nama fungsinya dipertahankan, tapi kodenya mengikuti eskristalKode():
+// perusahaan Es Kristal yang dilayani deployment ini (demo atau MKEsindo).
 export async function getMkesindoPerusahaanId(): Promise<number> {
   const pool = getPgPool();
-  const result = await pool.query<{ id: number }>(`SELECT id FROM perusahaan WHERE kode = $1`, ["mkesindo"]);
+  const kode = eskristalKode();
+  const result = await pool.query<{ id: number }>(`SELECT id FROM perusahaan WHERE kode = $1`, [kode]);
   const row = result.rows[0];
   if (!row) {
     throw new AppError(
-      'No perusahaan row for kode="mkesindo" — the Postgres directory DB is missing its seed row (see docs/superpowers/specs/2026-07-30-postgres-directory-multi-company.md).'
+      `No perusahaan row for kode="${kode}" — the Postgres directory DB is missing its seed row (see docs/superpowers/specs/2026-07-30-postgres-directory-multi-company.md).`
     );
   }
   return row.id;

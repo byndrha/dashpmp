@@ -12,6 +12,7 @@ import {
   touchAkunSesiLastSeen,
 } from "@/lib/queries/akun";
 import { fullPermissionMap } from "@/lib/permissions";
+import { deploymentHoldingKode } from "@/lib/tenant";
 
 type AccountScope = "mkesindo" | "direktur" | "pmputra" | "pmpersada" | "pmpakis";
 
@@ -63,6 +64,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           await recordFailedLogin(row.id, row.failedLoginCount);
           return null;
         }
+
+        // Batas tenant: deployment ini hanya melayani satu holding. Akun
+        // holding lain (mis. akun demo di situs PMP, atau akun PMP di situs
+        // demo) ditolak di sini, sebelum sesi dibuat -- jadi tidak ada guard
+        // halaman/API yang perlu tahu soal holding. Akun lama tanpa holding
+        // = PMP (semua akun sebelum tabel holding ada milik PMP Group).
+        if ((row.holdingKode ?? "pmp") !== deploymentHoldingKode()) return null;
 
         await recordSuccessfulLogin(row.id, ip);
 

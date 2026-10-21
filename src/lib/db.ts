@@ -1,8 +1,10 @@
 import sql from "mssql";
 import { resolveKoneksi } from "@/lib/queries/perusahaan-koneksi";
+import { eskristalKode } from "@/lib/tenant";
 
 // MKEsindo's live MSSQL connection now resolves through the Postgres
-// "directory" DB (perusahaan_koneksi, kode="mkesindo" label="utama")
+// "directory" DB (perusahaan_koneksi, kode=eskristalKode() label="utama" --
+// "mkesindo" di deployment PMP, perusahaan demo di deployment demo)
 // instead of static DB_* env vars — see docs/superpowers/specs/
 // 2026-07-30-perusahaan-db-koneksi-design.md. Deliberately NO env-var
 // fallback: if the directory lookup fails, this throws, and so does every
@@ -13,11 +15,12 @@ declare global {
 
 export function getPool(): Promise<sql.ConnectionPool> {
   if (!global._mssqlPool) {
-    global._mssqlPool = resolveKoneksi("mkesindo", "utama")
+    const kode = eskristalKode();
+    global._mssqlPool = resolveKoneksi(kode, "utama")
       .then((cfg) => {
         if (!cfg) {
           throw new Error(
-            'No perusahaan_koneksi row for kode="mkesindo" label="utama" — re-seed it using resolveKoneksi/upsertKoneksi from @/lib/queries/perusahaan-koneksi (see docs/superpowers/plans/2026-07-30-perusahaan-db-koneksi.md Task 3 — the original seed script was a one-off, deleted after use, not committed)'
+            `No perusahaan_koneksi row for kode="${kode}" label="utama" — re-seed it using resolveKoneksi/upsertKoneksi from @/lib/queries/perusahaan-koneksi (see docs/superpowers/plans/2026-07-30-perusahaan-db-koneksi.md Task 3 — the original seed script was a one-off, deleted after use, not committed; tenant baru: scripts/saas-provision-eskristal-tenant.ts)`
           );
         }
         const config: sql.config = {

@@ -6,6 +6,7 @@ import { resolveByChatByAccountId, type ResolvedByChat } from "@/lib/queries/per
 import { extractPhones } from "@/lib/bychat/phone";
 import { ambilStatusPesan } from "@/lib/bychat/client";
 import { kirimKartuOtomatis } from "@/lib/bychat/kirim";
+import { isPmpDeployment } from "@/lib/tenant";
 import {
   dalamJendela, pilihKandidat, susunJadwal, waktuWib,
   type KandidatMentah, type Pengaturan,
@@ -19,7 +20,9 @@ import {
 // POST /api/penagihan/tick. Idempoten: aman dipanggil berulang/tumpang-tindih.
 // Saat ini hanya MKEsindo (PMP_Agen Es Balok belum punya nomor telepon).
 
-const PT_DIDUKUNG = new Set(["mkesindo"]);
+// Hanya di deployment PMP: muatKandidatMkesindo() membaca getPool(), yang di
+// deployment demo berisi mitra fiktif -- tidak boleh ditagih lewat akun ByChat PMP.
+const PT_DIDUKUNG = new Set(isPmpDeployment() ? ["mkesindo"] : []);
 const MAKS_PER_TICK = 5;
 
 export interface HasilTickPt {

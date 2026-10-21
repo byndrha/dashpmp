@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFileBuffer } from "@/lib/storage/google-drive";
+import { eskristalKode, isPmpDeployment } from "@/lib/tenant";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ perusahaan: string; fileId: string; filename: string }> }
 ) {
   const { perusahaan, fileId } = await params;
+  // Deployment holding lain (demo) hanya boleh membuka Drive perusahaannya
+  // sendiri -- tidak pernah memakai kredensial Drive PT milik PMP.
+  if (!isPmpDeployment() && perusahaan !== eskristalKode()) {
+    return NextResponse.json({ error: "File tidak ditemukan" }, { status: 404 });
+  }
   try {
     const { buffer, mimeType } = await getFileBuffer(perusahaan, fileId);
     return new NextResponse(new Uint8Array(buffer), {

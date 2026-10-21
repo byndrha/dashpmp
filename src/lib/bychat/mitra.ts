@@ -9,6 +9,7 @@ import {
 } from "@/lib/queries/piutang-invoice-outstanding";
 import { extractPhones, last9, normalizePhone, phoneMatches } from "@/lib/bychat/phone";
 import { AppError } from "@/lib/action-result";
+import { isPmpDeployment } from "@/lib/tenant";
 import { listActiveMetodePembayaran } from "@/lib/queries/metode-pembayaran";
 import { ringkasIsi, type IsiPesanan } from "@/lib/bychat/isi-pesanan";
 
@@ -20,7 +21,11 @@ export type PtKode = "mkesindo" | "pmputra" | "pmpersada" | "pmpakis";
 const ES_BALOK: PtKode[] = ["pmputra", "pmpersada", "pmpakis"];
 
 export function assertPtKode(kode: string): PtKode {
-  if (kode === "mkesindo" || ES_BALOK.includes(kode as PtKode)) return kode as PtKode;
+  // Cabang "mkesindo" membaca getPool(), yang di deployment demo mengarah ke
+  // database demo -- jadi ByChat hanya dilayani di deployment PMP, supaya
+  // pemetaan akun ByChat milik PT PMP tidak pernah dipasangkan dengan data
+  // tenant lain.
+  if (isPmpDeployment() && (kode === "mkesindo" || ES_BALOK.includes(kode as PtKode))) return kode as PtKode;
   throw new AppError(`PT "${kode}" belum didukung integrasi ByChat.`);
 }
 

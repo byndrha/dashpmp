@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/queries/akun";
-import { canAccessAllPT } from "@/lib/require-access";
+import { canAccessAllPT, canAccessGrup } from "@/lib/require-access";
+import { eskristalKode } from "@/lib/tenant";
 import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
@@ -88,9 +89,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Driver redirects just above. Accounts with cross-PT authority (superadmin,
   // or "direktur" scope — Perusahaan "PMP Group", which sits above every PT)
   // are NOT redirected away: they're allowed to view this dashboard directly.
-  const groupLevelAccess = session?.user ? canAccessAllPT(session.user) : false;
+  const groupLevelAccess = session?.user ? canAccessGrup(session.user) : false;
   if (!groupLevelAccess && session?.user?.accountScope === "pmputra") {
     redirect("/pmputra");
+  }
+  // Defense-in-depth untuk middleware.ts: dashboard ini hanya untuk akun
+  // perusahaan Es Kristal yang dilayani deployment ini (atau akses lintas PT).
+  if (session?.user && !groupLevelAccess && session.user.accountScope !== eskristalKode()) {
+    redirect("/akses-ditolak");
   }
 
   const [profile, perusahaanList] = await Promise.all([

@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth.config";
+import { eskristalKode, isPmpDeployment } from "@/lib/tenant";
 
 // This file MUST be named middleware.ts, not proxy.ts. Next.js's own
 // vendored docs (node_modules/next/dist/docs/01-app/01-getting-started/
@@ -122,8 +123,9 @@ export const middleware = auth((req) => {
   // to keep this file's own dependency graph self-contained (it runs in
   // the Edge runtime, unlike that module's other exports which use
   // next/navigation's redirect()) — keep the two definitions in sync.
+  // Same rule as canAccessGrup() -- lintas PT hanya di deployment PMP.
   const isSuperAdmin = req.auth?.user?.isSuperAdmin ?? false;
-  const hasGroupAccess = isSuperAdmin || scope === "direktur";
+  const hasGroupAccess = isPmpDeployment() && (isSuperAdmin || scope === "direktur");
   if (hasGroupAccess) {
     if (path === "/") {
       return NextResponse.redirect(new URL("/grup", req.nextUrl));
@@ -131,17 +133,18 @@ export const middleware = auth((req) => {
     return passThrough(req);
   }
 
-  if (scope === "pmputra" && !path.startsWith("/pmputra")) {
-    return NextResponse.redirect(new URL("/pmputra", req.nextUrl));
+  // Setiap scope punya tepat satu route tree. Scope yang tidak dilayani
+  // deployment ini ditolak, bukan diloloskan -- sebelumnya scope tak dikenal
+  // (mis. perusahaan baru) jatuh ke passThrough dan bisa membuka /mkesindo.
+  const home =
+    scope === eskristalKode() ? "/mkesindo"
+    : isPmpDeployment() && (scope === "pmputra" || scope === "pmpersada" || scope === "pmpakis") ? `/${scope}`
+    : null;
+  if (!home) {
+    return NextResponse.redirect(new URL("/akses-ditolak", req.nextUrl));
   }
-  if (scope === "pmpersada" && !path.startsWith("/pmpersada")) {
-    return NextResponse.redirect(new URL("/pmpersada", req.nextUrl));
-  }
-  if (scope === "pmpakis" && !path.startsWith("/pmpakis")) {
-    return NextResponse.redirect(new URL("/pmpakis", req.nextUrl));
-  }
-  if (scope === "mkesindo" && !path.startsWith("/mkesindo")) {
-    return NextResponse.redirect(new URL("/mkesindo", req.nextUrl));
+  if (!path.startsWith(home)) {
+    return NextResponse.redirect(new URL(home, req.nextUrl));
   }
 
   return passThrough(req);
