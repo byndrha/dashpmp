@@ -15,6 +15,7 @@ import { fullPermissionMap } from "@/lib/permissions";
 import { deploymentHoldingKode } from "@/lib/tenant";
 
 type AccountScope = "mkesindo" | "direktur" | "pmputra" | "pmpersada" | "pmpakis";
+const PMP_SCOPES: string[] = ["mkesindo", "direktur", "pmputra", "pmpersada", "pmpakis"];
 
 interface AuthorizedUser {
   id: string;
@@ -32,6 +33,7 @@ interface AuthorizedUser {
   permissions: ReturnType<typeof fullPermissionMap>;
   accountScope: AccountScope;
   perusahaanId: number | null;
+  holdingKode: string;
   sessionId: string;
 }
 
@@ -70,7 +72,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // demo) ditolak di sini, sebelum sesi dibuat -- jadi tidak ada guard
         // halaman/API yang perlu tahu soal holding. Akun lama tanpa holding
         // = PMP (semua akun sebelum tabel holding ada milik PMP Group).
-        if ((row.holdingKode ?? "pmp") !== deploymentHoldingKode()) return null;
+        const holdingKode = row.holdingKode ?? "pmp";
+        if (holdingKode !== deploymentHoldingKode()) return null;
 
         await recordSuccessfulLogin(row.id, ip);
 
@@ -104,6 +107,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           permissions,
           accountScope: (row.perusahaanKode ?? "direktur") as AccountScope,
           perusahaanId: row.perusahaanId,
+          holdingKode,
           sessionId,
         };
         return user;
@@ -128,9 +132,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.permissions = u.permissions;
         token.accountScope = u.accountScope;
         token.perusahaanId = u.perusahaanId;
+        token.holdingKode = u.holdingKode;
         token.sessionId = u.sessionId;
         return token;
       }
+      // Batas tenant, sisi token: semua deployment berbagi AUTH_SECRET (ia
+      // juga kunci dekripsi kredensial perusahaan_koneksi), jadi JWT yang
+      // terbit di deployment demo SAH secara kriptografis di deployment PMP.
+      // Tanpa cek ini, cookie sesi demo yang disalin ke situs PMP lolos di
+      // route /api/* (yang tidak dijaga middleware). Tidak fail-open: ini
+      // tidak butuh DB. Token lama tanpa holdingKode dianggap PMP hanya bila
+      // scope-nya memang PT milik PMP; scope lain ditolak.
+      const tokenHolding = token.holdingKode ?? (PMP_SCOPES.includes(String(token.accountScope)) ? "pmp" : undefined);
+      if (tokenHolding !== deploymentHoldingKode()) return null;
       // Every subsequent call (no fresh `user` — just decoding an existing
       // token) is the revocation check: if this session was force-logged-out
       // from the sesi-login-aktif admin page, invalidate it immediately

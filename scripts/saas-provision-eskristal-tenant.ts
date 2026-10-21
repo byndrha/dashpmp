@@ -160,6 +160,12 @@ async function main() {
   await seedTable(target, "DashboardSiteSettings", [
     { ID: 1, Title: holding.nama, Description: `Manajemen Pabrik Es ${NAMA}`, UpdatedAt: new Date() },
   ]);
+  // Pemindai notifikasi (src/lib/queries/notifications.ts) gagal tanpa baris
+  // penanda ini. Dimulai dari "sekarang" supaya data lama tidak membanjiri
+  // notifikasi.
+  await seedTable(target, "DashboardNotificationScanState", ["PengajuanMitraBaru", "SITerbayar", "SOBaru"].map((s) => ({
+    SourceType: s, LastScannedAt: new Date(),
+  })));
   await seedTable(target, "DashboardPabrikLocation", [
     { ID: 1, Latitude: PABRIK_LAT, Longitude: PABRIK_LNG, Alamat: PABRIK_ALAMAT, ModifiedDate: new Date() },
   ]);

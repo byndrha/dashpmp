@@ -61,5 +61,8 @@ declare module "next-auth/jwt" {
     accountScope: AccountScope;
     perusahaanId: number | null;
     sessionId: string;
+    // holding.kode akun saat login. Opsional: token yang terbit sebelum
+    // kolom ini ada tidak membawanya (dianggap "pmp" oleh auth.ts).
+    holdingKode?: string;
   }
 }
