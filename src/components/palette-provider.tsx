@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export const PALETTES = ["glacier", "lavender", "rose", "sage"] as const;
 export type Palette = (typeof PALETTES)[number];
@@ -52,10 +53,13 @@ const PaletteContext = createContext<PaletteContextValue | null>(null);
 
 export function PaletteProvider({ children }: { children: React.ReactNode }) {
   const [palette, setPaletteState] = useState<Palette>(readPaletteFromDom);
+  // Halaman publik /kartu tidak punya menu tampilan: selalu Glacier, tanpa
+  // menimpa pilihan tersimpan (localStorage) milik pengguna dashboard.
+  const dipaksa = (usePathname() ?? "").startsWith("/kartu");
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-palette", palette);
-  }, [palette]);
+    document.documentElement.setAttribute("data-palette", dipaksa ? DEFAULT_PALETTE : palette);
+  }, [palette, dipaksa]);
 
   function setPalette(next: Palette) {
     setPaletteState(next);
@@ -78,4 +82,4 @@ export function usePalette(): PaletteContextValue {
 // React hydrates.
 export const PALETTE_INIT_SCRIPT = `(function(){try{var p=localStorage.getItem(${JSON.stringify(
   STORAGE_KEY
-)});var valid=${JSON.stringify(PALETTES)};if(p&&valid.indexOf(p)!==-1){document.documentElement.setAttribute('data-palette',p);}}catch(e){}})();`;
+)});var valid=${JSON.stringify(PALETTES)};if(p&&valid.indexOf(p)!==-1&&location.pathname.indexOf('/kartu')!==0){document.documentElement.setAttribute('data-palette',p);}}catch(e){}})();`;
