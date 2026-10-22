@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { MetodeBayarKartu } from "@/components/kartu/metode-bayar-kartu";
+import { teksPembaruan } from "@/lib/bychat/pembaruan";
 import { teksIsi } from "@/lib/bychat/isi-pesanan";
 import type { KartuPiutangData } from "@/lib/bychat/mitra";
 import { esBalokAgingBucket } from "@/lib/queries/piutang-invoice-outstanding";
@@ -30,7 +31,7 @@ export function KartuPublik({ data, token }: { data: KartuPiutangData; token: st
       <header>
         <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Kartu Piutang</p>
         <h1 className="font-display text-2xl font-semibold">{data.ptNama}</h1>
-        <p className="text-sm text-muted-foreground">Posisi per {tgl(data.tanggalPosisi)}</p>
+        <p className="text-sm text-muted-foreground">{teksPembaruan()}</p>
       </header>
 
       <Card className="py-4">

@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import type { KartuPiutangData } from "@/lib/bychat/mitra";
 import { esBalokAgingBucket } from "@/lib/queries/piutang-invoice-outstanding";
+import { teksPembaruan } from "@/lib/bychat/pembaruan";
 import { teksIsi } from "@/lib/bychat/isi-pesanan";
 import { KARTU_FONT_BASE64 as F } from "@/lib/bychat/kartu-fonts";
 
@@ -131,7 +132,7 @@ export async function renderKartuPng(data: KartuPiutangData, now = new Date()): 
         <div style={{ display: "flex", flexDirection: "column", height: H_HEADER, justifyContent: "center" }}>
           {label("Kartu Piutang")}
           <div style={{ display: "flex", fontFamily: "Space Grotesk", fontSize: 38, fontWeight: 600, marginTop: 6 }}>{data.ptNama}</div>
-          <div style={{ display: "flex", fontSize: 22, color: C.mutedFg, marginTop: 4 }}>{`Posisi per ${tgl(data.tanggalPosisi)}`}</div>
+          <div style={{ display: "flex", fontSize: 22, color: C.mutedFg, marginTop: 4 }}>{teksPembaruan()}</div>
         </div>
 
         {/* Kartu mitra (seperti MitraAgingCard) */}
