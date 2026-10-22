@@ -175,7 +175,7 @@ export async function renderKartuPng(data: KartuPiutangData, now = new Date()): 
           {data.rekening.map((r, i) => (
             <div key={`${r.bank}-${r.nomorRekening}-${i}`} style={{ display: "flex", flexDirection: "column", height: H_REK_BARIS, justifyContent: "center", borderTop: i === 0 ? "none" : `1px solid ${C.border}` }}>
               <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-                <div style={{ display: "flex", fontSize: 21, fontWeight: 600, color: C.primary, background: C.primary15, padding: "3px 12px", borderRadius: 6 }}>{`Transfer ${r.bank}`}</div>
+                <div style={{ display: "flex", fontSize: 21, fontWeight: 600, color: C.primary, background: C.primary15, padding: "3px 12px", borderRadius: 6 }}>{/^bank\b/i.test(r.bank) ? r.bank : `Bank ${r.bank}`}</div>
                 <div style={{ display: "flex", fontFamily: "IBM Plex Mono", fontSize: 32, fontWeight: 500, marginLeft: 16 }}>{r.nomorRekening}</div>
               </div>
               <div style={{ display: "flex", fontSize: 21, color: C.mutedFg, marginTop: 6 }}>

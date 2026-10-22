@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { MetodeBayarKartu } from "@/components/kartu/metode-bayar-kartu";
 import { teksIsi } from "@/lib/bychat/isi-pesanan";
 import type { KartuPiutangData } from "@/lib/bychat/mitra";
 import { esBalokAgingBucket } from "@/lib/queries/piutang-invoice-outstanding";
@@ -70,22 +71,7 @@ export function KartuPublik({ data, token }: { data: KartuPiutangData; token: st
       <Card className="py-4">
         <CardContent className="flex flex-col gap-2 px-4">
           <p className="font-medium">Cara pembayaran</p>
-          {data.rekening.length > 0 ? (
-            data.rekening.map((r, i) => (
-              <div key={`${r.bank}-${r.nomorRekening}-${i}`} className="flex flex-col gap-0.5">
-                <p>
-                  <span className="rounded bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary">Transfer {r.bank}</span>{" "}
-                  <span className="font-data text-lg font-medium">{r.nomorRekening}</span>
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {[r.atasNama ? `a.n. ${r.atasNama}` : "", r.catatan ?? ""].filter(Boolean).join(" · ")}
-                </p>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">Hubungi admin kami untuk informasi pembayaran.</p>
-          )}
-          {data.rekening.length > 0 && <p className="text-sm text-muted-foreground">Mohon konfirmasi setelah transfer.</p>}
+          <MetodeBayarKartu rekening={data.rekening} qris={data.qris ?? []} />
         </CardContent>
       </Card>
 

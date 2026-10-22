@@ -66,12 +66,19 @@ export interface RekeningBayar {
   catatan: string | null;
 }
 
+// QRIS statis aktif (konteks "publik") untuk tab QRIS di tautan publik kartu.
+export interface QrisBayar {
+  gambar: string; // path /api/files/... (proxy Google Drive, publik)
+  catatan: string | null;
+}
+
 export interface KartuPiutangData {
   ptKode: PtKode;
   ptNama: string;
   mitra: MitraRingkas;
   tanggalPosisi: string; // yyyy-MM-dd (WIB) -- dasar idempotency_key
   rekening: RekeningBayar[];
+  qris?: QrisBayar[];
   faktur: FakturRow[];
   aging: AgingRingkas[];
   totalPiutang: number;
@@ -288,11 +295,12 @@ export async function ambilMitraById(ptKode: PtKode, mitraId: string): Promise<M
 export async function getKartuByMitraId(ptKode: PtKode, ptNama: string, perusahaanId: number, mitraId: string): Promise<KartuPiutangData | null> {
   const mitra = await ambilMitraById(ptKode, mitraId);
   if (!mitra) return null;
-  const [bagian, rekening] = await Promise.all([
+  const [bagian, rekening, qris] = await Promise.all([
     ptKode === "mkesindo" ? kartuMkesindo(mitra) : kartuEsBalok(ptKode, mitra),
     getRekeningPembayaran(perusahaanId),
+    getQrisBayar(perusahaanId),
   ]);
-  return { ptKode, ptNama, mitra, tanggalPosisi: tanggalPosisiWib(), rekening, ...bagian };
+  return { ptKode, ptNama, mitra, tanggalPosisi: tanggalPosisiWib(), rekening, qris, ...bagian };
 }
 
 export async function getRekeningPembayaran(perusahaanId: number): Promise<RekeningBayar[]> {
@@ -307,6 +315,13 @@ export async function getRekeningPembayaran(perusahaanId: number): Promise<Reken
     }));
 }
 
+export async function getQrisBayar(perusahaanId: number): Promise<QrisBayar[]> {
+  const metode = await listActiveMetodePembayaran(perusahaanId, "publik");
+  return metode
+    .filter((m) => m.jenis === "qris_static" && m.qrisStatisImagePath)
+    .map((m) => ({ gambar: m.qrisStatisImagePath as string, catatan: m.catatan && m.catatan.trim() ? m.catatan.trim() : null }));
+}
+
 export async function getKartuPiutang(
   ptKode: PtKode,
   ptNama: string,
@@ -317,11 +332,12 @@ export async function getKartuPiutang(
   const cocok = await cariMitraByNomor(ptKode, nomor);
   const mitra = cocok.find((m) => m.id === mitraId);
   if (!mitra) throw new AppError("Mitra tidak cocok dengan nomor percakapan ini.");
-  const [bagian, rekening] = await Promise.all([
+  const [bagian, rekening, qris] = await Promise.all([
     ptKode === "mkesindo" ? kartuMkesindo(mitra) : kartuEsBalok(ptKode, mitra),
     getRekeningPembayaran(perusahaanId),
+    getQrisBayar(perusahaanId),
   ]);
-  return { ptKode, ptNama, mitra, tanggalPosisi: tanggalPosisiWib(), rekening, ...bagian };
+  return { ptKode, ptNama, mitra, tanggalPosisi: tanggalPosisiWib(), rekening, qris, ...bagian };
 }
 
 export { extractPhones };
