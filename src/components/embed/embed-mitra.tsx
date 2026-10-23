@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { setEmbedTema, temaDariPesan } from "@/lib/embed-theme";
+import { asalPesanDiterima, deteksiEmbedHost } from "@/lib/embed-host";
 
 // Panel "Mitra" di sidebar percakapan ByChat. Menerima token konteks
 // bertanda tangan lewat postMessage (hanya dari origin ByChat), dan menyertakan
@@ -187,8 +188,12 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
   const conversasiRef = useRef<string | null>(null);
 
   const mintaToken = useCallback(() => {
-    if (window.parent === window) return;
-    window.parent.postMessage("chatwoot-dashboard-app:fetch-info", "*");
+    const host = deteksiEmbedHost(window);
+    if (host === "webview") {
+      (window as unknown as { ReactNativeWebView: { postMessage: (s: string) => void } }).ReactNativeWebView.postMessage("chatwoot-dashboard-app:fetch-info");
+    }
+    // Di dalam iframe, induk ByChat web yang menjawab.
+    if (host === "iframe") window.parent.postMessage("chatwoot-dashboard-app:fetch-info", "*");
   }, []);
 
   const panggil = useCallback(async (path: string, body: Record<string, unknown>, token: string) => {
@@ -238,12 +243,13 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
   }, [mintaToken]);
 
   useEffect(() => {
-    if (window.parent === window) {
+    const host = deteksiEmbedHost(window);
+    if (host === "mandiri") {
       const t = setTimeout(() => setTahap({ s: "galat", pesan: "Panel ini hanya berfungsi di dalam ByChat (Aplikasi Dasbor)." }), 0);
       return () => clearTimeout(t);
     }
     function onMsg(ev: MessageEvent) {
-      if (!allowedOrigins.includes(ev.origin)) return;
+      if (!asalPesanDiterima(host, ev.origin, allowedOrigins, window.location.origin)) return;
       // appContext (tema) dikirim ulang ByChat tiap tema diganti: dengarkan terus.
       const tema = temaDariPesan(ev.data);
       if (tema) {
@@ -271,8 +277,15 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
       }
     }
     window.addEventListener("message", onMsg);
+    // Android React Native WebView mengirim lewat document, iOS lewat window
+    // (satu pesan tidak sampai ke keduanya).
+    const lewatDocument = host === "webview";
+    if (lewatDocument) document.addEventListener("message", onMsg as EventListener);
     mintaToken();
-    return () => window.removeEventListener("message", onMsg);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      if (lewatDocument) document.removeEventListener("message", onMsg as EventListener);
+    };
   }, [allowedOrigins, mintaToken, muat]);
 
   const ambilRiwayat = useCallback(
