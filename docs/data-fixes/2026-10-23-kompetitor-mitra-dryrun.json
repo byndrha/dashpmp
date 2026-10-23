@@ -1,0 +1,782 @@
+{
+  "namaUnik": [
+    {
+      "nama": "ATLAS",
+      "mitra": [
+        "01739",
+        "01778",
+        "01818",
+        "01819",
+        "01820",
+        "01821",
+        "01823",
+        "01832",
+        "01833",
+        "01845",
+        "01846",
+        "01850",
+        "01854",
+        "01866",
+        "01871",
+        "01879",
+        "01887",
+        "01888",
+        "01897"
+      ]
+    },
+    {
+      "nama": "LOKAL",
+      "mitra": [
+        "01739",
+        "01740",
+        "01744",
+        "01748",
+        "01750",
+        "01751",
+        "01785",
+        "01787",
+        "01794",
+        "01800",
+        "01811",
+        "01816",
+        "01822"
+      ]
+    },
+    {
+      "nama": "atm",
+      "mitra": [
+        "01819",
+        "01820",
+        "01821",
+        "01823",
+        "01876",
+        "01880",
+        "01889",
+        "01892"
+      ]
+    },
+    {
+      "nama": "RR",
+      "mitra": [
+        "01808",
+        "01869",
+        "01875",
+        "01876",
+        "01882",
+        "01884",
+        "01885",
+        "01889"
+      ]
+    },
+    {
+      "nama": "Moya",
+      "mitra": [
+        "01780",
+        "01781",
+        "01793",
+        "01869",
+        "01886",
+        "01892"
+      ]
+    },
+    {
+      "nama": "wiko",
+      "mitra": [
+        "01780",
+        "01781",
+        "01826",
+        "01838",
+        "01867",
+        "01879"
+      ]
+    },
+    {
+      "nama": "Alaska",
+      "mitra": [
+        "01846",
+        "01882"
+      ]
+    },
+    {
+      "nama": "Belum ada kompetitor",
+      "mitra": [
+        "01733",
+        "01734"
+      ]
+    },
+    {
+      "nama": "hadi",
+      "mitra": [
+        "01826",
+        "01877"
+      ]
+    },
+    {
+      "nama": "kasanah",
+      "mitra": [
+        "01875",
+        "01880"
+      ]
+    },
+    {
+      "nama": "Lokal harga 7.000",
+      "mitra": [
+        "01790",
+        "01791"
+      ]
+    },
+    {
+      "nama": "ra",
+      "mitra": [
+        "01818",
+        "01867"
+      ]
+    },
+    {
+      "nama": "Sukorejo",
+      "mitra": [
+        "01874",
+        "01877"
+      ]
+    },
+    {
+      "nama": "Agen anton",
+      "mitra": [
+        "01838"
+      ]
+    },
+    {
+      "nama": "arif",
+      "mitra": [
+        "01866"
+      ]
+    },
+    {
+      "nama": "babadan",
+      "mitra": [
+        "01874"
+      ]
+    },
+    {
+      "nama": "Balong",
+      "mitra": [
+        "01839"
+      ]
+    },
+    {
+      "nama": "barista",
+      "mitra": [
+        "01871"
+      ]
+    },
+    {
+      "nama": "bbadan",
+      "mitra": [
+        "01886"
+      ]
+    },
+    {
+      "nama": "Bear tube",
+      "mitra": [
+        "01808"
+      ]
+    },
+    {
+      "nama": "Bintang",
+      "mitra": [
+        "01778"
+      ]
+    },
+    {
+      "nama": "Bringin",
+      "mitra": [
+        "01890"
+      ]
+    },
+    {
+      "nama": "Bungkal",
+      "mitra": [
+        "01755"
+      ]
+    },
+    {
+      "nama": "Dapat es dari pak arif",
+      "mitra": [
+        "01777"
+      ]
+    },
+    {
+      "nama": "Driver Lokal",
+      "mitra": [
+        "01779"
+      ]
+    },
+    {
+      "nama": "Eric bungkal",
+      "mitra": [
+        "01891"
+      ]
+    },
+    {
+      "nama": "Es atlas",
+      "mitra": [
+        "01831"
+      ]
+    },
+    {
+      "nama": "Es babadan",
+      "mitra": [
+        "01853"
+      ]
+    },
+    {
+      "nama": "Es kristal dari pak hadi",
+      "mitra": [
+        "01860"
+      ]
+    },
+    {
+      "nama": "Es kristal dari Sukorejo",
+      "mitra": [
+        "01840"
+      ]
+    },
+    {
+      "nama": "Kaisar",
+      "mitra": [
+        "01867"
+      ]
+    },
+    {
+      "nama": "Mam loundri",
+      "mitra": [
+        "01893"
+      ]
+    },
+    {
+      "nama": "mlarak",
+      "mitra": [
+        "01755"
+      ]
+    },
+    {
+      "nama": "Pabrik Lokal",
+      "mitra": [
+        "01736"
+      ]
+    },
+    {
+      "nama": "SSS",
+      "mitra": [
+        "01808"
+      ]
+    },
+    {
+      "nama": "Tidak ada kompetitor",
+      "mitra": [
+        "01803"
+      ]
+    }
+  ],
+  "perMitra": [
+    {
+      "bpId": "01733",
+      "teksAsli": "Belum ada kompetitor",
+      "hasil": [
+        "Belum ada kompetitor"
+      ]
+    },
+    {
+      "bpId": "01734",
+      "teksAsli": "Belum ada kompetitor",
+      "hasil": [
+        "Belum ada kompetitor"
+      ]
+    },
+    {
+      "bpId": "01736",
+      "teksAsli": "Pabrik Lokal",
+      "hasil": [
+        "Pabrik Lokal"
+      ]
+    },
+    {
+      "bpId": "01739",
+      "teksAsli": "ATLAS dan LOKAL",
+      "hasil": [
+        "ATLAS",
+        "LOKAL"
+      ]
+    },
+    {
+      "bpId": "01740",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01744",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01748",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01750",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01751",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01755",
+      "teksAsli": "Bungkal, mlarak",
+      "hasil": [
+        "Bungkal",
+        "mlarak"
+      ]
+    },
+    {
+      "bpId": "01777",
+      "teksAsli": "Dapat es dari pak arif",
+      "hasil": [
+        "Dapat es dari pak arif"
+      ]
+    },
+    {
+      "bpId": "01778",
+      "teksAsli": "Bintang, atlas",
+      "hasil": [
+        "Bintang",
+        "atlas"
+      ]
+    },
+    {
+      "bpId": "01779",
+      "teksAsli": "Driver Lokal",
+      "hasil": [
+        "Driver Lokal"
+      ]
+    },
+    {
+      "bpId": "01780",
+      "teksAsli": "Moya, wiko",
+      "hasil": [
+        "Moya",
+        "wiko"
+      ]
+    },
+    {
+      "bpId": "01781",
+      "teksAsli": "Wiko, moya",
+      "hasil": [
+        "Wiko",
+        "moya"
+      ]
+    },
+    {
+      "bpId": "01785",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01787",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01790",
+      "teksAsli": "Lokal harga 7.000",
+      "hasil": [
+        "Lokal harga 7.000"
+      ]
+    },
+    {
+      "bpId": "01791",
+      "teksAsli": "Lokal harga 7.000",
+      "hasil": [
+        "Lokal harga 7.000"
+      ]
+    },
+    {
+      "bpId": "01793",
+      "teksAsli": "Moya",
+      "hasil": [
+        "Moya"
+      ]
+    },
+    {
+      "bpId": "01794",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01800",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01803",
+      "teksAsli": "Tidak ada kompetitor",
+      "hasil": [
+        "Tidak ada kompetitor"
+      ]
+    },
+    {
+      "bpId": "01808",
+      "teksAsli": "Bear tube, SSS, RR",
+      "hasil": [
+        "Bear tube",
+        "SSS",
+        "RR"
+      ]
+    },
+    {
+      "bpId": "01811",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01816",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01818",
+      "teksAsli": "Atlas, ra",
+      "hasil": [
+        "Atlas",
+        "ra"
+      ]
+    },
+    {
+      "bpId": "01819",
+      "teksAsli": "Atlas, atm",
+      "hasil": [
+        "Atlas",
+        "atm"
+      ]
+    },
+    {
+      "bpId": "01820",
+      "teksAsli": "Atlas, atm",
+      "hasil": [
+        "Atlas",
+        "atm"
+      ]
+    },
+    {
+      "bpId": "01821",
+      "teksAsli": "Atlas, atm",
+      "hasil": [
+        "Atlas",
+        "atm"
+      ]
+    },
+    {
+      "bpId": "01822",
+      "teksAsli": "Lokal",
+      "hasil": [
+        "Lokal"
+      ]
+    },
+    {
+      "bpId": "01823",
+      "teksAsli": "Atm, atlas",
+      "hasil": [
+        "Atm",
+        "atlas"
+      ]
+    },
+    {
+      "bpId": "01826",
+      "teksAsli": "Wiko, hadi",
+      "hasil": [
+        "Wiko",
+        "hadi"
+      ]
+    },
+    {
+      "bpId": "01831",
+      "teksAsli": "Es atlas",
+      "hasil": [
+        "Es atlas"
+      ]
+    },
+    {
+      "bpId": "01832",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    },
+    {
+      "bpId": "01833",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    },
+    {
+      "bpId": "01838",
+      "teksAsli": "Agen anton,wiko",
+      "hasil": [
+        "Agen anton",
+        "wiko"
+      ]
+    },
+    {
+      "bpId": "01839",
+      "teksAsli": "Balong",
+      "hasil": [
+        "Balong"
+      ]
+    },
+    {
+      "bpId": "01840",
+      "teksAsli": "Es kristal dari Sukorejo ",
+      "hasil": [
+        "Es kristal dari Sukorejo"
+      ]
+    },
+    {
+      "bpId": "01845",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    },
+    {
+      "bpId": "01846",
+      "teksAsli": "Alaska, atlas",
+      "hasil": [
+        "Alaska",
+        "atlas"
+      ]
+    },
+    {
+      "bpId": "01850",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    },
+    {
+      "bpId": "01853",
+      "teksAsli": "Es babadan",
+      "hasil": [
+        "Es babadan"
+      ]
+    },
+    {
+      "bpId": "01854",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    },
+    {
+      "bpId": "01860",
+      "teksAsli": "Es kristal dari pak hadi",
+      "hasil": [
+        "Es kristal dari pak hadi"
+      ]
+    },
+    {
+      "bpId": "01866",
+      "teksAsli": "Atlas,arif",
+      "hasil": [
+        "Atlas",
+        "arif"
+      ]
+    },
+    {
+      "bpId": "01867",
+      "teksAsli": "Kaisar, wiko, RA",
+      "hasil": [
+        "Kaisar",
+        "wiko",
+        "RA"
+      ]
+    },
+    {
+      "bpId": "01869",
+      "teksAsli": "RR, moya",
+      "hasil": [
+        "RR",
+        "moya"
+      ]
+    },
+    {
+      "bpId": "01871",
+      "teksAsli": "Atlas, barista",
+      "hasil": [
+        "Atlas",
+        "barista"
+      ]
+    },
+    {
+      "bpId": "01874",
+      "teksAsli": "Sukorejo,babadan",
+      "hasil": [
+        "Sukorejo",
+        "babadan"
+      ]
+    },
+    {
+      "bpId": "01875",
+      "teksAsli": "RR, kasanah",
+      "hasil": [
+        "RR",
+        "kasanah"
+      ]
+    },
+    {
+      "bpId": "01876",
+      "teksAsli": "RR,atm",
+      "hasil": [
+        "RR",
+        "atm"
+      ]
+    },
+    {
+      "bpId": "01877",
+      "teksAsli": "Hadi,sukorejo",
+      "hasil": [
+        "Hadi",
+        "sukorejo"
+      ]
+    },
+    {
+      "bpId": "01879",
+      "teksAsli": "Atlas,wiko",
+      "hasil": [
+        "Atlas",
+        "wiko"
+      ]
+    },
+    {
+      "bpId": "01880",
+      "teksAsli": "Kasanah,atm",
+      "hasil": [
+        "Kasanah",
+        "atm"
+      ]
+    },
+    {
+      "bpId": "01882",
+      "teksAsli": "RR,Alaska",
+      "hasil": [
+        "RR",
+        "Alaska"
+      ]
+    },
+    {
+      "bpId": "01884",
+      "teksAsli": "RR",
+      "hasil": [
+        "RR"
+      ]
+    },
+    {
+      "bpId": "01885",
+      "teksAsli": "RR",
+      "hasil": [
+        "RR"
+      ]
+    },
+    {
+      "bpId": "01886",
+      "teksAsli": "Moya,bbadan",
+      "hasil": [
+        "Moya",
+        "bbadan"
+      ]
+    },
+    {
+      "bpId": "01887",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    },
+    {
+      "bpId": "01888",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    },
+    {
+      "bpId": "01889",
+      "teksAsli": "ATM,RR",
+      "hasil": [
+        "ATM",
+        "RR"
+      ]
+    },
+    {
+      "bpId": "01890",
+      "teksAsli": "Bringin ",
+      "hasil": [
+        "Bringin"
+      ]
+    },
+    {
+      "bpId": "01891",
+      "teksAsli": "Eric bungkal",
+      "hasil": [
+        "Eric bungkal"
+      ]
+    },
+    {
+      "bpId": "01892",
+      "teksAsli": "Moya,atm",
+      "hasil": [
+        "Moya",
+        "atm"
+      ]
+    },
+    {
+      "bpId": "01893",
+      "teksAsli": "Mam loundri",
+      "hasil": [
+        "Mam loundri"
+      ]
+    },
+    {
+      "bpId": "01897",
+      "teksAsli": "Atlas",
+      "hasil": [
+        "Atlas"
+      ]
+    }
+  ]
+}
