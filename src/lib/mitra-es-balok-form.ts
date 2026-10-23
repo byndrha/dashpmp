@@ -71,6 +71,23 @@ export function kartuKeAlamatForm(card: MitraCard | null): MitraAlamatForm {
 }
 
 /**
+ * Nilai Balok Besar yang dikirim saat simpan. PMPakis hanya menjual Balok
+ * Kecil (isian Besar disembunyikan), tetapi baris logistik dipakai bersama
+ * pmpersada (FINAC_PMP_LOGISTIC) — jadi untuk pmpakis kirim nilai TERSIMPAN
+ * kartu, bukan 0/null, supaya harga/kapasitas Besar milik pmpersada tidak
+ * terhapus dan simpan tanpa perubahan tetap tidak menulis apa pun. Mitra baru
+ * pmpakis: 0/null.
+ */
+export function nilaiBalokBesarUntukSimpan(
+  kode: string,
+  card: Pick<MitraCard, "hargaBalokBesar" | "kapasitasBalokBesar"> | null,
+  isian: { hargaBalokBesar: number; kapasitasBalokBesar: number | null }
+): { hargaBalokBesar: number; kapasitasBalokBesar: number | null } {
+  if (kode !== "pmpakis") return isian;
+  return { hargaBalokBesar: card?.hargaBalokBesar ?? 0, kapasitasBalokBesar: card?.kapasitasBalokBesar ?? null };
+}
+
+/**
  * Titik peta halaman /mitra: satu titik per lokasi (utama + tambahan aktif
  * ber-koordinat) untuk mitra aktif. Kartu ganda dari Agen yang sama berbagi
  * pin & lokasi tambahan (dikunci per AgenID), jadi hanya dihitung sekali.

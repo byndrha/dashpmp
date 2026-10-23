@@ -22,7 +22,7 @@ import type { BerkasIdentitasNilai } from "@/components/dashboard/mitra-form/ber
 import type { MitraLocationPoint } from "@/components/dashboard/mitra-locations-map";
 import type { ActionResult } from "@/lib/action-result";
 import { PESAN_SIMPAN_SEBAGIAN, type LokasiTambahanInput, type MitraAlamatForm } from "@/lib/mitra-lokasi";
-import { kartuKeAlamatForm } from "@/lib/mitra-es-balok-form";
+import { kartuKeAlamatForm, nilaiBalokBesarUntukSimpan } from "@/lib/mitra-es-balok-form";
 import type { MitraCard, SumberAgen, WilayahOption } from "@/lib/queries/mitra-es-balok";
 import type { MitraFormKonteksEsBalok, MitraLengkapEsBalokInput } from "@/lib/queries/mitra-es-balok-lokasi";
 import type { BisnisKompetitor, Kompetitor } from "@/lib/queries/kompetitor";
@@ -237,10 +237,13 @@ export function MitraEsBalokFormDialog({
       mitra: {
         nama,
         hargaBalokKecil: angkaAtauNol(hargaKecil),
-        hargaBalokBesar: isPmpakis ? 0 : angkaAtauNol(hargaBesar),
         maksimumHutang: angkaAtauNol(maksHutang),
         kapasitasBalokKecil: angkaAtauNull(kapasitasKecil),
-        kapasitasBalokBesar: isPmpakis ? null : angkaAtauNull(kapasitasBesar),
+        // pmpakis: nilai Besar tersimpan dipertahankan (baris logistik dipakai bersama pmpersada).
+        ...nilaiBalokBesarUntukSimpan(kode, card, {
+          hargaBalokBesar: angkaAtauNol(hargaBesar),
+          kapasitasBalokBesar: angkaAtauNull(kapasitasBesar),
+        }),
         segmentasi,
       },
       namaPenanggungJawab: penanggungJawab.trim() || null,

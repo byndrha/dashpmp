@@ -433,7 +433,7 @@ async function updateMitraDalamTx(tx: sql.Transaction, agenId: string, input: Mi
     | undefined;
   if (!agen) throw new AppError("Mitra tidak ditemukan.");
   const agenBerubah =
-    (agen.Nama ?? "") !== input.nama ||
+    (agen.Nama ?? "").trim() !== input.nama ||
     !teksSama(agen.Telepon, input.telepon) ||
     Number(agen.BalokKecil) !== input.hargaBalokKecil ||
     Number(agen.BalokBesar) !== input.hargaBalokBesar ||
