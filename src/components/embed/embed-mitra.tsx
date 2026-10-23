@@ -27,10 +27,20 @@ interface Pembelian {
   tanggal: string;
   nilai: number;
 }
+// Ringkasan lokasi (utama, alamat mitra, lokasi pengiriman tambahan);
+// `cocok` = kontak lokasi itu memuat nomor percakapan.
+interface LokasiData {
+  label: string;
+  wilayah: string | null;
+  alamat: string | null;
+  kontak: string | null;
+  cocok: boolean;
+}
 interface MitraData {
   id: string;
   nama: string;
   wilayah: string | null;
+  lokasi: LokasiData[];
   totalPiutang: number;
   jumlahFaktur: number;
   aging: Aging[];
@@ -491,6 +501,25 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
               </ul>
             )}
           </section>
+
+          {mitra.lokasi.length > 0 && (
+            <section>
+              <h2 className={judulBagian}>Lokasi ({mitra.lokasi.length})</h2>
+              <ul className="divide-y rounded-xl border bg-card px-4">
+                {mitra.lokasi.map((l, i) => (
+                  <li key={`${l.label}-${i}`} className="flex flex-col gap-0.5 py-2">
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-medium">{l.label}</span>
+                      {l.wilayah && <span className="text-xs text-muted-foreground">{l.wilayah}</span>}
+                      {l.cocok && <span className="text-xs font-medium text-primary">nomor ini</span>}
+                    </span>
+                    {l.alamat && <span className="text-xs text-muted-foreground">{l.alamat}</span>}
+                    {l.kontak && <span className="text-xs tabular-nums text-muted-foreground">{l.kontak}</span>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <PanelRiwayat key={mitra.id} ambil={ambilRiwayat} />
 

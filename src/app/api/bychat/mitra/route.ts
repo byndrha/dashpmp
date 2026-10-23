@@ -21,6 +21,7 @@ export async function POST(req: Request) {
           id: m.id,
           nama: m.nama,
           wilayah: m.wilayah,
+          lokasi: m.lokasi ?? [],
           totalPiutang: kartu.totalPiutang,
           jumlahFaktur: kartu.faktur.length,
           aging: kartu.aging,

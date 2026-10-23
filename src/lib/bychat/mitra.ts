@@ -8,6 +8,7 @@ import {
   type EsBalokAgingBucket,
 } from "@/lib/queries/piutang-invoice-outstanding";
 import { extractPhones, last9, normalizePhone, phoneMatches } from "@/lib/bychat/phone";
+import { cocokkanNomorKeMitra } from "@/lib/bychat/cocok-mitra";
 import { AppError } from "@/lib/action-result";
 import { isPmpDeployment } from "@/lib/tenant";
 import { listActiveMetodePembayaran } from "@/lib/queries/metode-pembayaran";
@@ -29,10 +30,22 @@ export function assertPtKode(kode: string): PtKode {
   throw new AppError(`PT "${kode}" belum didukung integrasi ByChat.`);
 }
 
+// Ringkasan satu lokasi mitra untuk panel /embed/mitra. `cocok` = kolom
+// kontak lokasi ini memuat nomor percakapan.
+export interface LokasiRingkas {
+  label: string; // "Utama" / "Alamat Mitra" / label lokasi / "Lokasi N"
+  wilayah: string | null;
+  alamat: string | null;
+  kontak: string | null;
+  cocok: boolean;
+}
+
 export interface MitraRingkas {
   id: string;
   nama: string;
   wilayah: string | null;
+  // Hanya diisi cariMitraByNomor (tidak oleh ambilMitraById / tautan publik).
+  lokasi?: LokasiRingkas[];
 }
 
 export interface FakturRow {
@@ -104,36 +117,176 @@ export async function cariMitraByNomor(ptKode: PtKode, nomorMentah: string): Pro
   if (!nomor) return [];
   const l9 = last9(nomor);
   if (!l9) return [];
+  return ptKode === "mkesindo" ? cariMkesindo(nomor, l9) : cariEsBalok(ptKode, nomor, l9);
+}
 
-  if (ptKode === "mkesindo") {
-    const pool = await getPool();
-    const r = await pool
-      .request()
-      .input("l9", sql.VarChar(16), `%${l9}%`)
-      .query(`
-        SELECT BusinessPartnerID, Name, NPWPName AS Wilayah, MobileNo, PhoneNo
-        FROM BusinessPartner WITH (NOLOCK)
-        WHERE IsDeleted = 0 AND (${STRIP_SQL("MobileNo")} LIKE @l9 OR ${STRIP_SQL("PhoneNo")} LIKE @l9)
-      `);
-    return (r.recordset as { BusinessPartnerID: string; Name: string; Wilayah: string | null; MobileNo: string | null; PhoneNo: string | null }[])
-      .filter((b) => phoneMatches(b.MobileNo, nomor) || phoneMatches(b.PhoneNo, nomor))
-      .map((b) => ({ id: b.BusinessPartnerID, nama: b.Name, wilayah: b.Wilayah }))
-      .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
-  }
+// Baris kontak tambahan (alamat mitra / lokasi pengiriman) per mitra kandidat.
+interface KontakTambahanRow {
+  PartnerID: string;
+  Jenis: "alamat" | "lokasi";
+  Label: string | null;
+  Wilayah: string | null;
+  Alamat: string | null;
+  Kontak: string | null;
+}
 
+interface KandidatMitra {
+  id: string;
+  nama: string;
+  wilayah: string | null;
+  kontakUtama: (string | null)[];
+  utama: LokasiRingkas;
+}
+
+// Placeholder IN (@p0, @p1, ...) untuk daftar ID kandidat (sedikit, hasil prefilter).
+function inputDaftarId(req: sql.Request, ids: string[]): string {
+  return ids
+    .map((id, i) => {
+      req.input(`p${i}`, sql.VarChar(16), id);
+      return `@p${i}`;
+    })
+    .join(",");
+}
+
+/**
+ * Kandidat prefilter → cocokkanNomorKeMitra (semua kolom kontak) →
+ * MitraRingkas + ringkasan lokasi (utama, alamat mitra, lokasi tambahan
+ * aktif) dengan penanda kontak mana yang cocok.
+ */
+function susunHasil(nomor: string, kandidat: KandidatMitra[], tambahan: KontakTambahanRow[]): MitraRingkas[] {
+  const perMitra = new Map<string, KontakTambahanRow[]>();
+  for (const t of tambahan) perMitra.set(t.PartnerID, [...(perMitra.get(t.PartnerID) ?? []), t]);
+  const cocok = new Set(
+    cocokkanNomorKeMitra(
+      nomor,
+      kandidat.map((k) => ({ id: k.id, kontak: [...k.kontakUtama, ...(perMitra.get(k.id) ?? []).map((t) => t.Kontak)] }))
+    )
+  );
+  return kandidat
+    .filter((k) => cocok.has(k.id))
+    .map((k) => {
+      let nomorLokasi = 1;
+      const lokasi: LokasiRingkas[] = [
+        k.utama,
+        ...(perMitra.get(k.id) ?? []).map((t) => ({
+          label: t.Jenis === "alamat" ? "Alamat Mitra" : t.Label?.trim() || `Lokasi ${++nomorLokasi}`,
+          wilayah: t.Wilayah,
+          alamat: t.Alamat,
+          kontak: t.Kontak,
+          cocok: phoneMatches(t.Kontak, nomor),
+        })),
+      ];
+      return { id: k.id, nama: k.nama, wilayah: k.wilayah, lokasi };
+    })
+    .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
+}
+
+async function cariMkesindo(nomor: string, l9: string): Promise<MitraRingkas[]> {
+  const pool = await getPool();
+  const r = await pool
+    .request()
+    .input("l9", sql.VarChar(16), `%${l9}%`)
+    .query(`
+      SELECT bp.BusinessPartnerID, bp.Name, bp.NPWPName AS Wilayah, bp.Address AS Alamat, bp.MobileNo, bp.PhoneNo
+      FROM BusinessPartner bp WITH (NOLOCK)
+      WHERE bp.IsDeleted = 0 AND (
+        ${STRIP_SQL("bp.MobileNo")} LIKE @l9 OR ${STRIP_SQL("bp.PhoneNo")} LIKE @l9
+        OR EXISTS (SELECT 1 FROM DashboardMitraAlamat ma WITH (NOLOCK)
+                   WHERE ma.BusinessPartnerID = bp.BusinessPartnerID AND ${STRIP_SQL("ma.Kontak")} LIKE @l9)
+        OR EXISTS (SELECT 1 FROM DashboardMitraLokasiPengiriman lp WITH (NOLOCK)
+                   WHERE lp.BusinessPartnerID = bp.BusinessPartnerID AND lp.IsDeleted = 0 AND ${STRIP_SQL("lp.Kontak")} LIKE @l9)
+      )
+    `);
+  const rows = r.recordset as {
+    BusinessPartnerID: string;
+    Name: string;
+    Wilayah: string | null;
+    Alamat: string | null;
+    MobileNo: string | null;
+    PhoneNo: string | null;
+  }[];
+  if (rows.length === 0) return [];
+
+  const req = pool.request();
+  const daftar = inputDaftarId(req, rows.map((b) => b.BusinessPartnerID));
+  const t = await req.query(`
+    SELECT BusinessPartnerID AS PartnerID, 'alamat' AS Jenis, CAST(NULL AS varchar(64)) AS Label,
+           Wilayah, Alamat, Kontak, 0 AS Urutan, 0 AS LokasiPengirimanID
+    FROM DashboardMitraAlamat WITH (NOLOCK) WHERE BusinessPartnerID IN (${daftar})
+    UNION ALL
+    SELECT BusinessPartnerID, 'lokasi', Label, Wilayah, Alamat, Kontak, Urutan, LokasiPengirimanID
+    FROM DashboardMitraLokasiPengiriman WITH (NOLOCK) WHERE IsDeleted = 0 AND BusinessPartnerID IN (${daftar})
+    ORDER BY PartnerID, Urutan, LokasiPengirimanID
+  `);
+  return susunHasil(
+    nomor,
+    rows.map((b) => ({
+      id: b.BusinessPartnerID,
+      nama: b.Name,
+      wilayah: b.Wilayah,
+      kontakUtama: [b.MobileNo, b.PhoneNo],
+      utama: {
+        label: "Utama",
+        wilayah: b.Wilayah,
+        alamat: b.Alamat,
+        kontak: b.MobileNo,
+        cocok: phoneMatches(b.MobileNo, nomor) || phoneMatches(b.PhoneNo, nomor),
+      },
+    })),
+    t.recordset as KontakTambahanRow[]
+  );
+}
+
+// Es Balok: hanya DB "utama" PT (sama dengan perilaku sebelumnya). Alamat
+// mitra & lokasi tambahan Agen sumber "utama" disimpan di DB yang sama
+// (resolveAgenKoneksi), jadi cukup satu pool.
+async function cariEsBalok(ptKode: PtKode, nomor: string, l9: string): Promise<MitraRingkas[]> {
   const { kode, label } = resolveAgenKoneksi(ptKode, "utama");
   const pool = await getCompanyPool(kode, label);
   const r = await pool
     .request()
     .input("l9", sql.VarChar(16), `%${l9}%`)
     .query(`
-      SELECT AgenID, Nama, Telepon FROM PMP_Agen WITH (NOLOCK)
-      WHERE IsDeleted = 0 AND ${STRIP_SQL("Telepon")} LIKE @l9
+      SELECT a.AgenID, a.Nama, a.Telepon, w.Nama AS WilayahNama, ad.Address1 AS Alamat
+      FROM PMP_Agen a WITH (NOLOCK)
+      OUTER APPLY (SELECT TOP 1 d.RegionID, d.Address1 FROM PMP_AgenDetail d WITH (NOLOCK)
+                   WHERE d.AgenID = a.AgenID AND ISNULL(d.IsDeleted, 0) = 0 ORDER BY d.AgenDetailID) ad
+      LEFT JOIN PMP_Wilayah w ON w.WilayahID = ad.RegionID
+      WHERE a.IsDeleted = 0 AND (
+        ${STRIP_SQL("a.Telepon")} LIKE @l9
+        OR EXISTS (SELECT 1 FROM DashboardAgenAlamat aa WITH (NOLOCK)
+                   WHERE aa.AgenID = a.AgenID AND ${STRIP_SQL("aa.Kontak")} LIKE @l9)
+        OR EXISTS (SELECT 1 FROM DashboardAgenLokasiPengiriman lp WITH (NOLOCK)
+                   WHERE lp.AgenID = a.AgenID AND lp.IsDeleted = 0 AND ${STRIP_SQL("lp.Kontak")} LIKE @l9)
+      )
     `);
-  return (r.recordset as { AgenID: string; Nama: string; Telepon: string | null }[])
-    .filter((a) => phoneMatches(a.Telepon, nomor))
-    .map((a) => ({ id: a.AgenID, nama: a.Nama, wilayah: null }))
-    .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
+  const rows = r.recordset as { AgenID: string; Nama: string; Telepon: string | null; WilayahNama: string | null; Alamat: string | null }[];
+  if (rows.length === 0) return [];
+
+  const req = pool.request();
+  const daftar = inputDaftarId(req, rows.map((a) => a.AgenID));
+  const t = await req.query(`
+    SELECT aa.AgenID AS PartnerID, 'alamat' AS Jenis, CAST(NULL AS varchar(64)) AS Label,
+           w.Nama AS Wilayah, aa.Alamat, aa.Kontak, 0 AS Urutan, 0 AS LokasiPengirimanID
+    FROM DashboardAgenAlamat aa WITH (NOLOCK) LEFT JOIN PMP_Wilayah w ON w.WilayahID = aa.WilayahID
+    WHERE aa.AgenID IN (${daftar})
+    UNION ALL
+    SELECT lp.AgenID, 'lokasi', lp.Label, w.Nama, lp.Alamat, lp.Kontak, lp.Urutan, lp.LokasiPengirimanID
+    FROM DashboardAgenLokasiPengiriman lp WITH (NOLOCK) LEFT JOIN PMP_Wilayah w ON w.WilayahID = lp.WilayahID
+    WHERE lp.IsDeleted = 0 AND lp.AgenID IN (${daftar})
+    ORDER BY PartnerID, Urutan, LokasiPengirimanID
+  `);
+  return susunHasil(
+    nomor,
+    rows.map((a) => ({
+      id: a.AgenID,
+      nama: a.Nama,
+      wilayah: null, // sama dengan perilaku lama: wilayah kartu Es Balok tidak diisi
+      kontakUtama: [a.Telepon],
+      utama: { label: "Utama", wilayah: a.WilayahNama, alamat: a.Alamat, kontak: a.Telepon, cocok: phoneMatches(a.Telepon, nomor) },
+    })),
+    t.recordset as KontakTambahanRow[]
+  );
 }
 
 // Nomor tujuan pengiriman = nomor kanonik yang sudah terbukti cocok dengan
