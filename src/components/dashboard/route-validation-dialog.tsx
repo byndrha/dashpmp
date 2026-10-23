@@ -50,6 +50,7 @@ import type { VehicleCheckRow } from "@/lib/vehicle-check-types";
 import {
   getJadwalDetailAction,
   updateJadwalUrutanAction,
+  setJadwalDetailLokasiAction,
   updateJadwalDriverTimeAction,
   addSalesOrdersToJadwalAction,
   removeSalesOrderFromJadwalAction,
@@ -71,6 +72,7 @@ import {
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
 import { shareImageBlob, shareTextBlock } from "@/lib/share-image";
+import { pilihanLokasiStopTampil } from "@/lib/mitra-lokasi";
 
 const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((m) => m.RouteMap), {
   ssr: false,
@@ -96,6 +98,10 @@ function formatDurationMinutes(totalMinutes: number): string {
   return rest > 0 ? `${hours} Jam ${rest} Menit` : `${hours} Jam`;
 }
 
+// Nilai Select untuk "Utama" (LokasiPengirimanID NULL) — base-ui Select
+// butuh string, jadi NULL dipetakan ke penanda ini.
+const LOKASI_UTAMA = "utama";
+
 function SortableStopRow({
   detail,
   index,
@@ -105,6 +111,7 @@ function SortableStopRow({
   onRemove,
   hasDeparted,
   onOpenProof,
+  onChangeLokasi,
 }: {
   detail: DriverStopRow;
   index: number;
@@ -122,7 +129,12 @@ function SortableStopRow({
   // the popup itself (not this row) decides whether there's anything to show.
   hasDeparted: boolean;
   onOpenProof: (detail: DriverStopRow) => void;
+  // Pemilih lokasi pengiriman stop — hanya diteruskan selama Draft. Tetap
+  // tersembunyi bila mitra cuma punya 1 lokasi (LokasiPilihan null) atau
+  // alamat stop sudah dibekukan (DO sudah dibuat).
+  onChangeLokasi?: (detail: DriverStopRow, lokasiPengirimanId: number | null) => void;
 }) {
+  const pilihanLokasi = pilihanLokasiStopTampil(detail.LokasiPilihan, detail.LokasiDibekukan, onChangeLokasi != null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: detail.JadwalDetailID,
   });
@@ -142,11 +154,12 @@ function SortableStopRow({
       <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
         {index + 1}
       </span>
+      <div className="min-w-0 flex-1">
       <button
         type="button"
         onClick={() => !disabled && onEdit(detail)}
         disabled={disabled}
-        className="min-w-0 flex-1 text-left hover:underline disabled:cursor-default disabled:hover:no-underline"
+        className="w-full min-w-0 text-left hover:underline disabled:cursor-default disabled:hover:no-underline"
       >
         <p className="truncate text-base font-semibold">{detail.CustomerName}</p>
         <p className="flex items-center gap-1 truncate text-muted-foreground">
@@ -158,6 +171,31 @@ function SortableStopRow({
           <p className="text-xs text-muted-foreground">Tiba {formatTime(detail.JamTiba)}</p>
         )}
       </button>
+      {pilihanLokasi && (
+        <Select
+          value={detail.LokasiPengirimanID == null ? LOKASI_UTAMA : String(detail.LokasiPengirimanID)}
+          onValueChange={(v) => {
+            if (v == null) return;
+            onChangeLokasi?.(detail, v === LOKASI_UTAMA ? null : Number(v));
+          }}
+        >
+          <SelectTrigger size="sm" className="mt-1 h-7 w-full max-w-72 text-xs" title="Lokasi pengiriman stop ini">
+            <SelectValue>
+              {(v: string) =>
+                pilihanLokasi.find((p) => (p.id == null ? LOKASI_UTAMA : String(p.id)) === v)?.label ?? "Lokasi pengiriman"
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {pilihanLokasi.map((p) => (
+              <SelectItem key={p.id ?? LOKASI_UTAMA} value={p.id == null ? LOKASI_UTAMA : String(p.id)}>
+                {p.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      </div>
       {/* Widened per explicit user request (confirmed OK with the tighter
           name/location column that results) so "155 kantong (10 KG)" fits
           on one line instead of wrapping — was w-24, which avoided the
@@ -696,6 +734,24 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
           onDeleted?.();
           onOpenChange(false);
         }
+        return;
+      }
+      const rows = await getJadwalDetailAction(targetId);
+      if (jadwalIdRef.current === targetId) setOrder(rows);
+    });
+  }
+
+  // Ganti lokasi pengiriman satu stop, lalu muat ulang daftar stop —
+  // koordinat baru memicu hitung ulang rute (efek [order, pabrik]).
+  function handleChangeLokasi(detail: DriverStopRow, lokasiPengirimanId: number | null) {
+    if (jadwalId == null) return;
+    if (detail.LokasiPengirimanID === lokasiPengirimanId) return;
+    const targetId = jadwalId;
+    setError(null);
+    startTransition(async () => {
+      const result = await setJadwalDetailLokasiAction(detail.JadwalDetailID, lokasiPengirimanId);
+      if (!result.success) {
+        if (jadwalIdRef.current === targetId) setError(result.error);
         return;
       }
       const rows = await getJadwalDetailAction(targetId);
@@ -1512,6 +1568,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                         onRemove={isDraft ? handleRemoveStop : undefined}
                         hasDeparted={hasDeparted}
                         onOpenProof={setProofDetail}
+                        onChangeLokasi={isDraft ? handleChangeLokasi : undefined}
                       />
                     ))}
                   </SortableContext>

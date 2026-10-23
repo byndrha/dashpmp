@@ -1,3 +1,4 @@
+import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS } from "@/lib/queries/mitra-lokasi-pengiriman";
 import { getPool, sql } from "@/lib/db";
 import { getSatpamShiftWindow, type SatpamShiftType } from "@/lib/satpam-shift";
 import { naiveWibToUtcInstant } from "@/lib/business-date";
@@ -39,14 +40,18 @@ async function getLokasiTerjauhPerJadwal(
     return `@jid${i}`;
   });
   const stopsResult = await request.query(`
-    SELECT jd.JadwalID, ml.Latitude, ml.Longitude,
-           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-           bp.NPWPAddress AS Kecamatan
-    FROM DashboardPengirimanJadwalDetail jd
-    JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
-    JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
-    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
-    WHERE jd.JadwalID IN (${placeholders.join(",")}) AND jd.IsDeleted = 0
+    SELECT x.JadwalID, x.StopLatitude AS Latitude, x.StopLongitude AS Longitude,
+           ISNULL(NULLIF(LTRIM(RTRIM(x.StopWilayah)), ''), 'Tidak Diketahui') AS Wilayah,
+           x.StopKecamatan AS Kecamatan
+    FROM (
+      -- Lokasi stop (snapshot / terpilih / utama) — lihat STOP_LOKASI_COLUMNS.
+      SELECT jd.JadwalID, ${STOP_LOKASI_COLUMNS("jd")}
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+      JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+      ${STOP_LOKASI_JOIN("jd", "so")}
+      WHERE jd.JadwalID IN (${placeholders.join(",")}) AND jd.IsDeleted = 0
+    ) x
   `);
   type StopRow = { JadwalID: number; Latitude: number | null; Longitude: number | null; Wilayah: string; Kecamatan: string | null };
   const byJadwal = new Map<number, (StopRow & { Latitude: number; Longitude: number })[]>();

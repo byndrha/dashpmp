@@ -115,3 +115,25 @@ export function saringNikMasukan<T extends { nik?: string | null }>(input: T, bo
   delete salinan.nik;
   return salinan;
 }
+
+/** Lebar live kolom ERP DeliveryOrder.AddressDelivery (varchar(150)). */
+export const ADDRESS_DELIVERY_MAKS = 150;
+
+/**
+ * Nilai DeliveryOrder.AddressDelivery dari alamat stop yang dibekukan saat
+ * DO dibuat (spec §9.2): NULL → '' (perilaku lama), dipotong ke 150 karakter.
+ */
+export function alamatUntukDeliveryOrder(alamatBeku: string | null): string {
+  return (alamatBeku ?? "").slice(0, ADDRESS_DELIVERY_MAKS);
+}
+
+/**
+ * Pilihan yang ditampilkan pemilih lokasi di kartu stop Papan Pengiriman,
+ * atau null bila pemilih harus disembunyikan: Jadwal bukan Draft
+ * (`bolehUbah` false), alamat stop sudah dibekukan, atau mitra hanya punya
+ * satu lokasi (pilihan null / ≤1 elemen).
+ */
+export function pilihanLokasiStopTampil<T>(pilihan: T[] | null, dibekukan: boolean, bolehUbah: boolean): T[] | null {
+  if (!bolehUbah || dibekukan || !pilihan || pilihan.length <= 1) return null;
+  return pilihan;
+}

@@ -12,6 +12,8 @@ import {
   removeSalesOrderFromJadwal,
   findDraftJadwalByArmadaAndTime,
   addSalesOrdersToJadwal,
+  getLokasiStopSalesOrder,
+  terapkanLokasiStopSalesOrder,
 } from "@/lib/queries/pengiriman-jadwal";
 import { AppError } from "@/lib/action-result";
 import { softDeleteTakeAwayMuatanForSalesOrder, isTakeAwayMuatanStarted } from "@/lib/queries/takeaway-muatan";
@@ -432,6 +434,10 @@ export async function reschedulePemesanan(input: ReschedulePemesananInput): Prom
   }
 
   if (current) {
+    // Lokasi pengiriman stop ikut terbawa ke Jadwal baru (spec §9.1) —
+    // baris JadwalDetail baru selalu lahir dengan LokasiPengirimanID NULL.
+    const lokasiLama = await getLokasiStopSalesOrder(current.jadwalId, input.salesOrderId);
+    if (lokasiLama != null) await terapkanLokasiStopSalesOrder(jadwalId, input.salesOrderId, lokasiLama);
     await removeSalesOrderFromJadwal(current.jadwalId, input.salesOrderId);
   }
 

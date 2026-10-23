@@ -9,6 +9,7 @@ import {
   addSalesOrdersToJadwal,
   removeSalesOrderFromJadwal,
   updateJadwalUrutan,
+  setJadwalDetailLokasi,
   updateJadwalDriverTime,
   updateJadwalArmada,
   startMuat,
@@ -157,6 +158,20 @@ export async function removeSalesOrderFromJadwalAction(jadwalId: number, salesOr
 export async function updateJadwalUrutanAction(jadwalId: number, orderedDetailIds: number[]): Promise<ActionResult<void>> {
   return runAction(async () => {
     await updateJadwalUrutan(jadwalId, orderedDetailIds);
+    revalidatePath("/mkesindo/delivery");
+  });
+}
+
+// Pemilih lokasi pengiriman per stop (kartu stop Validasi Rute). null =
+// lokasi utama. Validasi kepemilikan lokasi + status beku ada di
+// setJadwalDetailLokasi.
+export async function setJadwalDetailLokasiAction(
+  jadwalDetailId: number,
+  lokasiPengirimanId: number | null
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    await setJadwalDetailLokasi(jadwalDetailId, lokasiPengirimanId);
     revalidatePath("/mkesindo/delivery");
   });
 }

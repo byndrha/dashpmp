@@ -19,6 +19,8 @@ import {
   utcInstantToWibDisplay,
 } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
+import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS, getLokasiPilihanStop } from "@/lib/queries/mitra-lokasi-pengiriman";
+import { alamatUntukDeliveryOrder } from "@/lib/mitra-lokasi";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
 // mitra-do.ts's KANTONG_QTY_EXPR, applied to SalesOrderDetail.Qty since that
@@ -552,12 +554,17 @@ async function getEstimasiSampaiPerJadwal(pool: sql.ConnectionPool, jadwalIds: n
   const [pabrik, stopsResult, headerResult] = await Promise.all([
     getPabrikLocation(),
     stopsRequest.query(`
-      SELECT jd.JadwalID, ml.Latitude, ml.Longitude
-      FROM DashboardPengirimanJadwalDetail jd
-      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
-      LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
-      WHERE jd.JadwalID IN (${stopsPlaceholders.join(",")}) AND jd.IsDeleted = 0
-      ORDER BY jd.JadwalID, jd.Urutan
+      SELECT x.JadwalID, x.StopLatitude AS Latitude, x.StopLongitude AS Longitude
+      FROM (
+        -- Koordinat stop = snapshot / lokasi terpilih / utama (STOP_LOKASI_COLUMNS).
+        SELECT jd.JadwalID, jd.Urutan, ${STOP_LOKASI_COLUMNS("jd")}
+        FROM DashboardPengirimanJadwalDetail jd
+        JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+        JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+        ${STOP_LOKASI_JOIN("jd", "so")}
+        WHERE jd.JadwalID IN (${stopsPlaceholders.join(",")}) AND jd.IsDeleted = 0
+      ) x
+      ORDER BY x.JadwalID, x.Urutan
     `),
     headerRequest.query(
       `SELECT JadwalID, JamJadwal, JamAktualBerangkat FROM DashboardPengirimanJadwal WHERE JadwalID IN (${headerPlaceholders.join(",")})`
@@ -778,15 +785,20 @@ async function estimateTravelMinutesForJadwal(
     return `@jid${i}`;
   });
   const stopsResult = await request.query(`
-    SELECT jd.JadwalID, ml.Latitude, ml.Longitude,
-           ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-           bp.NPWPAddress AS Kecamatan
-    FROM DashboardPengirimanJadwalDetail jd
-    JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
-    JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
-    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
-    WHERE jd.JadwalID IN (${placeholders.join(",")}) AND jd.IsDeleted = 0
-    ORDER BY jd.JadwalID, jd.Urutan
+    SELECT x.JadwalID, x.StopLatitude AS Latitude, x.StopLongitude AS Longitude,
+           ISNULL(NULLIF(LTRIM(RTRIM(x.StopWilayah)), ''), 'Tidak Diketahui') AS Wilayah,
+           x.StopKecamatan AS Kecamatan
+    FROM (
+      -- Pengelompokan wilayah/kecamatan + waktu tempuh memakai lokasi stop
+      -- (snapshot / terpilih / utama), bukan selalu lokasi utama mitra.
+      SELECT jd.JadwalID, jd.Urutan, ${STOP_LOKASI_COLUMNS("jd")}
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+      JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+      ${STOP_LOKASI_JOIN("jd", "so")}
+      WHERE jd.JadwalID IN (${placeholders.join(",")}) AND jd.IsDeleted = 0
+    ) x
+    ORDER BY x.JadwalID, x.Urutan
   `);
   type StopRow = { JadwalID: number; Latitude: number | null; Longitude: number | null; Wilayah: string; Kecamatan: string | null };
   const stopsByJadwal = new Map<number, LatLng[]>();
@@ -851,6 +863,12 @@ export interface JadwalDetailRow {
   // selling price in RouteValidationDialog. Null when the mitra has no
   // price level set.
   PriceLevel: number | null;
+  // Lokasi pengiriman terpilih untuk stop ini (NULL = lokasi utama) dan
+  // apakah alamatnya sudah dibekukan (KirimDibekukanAt terisi saat DO
+  // dibuat). Wilayah/Kecamatan/Alamat/MobileNo/Latitude/Longitude di atas
+  // sudah ter-resolve lewat STOP_LOKASI_COLUMNS (snapshot → terpilih → utama).
+  LokasiPengirimanID: number | null;
+  LokasiDibekukan: boolean;
 }
 
 // Always sources customer/qty/address from SalesOrder/SalesOrderDetail via
@@ -864,37 +882,55 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
     .request()
     .input("jadwalId", sql.Int, jadwalId).query(`
       SELECT
-          jd.JadwalDetailID,
-          jd.SalesOrderID,
-          jd.DeliveryOrderID,
-          jd.SalesInvoiceID,
-          jd.Urutan,
-          bp.Name AS CustomerName,
-          ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty,
-          ISNULL(${JADWAL_BONUS_QTY_EXPR}, 0) AS BonusQty,
-          ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
-          ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG,
-          ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-          bp.NPWPAddress AS Kecamatan,
-          bp.Address AS Alamat,
-          bp.MobileNo,
-          ml.Latitude,
-          ml.Longitude,
-          bp.PriceLevel
-      FROM DashboardPengirimanJadwalDetail jd
-      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
-      JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
-      LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
-      LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
-      WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
-      GROUP BY jd.JadwalDetailID, jd.SalesOrderID, jd.DeliveryOrderID, jd.SalesInvoiceID, jd.Urutan,
-               bp.Name, bp.NPWPName, bp.NPWPAddress, bp.Address, bp.MobileNo, ml.Latitude, ml.Longitude, bp.PriceLevel
-      ORDER BY jd.Urutan
+          x.JadwalDetailID,
+          x.SalesOrderID,
+          x.DeliveryOrderID,
+          x.SalesInvoiceID,
+          x.Urutan,
+          x.CustomerName,
+          x.Qty, x.BonusQty, x.Qty10KG, x.Qty5KG,
+          ISNULL(NULLIF(LTRIM(RTRIM(x.StopWilayah)), ''), 'Tidak Diketahui') AS Wilayah,
+          x.StopKecamatan AS Kecamatan,
+          x.StopAlamat AS Alamat,
+          x.StopKontak AS MobileNo,
+          x.StopLatitude AS Latitude,
+          x.StopLongitude AS Longitude,
+          x.PriceLevel,
+          x.LokasiPengirimanID,
+          CAST(CASE WHEN x.KirimDibekukanAt IS NOT NULL THEN 1 ELSE 0 END AS bit) AS LokasiDibekukan
+      FROM (
+        -- Alamat/kontak/pin stop lewat STOP_LOKASI_COLUMNS (snapshot →
+        -- lokasi terpilih → utama). Qty diagregasi di OUTER APPLY supaya
+        -- kolom CASE di atas tidak perlu ikut GROUP BY.
+        SELECT jd.JadwalDetailID, jd.SalesOrderID, jd.DeliveryOrderID, jd.SalesInvoiceID, jd.Urutan,
+               jd.LokasiPengirimanID, jd.KirimDibekukanAt,
+               bp.Name AS CustomerName, bp.PriceLevel,
+               ISNULL(q.Qty, 0) AS Qty, ISNULL(q.BonusQty, 0) AS BonusQty,
+               ISNULL(q.Qty10KG, 0) AS Qty10KG, ISNULL(q.Qty5KG, 0) AS Qty5KG,
+               ${STOP_LOKASI_COLUMNS("jd")}
+        FROM DashboardPengirimanJadwalDetail jd
+        JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+        JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+        ${STOP_LOKASI_JOIN("jd", "so")}
+        OUTER APPLY (
+          SELECT ${JADWAL_KANTONG_EXPR} AS Qty,
+                 ${JADWAL_BONUS_QTY_EXPR} AS BonusQty,
+                 ${JADWAL_KANTONG_10KG_EXPR} AS Qty10KG,
+                 ${JADWAL_KANTONG_5KG_EXPR} AS Qty5KG
+          FROM SalesOrderDetail sod WHERE sod.SalesOrderID = jd.SalesOrderID
+        ) q
+        WHERE jd.JadwalID = @jadwalId AND jd.IsDeleted = 0
+      ) x
+      ORDER BY x.Urutan
     `);
   const rows = result.recordset as (Omit<JadwalDetailRow, "InvoiceToken"> & { SalesInvoiceID: string | null })[];
   return rows.map((r) => {
     const { SalesInvoiceID, ...rest } = r;
-    return { ...rest, InvoiceToken: SalesInvoiceID ? encodeInvoiceToken(SalesInvoiceID) : null };
+    return {
+      ...rest,
+      LokasiDibekukan: Boolean(rest.LokasiDibekukan),
+      InvoiceToken: SalesInvoiceID ? encodeInvoiceToken(SalesInvoiceID) : null,
+    };
   });
 }
 
@@ -1095,12 +1131,30 @@ async function getStopLocationsForSalesOrders(
     return `@so${i}`;
   });
   const result = await request.query(`
-    SELECT so.SalesOrderID, ml.Latitude, ml.Longitude, ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Qty
-    FROM SalesOrder so
-    LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = so.SalesOrderID
-    LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = so.BusinessPartnerID
-    WHERE so.SalesOrderID IN (${placeholders.join(",")})
-    GROUP BY so.SalesOrderID, ml.Latitude, ml.Longitude
+    SELECT x.SalesOrderID, x.StopLatitude AS Latitude, x.StopLongitude AS Longitude, x.Qty
+    FROM (
+      -- Lokasi stop: bila SO ini sudah duduk di JadwalDetail aktif (Jadwal
+      -- tidak dihapus), pakai lokasi stop itu (snapshot / terpilih); SO
+      -- kandidat yang belum dijadwalkan → jd NULL → lokasi utama. Dipakai
+      -- aturan travel-time + overlap/merge di ketiga jalur tulis Jadwal.
+      SELECT so.SalesOrderID, ISNULL(q.Qty, 0) AS Qty, ${STOP_LOKASI_COLUMNS("jd")}
+      FROM SalesOrder so
+      LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+      OUTER APPLY (
+        SELECT TOP 1 jd0.JadwalDetailID, jd0.LokasiPengirimanID, jd0.KirimDibekukanAt,
+               jd0.KirimAlamat, jd0.KirimWilayah, jd0.KirimKecamatan, jd0.KirimKontak,
+               jd0.KirimLatitude, jd0.KirimLongitude
+        FROM DashboardPengirimanJadwalDetail jd0
+        JOIN DashboardPengirimanJadwal j0 ON j0.JadwalID = jd0.JadwalID AND j0.IsDeleted = 0
+        WHERE jd0.SalesOrderID = so.SalesOrderID AND jd0.IsDeleted = 0
+        ORDER BY jd0.JadwalDetailID DESC
+      ) jd
+      ${STOP_LOKASI_JOIN("jd", "so")}
+      OUTER APPLY (
+        SELECT ${JADWAL_KANTONG_EXPR} AS Qty FROM SalesOrderDetail sod WHERE sod.SalesOrderID = so.SalesOrderID
+      ) q
+      WHERE so.SalesOrderID IN (${placeholders.join(",")})
+    ) x
   `);
   for (const row of result.recordset as { SalesOrderID: string; Latitude: number | null; Longitude: number | null; Qty: number }[]) {
     map.set(row.SalesOrderID, row.Latitude != null && row.Longitude != null ? { lat: row.Latitude, lng: row.Longitude, qty: row.Qty } : null);
@@ -1420,16 +1474,147 @@ async function insertJadwalDetailRows(
   startUrutan: number
 ): Promise<void> {
   for (let i = 0; i < rows.length; i++) {
-    await pool
-      .request()
-      .input("jadwalId", sql.Int, jadwalId)
-      .input("soId", sql.VarChar(16), rows[i].salesOrderId)
-      .input("doId", sql.VarChar(16), rows[i].deliveryOrderId)
-      .input("urutan", sql.Int, startUrutan + i).query(`
-        INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, SalesOrderID, DeliveryOrderID, Urutan, IsDeleted)
-        VALUES (@jadwalId, @soId, @doId, @urutan, 0)
-      `);
+    const insertRow = (exec: sql.ConnectionPool | sql.Transaction) =>
+      exec
+        .request()
+        .input("jadwalId", sql.Int, jadwalId)
+        .input("soId", sql.VarChar(16), rows[i].salesOrderId)
+        .input("doId", sql.VarChar(16), rows[i].deliveryOrderId)
+        .input("urutan", sql.Int, startUrutan + i).query(`
+          INSERT INTO DashboardPengirimanJadwalDetail (JadwalID, SalesOrderID, DeliveryOrderID, Urutan, IsDeleted)
+          OUTPUT inserted.JadwalDetailID
+          VALUES (@jadwalId, @soId, @doId, @urutan, 0)
+        `);
+    if (rows[i].deliveryOrderId == null) {
+      await insertRow(pool);
+      continue;
+    }
+    // DO eksternal (dibuat ERP desktop) sudah punya DeliveryOrderID sejak
+    // baris ini lahir → alamat stop langsung dibekukan ke lokasi utama
+    // (LokasiPengirimanID baris baru selalu NULL), dalam transaksi yang sama
+    // dengan INSERT-nya. DeliveryOrder.AddressDelivery milik ERP TIDAK
+    // ditimpa — dokumen itu bukan buatan dashboard.
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+      const res = await insertRow(tx);
+      const detailId = (res.recordset[0] as { JadwalDetailID: number }).JadwalDetailID;
+      await bekukanLokasiStop(tx, detailId);
+      await tx.commit();
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      throw err;
+    }
   }
+}
+
+// Bekukan alamat stop (spec §6.1 "Pembekuan alamat per stop"): salin hasil
+// resolusi STOP_LOKASI_COLUMNS saat ini (lokasi terpilih, atau utama bila
+// LokasiPengirimanID NULL) ke kolom Kirim* dan isi KirimDibekukanAt. Wajib
+// dipanggil di transaksi yang sama dengan pengisian DeliveryOrderID.
+// Idempoten: baris yang sudah beku tidak ditimpa — nilai beku lama yang
+// dikembalikan. Alamat dipotong ke lebar kolom KirimAlamat (1024).
+async function bekukanLokasiStop(tx: sql.Transaction, jadwalDetailId: number): Promise<{ alamat: string | null }> {
+  const upd = await new sql.Request(tx).input("id", sql.Int, jadwalDetailId).query(`
+    UPDATE t SET
+      KirimAlamat = LEFT(x.StopAlamat, 1024),
+      KirimWilayah = LEFT(x.StopWilayah, 128),
+      KirimKecamatan = LEFT(x.StopKecamatan, 128),
+      KirimKontak = LEFT(x.StopKontak, 128),
+      KirimLatitude = x.StopLatitude,
+      KirimLongitude = x.StopLongitude,
+      KirimDibekukanAt = GETDATE()
+    OUTPUT inserted.KirimAlamat
+    FROM DashboardPengirimanJadwalDetail t
+    JOIN (
+      SELECT jd.JadwalDetailID, ${STOP_LOKASI_COLUMNS("jd")}
+      FROM DashboardPengirimanJadwalDetail jd
+      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+      LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
+      ${STOP_LOKASI_JOIN("jd", "so")}
+      WHERE jd.JadwalDetailID = @id
+    ) x ON x.JadwalDetailID = t.JadwalDetailID
+    WHERE t.JadwalDetailID = @id AND t.KirimDibekukanAt IS NULL
+  `);
+  const baru = upd.recordset[0] as { KirimAlamat: string | null } | undefined;
+  if (baru) return { alamat: baru.KirimAlamat };
+  const lama = await new sql.Request(tx)
+    .input("id", sql.Int, jadwalDetailId)
+    .query(`SELECT KirimAlamat FROM DashboardPengirimanJadwalDetail WHERE JadwalDetailID = @id`);
+  return { alamat: (lama.recordset[0] as { KirimAlamat: string | null } | undefined)?.KirimAlamat ?? null };
+}
+
+// Pilih lokasi pengiriman untuk satu stop di Papan Pengiriman (spec §9.1).
+// NULL = lokasi utama. Ditolak bila stop sudah dibekukan (DO sudah dibuat),
+// Jadwal-nya bukan Draft, atau lokasi bukan milik mitra SO stop tsb / sudah
+// dihapus.
+export async function setJadwalDetailLokasi(jadwalDetailId: number, lokasiPengirimanId: number | null): Promise<void> {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const res = await new sql.Request(tx).input("id", sql.Int, jadwalDetailId).query(`
+      SELECT jd.KirimDibekukanAt, jd.DeliveryOrderID, j.Status, so.BusinessPartnerID
+      FROM DashboardPengirimanJadwalDetail jd WITH (UPDLOCK)
+      JOIN DashboardPengirimanJadwal j ON j.JadwalID = jd.JadwalID AND j.IsDeleted = 0
+      JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
+      WHERE jd.JadwalDetailID = @id AND jd.IsDeleted = 0
+    `);
+    const row = res.recordset[0] as
+      | { KirimDibekukanAt: Date | null; DeliveryOrderID: string | null; Status: JadwalStatus; BusinessPartnerID: string }
+      | undefined;
+    if (!row) throw new AppError("Stop tidak ditemukan.");
+    if (row.KirimDibekukanAt != null || row.DeliveryOrderID != null) {
+      throw new AppError("DO stop ini sudah dibuat — lokasi pengiriman tidak bisa diubah lagi.");
+    }
+    if (row.Status !== "Draft") throw new AppError("Keberangkatan ini sudah rilis — lokasi pengiriman tidak bisa diubah lagi.");
+
+    if (lokasiPengirimanId != null) {
+      const lok = await new sql.Request(tx)
+        .input("lokasiId", sql.Int, lokasiPengirimanId)
+        .input("bpId", sql.VarChar(16), row.BusinessPartnerID).query(`
+          SELECT 1 AS Ada FROM DashboardMitraLokasiPengiriman
+          WHERE LokasiPengirimanID = @lokasiId AND BusinessPartnerID = @bpId AND IsDeleted = 0
+        `);
+      if (!lok.recordset[0]) throw new AppError("Lokasi pengiriman bukan milik mitra stop ini atau sudah dihapus.");
+    }
+
+    await new sql.Request(tx)
+      .input("id", sql.Int, jadwalDetailId)
+      .input("lokasiId", sql.Int, lokasiPengirimanId)
+      .query(`UPDATE DashboardPengirimanJadwalDetail SET LokasiPengirimanID = @lokasiId WHERE JadwalDetailID = @id`);
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+// Salin pilihan lokasi stop satu SO dari JadwalDetail lama ke yang baru —
+// dipakai reschedulePemesanan (pemesanan.ts) yang memindahkan SO dengan
+// INSERT baris baru + soft-delete baris lama, supaya lokasi stop "ikut
+// terbawa" (spec §9.1) alih-alih diam-diam kembali ke Utama. Hanya
+// menyentuh baris tujuan yang belum dibekukan.
+export async function getLokasiStopSalesOrder(jadwalId: number, salesOrderId: string): Promise<number | null> {
+  const pool = await getPool();
+  const res = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .query(`SELECT TOP 1 LokasiPengirimanID FROM DashboardPengirimanJadwalDetail
+            WHERE JadwalID = @jadwalId AND SalesOrderID = @soId AND IsDeleted = 0 ORDER BY JadwalDetailID DESC`);
+  return (res.recordset[0] as { LokasiPengirimanID: number | null } | undefined)?.LokasiPengirimanID ?? null;
+}
+
+export async function terapkanLokasiStopSalesOrder(jadwalId: number, salesOrderId: string, lokasiPengirimanId: number): Promise<void> {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .input("soId", sql.VarChar(16), salesOrderId)
+    .input("lokasiId", sql.Int, lokasiPengirimanId)
+    .query(`UPDATE DashboardPengirimanJadwalDetail SET LokasiPengirimanID = @lokasiId
+            WHERE JadwalID = @jadwalId AND SalesOrderID = @soId AND IsDeleted = 0 AND KirimDibekukanAt IS NULL`);
 }
 
 // Finds a still-open Draft already scheduled for the exact same Armada +
@@ -2375,6 +2560,12 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
           .input("doId", sql.VarChar(16), detail.DeliveryOrderID)
           .query(`UPDATE DeliveryOrder SET ModifiedDate = GETDATE() WHERE DeliveryOrderID = @doId`);
 
+        // DO sudah ada → alamat stop semestinya sudah beku sejak
+        // insertJadwalDetailRows; panggilan idempoten ini menutup baris lama
+        // (sebelum fitur pembekuan) yang belum ter-backfill. AddressDelivery
+        // DO milik ERP tidak disentuh.
+        await bekukanLokasiStop(transaction, detail.JadwalDetailID);
+
         // This stop's DO already existed before this Jadwal's own Selesai
         // Muat ran — but per [[transdate-wib-utc-boundary-bug]]-style live
         // confirmation (2026-08-24: 100% of Terbit stops in the last 3 days
@@ -2504,6 +2695,16 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
         .input("detailId", sql.Int, detail.JadwalDetailID)
         .input("doId", sql.VarChar(16), deliveryOrderId)
         .query(`UPDATE DashboardPengirimanJadwalDetail SET DeliveryOrderID = @doId WHERE JadwalDetailID = @detailId`);
+
+      // Bekukan alamat stop di transaksi yang sama dengan pengisian
+      // DeliveryOrderID (spec §6.1), lalu tulis alamat beku itu ke
+      // DeliveryOrder.AddressDelivery (varchar(150) live → dipotong 150)
+      // supaya ERP desktop ikut menampilkan alamat kirim (spec §9.2).
+      const beku = await bekukanLokasiStop(transaction, detail.JadwalDetailID);
+      await new sql.Request(transaction)
+        .input("doId", sql.VarChar(16), deliveryOrderId)
+        .input("alamat", sql.VarChar(150), alamatUntukDeliveryOrder(beku.alamat))
+        .query(`UPDATE DeliveryOrder SET AddressDelivery = @alamat WHERE DeliveryOrderID = @doId`);
 
       const salesInvoiceId = await createSalesInvoiceForStop(transaction, {
         jadwalDetailId: detail.JadwalDetailID,
@@ -2646,6 +2847,10 @@ export interface DriverStopRow extends JadwalDetailRow {
   UrutanOverride: number | null;
   IsTerkendala: boolean;
   TerkendalaAlasan: string | null;
+  // Pilihan pemilih lokasi stop di Papan Pengiriman (getLokasiPilihanStop):
+  // null bila mitranya hanya punya 1 lokasi (tanpa pemilih). Elemen
+  // pertama = Utama (id null).
+  LokasiPilihan: { id: number | null; label: string }[] | null;
 }
 
 // Merges getJadwalDetail's existing per-stop data (customer/qty/address —
@@ -2680,6 +2885,7 @@ export async function getDriverJadwalStops(jadwalId: number): Promise<DriverStop
       }[]
     ).map((r) => [r.JadwalDetailID, r])
   );
+  const pilihan = await getLokasiPilihanStop([...extraByDetailId.values()].map((r) => r.BusinessPartnerID));
   return stops.map((s) => {
     const extra = extraByDetailId.get(s.JadwalDetailID);
     return {
@@ -2690,6 +2896,7 @@ export async function getDriverJadwalStops(jadwalId: number): Promise<DriverStop
       UrutanOverride: extra?.UrutanOverride ?? null,
       IsTerkendala: extra?.TerkendalaAlasan != null,
       TerkendalaAlasan: extra?.TerkendalaAlasan ?? null,
+      LokasiPilihan: (extra && pilihan.get(extra.BusinessPartnerID)) ?? null,
     };
   });
 }

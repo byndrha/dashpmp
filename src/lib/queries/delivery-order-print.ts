@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS } from "@/lib/queries/mitra-lokasi-pengiriman";
 
 export interface DeliveryOrderPrintHeader {
   DeliveryOrderID: string;
@@ -39,11 +40,24 @@ export async function getDeliveryOrderPrintData(deliveryOrderId: string): Promis
       SELECT
           do_.DeliveryOrderID, do_.VoucherNo, do_.TransDate, do_.VehicleNo,
           sm.Name AS DriverName,
-          bp.Name AS CustomerName, bp.Address AS Alamat,
-          ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), NULL) AS Wilayah
+          bp.Name AS CustomerName, lok.StopAlamat AS Alamat,
+          NULLIF(LTRIM(RTRIM(lok.StopWilayah)), '') AS Wilayah
       FROM DeliveryOrder do_
       LEFT JOIN Salesman sm ON sm.SalesmanID = do_.SalesmanID
       LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
+      -- Alamat kirim = alamat stop Jadwal yang memuat DO ini (snapshot beku
+      -- saat DO dibuat → lokasi terpilih → utama); DO tanpa Jadwal (dibuat
+      -- ERP desktop) → jd NULL → bp.Address. Spec §9.2.
+      OUTER APPLY (
+        SELECT TOP 1 jd0.JadwalDetailID, jd0.LokasiPengirimanID, jd0.KirimDibekukanAt,
+               jd0.KirimAlamat, jd0.KirimWilayah, jd0.KirimKecamatan, jd0.KirimKontak,
+               jd0.KirimLatitude, jd0.KirimLongitude
+        FROM DashboardPengirimanJadwalDetail jd0
+        WHERE jd0.DeliveryOrderID = do_.DeliveryOrderID AND jd0.IsDeleted = 0
+        ORDER BY jd0.JadwalDetailID DESC
+      ) jd
+      ${STOP_LOKASI_JOIN("jd", "do_")}
+      CROSS APPLY (SELECT ${STOP_LOKASI_COLUMNS("jd")}) lok
       WHERE do_.DeliveryOrderID = @id AND do_.IsDeleted = 0
     `);
   const header = headerResult.recordset[0] as DeliveryOrderPrintHeader | undefined;

@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS } from "@/lib/queries/mitra-lokasi-pengiriman";
 import { AppError } from "@/lib/action-result";
 import { getMkesindoPerusahaanId } from "@/lib/queries/perusahaan";
 import { listActiveMetodePembayaran } from "@/lib/queries/metode-pembayaran";
@@ -59,9 +60,22 @@ export async function getThermalReceiptData(
     .request()
     .input("id", sql.VarChar(16), salesInvoiceId).query(`
       SELECT si.SalesInvoiceID, si.VoucherNo, si.TransDate, si.Netto, si.DeliveryOrderID,
-             bp.Name AS MitraName, bp.Address AS MitraAddress
+             bp.Name AS MitraName, lok.StopAlamat AS MitraAddress
       FROM SalesInvoice si
       LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = si.BusinessPartnerID
+      -- Alamat kirim = alamat stop Jadwal yang memuat DO invoice ini
+      -- (snapshot → terpilih → utama); tanpa Jadwal → bp.Address. Spec §9.2.
+      -- SalesInvoice.DeliveryOrderID bisa terbungkus kutip tunggal (quirk ERP).
+      OUTER APPLY (
+        SELECT TOP 1 jd0.JadwalDetailID, jd0.LokasiPengirimanID, jd0.KirimDibekukanAt,
+               jd0.KirimAlamat, jd0.KirimWilayah, jd0.KirimKecamatan, jd0.KirimKontak,
+               jd0.KirimLatitude, jd0.KirimLongitude
+        FROM DashboardPengirimanJadwalDetail jd0
+        WHERE jd0.DeliveryOrderID = REPLACE(si.DeliveryOrderID, '''', '') AND jd0.IsDeleted = 0
+        ORDER BY jd0.JadwalDetailID DESC
+      ) jd
+      ${STOP_LOKASI_JOIN("jd", "si")}
+      CROSS APPLY (SELECT ${STOP_LOKASI_COLUMNS("jd")}) lok
       WHERE si.SalesInvoiceID = @id AND si.IsDeleted = 0
     `);
   const header = headerResult.recordset[0] as
