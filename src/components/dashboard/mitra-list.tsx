@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
+import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Phone, MapPin, Package, Filter, Ban, RotateCcw, LayoutGrid, List } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -26,22 +27,40 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
-import { WilayahSelect } from "@/components/dashboard/wilayah-select";
-import { KecamatanSelect } from "@/components/dashboard/kecamatan-select";
+import { MitraIdentitasSection } from "@/components/dashboard/mitra-form/mitra-identitas-section";
+import {
+  AlamatBaris,
+  LokasiPengirimanSection,
+  type RenderWilayahKecamatan,
+} from "@/components/dashboard/mitra-form/lokasi-pengiriman-section";
+import { KompetitorPicker } from "@/components/dashboard/mitra-form/kompetitor-picker";
+import { WilayahKecamatanField } from "@/components/dashboard/mitra-form/wilayah-kecamatan-field";
+import type { BerkasIdentitasNilai } from "@/components/dashboard/mitra-form/berkas-identitas-field";
+import type { MitraLocationPoint } from "@/components/dashboard/mitra-locations-map";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { MitraRow, TermOfPaymentOption, MitraInput, PriceLevelOption } from "@/lib/queries/mitra";
+import { PESAN_SIMPAN_SEBAGIAN, type LokasiTambahanInput, type MitraAlamatForm } from "@/lib/mitra-lokasi";
+import { mitraKeAlamatForm } from "@/lib/mitra-form";
+import type { MitraRow, TermOfPaymentOption, PriceLevelOption } from "@/lib/queries/mitra";
+import type { Kompetitor } from "@/lib/queries/kompetitor";
 import {
-  createMitraAction,
-  updateMitraAction,
   deleteMitraAction,
   setMitraSuspendedAction,
-  setMitraLocationAction,
-  setMitraCompetitorAction,
   setMitraPemilikAction,
+  simpanMitraLengkapAction,
+  jadikanLokasiUtamaAction,
+  tambahKompetitorAction,
+  getMitraFormKonteksAction,
+  getMitraDetailAction,
+  type MitraLengkapInput,
 } from "@/app/mkesindo/(dashboard)/mitra/actions";
 import type { MarketingUserOption } from "@/lib/queries/marketing-wilayah";
+
+// Leaflet menyentuh global browser saat impor — sama dengan mitra-locations-panel.tsx.
+const MitraLocationsMap = dynamic(
+  () => import("@/components/dashboard/mitra-locations-map").then((m) => m.MitraLocationsMap),
+  { ssr: false, loading: () => <Skeleton className="h-[220px] w-full rounded-lg" /> }
+);
 
 const PEMILIK_NONE = "__none__";
 
@@ -73,203 +92,262 @@ function matchesCapacityBucket(capacity: number | null, bucket: string): boolean
   return capacity > min && capacity <= max;
 }
 
-function emptyForm(): MitraInput {
-  return {
-    name: "",
-    mobileNo: "",
-    address: "",
-    wilayah: "",
-    kecamatan: "",
-    gender: "Male",
-    priceLevel: null,
-    termOfPaymentId: null,
-    capacity: null,
-  };
+// Titik peta satu mitra: utama + lokasi tambahan yang punya koordinat.
+export function titikLokasiMitra(nama: string, bpId: string, alamat: MitraAlamatForm): MitraLocationPoint[] {
+  const utama = alamat.lokasiBerbeda ? alamat.lokasiUtama : alamat.alamatMitra;
+  const hasil: MitraLocationPoint[] = [];
+  if (utama.latitude != null && utama.longitude != null) {
+    hasil.push({
+      Key: `${bpId}:utama`,
+      BusinessPartnerID: bpId,
+      Name: nama,
+      Label: "Utama",
+      Wilayah: utama.wilayah,
+      Latitude: utama.latitude,
+      Longitude: utama.longitude,
+    });
+  }
+  if (alamat.lokasiBerbeda) {
+    alamat.lokasiTambahan.forEach((l, i) => {
+      if (l.latitude == null || l.longitude == null) return;
+      hasil.push({
+        Key: `${bpId}:${l.lokasiPengirimanId ?? `baru-${i}`}`,
+        BusinessPartnerID: bpId,
+        Name: nama,
+        Label: l.label?.trim() || `Lokasi ${i + 2}`,
+        Wilayah: l.wilayah,
+        Latitude: l.latitude,
+        Longitude: l.longitude,
+      });
+    });
+  }
+  return hasil;
 }
 
-export function rowToForm(row: MitraRow): MitraInput {
-  return {
-    name: row.Name ?? "",
-    mobileNo: row.Kontak ?? "",
-    address: row.Alamat ?? "",
-    wilayah: row.Wilayah ?? "",
-    kecamatan: row.Kecamatan ?? "",
-    gender: row.Gender ?? "Male",
-    priceLevel: row.PriceLevel,
-    termOfPaymentId: row.TermOfPaymentID,
-    capacity: row.Capacity,
-  };
-}
+const renderWilayahKecamatan: RenderWilayahKecamatan = (p) => <WilayahKecamatanField {...p} />;
 
-export function rowToLocation(row: MitraRow): MitraLocationValue | null {
-  if (row.Latitude == null || row.Longitude == null) return null;
-  return { latitude: row.Latitude, longitude: row.Longitude, alamat: row.GeoAlamat };
-}
+const BERKAS_KOSONG: BerkasIdentitasNilai = { ada: false, namaFile: null, mime: null };
 
-// Exported so MitraEditDialog (mitra-edit-dialog.tsx) can reuse this same
-// form — reused anywhere "Edit Mitra" needs to open outside the Mitra
-// module itself (Transaksi's Mitra DO panel), same pattern as
-// MitraDetailDialog's cross-module reuse.
+// Form Tambah/Edit Mitra Es Kristal (spec §2). Diekspor agar MitraEditDialog
+// (mitra-edit-dialog.tsx, Transaksi "Mitra DO") memakai form yang sama.
+// Dialog ini memuat sendiri konteks yang tidak ada di MitraRow (identitas,
+// kompetitor, hak akses) lewat getMitraFormKonteksAction saat dipasang —
+// NIK tidak pernah lewat props halaman — lalu menyimpan lewat
+// simpanMitraLengkapAction (+ setMitraPemilikAction bila berubah). Induk
+// memasang komponen ini hanya selagi dialog terbuka (state selalu segar).
 export function MitraFormDialog({
   open,
   onOpenChange,
-  initial,
-  initialLocation,
-  initialKompetitor,
+  mitra,
   title,
   termOptions,
   priceLevels,
-  onSubmit,
-  pending,
-  error,
+  onSelesai,
   canEditPemilik = false,
   pemilikOptions = { marketing: [], driver: [] },
   initialPemilik = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initial: MitraInput;
-  initialLocation: MitraLocationValue | null;
-  initialKompetitor: string | null;
+  // null = Tambah Mitra.
+  mitra: MitraRow | null;
   title: string;
   termOptions: TermOfPaymentOption[];
   priceLevels: PriceLevelOption[];
-  onSubmit: (
-    input: MitraInput,
-    location: MitraLocationValue | null,
-    kompetitor: string | null,
-    pemilikAkunId: string | null
-  ) => void;
-  pending: boolean;
-  error?: string | null;
+  // Dipanggil setelah simpan selesai (induk menutup dialog / refresh).
+  onSelesai: () => void;
   // Only ever true for an edit dialog on a session allowed to change it
-  // (see MitraPage's canEditPemilik) — omitted entirely (falls back to
-  // false/empty) for the create dialog and for every other reuse of this
-  // component (mitra-edit-dialog.tsx, Transaksi's Mitra DO panel), none of
-  // which were asked to expose this field.
+  // (see MitraPage's canEditPemilik) — omitted for the create dialog and
+  // for every other reuse of this component.
   canEditPemilik?: boolean;
   pemilikOptions?: { marketing: MarketingUserOption[]; driver: MarketingUserOption[] };
   initialPemilik?: string | null;
 }) {
-  const [gender, setGender] = useState(initial.gender ?? "Male");
+  const bpId = mitra?.BusinessPartnerID ?? null;
+  const [nama, setNama] = useState(mitra?.Name ?? "");
+  const [penanggungJawab, setPenanggungJawab] = useState("");
+  const [nik, setNik] = useState("");
+  const [berkasNik, setBerkasNik] = useState<BerkasIdentitasNilai>(BERKAS_KOSONG);
+  const [berkasSk, setBerkasSk] = useState<BerkasIdentitasNilai>(BERKAS_KOSONG);
+  const [alamat, setAlamat] = useState<MitraAlamatForm>(() => mitraKeAlamatForm(mitra));
+  const [gender, setGender] = useState(mitra?.Gender ?? "Male");
   const [pemilik, setPemilik] = useState(initialPemilik ?? PEMILIK_NONE);
-  const [termOfPaymentId, setTermOfPaymentId] = useState(initial.termOfPaymentId ?? "");
-  const [priceLevel, setPriceLevel] = useState(initial.priceLevel != null ? String(initial.priceLevel) : "");
-  const [location, setLocation] = useState<MitraLocationValue | null>(initialLocation);
-  const [address, setAddress] = useState(initial.address ?? "");
-  const [wilayah, setWilayah] = useState(initial.wilayah ?? "");
-  const [kecamatan, setKecamatan] = useState(initial.kecamatan ?? "");
-  const [regencyCode, setRegencyCode] = useState<string | null>(null);
-  // Tooltip's own uncontrolled hover/focus detection doesn't fire when its
-  // trigger is a Textarea passed via `render` — controlling `open` directly
-  // off the field's focus state sidesteps that and is proven reliable
-  // elsewhere (filter-bar.tsx's same-date warning uses the same approach).
-  const [kompetitorFocused, setKompetitorFocused] = useState(false);
+  const [priceLevel, setPriceLevel] = useState(mitra?.PriceLevel != null ? String(mitra.PriceLevel) : "");
+  const [termOfPaymentId, setTermOfPaymentId] = useState(mitra?.TermOfPaymentID ?? "");
+  const [capacity, setCapacity] = useState(mitra?.Capacity != null ? String(mitra.Capacity) : "");
+  const [marketingNama, setMarketingNama] = useState(mitra?.MarketingNama ?? null);
+  const [kompetitorOpsi, setKompetitorOpsi] = useState<Kompetitor[]>([]);
+  const [kompetitorIds, setKompetitorIds] = useState<number[]>([]);
+  const [konteks, setKonteks] = useState<{ akses: { lihat: boolean; ubah: boolean }; perusahaanKode: string } | null>(null);
+  const [galatKonteks, setGalatKonteks] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [sedangJadikan, startJadikan] = useTransition();
 
-  // Auto-fills Wilayah/Kecamatan/Alamat from the geser-pin location whenever
-  // it resolves — Kecamatan is frequently missing from OSM's Indonesia data
-  // (verified: rural areas often have no suburb/city_district tag at all),
-  // so that one's left untouched rather than overwritten with a blank guess.
-  // WilayahSelect resolves the matching regencyCode itself once its list has
-  // loaded (via handleWilayahChange below), so Kecamatan's dropdown unlocks
-  // right after.
-  function handleGeocode(suggestion: { alamat: string | null; wilayah: string | null; kecamatan: string | null }) {
-    if (suggestion.alamat) setAddress(suggestion.alamat);
-    if (suggestion.wilayah) setWilayah(suggestion.wilayah);
-    if (suggestion.kecamatan) setKecamatan(suggestion.kecamatan);
-  }
+  // Muat identitas + kompetitor + hak akses saat dialog dipasang. Isian
+  // identitas dikunci (dan Simpan nonaktif) sampai selesai, supaya nilai
+  // kosong tidak tersimpan menimpa data lama.
+  useEffect(() => {
+    let batal = false;
+    getMitraFormKonteksAction(bpId).then((r) => {
+      if (batal) return;
+      if (!r.success) {
+        setGalatKonteks(r.error);
+        return;
+      }
+      const d = r.data;
+      setKonteks({ akses: d.akses, perusahaanKode: d.perusahaanKode });
+      setKompetitorOpsi(d.kompetitorOpsi);
+      setKompetitorIds(d.kompetitorDipilih);
+      if (d.identitas) {
+        setPenanggungJawab(d.identitas.namaPenanggungJawab ?? "");
+        setNik(d.identitas.nik ?? "");
+        setBerkasNik({ ada: d.identitas.punyaBerkasNik, namaFile: d.identitas.nikNamaFile, mime: d.identitas.nikMime });
+        setBerkasSk({ ada: d.identitas.punyaBerkasSk, namaFile: d.identitas.skNamaFile, mime: d.identitas.skMime });
+      }
+    });
+    return () => {
+      batal = true;
+    };
+  }, [bpId]);
 
-  // Only clears Kecamatan when Wilayah actually changes to a different
-  // region — WilayahSelect also calls this to report the regencyCode it
-  // resolved for the CURRENT value (e.g. right after opening the edit
-  // dialog), which must not wipe out the Kecamatan that came with `initial`.
-  function handleWilayahChange(name: string, code: string | null) {
-    if (name !== wilayah) setKecamatan("");
-    setWilayah(name);
-    setRegencyCode(code);
-  }
+  const memuat = konteks === null;
+  const akses = konteks?.akses ?? { lihat: false, ubah: false };
 
-  function handleSubmit(formData: FormData) {
-    onSubmit(
-      {
-        name: String(formData.get("name") ?? ""),
-        mobileNo: String(formData.get("mobileNo") ?? "") || null,
-        address: address || null,
-        wilayah: wilayah || null,
-        kecamatan: kecamatan || null,
+  function handleSubmit() {
+    if (memuat) return;
+    setError(null);
+    const input: MitraLengkapInput = {
+      ...alamat,
+      mitra: {
+        name: nama,
         gender,
         priceLevel: priceLevel ? Number(priceLevel) : null,
         termOfPaymentId: termOfPaymentId || null,
-        capacity: formData.get("capacity") ? Number(formData.get("capacity")) : null,
+        capacity: capacity !== "" ? Number(capacity) : null,
       },
-      location,
-      String(formData.get("kompetitor") ?? "").trim() || null,
-      pemilik === PEMILIK_NONE ? null : pemilik
-    );
+      namaPenanggungJawab: penanggungJawab.trim() || null,
+      kompetitorIds,
+      // NIK hanya dikirim bila boleh mengubah (server juga membuangnya).
+      ...(akses.ubah ? { nik: nik.trim() || null } : {}),
+    };
+    startTransition(async () => {
+      const r = await simpanMitraLengkapAction(bpId, input);
+      if (!r.success) {
+        if (!bpId && r.error === PESAN_SIMPAN_SEBAGIAN) {
+          // Mitra baru SUDAH dibuat — tutup form agar "simpan ulang" tidak
+          // membuat mitra ganda; lanjutkan lewat Edit.
+          toast.warning("Mitra baru tersimpan, tetapi identitas/kompetitor gagal disimpan. Buka Edit mitra ini lalu simpan ulang.");
+          onSelesai();
+          return;
+        }
+        setError(r.error);
+        return;
+      }
+      // Only sent when this session can actually edit it (canEditPemilik) —
+      // for anyone else the field never rendered, and re-sending null here
+      // would silently WIPE an existing override.
+      if (bpId && canEditPemilik) {
+        const pemilikAkunId = pemilik === PEMILIK_NONE ? null : pemilik;
+        if (pemilikAkunId !== (initialPemilik ?? null)) {
+          const p = await setMitraPemilikAction(bpId, pemilikAkunId);
+          if (!p.success) {
+            setError(p.error);
+            return;
+          }
+        }
+      }
+      onSelesai();
+    });
   }
 
+  function handleJadikanUtama(l: LokasiTambahanInput) {
+    if (!bpId || l.lokasiPengirimanId == null) return;
+    const lokasiId = l.lokasiPengirimanId;
+    const wilayahLama = alamat.lokasiUtama.wilayah?.trim() || null;
+    const wilayahBaru = l.wilayah?.trim() || null;
+    const beda = (wilayahLama ?? "").toLowerCase() !== (wilayahBaru ?? "").toLowerCase();
+    const namaLokasi = l.label?.trim() || "lokasi ini";
+    const pesan =
+      `Jadikan ${namaLokasi} sebagai Lokasi Utama? Lokasi Utama saat ini akan menjadi lokasi tambahan.\n` +
+      `Daftar lokasi di form ini akan dimuat ulang dari data tersimpan (perubahan lokasi yang belum disimpan hilang).` +
+      (beda
+        ? `\n\nPERINGATAN: Wilayah utama berubah dari "${wilayahLama ?? "-"}" ke "${wilayahBaru ?? "-"}". ` +
+          `Marketing penanggung jawab dan laporan per wilayah untuk mitra ini ikut pindah.`
+        : "");
+    if (!confirm(pesan)) return;
+    setError(null);
+    startJadikan(async () => {
+      const r = await jadikanLokasiUtamaAction(bpId, lokasiId);
+      if (!r.success) {
+        setError(r.error);
+        return;
+      }
+      const d = await getMitraDetailAction(bpId);
+      if (d.success && d.data) {
+        const segar = mitraKeAlamatForm(d.data);
+        // Alamat mitra (Identitas) tidak disentuh Jadikan Utama — pertahankan isian.
+        setAlamat((prev) => ({ ...segar, alamatMitra: prev.alamatMitra }));
+        setMarketingNama(d.data.MarketingNama);
+      }
+      if ((r.data.wilayahLama ?? "") !== (r.data.wilayahBaru ?? "")) {
+        toast.warning(
+          `Lokasi utama diganti. Wilayah pindah dari ${r.data.wilayahLama ?? "-"} ke ${r.data.wilayahBaru ?? "-"} — marketing penanggung jawab & laporan wilayah ikut pindah.`
+        );
+      } else {
+        toast.success("Lokasi utama diganti.");
+      }
+    });
+  }
+
+  const titikPeta = useMemo(() => titikLokasiMitra(nama || "Mitra", bpId ?? "baru", alamat), [nama, bpId, alamat]);
+  // Peta dipasang ulang saat titik berubah agar tampilan menyesuaikan semua pin.
+  const kunciPeta = titikPeta.map((t) => `${t.Key}@${t.Latitude},${t.Longitude}`).join("|");
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (next) {
-          setGender(initial.gender ?? "Male");
-          setPemilik(initialPemilik ?? PEMILIK_NONE);
-          setTermOfPaymentId(initial.termOfPaymentId ?? "");
-          setPriceLevel(initial.priceLevel != null ? String(initial.priceLevel) : "");
-          setLocation(initialLocation);
-          setAddress(initial.address ?? "");
-          setWilayah(initial.wilayah ?? "");
-          setKecamatan(initial.kecamatan ?? "");
-          setRegencyCode(null);
-        }
-      }}
-    >
-      <DialogContent className="max-w-lg sm:max-w-4xl">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Data mitra tersimpan langsung ke database MKEsindo.</DialogDescription>
+          <DialogDescription>Data mitra tersimpan langsung ke database perusahaan.</DialogDescription>
         </DialogHeader>
-        <form action={handleSubmit} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="name" className="sr-only">Nama Mitra</Label>
-            <Input id="name" name="name" placeholder="Nama Mitra" defaultValue={initial.name} required />
-          </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="address" className="sr-only">Alamat</Label>
-            <Input
-              id="address"
-              name="address"
-              placeholder="Alamat"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+          className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+        >
+          <h4 className="col-span-full text-sm font-medium">Identitas</h4>
+          <MitraIdentitasSection
+            nama={nama}
+            onNamaChange={setNama}
+            namaPenanggungJawab={penanggungJawab}
+            onNamaPenanggungJawabChange={setPenanggungJawab}
+            nik={nik}
+            onNikChange={setNik}
+            tanggalPendaftaran={mitra?.JoinDate ?? null}
+            bolehLihat={akses.lihat}
+            bolehUbah={akses.ubah}
+            memuat={memuat}
+            berkas={{
+              kode: konteks?.perusahaanKode ?? "",
+              sumber: "utama",
+              partnerId: bpId,
+              nik: berkasNik,
+              sk: berkasSk,
+              onBerubah: (jenis, v) => (jenis === "nik" ? setBerkasNik(v) : setBerkasSk(v)),
+            }}
+          />
+          <AlamatBaris
+            value={alamat.alamatMitra}
+            onChange={(fn) => setAlamat((a) => ({ ...a, alamatMitra: fn(a.alamatMitra) }))}
+            renderWilayahKecamatan={renderWilayahKecamatan}
+            tampilkanPin={!alamat.lokasiBerbeda}
+          />
+
           <div className="flex flex-col gap-1.5">
-            <Label className="sr-only">Wilayah</Label>
-            <WilayahSelect value={wilayah} onChange={handleWilayahChange} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label className="sr-only">Kecamatan</Label>
-            <KecamatanSelect regencyCode={regencyCode} value={kecamatan} onChange={setKecamatan} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mobileNo" className="sr-only">Kontak</Label>
-            <Input id="mobileNo" name="mobileNo" placeholder="Kontak" defaultValue={initial.mobileNo ?? ""} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="capacity" className="sr-only">Kapasitas Harian</Label>
-            <Input
-              id="capacity"
-              name="capacity"
-              type="number"
-              placeholder="Kapasitas Harian"
-              defaultValue={initial.capacity ?? ""}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label className="sr-only">Tipe Mitra</Label>
+            <Label className="sr-only">Segmentasi</Label>
             <Select value={gender} onValueChange={(v) => setGender(v ?? "Male")}>
               <SelectTrigger className="w-full">
                 <SelectValue>{(v: string) => (v === "Female" ? "Outlet" : v === "Other" ? "RPA" : "Agen")}</SelectValue>
@@ -281,12 +359,18 @@ export function MitraFormDialog({
               </SelectContent>
             </Select>
           </div>
-          {canEditPemilik && (
-            <div className="flex flex-col gap-1.5">
-              <Label className="sr-only">Pemilik</Label>
+          <div className="flex flex-col gap-1.5">
+            <Label className="sr-only">Marketing</Label>
+            {canEditPemilik ? (
               <Select value={pemilik} onValueChange={(v) => setPemilik(v ?? PEMILIK_NONE)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pemilik (Marketing/Driver)" />
+                  <SelectValue placeholder="Marketing">
+                    {(v: string) =>
+                      v === PEMILIK_NONE
+                        ? "Ikuti Wilayah"
+                        : ([...pemilikOptions.marketing, ...pemilikOptions.driver].find((o) => o.UserID === v)?.Nama ?? "Marketing")
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={PEMILIK_NONE}>Ikuti Wilayah (tidak ditentukan)</SelectItem>
@@ -312,8 +396,15 @@ export function MitraFormDialog({
                   )}
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            ) : (
+              <Input
+                value={mitra ? (marketingNama ?? "Marketing belum ditentukan") : "Marketing mengikuti Wilayah"}
+                disabled
+                readOnly
+                title="Marketing penanggung jawab mengikuti Wilayah/Kecamatan lokasi utama"
+              />
+            )}
+          </div>
           <div className="flex flex-col gap-1.5">
             <Label className="sr-only">Harga</Label>
             <Select value={priceLevel} onValueChange={(v) => setPriceLevel(v ?? "")}>
@@ -351,41 +442,53 @@ export function MitraFormDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kompetitor" className="sr-only">Daftar Kompetitor</Label>
-            <Tooltip open={kompetitorFocused}>
-              <TooltipTrigger
-                render={
-                  <Textarea
-                    id="kompetitor"
-                    name="kompetitor"
-                    defaultValue={initialKompetitor ?? ""}
-                    placeholder="Daftar Kompetitor"
-                    rows={1}
-                    onFocus={() => setKompetitorFocused(true)}
-                    onBlur={() => setKompetitorFocused(false)}
-                  />
-                }
-              />
-              <TooltipContent>Pisahkan satu kompetitor dengan koma</TooltipContent>
-            </Tooltip>
+
+          <LokasiPengirimanSection
+            value={alamat}
+            onChange={setAlamat}
+            renderWilayahKecamatan={renderWilayahKecamatan}
+            onJadikanUtama={bpId ? handleJadikanUtama : undefined}
+            sedangJadikanUtama={sedangJadikan}
+          />
+
+          <div className="col-span-2 flex flex-col gap-1 sm:col-span-3">
+            <Label className="text-xs text-muted-foreground">Daftar Kompetitor</Label>
+            <KompetitorPicker
+              bisnis="es_kristal"
+              opsi={kompetitorOpsi}
+              onOpsiChange={setKompetitorOpsi}
+              value={kompetitorIds}
+              onChange={setKompetitorIds}
+              onTambah={tambahKompetitorAction}
+              disabled={memuat}
+            />
+            {mitra?.Kompetitor && kompetitorIds.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">Catatan lama: {mitra.Kompetitor}</p>
+            )}
           </div>
-          <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
-            <Label className="sr-only">Lokasi GPS</Label>
-            <MitraLocationField
-              value={location}
-              onChange={setLocation}
-              onGeocode={handleGeocode}
-              wilayah={wilayah}
-              kecamatan={kecamatan}
+          <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
+            <Label htmlFor="mitra-capacity" className="text-xs text-muted-foreground">
+              Kapasitas Harian
+            </Label>
+            <Input
+              id="mitra-capacity"
+              type="number"
+              placeholder="Kapasitas Harian"
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
             />
           </div>
-          {error && (
-            <p className="col-span-2 text-xs text-destructive sm:col-span-4">{error}</p>
+
+          {titikPeta.length > 0 && (
+            <div className="col-span-full overflow-hidden rounded-lg ring-1 ring-foreground/10">
+              <MitraLocationsMap key={kunciPeta} points={titikPeta} growthRows={[]} ringkas />
+            </div>
           )}
-          <DialogFooter className="col-span-2 sm:col-span-4">
-            <Button type="submit" disabled={pending} className="ml-auto">
-              {pending ? "Menyimpan..." : "Simpan"}
+
+          {(error || galatKonteks) && <p className="col-span-full text-xs text-destructive">{error ?? galatKonteks}</p>}
+          <DialogFooter className="col-span-full">
+            <Button type="submit" disabled={pending || memuat || sedangJadikan} className="ml-auto">
+              {pending ? "Menyimpan..." : memuat ? "Memuat..." : "Simpan"}
             </Button>
           </DialogFooter>
         </form>
@@ -449,16 +552,11 @@ export function MitraList({
   }
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MitraRow | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-  // Two independent error states, not one shared `error` — the create/edit
-  // dialog and the plain list (delete/suspend) are separate surfaces, and a
-  // failure in one must never bleed into the other (e.g. showing a stale
-  // "gagal menyimpan lokasi" banner over the list after a failed create
-  // dialog is dismissed, or a previous row's edit error appearing in a
-  // freshly-opened dialog for a different row). Matches driver-manager.tsx's
-  // split between its list-level `error` and its DriverFormDialog-local one.
-  const [formError, setFormError] = useState<string | null>(null);
+  // Galat daftar (hapus/nonaktifkan) terpisah dari galat form — form
+  // menyimpan galatnya sendiri di MitraFormDialog, jadi tidak pernah bocor
+  // ke daftar atau ke dialog mitra lain.
   const [listError, setListError] = useState<string | null>(null);
 
   const priceByLevel = useMemo(() => new Map(priceLevels.map((p) => [p.Level, p.Price])), [priceLevels]);
@@ -535,73 +633,6 @@ export function MitraList({
     }, 4000);
     return () => clearInterval(timer);
   }, [hasMore, filtered.length]);
-
-  function handleCreate(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
-    setFormError(null);
-    startTransition(async () => {
-      const createResult = await createMitraAction(input);
-      if (!createResult.success) {
-        setFormError(createResult.error);
-        return;
-      }
-      if (location) {
-        const locationResult = await setMitraLocationAction({ businessPartnerId: createResult.data, ...location });
-        if (!locationResult.success) {
-          setFormError(locationResult.error);
-          return;
-        }
-      }
-      if (kompetitor) {
-        const competitorResult = await setMitraCompetitorAction({ businessPartnerId: createResult.data, kompetitor });
-        if (!competitorResult.success) {
-          setFormError(competitorResult.error);
-          return;
-        }
-      }
-      setCreating(false);
-    });
-  }
-
-  function handleUpdate(
-    input: MitraInput,
-    location: MitraLocationValue | null,
-    kompetitor: string | null,
-    pemilikAkunId: string | null
-  ) {
-    if (!editing) return;
-    setFormError(null);
-    startTransition(async () => {
-      const updateResult = await updateMitraAction(editing.BusinessPartnerID, input);
-      if (!updateResult.success) {
-        setFormError(updateResult.error);
-        return;
-      }
-      if (location) {
-        const locationResult = await setMitraLocationAction({ businessPartnerId: editing.BusinessPartnerID, ...location });
-        if (!locationResult.success) {
-          setFormError(locationResult.error);
-          return;
-        }
-      }
-      const competitorResult = await setMitraCompetitorAction({ businessPartnerId: editing.BusinessPartnerID, kompetitor });
-      if (!competitorResult.success) {
-        setFormError(competitorResult.error);
-        return;
-      }
-      // Only sent when this session can actually edit it (canEditPemilik) —
-      // for anyone else the field never rendered, pemilikAkunId always
-      // arrives as null, and re-sending null here would silently WIPE an
-      // existing override for a session that never touched the field.
-      if (canEditPemilik && pemilikAkunId !== (currentPemilikMap[editing.BusinessPartnerID] ?? null)) {
-        const pemilikResult = await setMitraPemilikAction(editing.BusinessPartnerID, pemilikAkunId);
-        if (!pemilikResult.success) {
-          setFormError(pemilikResult.error);
-          return;
-        }
-      }
-      setEditing(null);
-    });
-  }
 
   function handleDelete(row: MitraRow) {
     if (!confirm(`Hapus mitra "${row.Name}"? Data akan disembunyikan (bisa dipulihkan lewat database).`)) return;
@@ -777,10 +808,7 @@ export function MitraList({
             </Button>
           </div>
           <Button
-            onClick={() => {
-              setFormError(null);
-              setCreating(true);
-            }}
+            onClick={() => setCreating(true)}
           >
             <Plus className="size-4" />
             Tambah Mitra
@@ -806,6 +834,11 @@ export function MitraList({
                     <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                       {m.PartnerType}
                     </Badge>
+                    {m.LokasiTambahan.length > 0 && (
+                      <Badge variant="outline" className="h-5 px-1.5 text-[10px]" title="Jumlah lokasi pengiriman">
+                        {m.LokasiTambahan.length + 1} lokasi
+                      </Badge>
+                    )}
                     <Badge variant={m.MarketingNama ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
                       {m.MarketingNama ?? "Belum Ditentukan"}
                     </Badge>
@@ -834,10 +867,7 @@ export function MitraList({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    onClick={() => {
-                      setFormError(null);
-                      setEditing(m);
-                    }}
+                    onClick={() => setEditing(m)}
                   >
                     <Pencil className="size-3.5" />
                   </Button>
@@ -896,6 +926,11 @@ export function MitraList({
                 <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                   {m.PartnerType}
                 </Badge>
+                {m.LokasiTambahan.length > 0 && (
+                  <Badge variant="outline" className="h-5 px-1.5 text-[10px]" title="Jumlah lokasi pengiriman">
+                    {m.LokasiTambahan.length + 1} lokasi
+                  </Badge>
+                )}
                 <Badge variant={m.MarketingNama ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
                   {m.MarketingNama ?? "Belum Ditentukan"}
                 </Badge>
@@ -947,10 +982,7 @@ export function MitraList({
                 variant="ghost"
                 size="icon"
                 className="size-7"
-                onClick={() => {
-                  setFormError(null);
-                  setEditing(m);
-                }}
+                onClick={() => setEditing(m)}
               >
                 <Pencil className="size-3.5" />
               </Button>
@@ -969,43 +1001,30 @@ export function MitraList({
       <div ref={sentinelRef} className="h-1" />
       {hasMore && <p className="py-2 text-center text-xs text-muted-foreground">Memuat lagi...</p>}
 
-      <MitraFormDialog
-        open={creating}
-        onOpenChange={(open) => {
-          setCreating(open);
-          if (!open) setFormError(null);
-        }}
-        initial={emptyForm()}
-        initialLocation={null}
-        initialKompetitor={null}
-        title="Tambah Mitra"
-        termOptions={termOptions}
-        priceLevels={priceLevels}
-        onSubmit={handleCreate}
-        pending={pending}
-        error={formError}
-      />
+      {creating && (
+        <MitraFormDialog
+          open
+          onOpenChange={(open) => !open && setCreating(false)}
+          mitra={null}
+          title="Tambah Mitra"
+          termOptions={termOptions}
+          priceLevels={priceLevels}
+          onSelesai={() => setCreating(false)}
+        />
+      )}
       {editing && (
         <MitraFormDialog
-          open={!!editing}
-          onOpenChange={(open) => {
-            if (!open) {
-              setEditing(null);
-              setFormError(null);
-            }
-          }}
-          initial={rowToForm(editing)}
-          initialLocation={rowToLocation(editing)}
-          initialKompetitor={editing.Kompetitor}
+          key={editing.BusinessPartnerID}
+          open
+          onOpenChange={(open) => !open && setEditing(null)}
+          mitra={editing}
           title={`Edit Mitra — ${editing.Name}`}
           termOptions={termOptions}
           priceLevels={priceLevels}
-          onSubmit={handleUpdate}
+          onSelesai={() => setEditing(null)}
           canEditPemilik={canEditPemilik}
           pemilikOptions={pemilikOptions}
           initialPemilik={currentPemilikMap[editing.BusinessPartnerID] ?? null}
-          pending={pending}
-          error={formError}
         />
       )}
     </div>

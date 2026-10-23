@@ -32,9 +32,14 @@ const myLocationIcon = L.divIcon({
   iconAnchor: [7, 7],
 });
 
+// Satu titik = satu lokasi pengiriman (utama atau tambahan); satu mitra bisa
+// punya beberapa titik. Key unik per titik.
 export interface MitraLocationPoint {
+  Key: string;
   BusinessPartnerID: string;
   Name: string;
+  // "Utama" atau label/“Lokasi n” lokasi tambahan.
+  Label: string;
   Wilayah: string | null;
   Latitude: number;
   Longitude: number;
@@ -192,16 +197,18 @@ function MitraSearchBox({
         <div className="max-h-48 overflow-y-auto rounded-md bg-card/95 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
           {matches.map((p) => (
             <button
-              key={p.BusinessPartnerID}
+              key={p.Key}
               type="button"
               onClick={() => {
                 onSelect(p);
-                setQuery(p.Name);
+                setQuery(`${p.Name} — ${p.Label}`);
                 setOpen(false);
               }}
               className="flex w-full flex-col items-start px-2 py-1.5 text-left text-xs hover:bg-accent"
             >
-              <span className="truncate font-medium">{p.Name}</span>
+              <span className="truncate font-medium">
+                {p.Name} — {p.Label}
+              </span>
               {p.Wilayah && <span className="text-[11px] text-muted-foreground">{p.Wilayah}</span>}
             </button>
           ))}
@@ -212,9 +219,9 @@ function MitraSearchBox({
 }
 
 // Read-only overview map (unlike mitra-location-map.tsx's single draggable
-// pin, used for editing one mitra's location) — plots every mitra that has
-// a saved DashboardMitraLocation as a static marker with a name/wilayah
-// popup. `points` is already filtered upstream (page.tsx) to exclude
+// pin, used for editing one mitra's location) — plots one static marker per
+// delivery location (utama from DashboardMitraLocation + active lokasi
+// tambahan) with a "Nama — Label" popup. `points` is already filtered upstream (page.tsx) to exclude
 // deactivated (IsSuspended) mitra.
 //
 // The root wrapper below is `relative z-0` deliberately — Leaflet's own
@@ -225,9 +232,12 @@ function MitraSearchBox({
 export function MitraLocationsMap({
   points,
   growthRows,
+  ringkas = false,
 }: {
   points: MitraLocationPoint[];
   growthRows: MitraGrowthRow[];
+  // Pratinjau di form mitra: lebih pendek, tanpa cari/peringkat/GPS.
+  ringkas?: boolean;
 }) {
   const center: [number, number] =
     points.length > 0 ? [points[0].Latitude, points[0].Longitude] : [-7.8663, 111.4664];
@@ -245,7 +255,7 @@ export function MitraLocationsMap({
 
   function handleSelectMitra(point: MitraLocationPoint) {
     mapRef.current?.flyTo([point.Latitude, point.Longitude], 15);
-    markerRefs.current.get(point.BusinessPartnerID)?.openPopup();
+    markerRefs.current.get(point.Key)?.openPopup();
   }
 
   return (
@@ -257,7 +267,7 @@ export function MitraLocationsMap({
         scrollWheelZoom
         zoomControl={false}
         attributionControl={false}
-        style={{ height: 320, width: "100%" }}
+        style={{ height: ringkas ? 220 : 320, width: "100%" }}
       >
         {/* key={mapStyle} forces a fresh TileLayer instance per style so
             Leaflet doesn't try to diff/reuse tiles across completely
@@ -266,16 +276,16 @@ export function MitraLocationsMap({
         <MapZoomControl className="top-2 left-2" />
         {points.map((p) => (
           <Marker
-            key={p.BusinessPartnerID}
+            key={p.Key}
             position={[p.Latitude, p.Longitude]}
             icon={mitraIcon}
             ref={(instance) => {
-              if (instance) markerRefs.current.set(p.BusinessPartnerID, instance);
-              else markerRefs.current.delete(p.BusinessPartnerID);
+              if (instance) markerRefs.current.set(p.Key, instance);
+              else markerRefs.current.delete(p.Key);
             }}
           >
             <Popup>
-              <strong>{p.Name}</strong>
+              <strong>{p.Name}</strong> — {p.Label}
               {p.Wilayah && (
                 <>
                   <br />
@@ -289,10 +299,10 @@ export function MitraLocationsMap({
         <FitToPoints points={points} />
       </MapContainer>
 
-      <MitraSearchBox points={points} onSelect={handleSelectMitra} />
+      {!ringkas && <MitraSearchBox points={points} onSelect={handleSelectMitra} />}
       <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="top-2 right-2" />
-      <WilayahRankingOverlay rows={growthRows} />
-      <GpsButton onLocate={handleLocate} />
+      {!ringkas && <WilayahRankingOverlay rows={growthRows} />}
+      {!ringkas && <GpsButton onLocate={handleLocate} />}
       {/* Left of the GPS button (which is size-9 at right-3, i.e. spans to
           48px from the edge) rather than bottom-center, so it doesn't
           collide with either the search box (bottom-left) or GPS. */}

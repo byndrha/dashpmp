@@ -18,7 +18,10 @@ export interface IdentitasMitra {
   nik: string | null;
   punyaBerkasNik: boolean;
   punyaBerkasSk: boolean;
+  nikNamaFile: string | null;
+  nikMime: string | null;
   skNamaFile: string | null;
+  skMime: string | null;
   tanggalPendaftaran: string | null; // YYYY-MM-DD
 }
 
@@ -34,7 +37,8 @@ const kunciParams = (k: IdentitasKunci) => [k.perusahaanKode, k.sumber, k.partne
 export async function getIdentitasMitra(k: IdentitasKunci, bolehLihat: boolean): Promise<IdentitasMitra> {
   const pg = getPgPool();
   const kolomSensitif = bolehLihat
-    ? `, nik, (nik_file_id IS NOT NULL) AS punya_berkas_nik, (sk_file_id IS NOT NULL) AS punya_berkas_sk, sk_file_nama`
+    ? `, nik, (nik_file_id IS NOT NULL) AS punya_berkas_nik, (sk_file_id IS NOT NULL) AS punya_berkas_sk,
+       nik_file_nama, nik_file_mime, sk_file_nama, sk_file_mime`
     : "";
   const { rows } = await pg.query(
     `SELECT nama_penanggung_jawab, to_char(tanggal_pendaftaran, 'YYYY-MM-DD') AS tanggal_pendaftaran${kolomSensitif}
@@ -43,14 +47,18 @@ export async function getIdentitasMitra(k: IdentitasKunci, bolehLihat: boolean):
   );
   const r = rows[0] as
     | { nama_penanggung_jawab: string | null; tanggal_pendaftaran: string | null; nik?: string | null;
-        punya_berkas_nik?: boolean; punya_berkas_sk?: boolean; sk_file_nama?: string | null }
+        punya_berkas_nik?: boolean; punya_berkas_sk?: boolean; nik_file_nama?: string | null;
+        nik_file_mime?: string | null; sk_file_nama?: string | null; sk_file_mime?: string | null }
     | undefined;
   return {
     namaPenanggungJawab: r?.nama_penanggung_jawab ?? null,
     nik: bolehLihat ? (r?.nik ?? null) : null,
     punyaBerkasNik: bolehLihat ? Boolean(r?.punya_berkas_nik) : false,
     punyaBerkasSk: bolehLihat ? Boolean(r?.punya_berkas_sk) : false,
+    nikNamaFile: bolehLihat ? (r?.nik_file_nama ?? null) : null,
+    nikMime: bolehLihat ? (r?.nik_file_mime ?? null) : null,
     skNamaFile: bolehLihat ? (r?.sk_file_nama ?? null) : null,
+    skMime: bolehLihat ? (r?.sk_file_mime ?? null) : null,
     tanggalPendaftaran: r?.tanggal_pendaftaran ?? null,
   };
 }

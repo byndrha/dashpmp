@@ -1,26 +1,19 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { MitraFormDialog, rowToForm, rowToLocation } from "@/components/dashboard/mitra-list";
-import type { MitraRow, MitraInput, TermOfPaymentOption, PriceLevelOption } from "@/lib/queries/mitra";
-import type { MitraLocationValue } from "@/components/dashboard/mitra-location-field";
-import {
-  getMitraDetailAction,
-  getMitraEditOptionsAction,
-  updateMitraAction,
-  setMitraLocationAction,
-  setMitraCompetitorAction,
-} from "@/app/mkesindo/(dashboard)/mitra/actions";
+import { MitraFormDialog } from "@/components/dashboard/mitra-list";
+import type { MitraRow, TermOfPaymentOption, PriceLevelOption } from "@/lib/queries/mitra";
+import { getMitraDetailAction, getMitraEditOptionsAction } from "@/app/mkesindo/(dashboard)/mitra/actions";
 
 // Self-sufficient "Edit Mitra" popup, reused anywhere a mitra card is
 // clickable outside the Mitra module itself (Transaksi's "Transaksi DO per
 // Mitra" panel) — same businessPartnerId-driven open/fetch contract as
-// MitraDetailDialog, but wired to MitraList's own MitraFormDialog + save
-// flow (createMitra is deliberately not exposed here — this dialog only
-// ever edits an existing mitra, never creates one).
+// MitraDetailDialog, reusing MitraList's own MitraFormDialog (which saves
+// itself via simpanMitraLengkapAction — this dialog only ever edits an
+// existing mitra, never creates one).
 export function MitraEditDialog({
   businessPartnerId,
   onOpenChange,
@@ -35,7 +28,6 @@ export function MitraEditDialog({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     if (!businessPartnerId) return;
@@ -69,32 +61,6 @@ export function MitraEditDialog({
     };
   }, [businessPartnerId]);
 
-  function handleSubmit(input: MitraInput, location: MitraLocationValue | null, kompetitor: string | null) {
-    if (!businessPartnerId) return;
-    setError(null);
-    startTransition(async () => {
-      const updateResult = await updateMitraAction(businessPartnerId, input);
-      if (!updateResult.success) {
-        setError(updateResult.error);
-        return;
-      }
-      if (location) {
-        const locationResult = await setMitraLocationAction({ businessPartnerId, ...location });
-        if (!locationResult.success) {
-          setError(locationResult.error);
-          return;
-        }
-      }
-      const competitorResult = await setMitraCompetitorAction({ businessPartnerId, kompetitor });
-      if (!competitorResult.success) {
-        setError(competitorResult.error);
-        return;
-      }
-      onOpenChange(false);
-      router.refresh();
-    });
-  }
-
   if (!detail || !options) {
     return (
       <Dialog open={!!businessPartnerId} onOpenChange={onOpenChange}>
@@ -118,17 +84,17 @@ export function MitraEditDialog({
 
   return (
     <MitraFormDialog
+      key={detail.BusinessPartnerID}
       open={!!businessPartnerId}
       onOpenChange={onOpenChange}
-      initial={rowToForm(detail)}
-      initialLocation={rowToLocation(detail)}
-      initialKompetitor={detail.Kompetitor}
+      mitra={detail}
       title={`Edit Mitra — ${detail.Name}`}
       termOptions={options.termOptions}
       priceLevels={options.priceLevels}
-      onSubmit={handleSubmit}
-      pending={pending}
-      error={error}
+      onSelesai={() => {
+        onOpenChange(false);
+        router.refresh();
+      }}
     />
   );
 }

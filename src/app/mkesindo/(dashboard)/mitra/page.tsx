@@ -7,6 +7,7 @@ import { getMarketingUsers, getDriverUserOptions, getMarketingMitraAssignments }
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { MitraList } from "@/components/dashboard/mitra-list";
 import { MitraLocationsPanel } from "@/components/dashboard/mitra-locations-panel";
+import type { MitraLocationPoint } from "@/components/dashboard/mitra-locations-map";
 
 export const metadata: Metadata = { title: "Mitra" };
 
@@ -39,16 +40,40 @@ export default async function MitraPage() {
     for (const a of pemilikData[2]) currentPemilikMap[a.BusinessPartnerID] = a.MarketingUserID;
   }
 
-  // Reuses getMitraList()'s existing Latitude/Longitude (from
-  // DashboardMitraLocation) — no separate query needed. Deactivated
-  // (IsSuspended) mitra are excluded — they've been hidden from operational
-  // pickers already, the map should treat them the same way.
-  const locations = mitra
-    .filter(
-      (m): m is typeof m & { Latitude: number; Longitude: number } =>
-        m.Latitude != null && m.Longitude != null && !m.IsSuspended
-    )
-    .map((m) => ({ BusinessPartnerID: m.BusinessPartnerID, Name: m.Name, Wilayah: m.Wilayah, Latitude: m.Latitude, Longitude: m.Longitude }));
+  // Satu titik per lokasi pengiriman: utama (DashboardMitraLocation, sudah
+  // ada di getMitraList()) + lokasi tambahan aktif yang punya koordinat.
+  // Mitra nonaktif (IsSuspended) dikecualikan — sudah disembunyikan dari
+  // pemilih operasional, peta diperlakukan sama. Filter "pin" di daftar
+  // tetap memakai lokasi utama saja.
+  const locations: MitraLocationPoint[] = mitra
+    .filter((m) => !m.IsSuspended)
+    .flatMap((m) => {
+      const titik: MitraLocationPoint[] = [];
+      if (m.Latitude != null && m.Longitude != null) {
+        titik.push({
+          Key: `${m.BusinessPartnerID}:utama`,
+          BusinessPartnerID: m.BusinessPartnerID,
+          Name: m.Name,
+          Label: "Utama",
+          Wilayah: m.Wilayah,
+          Latitude: m.Latitude,
+          Longitude: m.Longitude,
+        });
+      }
+      for (const l of m.LokasiTambahan) {
+        if (l.latitude == null || l.longitude == null) continue;
+        titik.push({
+          Key: `${m.BusinessPartnerID}:${l.LokasiPengirimanID}`,
+          BusinessPartnerID: m.BusinessPartnerID,
+          Name: m.Name,
+          Label: l.Label?.trim() || `Lokasi ${l.Urutan}`,
+          Wilayah: l.wilayah,
+          Latitude: l.latitude,
+          Longitude: l.longitude,
+        });
+      }
+      return titik;
+    });
 
   return (
     <div className="flex flex-col gap-4">

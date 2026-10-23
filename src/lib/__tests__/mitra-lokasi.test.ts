@@ -4,6 +4,7 @@ import {
   normalisasiMitraForm,
   pecahTeksKompetitor,
   pilihLokasiStop,
+  saringNikMasukan,
   type AlamatFields,
   type MitraAlamatForm,
   type PinFields,
@@ -92,4 +93,19 @@ test("pecahTeksKompetitor: pemisah , ; baris baru dan kata \"dan\", dedupe tanpa
 test("pecahTeksKompetitor: kosong → []", () => {
   assert.deepEqual(pecahTeksKompetitor(null), []);
   assert.deepEqual(pecahTeksKompetitor("  "), []);
+});
+
+test("saringNikMasukan: tanpa hak ubah, properti nik hilang sama sekali", () => {
+  const masukan = { namaPenanggungJawab: "Budi", nik: "3507123412341234", kompetitorIds: [1] };
+  const tanpaHak = saringNikMasukan(masukan, false);
+  assert.equal("nik" in tanpaHak, false);
+  assert.equal(JSON.stringify(tanpaHak).includes("3507123412341234"), false);
+  assert.deepEqual(tanpaHak, { namaPenanggungJawab: "Budi", kompetitorIds: [1] });
+  // masukan asli tidak diubah
+  assert.equal(masukan.nik, "3507123412341234");
+});
+
+test("saringNikMasukan: dengan hak ubah, nik diteruskan (termasuk null = kosongkan)", () => {
+  assert.equal(saringNikMasukan({ nik: "123" }, true).nik, "123");
+  assert.equal(saringNikMasukan({ nik: null }, true).nik, null);
 });

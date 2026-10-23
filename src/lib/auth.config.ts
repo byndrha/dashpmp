@@ -37,6 +37,9 @@ export const authConfig = {
         session.user.accountScope = token.accountScope as AccountScope;
         session.user.perusahaanId = token.perusahaanId as number | null;
         session.user.sessionId = token.sessionId as string;
+        // Token lama tanpa holdingKode hanya lolos jwt() di auth.ts bila
+        // scope-nya PT milik PMP, jadi bawaannya "pmp".
+        session.user.holdingKode = typeof token.holdingKode === "string" ? token.holdingKode : "pmp";
       }
       return session;
     },

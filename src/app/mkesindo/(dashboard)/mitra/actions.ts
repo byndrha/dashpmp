@@ -3,21 +3,30 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import {
-  createMitra,
-  updateMitra,
   updateMitraCapacity,
   deleteMitra,
   setMitraSuspended,
   getMitraDetail,
   getTermOfPaymentOptions,
   getPriceLevelOptions,
-  type MitraInput,
   type MitraRow,
   type TermOfPaymentOption,
   type PriceLevelOption,
 } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
-import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
+import { jadikanLokasiUtama } from "@/lib/queries/mitra-lokasi-pengiriman";
+import { simpanMitraLengkap, type MitraLengkapInput } from "@/lib/queries/mitra-lengkap";
+import { getIdentitasMitra, type IdentitasMitra } from "@/lib/queries/mitra-identitas";
+import {
+  getKompetitorMitraMap,
+  listKompetitor,
+  tambahKompetitor,
+  type BisnisKompetitor,
+  type Kompetitor,
+} from "@/lib/queries/kompetitor";
+import { aksesIdentitasMitra } from "@/lib/permissions";
+import { currentEskristalKode } from "@/lib/tenant-request";
+import { saringNikMasukan } from "@/lib/mitra-lokasi";
 import {
   getMarketingUsers,
   getDriverUserOptions,
@@ -44,18 +53,102 @@ async function requireWilayahManager() {
   return user;
 }
 
-export async function createMitraAction(input: MitraInput): Promise<ActionResult<string>> {
+export type { MitraLengkapInput };
+
+async function requireUser() {
+  const session = await auth();
+  const user = session?.user;
+  if (!user?.id) throw new AppError("Unauthorized");
+  return user;
+}
+
+// Holding akun (kompetitor dipisah per holding). Diisi session() di
+// auth.config.ts; "pmp" hanya jaring pengaman.
+function holdingDari(user: { holdingKode?: string | null }): string {
+  return user.holdingKode || "pmp";
+}
+
+function kunciEsKristal(perusahaanKode: string, partnerId: string) {
+  return { perusahaanKode, sumber: "utama" as const, partnerId };
+}
+
+// Satu-satunya jalur simpan form Mitra (tambah & edit) sejak form identitas +
+// lokasi pengiriman ganda. NIK hanya diteruskan bila sesi punya hak ubah —
+// selain itu nik dibuang di sini, apa pun yang dikirim client.
+export async function simpanMitraLengkapAction(id: string | null, input: MitraLengkapInput): Promise<ActionResult<string>> {
   return runAction(async () => {
-    const id = await createMitra(input);
+    const user = await requireUser();
+    const akses = aksesIdentitasMitra(user);
+    const bpId = await simpanMitraLengkap(id, saringNikMasukan(input, akses.ubah), {
+      userId: user.id,
+      perusahaanKode: await currentEskristalKode(),
+      holdingKode: holdingDari(user),
+      bolehUbahNik: akses.ubah,
+    });
     revalidatePath("/mkesindo/mitra");
-    return id;
+    return bpId;
   });
 }
 
-export async function updateMitraAction(id: string, input: MitraInput): Promise<ActionResult<void>> {
+export async function jadikanLokasiUtamaAction(
+  bpId: string,
+  lokasiPengirimanId: number
+): Promise<ActionResult<{ wilayahLama: string | null; wilayahBaru: string | null }>> {
   return runAction(async () => {
-    await updateMitra(id, input);
+    const user = await requireUser();
+    const hasil = await jadikanLokasiUtama(bpId, lokasiPengirimanId, user.id);
     revalidatePath("/mkesindo/mitra");
+    revalidatePath("/mkesindo/pengiriman");
+    return hasil;
+  });
+}
+
+export async function tambahKompetitorAction(bisnis: BisnisKompetitor, nama: string): Promise<ActionResult<Kompetitor>> {
+  return runAction(async () => {
+    const user = await requireUser();
+    if (bisnis !== "es_kristal" && bisnis !== "es_balok") throw new AppError("Jenis bisnis tidak valid.");
+    return tambahKompetitor(holdingDari(user), bisnis, nama, user.id);
+  });
+}
+
+// Tanpa izin lihat: NIK & info berkas tidak pernah di-SELECT (lihat
+// getIdentitasMitra), jadi tidak ikut ke respons action.
+export async function getIdentitasMitraAction(bpId: string): Promise<ActionResult<IdentitasMitra>> {
+  return runAction(async () => {
+    const user = await requireUser();
+    const akses = aksesIdentitasMitra(user);
+    return getIdentitasMitra(kunciEsKristal(await currentEskristalKode(), bpId), akses.lihat);
+  });
+}
+
+export interface MitraFormKonteks {
+  akses: { lihat: boolean; ubah: boolean };
+  perusahaanKode: string; // untuk rute berkas /api/mitra-berkas
+  kompetitorOpsi: Kompetitor[];
+  kompetitorDipilih: number[];
+  identitas: IdentitasMitra | null; // null untuk mitra baru
+}
+
+// Semua yang dibutuhkan form/detail Mitra di luar MitraRow, satu round-trip,
+// dimuat saat dialog dibuka (tidak lewat props halaman — NIK tidak boleh
+// ikut payload RSC).
+export async function getMitraFormKonteksAction(bpId: string | null): Promise<ActionResult<MitraFormKonteks>> {
+  return runAction(async () => {
+    const user = await requireUser();
+    const akses = aksesIdentitasMitra(user);
+    const perusahaanKode = await currentEskristalKode();
+    const [kompetitorOpsi, kompetitorMap, identitas] = await Promise.all([
+      listKompetitor(holdingDari(user), "es_kristal"),
+      bpId ? getKompetitorMitraMap(perusahaanKode, "utama") : Promise.resolve(new Map<string, Kompetitor[]>()),
+      bpId ? getIdentitasMitra(kunciEsKristal(perusahaanKode, bpId), akses.lihat) : Promise.resolve(null),
+    ]);
+    return {
+      akses,
+      perusahaanKode,
+      kompetitorOpsi,
+      kompetitorDipilih: bpId ? (kompetitorMap.get(bpId) ?? []).map((x) => x.id) : [],
+      identitas,
+    };
   });
 }
 
@@ -94,20 +187,6 @@ export async function setMitraLocationAction(input: {
     if (!userId) throw new AppError("Unauthorized");
 
     await setMitraLocation({ ...input, userId });
-    revalidatePath("/mkesindo/mitra");
-  });
-}
-
-export async function setMitraCompetitorAction(input: {
-  businessPartnerId: string;
-  kompetitor: string | null;
-}): Promise<ActionResult<void>> {
-  return runAction(async () => {
-    const session = await auth();
-    const userId = session?.user?.id;
-    if (!userId) throw new AppError("Unauthorized");
-
-    await setMitraCompetitor({ ...input, userId });
     revalidatePath("/mkesindo/mitra");
   });
 }

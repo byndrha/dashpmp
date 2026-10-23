@@ -3,14 +3,21 @@
 import { useEffect, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { Phone, MapPin, Package, Loader2, Pencil, ExternalLink, X } from "lucide-react";
+import { Phone, MapPin, Package, Loader2, Pencil, ExternalLink, X, UserRound, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
+import { BerkasIdentitasField } from "@/components/dashboard/mitra-form/berkas-identitas-field";
+import { formatDateWib } from "@/lib/format";
 import type { MitraRow } from "@/lib/queries/mitra";
-import { getMitraDetailAction, setMitraLocationAction } from "@/app/mkesindo/(dashboard)/mitra/actions";
+import {
+  getMitraDetailAction,
+  getMitraFormKonteksAction,
+  setMitraLocationAction,
+  type MitraFormKonteks,
+} from "@/app/mkesindo/(dashboard)/mitra/actions";
 
 const MitraLocationMap = dynamic(
   () => import("@/components/dashboard/mitra-location-map").then((m) => m.MitraLocationMap),
@@ -39,6 +46,9 @@ export function MitraDetailDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [detail, setDetail] = useState<MitraRow | null>(null);
+  // Identitas/kompetitor/hak akses — NIK hanya terisi bila sesi boleh melihat
+  // (disaring di server oleh getMitraFormKonteksAction).
+  const [konteks, setKonteks] = useState<MitraFormKonteks | null>(null);
   const [loading, setLoading] = useState(false);
   const [editingLocation, setEditingLocation] = useState(false);
   const [draftLocation, setDraftLocation] = useState<MitraLocationValue | null>(null);
@@ -52,10 +62,13 @@ export function MitraDetailDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setDetail(null);
+    setKonteks(null);
     setEditingLocation(false);
-    getMitraDetailAction(businessPartnerId)
-      .then((result) => {
-        if (!cancelled && result.success) setDetail(result.data);
+    Promise.all([getMitraDetailAction(businessPartnerId), getMitraFormKonteksAction(businessPartnerId)])
+      .then(([result, konteksResult]) => {
+        if (cancelled) return;
+        if (result.success) setDetail(result.data);
+        if (konteksResult.success) setKonteks(konteksResult.data);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -132,12 +145,100 @@ export function MitraDetailDialog({
                 {detail.Capacity != null ? `${detail.Capacity.toLocaleString("id-ID")} kantong/hari` : "Kapasitas belum diisi"}
               </span>
             </div>
-            {detail.Kompetitor && (
-              <div className="border-t pt-2 text-muted-foreground">
-                <span className="font-medium text-foreground">Kompetitor: </span>
-                {detail.Kompetitor}
+            {konteks && (
+              <div className="flex flex-col gap-1 border-t pt-2 text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <UserRound className="size-3.5 shrink-0" />
+                  Penanggung Jawab:{" "}
+                  <span className="text-foreground">{konteks.identitas?.namaPenanggungJawab ?? "-"}</span>
+                </span>
+                <span className="pl-[22px]">
+                  NIK:{" "}
+                  {konteks.akses.lihat ? (
+                    <span className="text-foreground">{konteks.identitas?.nik ?? "-"}</span>
+                  ) : (
+                    <span className="italic">Tersembunyi</span>
+                  )}
+                </span>
+                <span className="pl-[22px]">
+                  Tanggal Pendaftaran:{" "}
+                  <span className="text-foreground">{detail.JoinDate ? formatDateWib(detail.JoinDate) : "—"}</span>
+                </span>
+                {konteks.identitas && (
+                  <div className="flex flex-col pl-[22px]">
+                    <BerkasIdentitasField
+                      jenis="nik"
+                      kode={konteks.perusahaanKode}
+                      sumber="utama"
+                      partnerId={detail.BusinessPartnerID}
+                      nilai={{ ada: konteks.identitas.punyaBerkasNik, namaFile: konteks.identitas.nikNamaFile, mime: konteks.identitas.nikMime }}
+                      bolehLihat={konteks.akses.lihat}
+                      bolehUbah={false}
+                      onBerubah={() => {}}
+                    />
+                    <BerkasIdentitasField
+                      jenis="sk"
+                      kode={konteks.perusahaanKode}
+                      sumber="utama"
+                      partnerId={detail.BusinessPartnerID}
+                      nilai={{ ada: konteks.identitas.punyaBerkasSk, namaFile: konteks.identitas.skNamaFile, mime: konteks.identitas.skMime }}
+                      bolehLihat={konteks.akses.lihat}
+                      bolehUbah={false}
+                      onBerubah={() => {}}
+                    />
+                  </div>
+                )}
               </div>
             )}
+
+            {detail.LokasiBerbeda && (
+              <div className="flex flex-col gap-1 border-t pt-2 text-muted-foreground">
+                <span className="text-xs font-medium">Alamat Mitra</span>
+                <span>
+                  {detail.AlamatMitra?.wilayah || "-"}
+                  {detail.AlamatMitra?.kecamatan ? ` | ${detail.AlamatMitra.kecamatan}` : ""}
+                </span>
+                {detail.AlamatMitra?.alamat && <span>{detail.AlamatMitra.alamat}</span>}
+                {detail.AlamatMitra?.kontak && <span>{detail.AlamatMitra.kontak}</span>}
+              </div>
+            )}
+            {detail.LokasiTambahan.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t pt-2 text-muted-foreground">
+                <span className="text-xs font-medium">Lokasi Pengiriman ({detail.LokasiTambahan.length + 1})</span>
+                <span className="inline-flex items-start gap-1.5">
+                  <Truck className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    <span className="text-foreground">Utama</span> — {detail.Wilayah || "-"}
+                    {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
+                    {detail.Alamat ? `, ${detail.Alamat}` : ""}
+                  </span>
+                </span>
+                {detail.LokasiTambahan.map((l) => (
+                  <span key={l.LokasiPengirimanID} className="inline-flex items-start gap-1.5">
+                    <Truck className="mt-0.5 size-3.5 shrink-0" />
+                    <span>
+                      <span className="text-foreground">{l.Label?.trim() || `Lokasi ${l.Urutan}`}</span> — {l.wilayah || "-"}
+                      {l.kecamatan ? ` | ${l.kecamatan}` : ""}
+                      {l.alamat ? `, ${l.alamat}` : ""}
+                      {l.kontak ? ` (${l.kontak})` : ""}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {(() => {
+              const nama = konteks
+                ? konteks.kompetitorOpsi.filter((k) => konteks.kompetitorDipilih.includes(k.id)).map((k) => k.nama)
+                : [];
+              const teks = nama.length > 0 ? nama.join(", ") : detail.Kompetitor;
+              return teks ? (
+                <div className="border-t pt-2 text-muted-foreground">
+                  <span className="font-medium text-foreground">Kompetitor: </span>
+                  {teks}
+                </div>
+              ) : null;
+            })()}
 
             <div className="border-t pt-2">
               <div className="mb-1.5 flex items-center justify-between">

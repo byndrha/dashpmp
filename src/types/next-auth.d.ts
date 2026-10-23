@@ -24,6 +24,9 @@ declare module "next-auth" {
       accountScope: AccountScope;
       perusahaanId: number | null;
       sessionId: string;
+      // holding.kode akun (lihat JWT.holdingKode); dipakai mis. master
+      // kompetitor per holding.
+      holdingKode: string;
     } & DefaultSession["user"];
   }
 

@@ -29,6 +29,8 @@ export function MitraLocationsPanel({
   growthRows: MitraGrowthRow[];
 }) {
   const [growthOpen, setGrowthOpen] = useState(false);
+  // Satu mitra bisa punya beberapa titik (lokasi pengiriman) — hitung mitranya.
+  const jumlahMitra = new Set(points.map((p) => p.BusinessPartnerID)).size;
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 shadow-md">
@@ -36,7 +38,8 @@ export function MitraLocationsPanel({
         <MitraLocationsMap points={points} growthRows={growthRows} />
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <span className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-foreground shadow backdrop-blur">
-            {points.length} mitra dengan lokasi tersimpan
+            {jumlahMitra} mitra dengan lokasi tersimpan
+            {points.length > jumlahMitra ? ` · ${points.length} titik` : ""}
           </span>
         </div>
       </div>

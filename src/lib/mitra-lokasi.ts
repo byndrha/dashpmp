@@ -94,3 +94,24 @@ export function pecahTeksKompetitor(teks: string | null): string[] {
   }
   return hasil;
 }
+
+/**
+ * Pesan galat simpanMitraLengkap bila data MSSQL sudah ter-commit tetapi
+ * identitas/kompetitor (Postgres) gagal. Diekspor agar form bisa mengenalinya:
+ * pada mitra BARU, form harus ditutup (mitra sudah dibuat) supaya "simpan
+ * ulang" tidak membuat mitra ganda.
+ */
+export const PESAN_SIMPAN_SEBAGIAN =
+  "Data mitra tersimpan, tetapi identitas/kompetitor gagal disimpan — coba simpan ulang.";
+
+/**
+ * Buang field `nik` dari masukan form bila sesi tidak berhak mengubah NIK —
+ * dipakai server action sebelum meneruskan ke lapisan simpan. Tanpa hak,
+ * properti `nik` hilang sama sekali (undefined = kolom NIK tidak disentuh).
+ */
+export function saringNikMasukan<T extends { nik?: string | null }>(input: T, bolehUbah: boolean): T {
+  if (bolehUbah) return input;
+  const salinan = { ...input };
+  delete salinan.nik;
+  return salinan;
+}
