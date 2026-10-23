@@ -7,10 +7,14 @@ import { PaletteProvider } from "@/components/palette-provider";
 import { NativeStatusBarSync } from "@/components/native-status-bar-sync";
 import { LocationTrackingBootstrap } from "@/components/location-tracking-bootstrap";
 import { AppVersionGate } from "@/components/app-version-gate";
+import { useEmbedTema } from "@/lib/embed-theme";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // /kartu (tautan publik) tidak punya pengaturan tampilan: selalu tema Terang.
-  const forcedTheme = (usePathname() ?? "").startsWith("/kartu") ? "light" : undefined;
+  // /embed (iframe ByChat) mengikuti tema ByChat lewat pesan appContext.
+  const pathname = usePathname() ?? "";
+  const embedTema = useEmbedTema();
+  const forcedTheme = pathname.startsWith("/kartu") ? "light" : pathname.startsWith("/embed") ? embedTema : undefined;
   return (
     <SessionProvider>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem forcedTheme={forcedTheme} disableTransitionOnChange>

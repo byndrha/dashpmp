@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { setEmbedTema, temaDariPesan } from "@/lib/embed-theme";
 
 // Panel "Mitra" di sidebar percakapan ByChat. Menerima token konteks
 // bertanda tangan lewat postMessage (hanya dari origin ByChat), dan menyertakan
@@ -134,6 +135,12 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
     }
     function onMsg(ev: MessageEvent) {
       if (!allowedOrigins.includes(ev.origin)) return;
+      // appContext (tema) dikirim ulang ByChat tiap tema diganti: dengarkan terus.
+      const tema = temaDariPesan(ev.data);
+      if (tema) {
+        setEmbedTema(tema);
+        return;
+      }
       let d: unknown = ev.data;
       if (typeof d === "string") {
         try {
@@ -214,19 +221,24 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
     }
   }
 
+
   if (tahap.s === "menunggu" || tahap.s === "memuat") {
-    return <p className="p-3 text-xs text-muted-foreground">Memuat data mitra…</p>;
+    return (
+      <main className="mx-auto w-full max-w-md p-4">
+        <p className="text-sm text-muted-foreground">Memuat data mitra…</p>
+      </main>
+    );
   }
   if (tahap.s === "galat") {
     return (
-      <div className="flex flex-col gap-2 p-3 text-xs">
-        <p className="text-destructive">{tahap.pesan}</p>
+      <main className="mx-auto flex w-full max-w-md flex-col gap-3 p-4 text-sm">
+        <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive">{tahap.pesan}</p>
         {tahap.kode === "kedaluwarsa" && (
-          <Button size="sm" variant="outline" onClick={mintaToken}>
+          <Button variant="outline" onClick={mintaToken}>
             Muat ulang
           </Button>
         )}
-      </div>
+      </main>
     );
   }
 
@@ -237,30 +249,47 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
     : !data.inbox.sesuai
       ? "Percakapan ini bukan di inbox penagihan PT."
       : null;
+  const namaKontakSama = !!mitra && data.kontak.nama.trim().toLowerCase() === mitra.nama.trim().toLowerCase();
+  const judulBagian = "mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+  const baris = "flex items-baseline justify-between gap-4 py-2";
+  const angka = "shrink-0 font-medium tabular-nums";
 
   return (
-    <div className="flex flex-col gap-3 p-3 text-xs">
-      <div>
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{data.pt.nama}</p>
-        <p className="text-sm font-semibold">{data.kontak.nama || "Kontak"}</p>
-        <p className="text-muted-foreground">{data.kontak.nomor ?? "Tanpa nomor WhatsApp"}</p>
-      </div>
+    <main className="mx-auto flex w-full max-w-md flex-col gap-5 p-4 text-sm">
+      <header className="flex flex-col gap-0.5">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{data.pt.nama}</p>
+        {mitra ? (
+          <>
+            <h1 className="text-lg font-semibold leading-tight">{mitra.nama}</h1>
+            {mitra.wilayah && <p className="text-muted-foreground">{mitra.wilayah}</p>}
+            <p className="text-muted-foreground">
+              {!namaKontakSama && data.kontak.nama ? `${data.kontak.nama} · ` : ""}
+              {data.kontak.nomor ?? "Tanpa nomor WhatsApp"}
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-lg font-semibold leading-tight">{data.kontak.nama || "Kontak"}</h1>
+            <p className="text-muted-foreground">{data.kontak.nomor ?? "Tanpa nomor WhatsApp"}</p>
+          </>
+        )}
+      </header>
 
       {!data.kontak.nomor && (
-        <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900">
+        <p className="rounded-lg border border-warning/50 bg-warning/10 p-3">
           Kontak ini tidak memiliki nomor asli (kontak berbasis LID), jadi tidak bisa dicocokkan dengan mitra.
         </p>
       )}
       {data.kontak.nomor && data.totalCocok === 0 && (
-        <p className="rounded-md border p-2">Nomor ini belum terdaftar pada mitra mana pun di {data.pt.nama}.</p>
+        <p className="rounded-lg border bg-card p-3">Nomor ini belum terdaftar pada mitra mana pun di {data.pt.nama}.</p>
       )}
       {data.totalCocok > 1 && (
-        <div className="flex flex-col gap-1.5">
-          <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900">
+        <div className="flex flex-col gap-2">
+          <p className="rounded-lg border border-warning/50 bg-warning/10 p-3">
             Nomor ini dipakai {data.totalCocok} mitra. Pilih mitra yang dimaksud.
           </p>
           {data.mitra.map((m) => (
-            <label key={m.id} className="flex cursor-pointer items-center gap-2 rounded-md border p-2">
+            <label key={m.id} className="flex cursor-pointer items-center gap-3 rounded-lg border bg-card p-3 has-checked:border-primary">
               <input
                 type="radio"
                 name="mitra"
@@ -273,102 +302,108 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
                 }}
               />
               <span className="flex-1 font-medium">{m.nama}</span>
-              <span className="text-muted-foreground">{rp(m.totalPiutang)}</span>
+              <span className="tabular-nums text-muted-foreground">{rp(m.totalPiutang)}</span>
             </label>
           ))}
         </div>
       )}
 
       {mitra && (
-        <div className="flex flex-col gap-3">
-          <div>
-            <p className="text-sm font-semibold">{mitra.nama}</p>
-            {mitra.wilayah && <p className="text-muted-foreground">{mitra.wilayah}</p>}
-          </div>
-
-          <div className="rounded-md border p-2">
+        <>
+          <section className="rounded-xl border bg-card p-4">
             <p className="text-muted-foreground">Total piutang</p>
-            <p className={`text-lg font-semibold ${mitra.totalPiutang > 0 ? "text-red-600" : "text-green-600"}`}>{rp(mitra.totalPiutang)}</p>
-            <p className="text-muted-foreground">{mitra.jumlahFaktur} faktur belum lunas</p>
-          </div>
+            <p className={`text-3xl font-semibold tabular-nums ${mitra.totalPiutang > 0 ? "text-destructive" : "text-primary"}`}>{rp(mitra.totalPiutang)}</p>
+            <p className="mt-0.5 text-muted-foreground">{mitra.jumlahFaktur} faktur belum lunas</p>
+          </section>
 
           {mitra.fakturTeratas.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <p className="font-medium">Faktur paling lama</p>
-              {mitra.fakturTeratas.map((f) => (
-                <div key={f.noDokumen} className="flex justify-between gap-2">
-                  <span className="truncate" title={f.noDokumen}>
-                    {tgl(f.tanggal)} • {f.hariLewat > 0 ? `${f.hariLewat} hr` : "belum"}
-                  </span>
-                  <span>{rp(f.sisa)}</span>
-                </div>
-              ))}
-            </div>
+            <section>
+              <h2 className={judulBagian}>Faktur paling lama</h2>
+              <ul className="divide-y rounded-xl border bg-card px-4">
+                {mitra.fakturTeratas.map((f) => (
+                  <li key={f.noDokumen} className={baris} title={f.noDokumen}>
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <span>{tgl(f.tanggal)}</span>
+                      <span className={`text-xs ${f.hariLewat > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                        {f.hariLewat > 0 ? `${f.hariLewat} hari` : "belum jatuh tempo"}
+                      </span>
+                    </span>
+                    <span className={angka}>{rp(f.sisa)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
-          <div className="flex flex-col gap-1">
-            <p className="font-medium">Pembelian</p>
-            <div className="flex justify-between">
-              <span>30 hari terakhir</span>
-              <span>{rp(mitra.pembelian30Hari)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>90 hari terakhir</span>
-              <span>{rp(mitra.pembelian90Hari)}</span>
-            </div>
-            {mitra.pembelianTerbaru.map((p) => (
-              <div key={p.noDokumen} className="flex justify-between text-muted-foreground">
-                <span>{tgl(p.tanggal)}</span>
-                <span>{rp(p.nilai)}</span>
+          <section>
+            <h2 className={judulBagian}>Pembelian</h2>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border bg-card p-3">
+                <p className="text-xs text-muted-foreground">30 hari terakhir</p>
+                <p className="font-semibold tabular-nums">{rp(mitra.pembelian30Hari)}</p>
               </div>
-            ))}
-          </div>
+              <div className="rounded-xl border bg-card p-3">
+                <p className="text-xs text-muted-foreground">90 hari terakhir</p>
+                <p className="font-semibold tabular-nums">{rp(mitra.pembelian90Hari)}</p>
+              </div>
+            </div>
+            {mitra.pembelianTerbaru.length > 0 && (
+              <ul className="mt-2 divide-y rounded-xl border bg-card px-4">
+                {mitra.pembelianTerbaru.map((p) => (
+                  <li key={p.noDokumen} className={`${baris} text-muted-foreground`}>
+                    <span>{tgl(p.tanggal)}</span>
+                    <span className="shrink-0 tabular-nums">{rp(p.nilai)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-          <div className="flex flex-col gap-2 border-t pt-2">
+          <section className="flex flex-col gap-3 border-t pt-4">
             {mitra.terakhirKirim && (
-              <p className="text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Kartu terakhir dikirim {new Date(mitra.terakhirKirim.waktu).toLocaleString("id-ID")} oleh {mitra.terakhirKirim.agenNama || "agen lain"}.
               </p>
             )}
-            {tidakBisaKirim && <p className="text-amber-700">{tidakBisaKirim}</p>}
+            {tidakBisaKirim && <p className="text-warning">{tidakBisaKirim}</p>}
             {mitra.totalPiutang <= 0 && <p className="text-muted-foreground">Tidak ada piutang outstanding.</p>}
             {!pratinjau && (
-              <Button size="sm" disabled={aksi.memuat || !!tidakBisaKirim || mitra.totalPiutang <= 0} onClick={() => lihatKartu(mitra.id)}>
-                {aksi.memuat ? "Menyiapkan kartu…" : "Lihat & kirim kartu piutang"}
-              </Button>
-            )}
-            {!pratinjau && (
-              <Button size="sm" variant="outline" disabled={aksi.memuat || mitra.totalPiutang <= 0} onClick={() => ambilTautan(mitra.id)}>
-                Salin tautan kartu
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button size="lg" className="h-10 flex-1" disabled={aksi.memuat || !!tidakBisaKirim || mitra.totalPiutang <= 0} onClick={() => lihatKartu(mitra.id)}>
+                  {aksi.memuat ? "Menyiapkan kartu…" : "Lihat & kirim kartu piutang"}
+                </Button>
+                <Button size="lg" variant="outline" className="h-10 sm:shrink-0" disabled={aksi.memuat || mitra.totalPiutang <= 0} onClick={() => ambilTautan(mitra.id)}>
+                  Salin tautan kartu
+                </Button>
+              </div>
             )}
             {tautan && (
               <div className="flex flex-col gap-1">
-                <input readOnly value={tautan.url} onFocus={(e) => e.currentTarget.select()} className="w-full rounded-md border bg-background px-2 py-1 font-mono text-[11px]" />
-                <p className="text-muted-foreground">{tautan.salin ?? "Pilih lalu salin tautan di atas."} Berlaku 30 hari, bisa dibuka tanpa login.</p>
+                <input readOnly value={tautan.url} onFocus={(e) => e.currentTarget.select()} className="w-full rounded-md border bg-background px-2 py-1.5 font-mono text-[11px]" />
+                <p className="text-xs text-muted-foreground">{tautan.salin ?? "Pilih lalu salin tautan di atas."} Berlaku 30 hari, bisa dibuka tanpa login.</p>
               </div>
             )}
             {pratinjau && (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={pratinjau.url} alt="Pratinjau kartu piutang" className="w-full rounded-md border" />
+                <img src={pratinjau.url} alt="Pratinjau kartu piutang" className="w-full rounded-lg border" />
                 <p>
                   Kirim ke <span className="font-medium">{data.kontak.nomor}</span> ({mitra.nama})?
                 </p>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" disabled={aksi.memuat} onClick={() => setPratinjau(null)}>
+                  <Button size="lg" variant="outline" className="h-10" disabled={aksi.memuat} onClick={() => setPratinjau(null)}>
                     Batal
                   </Button>
-                  <Button size="sm" disabled={aksi.memuat} onClick={() => kirim(mitra.id)}>
+                  <Button size="lg" className="h-10 flex-1" disabled={aksi.memuat} onClick={() => kirim(mitra.id)}>
                     {aksi.memuat ? "Mengirim…" : "Kirim sekarang"}
                   </Button>
                 </div>
               </div>
             )}
-            {aksi.pesan && <p className={aksi.ok ? "text-green-700" : "text-destructive"}>{aksi.pesan}</p>}
-          </div>
-        </div>
+            {aksi.pesan && <p className={aksi.ok ? "text-primary" : "text-destructive"}>{aksi.pesan}</p>}
+          </section>
+        </>
       )}
-    </div>
+    </main>
   );
 }
