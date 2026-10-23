@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { aksesIdentitasMitra } from "@/lib/permissions";
 import { currentEskristalKode } from "@/lib/tenant-request";
 import { isPmpDeployment, isPmpScope } from "@/lib/tenant";
+import { canAccessAllPT } from "@/lib/require-access";
 import { getBerkasIdentitas } from "@/lib/queries/mitra-identitas";
 import { getFileBuffer } from "@/lib/storage/google-drive";
 import { contentDispositionInline, validasiKunciBerkas } from "@/lib/mitra-berkas";
@@ -30,6 +31,8 @@ export async function GET(
     eskristalKode: await currentEskristalKode(),
     pmpScope: isPmpScope(session.user.accountScope),
     pmpDeployment: isPmpDeployment(),
+    accountScope: session.user.accountScope,
+    semuaPT: canAccessAllPT(session.user),
   });
   if (!kunciHasil.ok) return galat(kunciHasil.status, kunciHasil.error);
   const { kunci, jenis } = kunciHasil;

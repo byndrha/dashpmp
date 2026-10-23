@@ -10,8 +10,11 @@ import {
   type KonteksAkses,
 } from "../mitra-berkas";
 
-const PMP: KonteksAkses = { eskristalKode: "mkesindo", pmpScope: true, pmpDeployment: true };
-const DEMO: KonteksAkses = { eskristalKode: "demokristal", pmpScope: false, pmpDeployment: true };
+// Akun peran mkesindo biasa (bukan lintas PT).
+const PMP: KonteksAkses = { eskristalKode: "mkesindo", pmpScope: true, pmpDeployment: true, accountScope: "mkesindo", semuaPT: false };
+const DIREKTUR: KonteksAkses = { eskristalKode: "mkesindo", pmpScope: true, pmpDeployment: true, accountScope: "direktur", semuaPT: true };
+const DEMO: KonteksAkses = { eskristalKode: "demokristal", pmpScope: false, pmpDeployment: true, accountScope: "demokristal", semuaPT: false };
+const esBalok = (scope: string): KonteksAkses => ({ eskristalKode: "mkesindo", pmpScope: true, pmpDeployment: true, accountScope: scope, semuaPT: false });
 
 test("validasiBerkas menerima JPG/PNG/WEBP/PDF sampai 5 MB", () => {
   assert.deepEqual(validasiBerkas({ type: "image/jpeg", size: 1000 }), { ok: true, ext: "jpg" });
@@ -47,14 +50,51 @@ test("Es Kristal: kode harus sama dengan currentEskristalKode dan sumber utama",
 });
 
 test("Es Balok: butuh scope PMP dan deployment PMP, kode fisik saja", () => {
-  assert.equal(validasiKunciBerkas({ kode: "pmpersada", sumber: "logistik", partnerId: "AG01", jenis: "sk" }, PMP).ok, true);
+  assert.equal(validasiKunciBerkas({ kode: "pmpersada", sumber: "logistik", partnerId: "AG01", jenis: "sk" }, DIREKTUR).ok, true);
   const tanpaScope = validasiKunciBerkas({ kode: "pmputra", sumber: "utama", partnerId: "AG01", jenis: "sk" }, DEMO);
   assert.deepEqual(tanpaScope, { ok: false, status: 403, error: "Anda tidak berhak mengakses mitra perusahaan ini" });
-  const bukanDeployPmp = validasiKunciBerkas({ kode: "pmputra", sumber: "utama", partnerId: "AG01", jenis: "sk" }, { ...PMP, pmpDeployment: false });
+  const bukanDeployPmp = validasiKunciBerkas({ kode: "pmputra", sumber: "utama", partnerId: "AG01", jenis: "sk" }, { ...DIREKTUR, pmpDeployment: false });
   assert.equal(bukanDeployPmp.ok, false);
-  const bukanFisik = validasiKunciBerkas({ kode: "pmpakis", sumber: "logistik", partnerId: "AG01", jenis: "sk" }, PMP);
+  const bukanFisik = validasiKunciBerkas({ kode: "pmpakis", sumber: "logistik", partnerId: "AG01", jenis: "sk" }, DIREKTUR);
   assert.equal(bukanFisik.ok, false);
-  assert.equal(validasiKunciBerkas({ kode: "lainnya", sumber: "utama", partnerId: "AG01", jenis: "sk" }, PMP).ok, false);
+  assert.equal(validasiKunciBerkas({ kode: "lainnya", sumber: "utama", partnerId: "AG01", jenis: "sk" }, DIREKTUR).ok, false);
+});
+
+const kunci = (kode: string, sumber = "utama") => ({ kode, sumber, partnerId: "AG01", jenis: "nik" });
+const SUPERADMIN: KonteksAkses = { ...esBalok("mkesindo"), semuaPT: true };
+
+test("isolasi per PT: scope mkesindo tidak boleh ke pmputra", () => {
+  assert.deepEqual(validasiKunciBerkas(kunci("pmputra"), PMP), { ok: false, status: 403, error: "Anda tidak berhak mengakses mitra perusahaan ini" });
+  assert.equal(validasiKunciBerkas(kunci("pmpersada", "logistik"), PMP).ok, false);
+});
+
+test("isolasi per PT: scope pmputra tidak boleh ke Es Kristal mkesindo", () => {
+  assert.deepEqual(validasiKunciBerkas(kunci("mkesindo"), esBalok("pmputra")), { ok: false, status: 403, error: "Anda tidak berhak mengakses mitra perusahaan ini" });
+  assert.equal(validasiKunciBerkas(kunci("pmputra"), esBalok("pmputra")).ok, true);
+  assert.equal(validasiKunciBerkas(kunci("pmputra", "logistik"), esBalok("pmputra")).ok, true);
+  assert.equal(validasiKunciBerkas(kunci("pmpakis"), esBalok("pmputra")).ok, false);
+});
+
+test("scope pmpakis boleh pmpersada:logistik (DB fisik bersama), tidak pmpersada:utama", () => {
+  assert.equal(validasiKunciBerkas(kunci("pmpersada", "logistik"), esBalok("pmpakis")).ok, true);
+  assert.equal(validasiKunciBerkas(kunci("pmpersada"), esBalok("pmpakis")).ok, false);
+  assert.equal(validasiKunciBerkas(kunci("pmpakis"), esBalok("pmpakis")).ok, true);
+  assert.equal(validasiKunciBerkas(kunci("pmpersada", "logistik"), esBalok("pmpersada")).ok, true);
+});
+
+test("direktur & superadmin boleh semua PT", () => {
+  for (const ctx of [DIREKTUR, SUPERADMIN]) {
+    for (const [kode, sumber] of [["mkesindo", "utama"], ["pmputra", "utama"], ["pmputra", "logistik"], ["pmpersada", "utama"], ["pmpersada", "logistik"], ["pmpakis", "utama"]]) {
+      assert.equal(validasiKunciBerkas(kunci(kode, sumber), ctx).ok, true, `${ctx.accountScope} ${kode}:${sumber}`);
+    }
+  }
+});
+
+test("superadmin tenant demo tetap terisolasi dari PT PMP", () => {
+  const demoSa: KonteksAkses = { ...DEMO, semuaPT: true };
+  assert.equal(validasiKunciBerkas(kunci("demokristal"), demoSa).ok, true);
+  assert.equal(validasiKunciBerkas(kunci("mkesindo"), demoSa).ok, false);
+  assert.equal(validasiKunciBerkas(kunci("pmputra"), demoSa).ok, false);
 });
 
 test("partnerId & jenis divalidasi ketat (aman untuk path folder Drive)", () => {

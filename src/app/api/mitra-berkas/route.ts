@@ -10,6 +10,7 @@ import { AppError } from "@/lib/action-result";
 import { aksesIdentitasMitra } from "@/lib/permissions";
 import { currentEskristalKode } from "@/lib/tenant-request";
 import { isPmpDeployment, isPmpScope } from "@/lib/tenant";
+import { canAccessAllPT } from "@/lib/require-access";
 import { setBerkasIdentitas, type IdentitasKunci } from "@/lib/queries/mitra-identitas";
 import { deleteFile, uploadFileWajibDrive } from "@/lib/storage/google-drive";
 import { rapikanNamaBerkas, validasiBerkas, validasiKunciBerkas } from "@/lib/mitra-berkas";
@@ -36,6 +37,8 @@ async function konteksAkses(user: Session["user"]) {
     eskristalKode: await currentEskristalKode(),
     pmpScope: isPmpScope(user.accountScope),
     pmpDeployment: isPmpDeployment(),
+    accountScope: user.accountScope,
+    semuaPT: canAccessAllPT(user),
   };
 }
 

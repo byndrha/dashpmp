@@ -48,6 +48,22 @@ export interface KonteksAkses {
   pmpScope: boolean;
   /** isPmpDeployment() */
   pmpDeployment: boolean;
+  /** session.user.accountScope — izin peran hanya berlaku untuk PT miliknya. */
+  accountScope: string | null | undefined;
+  /** canAccessAllPT(session.user): superadmin & direktur boleh semua PT. */
+  semuaPT: boolean;
+}
+
+const TOLAK_PT = { ok: false, status: 403, error: "Anda tidak berhak mengakses mitra perusahaan ini" } as const;
+
+// Peran (dan izin mitra_identitas-nya) milik satu PT, jadi akun non-lintas-PT
+// hanya boleh menyentuh PT-nya sendiri — sama dengan requirePmputra/
+// requirePmpersada/requirePmpakis di halaman. Satu-satunya pengecualian:
+// pmpersada:logistik adalah DB fisik bersama pmpersada & pmpakis.
+function scopeCocokEsBalok(kode: string, sumber: string, scope: string | null | undefined): boolean {
+  if (!scope) return false;
+  if (scope === kode) return true;
+  return kode === "pmpersada" && sumber === "logistik" && scope === "pmpakis";
 }
 
 export type HasilKunci =
@@ -72,12 +88,12 @@ export function validasiKunciBerkas(
   if (kode === ctx.eskristalKode) {
     // Es Kristal selalu bersumber "utama".
     if (sumber !== "utama") return { ok: false, status: 400, error: "Sumber mitra Es Kristal harus 'utama'" };
+    if (!ctx.semuaPT && ctx.accountScope !== ctx.eskristalKode) return TOLAK_PT;
   } else if (apakahKunciFisikEsBalok(kode, sumber)) {
-    if (!ctx.pmpDeployment || !ctx.pmpScope) {
-      return { ok: false, status: 403, error: "Anda tidak berhak mengakses mitra perusahaan ini" };
-    }
+    if (!ctx.pmpDeployment || !ctx.pmpScope) return TOLAK_PT;
+    if (!ctx.semuaPT && !scopeCocokEsBalok(kode, sumber, ctx.accountScope)) return TOLAK_PT;
   } else {
-    return { ok: false, status: 403, error: "Anda tidak berhak mengakses mitra perusahaan ini" };
+    return TOLAK_PT;
   }
 
   return { ok: true, kunci: { perusahaanKode: kode, sumber, partnerId }, jenis: jenis as JenisBerkas };
