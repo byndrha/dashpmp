@@ -1,4 +1,4 @@
--- Skema inti tenant Es Kristal (89 tabel + 2 modul SQL).
+-- Skema inti tenant Es Kristal (91 tabel + 2 modul SQL).
 -- DIHASILKAN OTOMATIS oleh scripts/saas-dump-eskristal-schema.ts -- jangan edit manual.
 -- Pemisah batch: baris "GO".
 
@@ -914,6 +914,20 @@ CREATE TABLE [dbo].[DashboardMarketingWilayah] (
 );
 GO
 
+CREATE TABLE [dbo].[DashboardMitraAlamat] (
+  [BusinessPartnerID] varchar(16) NOT NULL,
+  [Wilayah] varchar(128) NULL,
+  [Kecamatan] varchar(128) NULL,
+  [Alamat] varchar(1024) NULL,
+  [Kontak] varchar(128) NULL,
+  [CreatedByUserID] varchar(16) NULL,
+  [UpdatedByUserID] varchar(16) NULL,
+  [CreatedAt] datetime NOT NULL DEFAULT (getdate()),
+  [UpdatedAt] datetime NOT NULL DEFAULT (getdate()),
+  PRIMARY KEY CLUSTERED ([BusinessPartnerID])
+);
+GO
+
 CREATE TABLE [dbo].[DashboardMitraCapacitySnapshot] (
   [SnapshotID] int IDENTITY(1,1) NOT NULL,
   [MonthStart] date NOT NULL,
@@ -961,6 +975,27 @@ CREATE TABLE [dbo].[DashboardMitraLocation] (
 );
 GO
 
+CREATE TABLE [dbo].[DashboardMitraLokasiPengiriman] (
+  [LokasiPengirimanID] int IDENTITY(1,1) NOT NULL,
+  [BusinessPartnerID] varchar(16) NOT NULL,
+  [Urutan] int NOT NULL,
+  [Label] varchar(64) NULL,
+  [Wilayah] varchar(128) NULL,
+  [Kecamatan] varchar(128) NULL,
+  [Alamat] varchar(1024) NULL,
+  [Kontak] varchar(128) NULL,
+  [Latitude] decimal(10,7) NULL,
+  [Longitude] decimal(10,7) NULL,
+  [GeoAlamat] varchar(512) NULL,
+  [IsDeleted] bit NOT NULL DEFAULT ((0)),
+  [CreatedByUserID] varchar(16) NULL,
+  [UpdatedByUserID] varchar(16) NULL,
+  [CreatedAt] datetime NOT NULL DEFAULT (getdate()),
+  [UpdatedAt] datetime NOT NULL DEFAULT (getdate()),
+  PRIMARY KEY CLUSTERED ([LokasiPengirimanID])
+);
+GO
+
 CREATE TABLE [dbo].[DashboardMitraPengajuan] (
   [PengajuanID] int IDENTITY(1,1) NOT NULL,
   [MarketingUserID] varchar(16) NOT NULL,
@@ -983,6 +1018,7 @@ CREATE TABLE [dbo].[DashboardMitraPengajuan] (
   [Kapasitas] decimal(23,4) NULL,
   [Kompetitor] varchar(1024) NULL,
   [Keterangan] varchar(500) NULL,
+  [KompetitorIDs] varchar(512) NULL,
   PRIMARY KEY CLUSTERED ([PengajuanID])
 );
 GO
@@ -1094,6 +1130,14 @@ CREATE TABLE [dbo].[DashboardPengirimanJadwalDetail] (
   [Urutan] int NOT NULL DEFAULT ((0)),
   [SalesInvoiceID] varchar(16) NULL,
   [UrutanOverride] int NULL,
+  [LokasiPengirimanID] int NULL,
+  [KirimAlamat] varchar(1024) NULL,
+  [KirimWilayah] varchar(128) NULL,
+  [KirimKecamatan] varchar(128) NULL,
+  [KirimKontak] varchar(128) NULL,
+  [KirimLatitude] decimal(10,7) NULL,
+  [KirimLongitude] decimal(10,7) NULL,
+  [KirimDibekukanAt] datetime NULL,
   PRIMARY KEY CLUSTERED ([JadwalDetailID])
 );
 GO
@@ -1533,6 +1577,8 @@ GO
 CREATE UNIQUE NONCLUSTERED INDEX [UX_DashboardMitraCapacitySnapshot_MonthStart_BusinessPartnerID] ON [dbo].[DashboardMitraCapacitySnapshot] ([MonthStart], [BusinessPartnerID]);
 GO
 CREATE NONCLUSTERED INDEX [IX_DashboardMitraContactLog_Mitra_Date] ON [dbo].[DashboardMitraContactLog] ([BusinessPartnerID], [LogDate]);
+GO
+CREATE NONCLUSTERED INDEX [IX_DashboardMitraLokasiPengiriman_BusinessPartnerID] ON [dbo].[DashboardMitraLokasiPengiriman] ([BusinessPartnerID]);
 GO
 ALTER TABLE [dbo].[DashboardCollectionTarget] ADD CONSTRAINT [FK_DashboardCollectionTarget_BusinessPartner] FOREIGN KEY ([BusinessPartnerID]) REFERENCES [dbo].[BusinessPartner] ([BusinessPartnerID]);
 GO
