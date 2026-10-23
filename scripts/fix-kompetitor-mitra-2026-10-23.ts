@@ -4,6 +4,11 @@ import * as path from "path";
 import { getCompanyPool } from "../src/lib/db-company";
 import { getPgPool } from "../src/lib/pg";
 import { pecahTeksKompetitor } from "../src/lib/mitra-lokasi";
+import {
+  bangunPetaAliasKompetitor,
+  kunciAliasKompetitor as kunci,
+  type EntriAliasKompetitor as EntriDisetujui,
+} from "../src/lib/kompetitor-alias";
 
 // Migrasi kompetitor Es Kristal (spec 2026-10-23-mitra-identitas-lokasi-pengiriman §10):
 // teks bebas DashboardMitraCompetitor.Kompetitor → master `kompetitor` (holding "pmp",
@@ -53,7 +58,6 @@ const DIR = path.join(__dirname, "..", "docs", "data-fixes");
 const DISETUJUI = path.join(DIR, "2026-10-23-kompetitor-mitra-disetujui.json");
 const POSTED = path.join(DIR, "2026-10-23-kompetitor-mitra-posted.json");
 
-interface EntriDisetujui { nama: string; alias?: string[]; abaikan?: boolean; mitra?: unknown }
 interface RelasiPosted { perusahaanKode: string; sumber: string; partnerId: string; kompetitorId: number }
 interface Posted {
   holdingKode: string; bisnis: string; createdBy: string;
@@ -62,29 +66,11 @@ interface Posted {
   run: { waktu: string; kompetitorDibuat: number; relasiDibuat: number }[];
 }
 
-const kunci = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
-
 function bacaDisetujui(): { peta: Map<string, EntriDisetujui>; galat: string[] } {
   const isi = JSON.parse(fs.readFileSync(DISETUJUI, "utf8")) as unknown;
   if (!Array.isArray(isi)) throw new Error("File disetujui harus berupa larik entri { nama, alias?, abaikan? }.");
-  const peta = new Map<string, EntriDisetujui>();
-  const galat: string[] = [];
-  for (const e of isi as EntriDisetujui[]) {
-    const nama = typeof e?.nama === "string" ? e.nama.trim().replace(/\s+/g, " ") : "";
-    if (!nama) { galat.push(`Entri tanpa nama: ${JSON.stringify(e)}`); continue; }
-    if (nama.length > 128) galat.push(`Nama terlalu panjang (>128): ${nama}`);
-    if (e.alias !== undefined && (!Array.isArray(e.alias) || e.alias.some((a) => typeof a !== "string")))
-      galat.push(`alias harus larik teks: ${nama}`);
-    const entri: EntriDisetujui = { nama, alias: e.alias ?? [], abaikan: e.abaikan === true };
-    for (const ejaan of [nama, ...(entri.alias ?? [])]) {
-      const k = kunci(ejaan);
-      if (!k) continue;
-      const lain = peta.get(k);
-      if (lain && lain !== entri) galat.push(`Ejaan "${ejaan}" muncul di dua entri: "${lain.nama}" dan "${nama}"`);
-      else peta.set(k, entri);
-    }
-  }
-  return { peta, galat };
+  // Validasi & pemetaan ejaan bersama src/lib/kompetitor-alias.ts.
+  return bangunPetaAliasKompetitor(isi as EntriDisetujui[]);
 }
 
 async function main() {

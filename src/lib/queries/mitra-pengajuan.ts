@@ -10,6 +10,7 @@ import {
   tambahKompetitor,
 } from "@/lib/queries/kompetitor";
 import { pecahTeksKompetitor } from "@/lib/mitra-lokasi";
+import { petaAliasKompetitorDisetujui, resolveAliasKompetitor } from "@/lib/kompetitor-alias";
 import { createSalesOrderFromPengajuan } from "@/lib/queries/sales-order";
 import { MARKETING_ROLE_ID, APPROVER_ROLE_IDS } from "@/lib/roles";
 import { AGEN_QTY_THRESHOLD, RPA_QTY_THRESHOLD } from "@/lib/mitra-classification";
@@ -250,8 +251,11 @@ export async function createPengajuan(
  * Kompetitor untuk mitra hasil persetujuan:
  * - KompetitorIDs terisi → ID itu, disaring ke master holding ini (master
  *   tidak pernah dihapus, jadi normalnya tidak ada yang terbuang);
- * - KompetitorIDs NULL (pengajuan lama, teks bebas) → pecahTeksKompetitor +
- *   tambahKompetitor per nama (nama yang sudah ada dipakai ulang).
+ * - KompetitorIDs NULL (pengajuan lama, teks bebas) → pecahTeksKompetitor,
+ *   lalu tiap potongan dicocokkan ke daftar alias yang disetujui
+ *   (src/lib/kompetitor-alias.ts): alias → nama resmi, "abaikan" (mis.
+ *   "Belum ada kompetitor") → dibuang, tidak dikenal → nama apa adanya.
+ *   Lalu tambahKompetitor per nama (nama yang sudah ada dipakai ulang).
  */
 async function resolveKompetitorPengajuan(
   row: { Kompetitor: string | null; KompetitorIDs: string | null },
@@ -268,7 +272,11 @@ async function resolveKompetitorPengajuan(
     return sah;
   }
   const hasil: number[] = [];
-  for (const nama of pecahTeksKompetitor(row.Kompetitor)) {
+  const petaAlias = petaAliasKompetitorDisetujui();
+  for (const potongan of pecahTeksKompetitor(row.Kompetitor)) {
+    const r = resolveAliasKompetitor(petaAlias, potongan);
+    if (r.jenis === "abaikan") continue;
+    const nama = r.jenis === "kanonik" ? r.nama : potongan;
     const kompetitor = await tambahKompetitor(k.holdingKode, "es_kristal", nama, reviewerUserId);
     if (!hasil.includes(kompetitor.id)) hasil.push(kompetitor.id);
   }
