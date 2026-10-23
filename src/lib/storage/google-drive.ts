@@ -2,6 +2,7 @@ import { OAuth2Client } from "google-auth-library";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { resolveGDriveKoneksi } from "@/lib/queries/perusahaan-gdrive";
+import { AppError } from "@/lib/action-result";
 
 export interface UploadedFile {
   fileId: string;
@@ -106,6 +107,45 @@ export async function uploadFile(
   const folderId = await resolveFolderId(accessToken, conn.rootFolderId, categoryPath);
   const fileId = await uploadToParent(accessToken, folderId, filename, buffer, mimeType);
   return { fileId, publicPath: `/api/files/${perusahaanKode}/${fileId}/${encodeURIComponent(filename)}` };
+}
+
+/**
+ * Sama seperti uploadFile(), tetapi TANPA fallback disk lokal: bila Google
+ * Drive perusahaan belum terhubung, melempar AppError. Wajib dipakai untuk
+ * berkas sensitif (mis. identitas mitra) — fallback disk menulis ke
+ * public/uploads yang bisa dibuka siapa saja.
+ */
+export async function uploadFileWajibDrive(
+  perusahaanKode: string,
+  categoryPath: string[],
+  filename: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<{ fileId: string }> {
+  const conn = await resolveGDriveKoneksi(perusahaanKode);
+  if (!conn) {
+    throw new AppError("Google Drive perusahaan belum terhubung. Hubungkan Google Drive di menu Perusahaan sebelum mengunggah berkas ini.");
+  }
+  const client = buildOAuthClient(conn.refreshToken);
+  const accessToken = await getAccessToken(client);
+  const folderId = await resolveFolderId(accessToken, conn.rootFolderId, categoryPath);
+  const fileId = await uploadToParent(accessToken, folderId, filename, buffer, mimeType);
+  return { fileId };
+}
+
+/** Hapus permanen satu berkas Drive. Berkas yang sudah tidak ada (404) dianggap berhasil. */
+export async function deleteFile(perusahaanKode: string, fileId: string): Promise<void> {
+  const conn = await resolveGDriveKoneksi(perusahaanKode);
+  if (!conn) throw new Error(`Google Drive belum terhubung untuk perusahaan "${perusahaanKode}"`);
+  const client = buildOAuthClient(conn.refreshToken);
+  const accessToken = await getAccessToken(client);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Gagal menghapus file Google Drive (${fileId}): ${res.status}`);
+  }
 }
 
 export async function getFileBuffer(perusahaanKode: string, fileId: string): Promise<{ buffer: Buffer; mimeType: string }> {
