@@ -196,7 +196,7 @@ export async function renderKartuPng(data: KartuPiutangData, now = new Date()): 
         <div style={{ display: "flex", flexDirection: "row", marginTop: GAP, height: H_FOOTER - GAP, alignItems: "center", justifyContent: "space-between", fontSize: 18, color: C.mutedFg }}>
           <div style={{ display: "flex", opacity: 0.85 }}>{`Dicetak ${cetak} WIB · ${data.ptNama}`}</div>
           {/* Watermark ekstensi: didukung oleh ByChat */}
-          <div style={{ display: "flex", fontWeight: 600, letterSpacing: 0.5 }}>Didukung oleh ByChat</div>
+          <div style={{ display: "flex", fontWeight: 600, letterSpacing: 0.5 }}>Didukung oleh byChat</div>
         </div>
       </div>
     ),

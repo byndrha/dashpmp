@@ -81,7 +81,7 @@ export function KartuPublik({ data, token }: { data: KartuPiutangData; token: st
           Unduh sebagai gambar
         </a>
       </p>
-      <p className="text-center text-[11px] font-medium tracking-wide text-muted-foreground">Didukung oleh ByChat</p>
+      <p className="text-center text-[11px] font-medium tracking-wide text-muted-foreground">Didukung oleh byChat</p>
     </main>
   );
 }
