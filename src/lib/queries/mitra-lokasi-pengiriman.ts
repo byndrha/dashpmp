@@ -7,7 +7,7 @@
 // DashboardMitraAlamat hanya ada barisnya bila kotak "lokasi berbeda" dicentang.
 import { getPool, sql } from "@/lib/db";
 import { AppError } from "@/lib/action-result";
-import type { AlamatFields, PinFields, MitraAlamatTernormalisasi } from "@/lib/mitra-lokasi";
+import { rencanakanLokasiTambahan, type AlamatFields, type PinFields, type MitraAlamatTernormalisasi } from "@/lib/mitra-lokasi";
 import type { Exec } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
 import { daftarPinMitra, type PinMitra } from "@/lib/pin-mitra";
@@ -103,9 +103,12 @@ export async function getSemuaPinMitra(bpId: string): Promise<PinMitra[]> {
  * updateMitra(…, tx) + setMitraLocation(…, tx) dengan nilai `n.utama`.
  *
  * 1. Upsert/hapus DashboardMitraAlamat sesuai `n.alamatMitra`.
- * 2. Sinkronkan lokasi tambahan: id lama yang hilang dari input → dicek
- *    tidak dipakai Jadwal terbuka, lalu soft-delete; baris ber-id → UPDATE;
- *    baris tanpa id → INSERT. Urutan = posisi array + 2 (utama = 1).
+ * 2. Sinkronkan lokasi tambahan (rencanakanLokasiTambahan): HANYA id di
+ *    `n.dihapusIds` (atau semua yang aktif bila `n.hapusSemuaTambahan`) yang
+ *    dicek tidak dipakai Jadwal terbuka lalu di-soft-delete; baris ber-id →
+ *    UPDATE; baris tanpa id → INSERT. Urutan = posisi array + 2 (utama = 1);
+ *    lokasi aktif lain yang tidak dikirim dibiarkan, Urutan-nya digeser ke
+ *    belakang.
  */
 export async function simpanAlamatDanLokasiMitra(
   tx: sql.Transaction,
@@ -139,27 +142,34 @@ export async function simpanAlamatDanLokasiMitra(
       .query(`DELETE FROM DashboardMitraAlamat WHERE BusinessPartnerID = @bpId`);
   }
 
-  // 2. Lokasi tambahan
-  const lama = await tx
+  // 2. Lokasi tambahan — hanya ID yang diminta hapus (lokasiDihapusIds) atau,
+  // bila kotak tidak dicentang, semua yang aktif. Lokasi aktif yang tidak
+  // dikirim form (mis. ditambah dari Aplikasi Pemasaran setelah form ini
+  // dibuka) TIDAK dihapus.
+  const milikRes = await tx
     .request()
     .input("bpId", sql.VarChar(16), bpId)
-    .query(`SELECT LokasiPengirimanID FROM DashboardMitraLokasiPengiriman WITH (UPDLOCK)
-            WHERE BusinessPartnerID = @bpId AND IsDeleted = 0`);
-  const idLama = new Set((lama.recordset as { LokasiPengirimanID: number }[]).map((r) => r.LokasiPengirimanID));
-
-  const idInput = new Set<number>();
-  for (const l of n.tambahan) {
-    if (l.lokasiPengirimanId == null) continue;
-    if (!idLama.has(l.lokasiPengirimanId)) {
-      throw new AppError("Lokasi pengiriman yang diubah tidak ditemukan atau sudah dihapus. Muat ulang data mitra lalu coba lagi.");
-    }
-    if (idInput.has(l.lokasiPengirimanId)) {
-      throw new AppError("Lokasi pengiriman yang sama muncul dua kali di form.");
-    }
-    idInput.add(l.lokasiPengirimanId);
+    .query(`SELECT LokasiPengirimanID, CAST(IsDeleted AS bit) AS IsDeleted
+            FROM DashboardMitraLokasiPengiriman WITH (UPDLOCK)
+            WHERE BusinessPartnerID = @bpId
+            ORDER BY Urutan, LokasiPengirimanID`);
+  const milik = (milikRes.recordset as { LokasiPengirimanID: number; IsDeleted: boolean }[]).map((r) => ({
+    id: r.LokasiPengirimanID,
+    aktif: !r.IsDeleted,
+  }));
+  let rencana: { dihapus: number[]; dipertahankan: number[] };
+  try {
+    rencana = rencanakanLokasiTambahan({
+      milik,
+      idInput: n.tambahan.flatMap((l) => (l.lokasiPengirimanId == null ? [] : [l.lokasiPengirimanId])),
+      idDiminta: n.dihapusIds,
+      hapusSemuaAktif: n.hapusSemuaTambahan,
+    });
+  } catch (err) {
+    throw new AppError(err instanceof Error ? err.message : "Data lokasi pengiriman tidak valid.");
   }
 
-  const dihapus = [...idLama].filter((id) => !idInput.has(id));
+  const dihapus = rencana.dihapus;
   if (dihapus.length > 0) {
     await assertLokasiTidakDipakaiJadwalTerbuka(tx, dihapus);
     const req = tx.request().input("bpId", sql.VarChar(16), bpId).input("userId", sql.VarChar(16), userId);
@@ -172,6 +182,17 @@ export async function simpanAlamatDanLokasiMitra(
       SET IsDeleted = 1, UpdatedByUserID = @userId, UpdatedAt = GETDATE()
       WHERE BusinessPartnerID = @bpId AND LokasiPengirimanID IN (${params.join(",")})
     `);
+  }
+
+  // Lokasi yang dibiarkan ditaruh di belakang isian form (Urutan saja yang diubah).
+  for (let j = 0; j < rencana.dipertahankan.length; j++) {
+    await tx
+      .request()
+      .input("bpId", sql.VarChar(16), bpId)
+      .input("id", sql.Int, rencana.dipertahankan[j])
+      .input("urutan", sql.Int, n.tambahan.length + 2 + j)
+      .query(`UPDATE DashboardMitraLokasiPengiriman SET Urutan = @urutan
+              WHERE LokasiPengirimanID = @id AND BusinessPartnerID = @bpId AND IsDeleted = 0`);
   }
 
   for (let i = 0; i < n.tambahan.length; i++) {

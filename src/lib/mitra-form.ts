@@ -18,10 +18,18 @@ const ALAMAT_KOSONG: AlamatPin = {
 // Bentuk form alamat dari MitraRow (atau kosong untuk mitra baru). Kolom ERP
 // (Alamat/Wilayah/Kecamatan/Kontak + pin) SELALU = lokasi utama (spec §5):
 // tanpa centang, itu juga alamat mitra; dengan centang, alamat mitra dari
-// DashboardMitraAlamat (tanpa pin).
+// DashboardMitraAlamat (tanpa pin). Ada lokasi tambahan tanpa baris
+// DashboardMitraAlamat (data dari jalur lain) → tetap dicentang & lokasi
+// tambahan ditampilkan, alamat mitra disalin dari lokasi utama.
 export function mitraKeAlamatForm(row: MitraRow | null): MitraAlamatForm {
   if (!row) {
-    return { lokasiBerbeda: false, alamatMitra: { ...ALAMAT_KOSONG }, lokasiUtama: { ...ALAMAT_KOSONG }, lokasiTambahan: [] };
+    return {
+      lokasiBerbeda: false,
+      alamatMitra: { ...ALAMAT_KOSONG },
+      lokasiUtama: { ...ALAMAT_KOSONG },
+      lokasiTambahan: [],
+      lokasiDihapusIds: [],
+    };
   }
   const utama: AlamatPin = {
     wilayah: row.Wilayah,
@@ -32,13 +40,17 @@ export function mitraKeAlamatForm(row: MitraRow | null): MitraAlamatForm {
     longitude: row.Longitude,
     geoAlamat: row.GeoAlamat,
   };
-  if (!row.LokasiBerbeda || !row.AlamatMitra) {
-    return { lokasiBerbeda: false, alamatMitra: utama, lokasiUtama: { ...utama }, lokasiTambahan: [] };
+  const am = row.LokasiBerbeda ? row.AlamatMitra : null;
+  if (!am && row.LokasiTambahan.length === 0) {
+    return { lokasiBerbeda: false, alamatMitra: utama, lokasiUtama: { ...utama }, lokasiTambahan: [], lokasiDihapusIds: [] };
   }
   return {
     lokasiBerbeda: true,
-    alamatMitra: { ...row.AlamatMitra, latitude: null, longitude: null, geoAlamat: null },
+    alamatMitra: am
+      ? { ...am, latitude: null, longitude: null, geoAlamat: null }
+      : { ...utama, latitude: null, longitude: null, geoAlamat: null },
     lokasiUtama: utama,
+    lokasiDihapusIds: [],
     lokasiTambahan: row.LokasiTambahan.map((l) => ({
       lokasiPengirimanId: l.LokasiPengirimanID,
       label: l.Label,

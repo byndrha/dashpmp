@@ -22,6 +22,7 @@ import { getNaiveWibNow } from "@/lib/business-date";
 import {
   normalisasiMitraForm,
   PESAN_SIMPAN_SEBAGIAN,
+  rencanakanLokasiTambahan,
   type MitraAlamatForm,
   type MitraAlamatTernormalisasi,
 } from "@/lib/mitra-lokasi";
@@ -88,8 +89,11 @@ async function poolAgen(kode: string, sumber: SumberAgen): Promise<sql.Connectio
  * `n.utama`. Es Balok belum punya Papan Pengiriman, jadi tidak ada cek
  * "dipakai Jadwal" sebelum soft-delete.
  * 1. Upsert/hapus DashboardAgenAlamat sesuai `n.alamatMitra`.
- * 2. Sinkronkan lokasi tambahan: id lama yang hilang dari input → soft-delete;
- *    baris ber-id → UPDATE; baris tanpa id → INSERT. Urutan = posisi + 2.
+ * 2. Sinkronkan lokasi tambahan (rencanakanLokasiTambahan): HANYA id di
+ *    `n.dihapusIds` (atau semua yang aktif bila `n.hapusSemuaTambahan`) yang
+ *    di-soft-delete; baris ber-id → UPDATE; baris tanpa id → INSERT.
+ *    Urutan = posisi + 2; lokasi aktif lain yang tidak dikirim dibiarkan,
+ *    Urutan-nya digeser ke belakang.
  */
 export async function simpanAlamatDanLokasiAgen(
   tx: sql.Transaction,
@@ -120,25 +124,33 @@ export async function simpanAlamatDanLokasiAgen(
     await tx.request().input("agenId", sql.VarChar(16), agenId).query(`DELETE FROM DashboardAgenAlamat WHERE AgenID = @agenId`);
   }
 
-  // 2. Lokasi tambahan
-  const lama = await tx
+  // 2. Lokasi tambahan — hanya ID yang diminta hapus (lokasiDihapusIds) atau,
+  // bila kotak tidak dicentang, semua yang aktif. Lokasi aktif yang tidak
+  // dikirim form TIDAK dihapus.
+  const milikRes = await tx
     .request()
     .input("agenId", sql.VarChar(16), agenId)
-    .query(`SELECT LokasiPengirimanID FROM DashboardAgenLokasiPengiriman WITH (UPDLOCK)
-            WHERE AgenID = @agenId AND IsDeleted = 0`);
-  const idLama = new Set((lama.recordset as { LokasiPengirimanID: number }[]).map((r) => r.LokasiPengirimanID));
-
-  const idInput = new Set<number>();
-  for (const l of n.tambahan) {
-    if (l.lokasiPengirimanId == null) continue;
-    if (!idLama.has(l.lokasiPengirimanId)) {
-      throw new AppError("Lokasi pengiriman yang diubah tidak ditemukan atau sudah dihapus. Muat ulang data mitra lalu coba lagi.");
-    }
-    if (idInput.has(l.lokasiPengirimanId)) throw new AppError("Lokasi pengiriman yang sama muncul dua kali di form.");
-    idInput.add(l.lokasiPengirimanId);
+    .query(`SELECT LokasiPengirimanID, CAST(IsDeleted AS bit) AS IsDeleted
+            FROM DashboardAgenLokasiPengiriman WITH (UPDLOCK)
+            WHERE AgenID = @agenId
+            ORDER BY Urutan, LokasiPengirimanID`);
+  const milik = (milikRes.recordset as { LokasiPengirimanID: number; IsDeleted: boolean }[]).map((r) => ({
+    id: r.LokasiPengirimanID,
+    aktif: !r.IsDeleted,
+  }));
+  let rencana: { dihapus: number[]; dipertahankan: number[] };
+  try {
+    rencana = rencanakanLokasiTambahan({
+      milik,
+      idInput: n.tambahan.flatMap((l) => (l.lokasiPengirimanId == null ? [] : [l.lokasiPengirimanId])),
+      idDiminta: n.dihapusIds,
+      hapusSemuaAktif: n.hapusSemuaTambahan,
+    });
+  } catch (err) {
+    throw new AppError(err instanceof Error ? err.message : "Data lokasi pengiriman tidak valid.");
   }
 
-  const dihapus = [...idLama].filter((id) => !idInput.has(id));
+  const dihapus = rencana.dihapus;
   if (dihapus.length > 0) {
     const req = tx.request().input("agenId", sql.VarChar(16), agenId).input("userId", sql.VarChar(16), userId);
     const params = dihapus.map((id, i) => {
@@ -150,6 +162,17 @@ export async function simpanAlamatDanLokasiAgen(
       SET IsDeleted = 1, UpdatedByUserID = @userId, UpdatedAt = GETDATE()
       WHERE AgenID = @agenId AND LokasiPengirimanID IN (${params.join(",")})
     `);
+  }
+
+  // Lokasi yang dibiarkan ditaruh di belakang isian form (Urutan saja yang diubah).
+  for (let j = 0; j < rencana.dipertahankan.length; j++) {
+    await tx
+      .request()
+      .input("agenId", sql.VarChar(16), agenId)
+      .input("id", sql.Int, rencana.dipertahankan[j])
+      .input("urutan", sql.Int, n.tambahan.length + 2 + j)
+      .query(`UPDATE DashboardAgenLokasiPengiriman SET Urutan = @urutan
+              WHERE LokasiPengirimanID = @id AND AgenID = @agenId AND IsDeleted = 0`);
   }
 
   for (let i = 0; i < n.tambahan.length; i++) {

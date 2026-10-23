@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { MitraLocationField } from "@/components/dashboard/mitra-location-field";
-import type { AlamatFields, LokasiTambahanInput, MitraAlamatForm, PinFields } from "@/lib/mitra-lokasi";
+import {
+  tandaiLokasiDihapus,
+  type AlamatFields,
+  type LokasiTambahanInput,
+  type MitraAlamatForm,
+  type PinFields,
+} from "@/lib/mitra-lokasi";
 
 export type AlamatPin = AlamatFields & PinFields;
 
@@ -76,7 +82,8 @@ export function AlamatBaris({
   }
 
   return (
-    <div className="col-span-full grid grid-cols-2 gap-2 sm:grid-cols-4">
+    // inert: Wilayah/Kecamatan (slot dari induk) ikut terkunci selagi disabled.
+    <div className={cn("col-span-full grid grid-cols-2 gap-2 sm:grid-cols-4", disabled && "opacity-60")} inert={disabled}>
       {renderWilayahKecamatan({
         wilayah: value.wilayah ?? "",
         kecamatan: value.kecamatan ?? "",
@@ -135,9 +142,13 @@ export function AlamatBaris({
   );
 }
 
-// Kunci React stabil untuk baris lokasi tambahan (baris baru belum punya ID).
+// Kunci React baris lokasi tambahan: baris tersimpan = ID-nya (tetap melekat
+// ke lokasi yang sama walau urutan berubah, mis. setelah Jadikan Utama);
+// baris baru = kunciKlien yang dibuat saat [+] diklik.
 let kunciBerikut = 0;
 const kunciBaru = () => `lok-${++kunciBerikut}`;
+const kunciBaris = (l: LokasiTambahanInput, i: number) =>
+  l.lokasiPengirimanId != null ? `id-${l.lokasiPengirimanId}` : (l.kunciKlien ?? `baru-${i}`);
 
 /**
  * Kotak "Lokasi Pengiriman Berbeda dengan Mitra" + daftar lokasi (spec §2, §8).
@@ -149,6 +160,10 @@ const kunciBaru = () => `lok-${++kunciBerikut}`;
  *     dibuang (soft-delete saat simpan) dan alamat mitra = Lokasi Utama.
  * "Jadikan Utama" langsung ke server, jadi disuntikkan lewat onJadikanUtama
  * (hanya untuk baris yang sudah tersimpan).
+ * Setiap lokasi tersimpan yang dihapus di sini dicatat di lokasiDihapusIds —
+ * server hanya menghapus ID yang tercatat (lokasi yang tidak dikenal form
+ * ini dibiarkan). Induk memasang ulang komponen ini (prop `key`) setiap kali
+ * daftar dimuat ulang dari server, supaya peta yang terbuka tertutup.
  */
 export function LokasiPengirimanSection({
   value,
@@ -157,6 +172,7 @@ export function LokasiPengirimanSection({
   onJadikanUtama,
   sedangJadikanUtama = false,
   adaptorWilayah,
+  disabled = false,
 }: {
   value: MitraAlamatForm;
   onChange: Pengubah<MitraAlamatForm>;
@@ -164,14 +180,9 @@ export function LokasiPengirimanSection({
   onJadikanUtama?: (lokasi: LokasiTambahanInput) => void;
   sedangJadikanUtama?: boolean;
   adaptorWilayah?: AdaptorWilayah;
+  // true selagi data alamat segar belum termuat dari server.
+  disabled?: boolean;
 }) {
-  const [kunci, setKunci] = useState<string[]>(() => value.lokasiTambahan.map(kunciBaru));
-  // Sinkronkan bila daftar diganti dari luar (mis. dimuat ulang setelah
-  // Jadikan Utama) — penyesuaian state saat render, bukan efek.
-  if (kunci.length !== value.lokasiTambahan.length) {
-    setKunci(value.lokasiTambahan.map(kunciBaru));
-  }
-
   function ubahCentang(dicentang: boolean) {
     if (dicentang) {
       onChange((v) => ({ ...v, lokasiBerbeda: true, lokasiUtama: { ...v.alamatMitra }, lokasiTambahan: [] }));
@@ -179,7 +190,13 @@ export function LokasiPengirimanSection({
     }
     const n = value.lokasiTambahan.length;
     if (n > 0 && !confirm(`${n} lokasi tambahan akan dihapus, alamat mitra akan disamakan dengan Lokasi Utama.`)) return;
-    onChange((v) => ({ ...v, lokasiBerbeda: false, alamatMitra: { ...v.lokasiUtama }, lokasiTambahan: [] }));
+    onChange((v) => ({
+      ...v,
+      lokasiBerbeda: false,
+      alamatMitra: { ...v.lokasiUtama },
+      lokasiTambahan: [],
+      lokasiDihapusIds: tandaiLokasiDihapus(v.lokasiDihapusIds, v.lokasiTambahan),
+    }));
   }
 
   function ubahTambahan(i: number, fn: (prev: LokasiTambahanInput) => LokasiTambahanInput) {
@@ -187,10 +204,10 @@ export function LokasiPengirimanSection({
   }
 
   function tambah() {
-    setKunci((k) => [...k, kunciBaru()]);
+    const kunciKlien = kunciBaru();
     onChange((v) => ({
       ...v,
-      lokasiTambahan: [...v.lokasiTambahan, { ...ALAMAT_KOSONG, lokasiPengirimanId: null, label: null }],
+      lokasiTambahan: [...v.lokasiTambahan, { ...ALAMAT_KOSONG, lokasiPengirimanId: null, label: null, kunciKlien }],
     }));
   }
 
@@ -198,8 +215,11 @@ export function LokasiPengirimanSection({
     const l = value.lokasiTambahan[i];
     const nama = l.label?.trim() || `Lokasi ${i + 2}`;
     if (!confirm(`Hapus ${nama}? Perubahan berlaku saat form disimpan.`)) return;
-    setKunci((k) => k.filter((_, j) => j !== i));
-    onChange((v) => ({ ...v, lokasiTambahan: v.lokasiTambahan.filter((_, j) => j !== i) }));
+    onChange((v) => ({
+      ...v,
+      lokasiTambahan: v.lokasiTambahan.filter((_, j) => j !== i),
+      lokasiDihapusIds: tandaiLokasiDihapus(v.lokasiDihapusIds, v.lokasiTambahan.filter((_, j) => j === i)),
+    }));
   }
 
   return (
@@ -209,6 +229,7 @@ export function LokasiPengirimanSection({
           type="checkbox"
           className="accent-primary"
           checked={value.lokasiBerbeda}
+          disabled={disabled}
           onChange={(e) => ubahCentang(e.target.checked)}
         />
         Lokasi Pengiriman Berbeda dengan Mitra
@@ -218,7 +239,7 @@ export function LokasiPengirimanSection({
         <div className="col-span-full flex flex-col gap-3 rounded-lg border p-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Lokasi Pengiriman</h4>
-            <Button type="button" variant="outline" size="icon-sm" title="Tambah lokasi pengiriman" onClick={tambah}>
+            <Button type="button" variant="outline" size="icon-sm" title="Tambah lokasi pengiriman" disabled={disabled} onClick={tambah}>
               <Plus className="size-4" />
             </Button>
           </div>
@@ -230,17 +251,19 @@ export function LokasiPengirimanSection({
               onChange={(fn) => onChange((v) => ({ ...v, lokasiUtama: fn(v.lokasiUtama) }))}
               renderWilayahKecamatan={renderWilayahKecamatan}
               adaptorWilayah={adaptorWilayah}
+              disabled={disabled}
             />
           </div>
 
           {value.lokasiTambahan.map((l, i) => (
-            <div key={kunci[i] ?? i} className="flex flex-col gap-1.5 border-t pt-3">
+            <div key={kunciBaris(l, i)} className="flex flex-col gap-1.5 border-t pt-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground">Lokasi {i + 2}</span>
                 <Input
                   placeholder="Label (opsional), mis. Gudang Pasar"
                   value={l.label ?? ""}
                   maxLength={64}
+                  disabled={disabled}
                   onChange={(e) => {
                     const label = kosongJadiNull(e.target.value);
                     ubahTambahan(i, (x) => ({ ...x, label }));
@@ -253,7 +276,7 @@ export function LokasiPengirimanSection({
                       type="button"
                       variant="outline"
                       size="xs"
-                      disabled={sedangJadikanUtama}
+                      disabled={sedangJadikanUtama || disabled}
                       onClick={() => onJadikanUtama(l)}
                     >
                       <Star className="size-3" />
@@ -265,6 +288,7 @@ export function LokasiPengirimanSection({
                     variant="ghost"
                     size="icon-xs"
                     title="Hapus lokasi"
+                    disabled={disabled}
                     onClick={() => hapus(i)}
                   >
                     <Trash2 className="text-destructive" />
@@ -276,6 +300,7 @@ export function LokasiPengirimanSection({
                 onChange={(fn) => ubahTambahan(i, (x) => ({ ...x, ...fn(x) }))}
                 renderWilayahKecamatan={renderWilayahKecamatan}
                 adaptorWilayah={adaptorWilayah}
+                disabled={disabled}
               />
             </div>
           ))}

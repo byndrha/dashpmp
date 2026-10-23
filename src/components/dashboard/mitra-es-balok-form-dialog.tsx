@@ -150,6 +150,9 @@ export function MitraEsBalokFormDialog({
   const [berkasNik, setBerkasNik] = useState<BerkasIdentitasNilai>(BERKAS_KOSONG);
   const [berkasSk, setBerkasSk] = useState<BerkasIdentitasNilai>(BERKAS_KOSONG);
   const [alamat, setAlamat] = useState<MitraAlamatForm>(() => kartuKeAlamatForm(card));
+  // Naik setiap isian alamat diganti data server → baris alamat/lokasi
+  // dipasang ulang (peta yang terbuka tertutup).
+  const [versiAlamat, setVersiAlamat] = useState(0);
   const [segmentasi, setSegmentasi] = useState<Segmentasi | null>(card?.segmentasi ?? null);
   const [hargaKecil, setHargaKecil] = useState(keTeks(card?.hargaBalokKecil ?? 0));
   const [hargaBesar, setHargaBesar] = useState(keTeks(card?.hargaBalokBesar ?? 0));
@@ -164,16 +167,32 @@ export function MitraEsBalokFormDialog({
   const [pending, startTransition] = useTransition();
   const [sedangJadikan, startJadikan] = useTransition();
 
-  // Muat identitas + kompetitor + hak akses + daftar Wilayah sumber ini.
-  // Isian identitas dikunci (dan Simpan nonaktif) sampai selesai, supaya
-  // nilai kosong tidak tersimpan menimpa data lama.
+  // Muat identitas + kompetitor + hak akses + daftar Wilayah sumber ini,
+  // plus kartu SEGAR (alamat/lokasi) untuk mitra lama — props `card` bisa
+  // sudah berjam-jam. Isian identitas & alamat dikunci (dan Simpan nonaktif)
+  // sampai selesai, supaya nilai kosong/basi tidak tersimpan menimpa data lama.
   useEffect(() => {
     let batal = false;
-    aksi.konteks(sumber, agenId).then((r) => {
+    Promise.all([
+      aksi.konteks(sumber, agenId),
+      agenId ? aksi.muatKartu(sumber, agenId, agenDetailId) : Promise.resolve(null),
+    ]).then(([r, kartu]) => {
       if (batal) return;
       if (!r.success) {
         setGalatKonteks(r.error);
         return;
+      }
+      if (kartu) {
+        if (!kartu.success) {
+          setGalatKonteks(kartu.error);
+          return;
+        }
+        if (!kartu.data) {
+          setGalatKonteks("Mitra tidak ditemukan atau sudah dihapus. Muat ulang halaman.");
+          return;
+        }
+        setAlamat(kartuKeAlamatForm(kartu.data));
+        setVersiAlamat((v) => v + 1);
       }
       const d = r.data;
       setGalatKonteks(null);
@@ -190,7 +209,7 @@ export function MitraEsBalokFormDialog({
     return () => {
       batal = true;
     };
-  }, [aksi, sumber, agenId]);
+  }, [aksi, sumber, agenId, agenDetailId]);
 
   const memuat = konteks === null;
   const akses = konteks?.akses ?? { lihat: false, ubah: false };
@@ -296,6 +315,7 @@ export function MitraEsBalokFormDialog({
         const segar = kartuKeAlamatForm(d.data);
         // Alamat mitra (Identitas) tidak disentuh Jadikan Utama — pertahankan isian.
         setAlamat((prev) => ({ ...segar, alamatMitra: prev.alamatMitra }));
+        setVersiAlamat((v) => v + 1);
       }
       if ((r.data.wilayahLama ?? "") !== (r.data.wilayahBaru ?? "")) {
         toast.warning(`Lokasi utama diganti. Wilayah pindah dari ${r.data.wilayahLama ?? "-"} ke ${r.data.wilayahBaru ?? "-"} — laporan wilayah ikut pindah.`);
@@ -396,11 +416,13 @@ export function MitraEsBalokFormDialog({
             }}
           />
           <AlamatBaris
+            key={`alamat-${versiAlamat}`}
             value={alamat.alamatMitra}
             onChange={(fn) => setAlamat((a) => ({ ...a, alamatMitra: fn(a.alamatMitra) }))}
             renderWilayahKecamatan={renderWilayahKecamatan}
             tampilkanPin={!alamat.lokasiBerbeda}
             adaptorWilayah={adaptorWilayah}
+            disabled={memuat}
           />
 
           <div className="flex flex-col gap-1">
@@ -443,6 +465,8 @@ export function MitraEsBalokFormDialog({
           </div>
 
           <LokasiPengirimanSection
+            key={`lokasi-${versiAlamat}`}
+            disabled={memuat}
             value={alamat}
             onChange={setAlamat}
             renderWilayahKecamatan={renderWilayahKecamatan}

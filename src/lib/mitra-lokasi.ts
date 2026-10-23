@@ -3,19 +3,32 @@
 
 export interface AlamatFields { wilayah: string | null; kecamatan: string | null; alamat: string | null; kontak: string | null }
 export interface PinFields { latitude: number | null; longitude: number | null; geoAlamat: string | null }
-export interface LokasiTambahanInput extends AlamatFields, PinFields { lokasiPengirimanId: number | null; label: string | null }
+export interface LokasiTambahanInput extends AlamatFields, PinFields {
+  lokasiPengirimanId: number | null;
+  label: string | null;
+  // Kunci React baris baru (khusus client, diabaikan server).
+  kunciKlien?: string;
+}
 
 export interface MitraAlamatForm {
   lokasiBerbeda: boolean;
   alamatMitra: AlamatFields & PinFields; // pin dipakai hanya bila !lokasiBerbeda
   lokasiUtama: AlamatFields & PinFields; // diabaikan bila !lokasiBerbeda
   lokasiTambahan: LokasiTambahanInput[]; // harus [] bila !lokasiBerbeda
+  // ID lokasi tambahan tersimpan yang SENGAJA dihapus pengguna di form ini.
+  // Server hanya men-soft-delete ID di sini (plus semua lokasi aktif bila
+  // kotak lokasi berbeda tidak dicentang); lokasi yang tidak dikirim dan
+  // tidak ada di sini dibiarkan (mis. ditambah dari tempat lain setelah form
+  // dibuka).
+  lokasiDihapusIds: number[];
 }
 
 export interface MitraAlamatTernormalisasi {
   utama: AlamatFields & PinFields; // → kolom ERP + pin
   alamatMitra: AlamatFields | null; // → Dashboard*Alamat; null = hapus baris
   tambahan: LokasiTambahanInput[];
+  dihapusIds: number[]; // dari lokasiDihapusIds, sudah divalidasi bentuknya
+  hapusSemuaTambahan: boolean; // true bila tidak dicentang → semua lokasi tambahan aktif dihapus
 }
 
 const ambilAlamat = (a: AlamatFields): AlamatFields => ({
@@ -31,13 +44,96 @@ const ambilAlamatPin = (a: AlamatFields & PinFields): AlamatFields & PinFields =
  * Dicentang: lokasi utama dari isian terpisah; alamat mitra disimpan tanpa pin.
  */
 export function normalisasiMitraForm(f: MitraAlamatForm): MitraAlamatTernormalisasi {
+  const dihapusIds = rapikanIdDihapus(f.lokasiDihapusIds);
   const hasil: MitraAlamatTernormalisasi = f.lokasiBerbeda
-    ? { utama: ambilAlamatPin(f.lokasiUtama), alamatMitra: ambilAlamat(f.alamatMitra), tambahan: f.lokasiTambahan }
-    : { utama: ambilAlamatPin(f.alamatMitra), alamatMitra: null, tambahan: [] };
+    ? {
+        utama: ambilAlamatPin(f.lokasiUtama),
+        alamatMitra: ambilAlamat(f.alamatMitra),
+        tambahan: f.lokasiTambahan,
+        dihapusIds,
+        hapusSemuaTambahan: false,
+      }
+    : { utama: ambilAlamatPin(f.alamatMitra), alamatMitra: null, tambahan: [], dihapusIds, hapusSemuaTambahan: true };
   if (!hasil.utama.wilayah || hasil.utama.wilayah.trim() === "") {
     throw new Error("Wilayah lokasi utama wajib diisi");
   }
   return hasil;
+}
+
+/**
+ * lokasiDihapusIds dari client → larik ID bulat positif tanpa duplikat.
+ * Tidak dikirim (client lama) → []. Bentuk lain → throw.
+ */
+function rapikanIdDihapus(ids: unknown): number[] {
+  if (ids == null) return [];
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "number" || !Number.isInteger(id) || id <= 0)) {
+    throw new Error("Daftar lokasi yang dihapus tidak valid.");
+  }
+  return [...new Set(ids as number[])];
+}
+
+/**
+ * Client: tambahkan ID tersimpan dari `baris` (baris yang dibuang dari form)
+ * ke lokasiDihapusIds. Baris baru (tanpa ID) diabaikan; tanpa duplikat.
+ */
+export function tandaiLokasiDihapus(ids: number[] | undefined, baris: LokasiTambahanInput[]): number[] {
+  const hasil = [...(ids ?? [])];
+  for (const l of baris) {
+    if (l.lokasiPengirimanId != null && !hasil.includes(l.lokasiPengirimanId)) hasil.push(l.lokasiPengirimanId);
+  }
+  return hasil;
+}
+
+export interface LokasiMilik {
+  id: number;
+  aktif: boolean;
+}
+
+/**
+ * Rencana sinkronisasi lokasi tambahan saat simpan form (murni, diuji unit).
+ * - `milik`: SEMUA baris lokasi tambahan mitra ini di DB (aktif & terhapus).
+ * - `idInput`: ID baris yang dikirim form (akan di-UPDATE) — harus aktif & unik.
+ * - `idDiminta`: lokasiDihapusIds — harus milik mitra ini; yang sudah
+ *   terhapus diabaikan; tidak boleh sekaligus ada di idInput.
+ * - `hapusSemuaAktif`: kotak lokasi berbeda tidak dicentang → semua lokasi
+ *   aktif ikut dihapus (idInput harus kosong).
+ * Hasil: `dihapus` (aktif yang di-soft-delete) dan `dipertahankan` (aktif,
+ * tidak dikirim, tidak diminta hapus — dibiarkan, mis. ditambah dari tempat
+ * lain setelah form dibuka). Melempar Error berpesan Indonesia bila tidak sah.
+ */
+export function rencanakanLokasiTambahan(p: {
+  milik: LokasiMilik[];
+  idInput: number[];
+  idDiminta: number[];
+  hapusSemuaAktif: boolean;
+}): { dihapus: number[]; dipertahankan: number[] } {
+  const aktif = new Set(p.milik.filter((m) => m.aktif).map((m) => m.id));
+  const semua = new Set(p.milik.map((m) => m.id));
+
+  const input = new Set<number>();
+  for (const id of p.idInput) {
+    if (!aktif.has(id)) {
+      throw new Error("Lokasi pengiriman yang diubah tidak ditemukan atau sudah dihapus. Muat ulang data mitra lalu coba lagi.");
+    }
+    if (input.has(id)) throw new Error("Lokasi pengiriman yang sama muncul dua kali di form.");
+    input.add(id);
+  }
+  if (p.hapusSemuaAktif && input.size > 0) {
+    throw new Error("Lokasi tambahan tidak boleh dikirim bila lokasi pengiriman tidak berbeda dengan mitra.");
+  }
+
+  const diminta = new Set<number>();
+  for (const id of p.idDiminta) {
+    if (!semua.has(id)) throw new Error("Lokasi pengiriman yang dihapus bukan milik mitra ini. Muat ulang data mitra lalu coba lagi.");
+    if (input.has(id)) throw new Error("Lokasi pengiriman yang sama ditandai diubah sekaligus dihapus.");
+    diminta.add(id);
+  }
+
+  const urutanAktif = p.milik.filter((m) => m.aktif).map((m) => m.id);
+  const dihapus = urutanAktif.filter((id) => p.hapusSemuaAktif || diminta.has(id));
+  const hapusSet = new Set(dihapus);
+  const dipertahankan = urutanAktif.filter((id) => !input.has(id) && !hapusSet.has(id));
+  return { dihapus, dipertahankan };
 }
 
 export interface StopLokasiSumber {

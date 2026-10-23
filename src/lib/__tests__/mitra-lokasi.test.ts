@@ -4,11 +4,15 @@ import {
   normalisasiMitraForm,
   pecahTeksKompetitor,
   pilihLokasiStop,
+  rencanakanLokasiTambahan,
   saringNikMasukan,
+  tandaiLokasiDihapus,
   type AlamatFields,
   type MitraAlamatForm,
   type PinFields,
 } from "../mitra-lokasi";
+import { mitraKeAlamatForm } from "../mitra-form";
+import type { MitraRow } from "../queries/mitra";
 
 const alamat = (o: Partial<AlamatFields & PinFields> = {}): AlamatFields & PinFields => ({
   wilayah: "Malang", kecamatan: "Klojen", alamat: "Jl. Ijen 1", kontak: "081234567890",
@@ -19,6 +23,7 @@ const form = (o: Partial<MitraAlamatForm> = {}): MitraAlamatForm => ({
   alamatMitra: alamat(),
   lokasiUtama: alamat({ wilayah: "Batu", alamat: "Jl. Diponegoro 5", latitude: -7.87, longitude: 112.52, geoAlamat: "Batu" }),
   lokasiTambahan: [],
+  lokasiDihapusIds: [],
   ...o,
 });
 const tambahan = {
@@ -28,7 +33,7 @@ const tambahan = {
 
 test("normalisasiMitraForm: tidak dicentang → utama = alamatMitra (termasuk pin), alamatMitra null, tambahan []", () => {
   const r = normalisasiMitraForm(form());
-  assert.deepEqual(r, { utama: alamat(), alamatMitra: null, tambahan: [] });
+  assert.deepEqual(r, { utama: alamat(), alamatMitra: null, tambahan: [], dihapusIds: [], hapusSemuaTambahan: true });
 });
 test("normalisasiMitraForm: tidak dicentang tapi tambahan terisi → tambahan dibuang", () => {
   const r = normalisasiMitraForm(form({ lokasiTambahan: [tambahan] }));
@@ -120,4 +125,95 @@ test("saringNikMasukan: tanpa hak ubah, properti nik hilang sama sekali", () => 
 test("saringNikMasukan: dengan hak ubah, nik diteruskan (termasuk null = kosongkan)", () => {
   assert.equal(saringNikMasukan({ nik: "123" }, true).nik, "123");
   assert.equal(saringNikMasukan({ nik: null }, true).nik, null);
+});
+
+test("normalisasiMitraForm: lokasiDihapusIds diteruskan (dedupe); dicentang → hapusSemuaTambahan false", () => {
+  const r = normalisasiMitraForm(form({ lokasiBerbeda: true, lokasiDihapusIds: [7, 7, 9] }));
+  assert.deepEqual(r.dihapusIds, [7, 9]);
+  assert.equal(r.hapusSemuaTambahan, false);
+});
+test("normalisasiMitraForm: lokasiDihapusIds tidak dikirim (client lama) → []; bentuk salah → throw", () => {
+  const f = form({ lokasiBerbeda: true }) as Partial<MitraAlamatForm>;
+  delete f.lokasiDihapusIds;
+  assert.deepEqual(normalisasiMitraForm(f as MitraAlamatForm).dihapusIds, []);
+  for (const buruk of [["1"], [0], [1.5], "1"] as unknown[]) {
+    assert.throws(() => normalisasiMitraForm(form({ lokasiDihapusIds: buruk as number[] })), {
+      message: "Daftar lokasi yang dihapus tidak valid.",
+    });
+  }
+});
+
+const milik = [
+  { id: 10, aktif: true },
+  { id: 11, aktif: true },
+  { id: 12, aktif: true },
+  { id: 5, aktif: false },
+];
+
+test("rencanakanLokasiTambahan: form basi (lokasi 12 tidak dikirim & tidak diminta hapus) → 12 dibiarkan", () => {
+  const r = rencanakanLokasiTambahan({ milik, idInput: [10, 11], idDiminta: [], hapusSemuaAktif: false });
+  assert.deepEqual(r, { dihapus: [], dipertahankan: [12] });
+});
+test("rencanakanLokasiTambahan: hanya ID yang diminta yang dihapus; ID sudah terhapus diabaikan", () => {
+  const r = rencanakanLokasiTambahan({ milik, idInput: [10], idDiminta: [11, 5], hapusSemuaAktif: false });
+  assert.deepEqual(r, { dihapus: [11], dipertahankan: [12] });
+});
+test("rencanakanLokasiTambahan: hapus centang → semua lokasi aktif dihapus, termasuk yang tidak dikenal form", () => {
+  const r = rencanakanLokasiTambahan({ milik, idInput: [], idDiminta: [10], hapusSemuaAktif: true });
+  assert.deepEqual(r, { dihapus: [10, 11, 12], dipertahankan: [] });
+});
+test("rencanakanLokasiTambahan: ID diminta hapus bukan milik mitra → throw", () => {
+  assert.throws(() => rencanakanLokasiTambahan({ milik, idInput: [], idDiminta: [99], hapusSemuaAktif: false }), {
+    message: /bukan milik mitra ini/,
+  });
+});
+test("rencanakanLokasiTambahan: ID input tidak aktif / ganda / sekaligus dihapus → throw", () => {
+  assert.throws(() => rencanakanLokasiTambahan({ milik, idInput: [5], idDiminta: [], hapusSemuaAktif: false }), {
+    message: /tidak ditemukan atau sudah dihapus/,
+  });
+  assert.throws(() => rencanakanLokasiTambahan({ milik, idInput: [10, 10], idDiminta: [], hapusSemuaAktif: false }), {
+    message: /muncul dua kali/,
+  });
+  assert.throws(() => rencanakanLokasiTambahan({ milik, idInput: [10], idDiminta: [10], hapusSemuaAktif: false }), {
+    message: /diubah sekaligus dihapus/,
+  });
+});
+
+test("tandaiLokasiDihapus: ID tersimpan ditambahkan tanpa duplikat, baris baru diabaikan", () => {
+  const baris = [
+    { ...tambahan, lokasiPengirimanId: 3 },
+    { ...tambahan, lokasiPengirimanId: null },
+    { ...tambahan, lokasiPengirimanId: 4 },
+  ];
+  assert.deepEqual(tandaiLokasiDihapus([4], baris), [4, 3]);
+  assert.deepEqual(tandaiLokasiDihapus(undefined, []), []);
+});
+
+const barisMitra = (o: Partial<MitraRow>): MitraRow =>
+  ({
+    BusinessPartnerID: "X1", Name: "Uji", Wilayah: "Malang", Kecamatan: "Klojen", Alamat: "Jl. Utama 1",
+    Kontak: "0811", Latitude: -7.9, Longitude: 112.6, GeoAlamat: "Geo",
+    LokasiBerbeda: false, AlamatMitra: null, LokasiTambahan: [], ...o,
+  }) as MitraRow;
+
+test("mitraKeAlamatForm: lokasi tambahan tanpa baris AlamatMitra → tetap dicentang, tambahan dipertahankan, alamat mitra = utama", () => {
+  const f = mitraKeAlamatForm(
+    barisMitra({
+      LokasiTambahan: [
+        { LokasiPengirimanID: 8, Urutan: 2, Label: "Gudang", IsDeleted: false, wilayah: "Batu", kecamatan: null,
+          alamat: "Jl. Gudang", kontak: null, latitude: null, longitude: null, geoAlamat: null },
+      ],
+    })
+  );
+  assert.equal(f.lokasiBerbeda, true);
+  assert.equal(f.lokasiTambahan.length, 1);
+  assert.equal(f.lokasiTambahan[0].lokasiPengirimanId, 8);
+  assert.deepEqual(f.alamatMitra, { wilayah: "Malang", kecamatan: "Klojen", alamat: "Jl. Utama 1", kontak: "0811", latitude: null, longitude: null, geoAlamat: null });
+  assert.equal(f.lokasiUtama.alamat, "Jl. Utama 1");
+  assert.deepEqual(f.lokasiDihapusIds, []);
+});
+test("mitraKeAlamatForm: tanpa AlamatMitra & tanpa tambahan → tidak dicentang", () => {
+  const f = mitraKeAlamatForm(barisMitra({}));
+  assert.equal(f.lokasiBerbeda, false);
+  assert.deepEqual(f.lokasiTambahan, []);
 });

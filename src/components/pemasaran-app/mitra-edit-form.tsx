@@ -20,6 +20,7 @@ import type { MitraAlamatForm } from "@/lib/mitra-lokasi";
 import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
 import type { Kompetitor } from "@/lib/queries/kompetitor";
 import {
+  getMitraDetailAction,
   getPriceLevelOptionsAction,
   simpanMitraPemasaranAction,
   tambahKompetitorAction,
@@ -50,6 +51,11 @@ export function MitraEditForm({
   const [nama, setNama] = useState(mitra.Name);
   const [penanggungJawab, setPenanggungJawab] = useState(namaPenanggungJawab ?? "");
   const [alamat, setAlamat] = useState<MitraAlamatForm>(() => mitraKeAlamatForm(mitra));
+  // Alamat/lokasi dimuat ulang dari server saat form dipasang (halaman bisa
+  // dibuka lama / dari cache router); isian alamat & Simpan dikunci sampai
+  // selesai supaya lokasi yang ditambah dari tempat lain tidak tertimpa.
+  const [alamatSiap, setAlamatSiap] = useState(false);
+  const [versiAlamat, setVersiAlamat] = useState(0);
   const [priceLevel, setPriceLevel] = useState(mitra.PriceLevel != null ? String(mitra.PriceLevel) : "");
   const [capacity, setCapacity] = useState(mitra.Capacity != null ? String(mitra.Capacity) : "");
   const [kompetitorOpsi, setKompetitorOpsi] = useState<Kompetitor[]>(opsiAwal);
@@ -61,7 +67,26 @@ export function MitraEditForm({
     });
   }, []);
 
+  const bpId = mitra.BusinessPartnerID;
+  useEffect(() => {
+    let batal = false;
+    getMitraDetailAction(bpId).then((r) => {
+      if (batal) return;
+      if (!r.success || !r.data) {
+        setError(r.success ? "Mitra tidak ditemukan atau sudah dihapus." : r.error);
+        return;
+      }
+      setAlamat(mitraKeAlamatForm(r.data));
+      setVersiAlamat((v) => v + 1);
+      setAlamatSiap(true);
+    });
+    return () => {
+      batal = true;
+    };
+  }, [bpId]);
+
   function handleSubmit() {
+    if (!alamatSiap) return;
     setError(null);
     startTransition(async () => {
       const result = await simpanMitraPemasaranAction(mitra.BusinessPartnerID, {
@@ -119,17 +144,25 @@ export function MitraEditForm({
             <Label>{alamat.lokasiBerbeda ? "Alamat Mitra" : "Alamat Mitra & Lokasi Pengiriman"}</Label>
             <div className="grid grid-cols-2 gap-2">
               <AlamatBaris
+                key={`alamat-${versiAlamat}`}
                 value={alamat.alamatMitra}
                 onChange={(fn) => setAlamat((a) => ({ ...a, alamatMitra: fn(a.alamatMitra) }))}
                 renderWilayahKecamatan={renderWilayahKecamatan}
                 tampilkanPin={!alamat.lokasiBerbeda}
+                disabled={!alamatSiap}
               />
             </div>
           </div>
         </section>
 
         <section className="grid grid-cols-2 gap-2 rounded-lg border border-border p-3">
-          <LokasiPengirimanSection value={alamat} onChange={setAlamat} renderWilayahKecamatan={renderWilayahKecamatan} />
+          <LokasiPengirimanSection
+            key={`lokasi-${versiAlamat}`}
+            value={alamat}
+            onChange={setAlamat}
+            renderWilayahKecamatan={renderWilayahKecamatan}
+            disabled={!alamatSiap}
+          />
         </section>
 
         <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
@@ -177,8 +210,8 @@ export function MitraEditForm({
 
         <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-2 flex flex-col gap-2 border-t border-border bg-background p-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" disabled={pending} className="w-full">
-            {pending ? "Menyimpan..." : "Simpan Perubahan"}
+          <Button type="submit" disabled={pending || !alamatSiap} className="w-full">
+            {pending ? "Menyimpan..." : !alamatSiap ? "Memuat..." : "Simpan Perubahan"}
           </Button>
         </div>
       </form>

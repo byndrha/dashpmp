@@ -26,7 +26,8 @@ import {
 } from "@/lib/queries/kompetitor";
 import { aksesIdentitasMitra } from "@/lib/permissions";
 import { currentEskristalKode } from "@/lib/tenant-request";
-import { saringNikMasukan } from "@/lib/mitra-lokasi";
+import { saringNikMasukan, type MitraAlamatForm } from "@/lib/mitra-lokasi";
+import { mitraKeAlamatForm } from "@/lib/mitra-form";
 import {
   getMarketingUsers,
   getDriverUserOptions,
@@ -127,27 +128,37 @@ export interface MitraFormKonteks {
   kompetitorOpsi: Kompetitor[];
   kompetitorDipilih: number[];
   identitas: IdentitasMitra | null; // null untuk mitra baru
+  // Isian alamat/lokasi SEGAR dari DB (hanya bila diminta & mitra lama) —
+  // form edit dibangun dari sini, bukan dari MitraRow props halaman yang
+  // bisa sudah berjam-jam.
+  alamat: MitraAlamatForm | null;
 }
 
 // Semua yang dibutuhkan form/detail Mitra di luar MitraRow, satu round-trip,
 // dimuat saat dialog dibuka (tidak lewat props halaman — NIK tidak boleh
-// ikut payload RSC).
-export async function getMitraFormKonteksAction(bpId: string | null): Promise<ActionResult<MitraFormKonteks>> {
+// ikut payload RSC). `denganAlamat` → ikut muat isian alamat segar (form edit).
+export async function getMitraFormKonteksAction(
+  bpId: string | null,
+  denganAlamat = false
+): Promise<ActionResult<MitraFormKonteks>> {
   return runAction(async () => {
     const user = await requireUser();
     const akses = aksesIdentitasMitra(user);
     const perusahaanKode = await currentEskristalKode();
-    const [kompetitorOpsi, kompetitorMap, identitas] = await Promise.all([
+    const [kompetitorOpsi, kompetitorMap, identitas, detail] = await Promise.all([
       listKompetitor(holdingDari(user), "es_kristal"),
       bpId ? getKompetitorMitraMap(perusahaanKode, "utama") : Promise.resolve(new Map<string, Kompetitor[]>()),
       bpId ? getIdentitasMitra(kunciEsKristal(perusahaanKode, bpId), akses.lihat) : Promise.resolve(null),
+      bpId && denganAlamat ? getMitraDetail(bpId) : Promise.resolve(null),
     ]);
+    if (bpId && denganAlamat && !detail) throw new AppError("Mitra tidak ditemukan atau sudah dihapus.");
     return {
       akses,
       perusahaanKode,
       kompetitorOpsi,
       kompetitorDipilih: bpId ? (kompetitorMap.get(bpId) ?? []).map((x) => x.id) : [],
       identitas,
+      alamat: detail ? mitraKeAlamatForm(detail) : null,
     };
   });
 }

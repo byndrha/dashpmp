@@ -170,6 +170,9 @@ export function MitraFormDialog({
   const [berkasNik, setBerkasNik] = useState<BerkasIdentitasNilai>(BERKAS_KOSONG);
   const [berkasSk, setBerkasSk] = useState<BerkasIdentitasNilai>(BERKAS_KOSONG);
   const [alamat, setAlamat] = useState<MitraAlamatForm>(() => mitraKeAlamatForm(mitra));
+  // Naik setiap isian alamat diganti data server → baris alamat/lokasi
+  // dipasang ulang (peta yang terbuka tertutup).
+  const [versiAlamat, setVersiAlamat] = useState(0);
   const [gender, setGender] = useState(mitra?.Gender ?? "Male");
   const [pemilik, setPemilik] = useState(initialPemilik ?? PEMILIK_NONE);
   const [priceLevel, setPriceLevel] = useState(mitra?.PriceLevel != null ? String(mitra.PriceLevel) : "");
@@ -184,18 +187,23 @@ export function MitraFormDialog({
   const [pending, startTransition] = useTransition();
   const [sedangJadikan, startJadikan] = useTransition();
 
-  // Muat identitas + kompetitor + hak akses saat dialog dipasang. Isian
-  // identitas dikunci (dan Simpan nonaktif) sampai selesai, supaya nilai
-  // kosong tidak tersimpan menimpa data lama.
+  // Muat identitas + kompetitor + hak akses + alamat/lokasi SEGAR saat
+  // dialog dipasang. Isian identitas & alamat dikunci (dan Simpan nonaktif)
+  // sampai selesai, supaya nilai kosong/basi tidak tersimpan menimpa data
+  // lama (props `mitra` bisa sudah berjam-jam).
   useEffect(() => {
     let batal = false;
-    getMitraFormKonteksAction(bpId).then((r) => {
+    getMitraFormKonteksAction(bpId, true).then((r) => {
       if (batal) return;
       if (!r.success) {
         setGalatKonteks(r.error);
         return;
       }
       const d = r.data;
+      if (d.alamat) {
+        setAlamat(d.alamat);
+        setVersiAlamat((v) => v + 1);
+      }
       setKonteks({ akses: d.akses, perusahaanKode: d.perusahaanKode });
       setKompetitorOpsi(d.kompetitorOpsi);
       setKompetitorIds(d.kompetitorDipilih);
@@ -288,6 +296,7 @@ export function MitraFormDialog({
         const segar = mitraKeAlamatForm(d.data);
         // Alamat mitra (Identitas) tidak disentuh Jadikan Utama — pertahankan isian.
         setAlamat((prev) => ({ ...segar, alamatMitra: prev.alamatMitra }));
+        setVersiAlamat((v) => v + 1);
         setMarketingNama(d.data.MarketingNama);
       }
       if ((r.data.wilayahLama ?? "") !== (r.data.wilayahBaru ?? "")) {
@@ -340,10 +349,12 @@ export function MitraFormDialog({
             }}
           />
           <AlamatBaris
+            key={`alamat-${versiAlamat}`}
             value={alamat.alamatMitra}
             onChange={(fn) => setAlamat((a) => ({ ...a, alamatMitra: fn(a.alamatMitra) }))}
             renderWilayahKecamatan={renderWilayahKecamatan}
             tampilkanPin={!alamat.lokasiBerbeda}
+            disabled={memuat}
           />
 
           <div className="flex flex-col gap-1.5">
@@ -444,11 +455,13 @@ export function MitraFormDialog({
           </div>
 
           <LokasiPengirimanSection
+            key={`lokasi-${versiAlamat}`}
             value={alamat}
             onChange={setAlamat}
             renderWilayahKecamatan={renderWilayahKecamatan}
             onJadikanUtama={bpId ? handleJadikanUtama : undefined}
             sedangJadikanUtama={sedangJadikan}
+            disabled={memuat}
           />
 
           <div className="col-span-2 flex flex-col gap-1 sm:col-span-3">

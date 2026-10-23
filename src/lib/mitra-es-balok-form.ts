@@ -30,7 +30,13 @@ export function kunciKartu(card: Pick<MitraCard, "sumber" | "agenId" | "agenDeta
 // Balok berisi WilayahID.
 export function kartuKeAlamatForm(card: MitraCard | null): MitraAlamatForm {
   if (!card) {
-    return { lokasiBerbeda: false, alamatMitra: { ...ALAMAT_KOSONG }, lokasiUtama: { ...ALAMAT_KOSONG }, lokasiTambahan: [] };
+    return {
+      lokasiBerbeda: false,
+      alamatMitra: { ...ALAMAT_KOSONG },
+      lokasiUtama: { ...ALAMAT_KOSONG },
+      lokasiTambahan: [],
+      lokasiDihapusIds: [],
+    };
   }
   const utama: AlamatPin = {
     wilayah: card.wilayahId,
@@ -46,7 +52,7 @@ export function kartuKeAlamatForm(card: MitraCard | null): MitraAlamatForm {
     // ini (hapus centang = tambahan di-soft-delete); tetap tampilkan agar
     // tidak hilang diam-diam bila data dibuat dari jalur lain.
     if (card.lokasiTambahan.length === 0) {
-      return { lokasiBerbeda: false, alamatMitra: utama, lokasiUtama: { ...utama }, lokasiTambahan: [] };
+      return { lokasiBerbeda: false, alamatMitra: utama, lokasiUtama: { ...utama }, lokasiTambahan: [], lokasiDihapusIds: [] };
     }
   }
   const am = card.alamatMitra;
@@ -56,6 +62,7 @@ export function kartuKeAlamatForm(card: MitraCard | null): MitraAlamatForm {
       ? { wilayah: am.wilayah, kecamatan: am.kecamatan, alamat: am.alamat, kontak: am.kontak, latitude: null, longitude: null, geoAlamat: null }
       : { ...utama, latitude: null, longitude: null, geoAlamat: null },
     lokasiUtama: utama,
+    lokasiDihapusIds: [],
     lokasiTambahan: card.lokasiTambahan.map((l) => ({
       lokasiPengirimanId: l.LokasiPengirimanID,
       label: l.Label,
