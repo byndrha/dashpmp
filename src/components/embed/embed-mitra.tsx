@@ -67,6 +67,115 @@ function conversationDari(token: string): string | null {
   }
 }
 
+const RENTANG = [30, 90, 180, 365] as const;
+type Riwayat = {
+  hari: number;
+  pembayaran: { noDokumen: string; tanggal: string; jumlah: number; untuk: string[]; catatan: string | null }[];
+  fakturLunas: { noDokumen: string; tanggal: string; nilai: number; tanggalLunas: string | null }[];
+  totalPembayaran: number;
+  totalFakturLunas: number;
+};
+
+// Riwayat lengkap (tanpa paginasi), terbaru -> terlama. Baru dimuat saat
+// dibuka, dan dimuat ulang saat rentang diganti.
+function PanelRiwayat({ ambil }: { ambil: (hari: number) => Promise<Riwayat> }) {
+  const [buka, setBuka] = useState(false);
+  const [hari, setHari] = useState<number>(90);
+  const [tab, setTab] = useState<"bayar" | "lunas">("bayar");
+  const [st, setSt] = useState<{ s: "diam" } | { s: "memuat" } | { s: "siap"; data: Riwayat } | { s: "galat"; pesan: string }>({ s: "diam" });
+
+  useEffect(() => {
+    if (!buka) return;
+    let batal = false;
+    // Dijadwalkan (bukan sinkron di body effect) supaya state "memuat" tidak
+    // di-set langsung dari effect.
+    const t = setTimeout(() => {
+      setSt({ s: "memuat" });
+      ambil(hari).then(
+        (data) => !batal && setSt({ s: "siap", data }),
+        (e: Error) => !batal && setSt({ s: "galat", pesan: e.message })
+      );
+    }, 0);
+    return () => {
+      batal = true;
+      clearTimeout(t);
+    };
+  }, [buka, hari, ambil]);
+
+  const chip = (aktif: boolean) =>
+    `rounded-full border px-3 py-1 text-xs font-medium ${aktif ? "border-primary bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`;
+  const baris = "flex items-start justify-between gap-4 py-2";
+
+  return (
+    <section>
+      <Button variant="outline" size="lg" className="h-10 w-full justify-between" aria-expanded={buka} onClick={() => setBuka((b) => !b)}>
+        <span>Riwayat pembayaran &amp; faktur lunas</span>
+        <span aria-hidden>{buka ? "▲" : "▼"}</span>
+      </Button>
+      {buka && (
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Rentang riwayat">
+            {RENTANG.map((h) => (
+              <button key={h} type="button" className={chip(hari === h)} aria-pressed={hari === h} onClick={() => setHari(h)}>
+                {h} hari
+              </button>
+            ))}
+          </div>
+          {st.s === "galat" && <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive">{st.pesan}</p>}
+          {(st.s === "memuat" || st.s === "diam") && <p className="text-muted-foreground">Memuat riwayat…</p>}
+          {st.s === "siap" && (
+            <>
+              <div className="grid grid-cols-2 gap-2" role="tablist">
+                <button type="button" role="tab" aria-selected={tab === "bayar"} className={`rounded-xl border p-3 text-left ${tab === "bayar" ? "border-primary bg-card" : "bg-card/50"}`} onClick={() => setTab("bayar")}>
+                  <p className="text-xs text-muted-foreground">Pembayaran ({st.data.pembayaran.length})</p>
+                  <p className="font-semibold tabular-nums">{rp(st.data.totalPembayaran)}</p>
+                </button>
+                <button type="button" role="tab" aria-selected={tab === "lunas"} className={`rounded-xl border p-3 text-left ${tab === "lunas" ? "border-primary bg-card" : "bg-card/50"}`} onClick={() => setTab("lunas")}>
+                  <p className="text-xs text-muted-foreground">Faktur lunas ({st.data.fakturLunas.length})</p>
+                  <p className="font-semibold tabular-nums">{rp(st.data.totalFakturLunas)}</p>
+                </button>
+              </div>
+              {tab === "bayar" &&
+                (st.data.pembayaran.length === 0 ? (
+                  <p className="text-muted-foreground">Tidak ada pembayaran dalam {st.data.hari} hari terakhir.</p>
+                ) : (
+                  <ul className="divide-y rounded-xl border bg-card px-4">
+                    {st.data.pembayaran.map((p) => (
+                      <li key={p.noDokumen} className={baris}>
+                        <span className="flex min-w-0 flex-col">
+                          <span>{tgl(p.tanggal)}</span>
+                          {p.untuk.length > 0 && <span className="text-xs text-muted-foreground">untuk {p.untuk.join(", ")}</span>}
+                          {p.catatan && <span className="text-xs text-muted-foreground">{p.catatan}</span>}
+                        </span>
+                        <span className="shrink-0 font-medium tabular-nums">{rp(p.jumlah)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+              {tab === "lunas" &&
+                (st.data.fakturLunas.length === 0 ? (
+                  <p className="text-muted-foreground">Tidak ada faktur lunas dalam {st.data.hari} hari terakhir.</p>
+                ) : (
+                  <ul className="divide-y rounded-xl border bg-card px-4">
+                    {st.data.fakturLunas.map((f) => (
+                      <li key={f.noDokumen} className={baris}>
+                        <span className="flex min-w-0 flex-col">
+                          <span>{tgl(f.tanggal)}</span>
+                          {f.tanggalLunas && <span className="text-xs text-muted-foreground">lunas {tgl(f.tanggalLunas)}</span>}
+                        </span>
+                        <span className="shrink-0 font-medium tabular-nums">{rp(f.nilai)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
   const [tahap, setTahap] = useState<Tahap>({ s: "menunggu" });
   const [dipilih, setDipilih] = useState<string | null>(null);
@@ -165,6 +274,17 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
     mintaToken();
     return () => window.removeEventListener("message", onMsg);
   }, [allowedOrigins, mintaToken, muat]);
+
+  const ambilRiwayat = useCallback(
+    async (hari: number): Promise<Riwayat> => {
+      if (!dipilih) throw new Error("Mitra belum dipilih.");
+      const res = await panggil("/api/bychat/riwayat", { mitraId: dipilih, hari }, await tokenSegar());
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error?.pesan ?? "Gagal memuat riwayat.");
+      return j as Riwayat;
+    },
+    [dipilih, panggil, tokenSegar]
+  );
 
   async function lihatKartu(mitraId: string) {
     setAksi({ memuat: true, pesan: null, ok: false });
@@ -358,6 +478,8 @@ export function EmbedMitra({ allowedOrigins }: { allowedOrigins: string[] }) {
               </ul>
             )}
           </section>
+
+          <PanelRiwayat key={mitra.id} ambil={ambilRiwayat} />
 
           <section className="flex flex-col gap-3 border-t pt-4">
             {mitra.terakhirKirim && (
