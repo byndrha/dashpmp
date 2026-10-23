@@ -6,6 +6,12 @@ import {
   resolveMitraOverrides,
 } from "@/lib/queries/marketing-wilayah";
 import type { PartnerType } from "@/types/dashboard";
+import type { AlamatFields } from "@/lib/mitra-lokasi";
+import { muatAlamatDanLokasiMitra, type LokasiPengirimanRow } from "@/lib/queries/mitra-lokasi-pengiriman";
+
+// Executor MSSQL: pool biasa, atau transaksi milik pemanggil (form mitra
+// menulis kolom ERP + pin + lokasi tambahan dalam satu transaksi, spec §8).
+export type Exec = sql.ConnectionPool | sql.Transaction;
 
 export interface MitraRow {
   BusinessPartnerID: string;
@@ -49,11 +55,20 @@ export interface MitraRow {
   // Cakupan Wilayah) without touching its history — different from Hapus
   // (IsDeleted), which removes it from the Mitra module entirely.
   IsSuspended: boolean;
+  // Kotak "lokasi pengiriman berbeda dari alamat mitra" dicentang = ada baris
+  // DashboardMitraAlamat. Kolom Alamat/Wilayah/Kecamatan/Kontak di atas tetap
+  // = lokasi pengiriman UTAMA (invarian spec §5).
+  LokasiBerbeda: boolean;
+  AlamatMitra: AlamatFields | null;
+  // Lokasi ke-2 dst. yang aktif, urut Urutan.
+  LokasiTambahan: LokasiPengirimanRow[];
 }
+
+type MitraDbRow = Omit<MitraRow, "MarketingNama" | "LokasiBerbeda" | "AlamatMitra" | "LokasiTambahan">;
 
 export async function getMitraList(): Promise<MitraRow[]> {
   const pool = await getPool();
-  const [result, marketingAssignments] = await Promise.all([
+  const [result, marketingAssignments, lokasiMitra] = await Promise.all([
     pool.request().query(`
       SELECT
           bp.BusinessPartnerID,
@@ -83,11 +98,15 @@ export async function getMitraList(): Promise<MitraRow[]> {
       ORDER BY bp.Name
     `),
     getMarketingWilayahAssignments(),
+    muatAlamatDanLokasiMitra(pool),
   ]);
 
   const mitraOverrides = await resolveMitraOverrides(marketingAssignments);
-  return (result.recordset as Omit<MitraRow, "MarketingNama">[]).map((r) => ({
+  return (result.recordset as MitraDbRow[]).map((r) => ({
     ...r,
+    LokasiBerbeda: lokasiMitra.alamat.has(r.BusinessPartnerID),
+    AlamatMitra: lokasiMitra.alamat.get(r.BusinessPartnerID) ?? null,
+    LokasiTambahan: lokasiMitra.lokasi.get(r.BusinessPartnerID) ?? [],
     MarketingNama: resolveResponsibleMarketing(r.BusinessPartnerID, r.Wilayah, r.Kecamatan, marketingAssignments, mitraOverrides),
   }));
 }
@@ -98,7 +117,7 @@ export async function getMitraList(): Promise<MitraRow[]> {
 // call sites only need a handful of fields most of the time.
 export async function getMitraDetail(businessPartnerId: string): Promise<MitraRow | null> {
   const pool = await getPool();
-  const [result, marketingAssignments] = await Promise.all([
+  const [result, marketingAssignments, lokasiMitra] = await Promise.all([
     pool
       .request()
       .input("businessPartnerId", sql.VarChar(16), businessPartnerId)
@@ -130,14 +149,18 @@ export async function getMitraDetail(businessPartnerId: string): Promise<MitraRo
         WHERE ISNULL(bp.IsDeleted, 0) = 0 AND bp.BusinessPartnerID = @businessPartnerId
       `),
     getMarketingWilayahAssignments(),
+    muatAlamatDanLokasiMitra(pool, businessPartnerId),
   ]);
 
-  const row = (result.recordset as Omit<MitraRow, "MarketingNama">[])[0];
+  const row = (result.recordset as MitraDbRow[])[0];
   if (!row) return null;
 
   const mitraOverrides = await resolveMitraOverrides(marketingAssignments);
   return {
     ...row,
+    LokasiBerbeda: lokasiMitra.alamat.has(row.BusinessPartnerID),
+    AlamatMitra: lokasiMitra.alamat.get(row.BusinessPartnerID) ?? null,
+    LokasiTambahan: lokasiMitra.lokasi.get(row.BusinessPartnerID) ?? [],
     MarketingNama: resolveResponsibleMarketing(row.BusinessPartnerID, row.Wilayah, row.Kecamatan, marketingAssignments, mitraOverrides),
   };
 }
@@ -223,7 +246,7 @@ const CUSTOMER_CODE_PREFIX = "CUST";
 // e.g. "01719"), shared with the desktop app — must continue from the live
 // max, not a dashboard-local counter, or the desktop app's own next insert
 // could collide with it.
-async function nextBusinessPartnerId(pool: sql.ConnectionPool): Promise<string> {
+async function nextBusinessPartnerId(pool: Exec): Promise<string> {
   const result = await pool.request().query(`SELECT MAX(TRY_CAST(BusinessPartnerID AS INT)) AS MaxID FROM BusinessPartner`);
   const maxId = (result.recordset[0]?.MaxID as number | null) ?? 0;
   return String(maxId + 1).padStart(5, "0");
@@ -234,7 +257,7 @@ async function nextBusinessPartnerId(pool: sql.ConnectionPool): Promise<string> 
 // (e.g. BusinessPartnerID "01718" pairs with Code "CUST00708" while a
 // differently-formatted "0211" row already holds "CUST00719") — so each
 // must be computed from its own max, not derived from the other.
-async function nextCustomerCode(pool: sql.ConnectionPool): Promise<string> {
+async function nextCustomerCode(pool: Exec): Promise<string> {
   const result = await pool.request().query(`
     SELECT MAX(TRY_CAST(SUBSTRING(Code, 5, 10) AS INT)) AS MaxNum
     FROM BusinessPartner
@@ -244,8 +267,10 @@ async function nextCustomerCode(pool: sql.ConnectionPool): Promise<string> {
   return `${CUSTOMER_CODE_PREFIX}${String(maxNum + 1).padStart(5, "0")}`;
 }
 
-export async function createMitra(input: MitraInput): Promise<string> {
-  const pool = await getPool();
+// `exec` opsional: tanpa argumen = pool biasa (pemanggil lama tetap jalan);
+// dengan transaksi = ikut transaksi pemanggil.
+export async function createMitra(input: MitraInput, exec?: Exec): Promise<string> {
+  const pool = exec ?? (await getPool());
   const id = await nextBusinessPartnerId(pool);
   const code = await nextCustomerCode(pool);
   await pool
@@ -284,8 +309,8 @@ export async function createMitra(input: MitraInput): Promise<string> {
   return id;
 }
 
-export async function updateMitra(id: string, input: MitraInput): Promise<void> {
-  const pool = await getPool();
+export async function updateMitra(id: string, input: MitraInput, exec?: Exec): Promise<void> {
+  const pool = exec ?? (await getPool());
   await pool
     .request()
     .input("id", sql.VarChar(16), id)

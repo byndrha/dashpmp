@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import type { Exec } from "@/lib/queries/mitra";
 
 export interface MitraLocation {
   BusinessPartnerID: string;
@@ -36,8 +37,9 @@ export async function setMitraLocation(input: {
   longitude: number;
   alamat: string | null;
   userId: string;
-}): Promise<void> {
-  const pool = await getPool();
+}, exec?: Exec): Promise<void> {
+  // `exec` opsional: transaksi pemanggil (form mitra / Jadikan Utama).
+  const pool = exec ?? (await getPool());
   await pool
     .request()
     .input("id", sql.VarChar(16), input.businessPartnerId)
