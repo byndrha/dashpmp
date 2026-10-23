@@ -3,81 +3,110 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePmpersadaKeuangan } from "@/lib/require-access";
+import { runAction, type ActionResult } from "@/lib/action-result";
 import {
   getMitraList,
   getWilayahOptions,
-  createMitra,
-  updateMitra,
   setMitraSuspended,
   deleteMitra,
-  setAgenLocation,
-  setAgenProfil,
+  type MitraCard,
   type SumberAgen,
-  type MitraInput,
 } from "@/lib/queries/mitra-es-balok";
+import type { MitraFormKonteksEsBalok, MitraLengkapEsBalokInput } from "@/lib/queries/mitra-es-balok-lokasi";
+import type { BisnisKompetitor, Kompetitor } from "@/lib/queries/kompetitor";
+import {
+  aksiJadikanLokasiUtamaEsBalok,
+  aksiKonteksFormEsBalok,
+  aksiMuatKartuEsBalok,
+  aksiSimpanMitraEsBalok,
+  aksiTambahKompetitorEsBalok,
+  pathMitraTerdampak,
+} from "@/lib/mitra-es-balok-aksi";
 
 const KODE = "pmpersada";
+const gerbang = requirePmpersadaKeuangan;
+
+function segarkan(sumber: string) {
+  for (const p of pathMitraTerdampak(KODE, sumber)) revalidatePath(p);
+}
 
 export async function getMitraListAction() {
-  await requirePmpersadaKeuangan();
+  await gerbang();
   return getMitraList(KODE);
 }
 
 export async function getWilayahOptionsAction(sumber: SumberAgen) {
-  await requirePmpersadaKeuangan();
+  await gerbang();
   return getWilayahOptions(KODE, sumber);
 }
 
-export async function createMitraAction(
+// Satu-satunya jalur simpan form Mitra (tambah & edit). agenDetailId = baris
+// PMP_AgenDetail milik kartu yang diedit (Agen bisa punya >1); NIK dibuang
+// di server bila sesi tanpa hak ubah.
+export async function simpanMitraLengkapEsBalokAction(
   sumber: SumberAgen,
-  input: MitraInput,
-  location: { latitude: number; longitude: number; alamat: string | null } | null
-) {
-  const session = await requirePmpersadaKeuangan();
-  const agenId = await createMitra(KODE, sumber, input);
-  const userId = String(session.user.id);
-  await setAgenProfil(KODE, sumber, agenId, {
-    kapasitasBalokKecil: input.kapasitasBalokKecil,
-    kapasitasBalokBesar: input.kapasitasBalokBesar,
-    segmentasi: input.segmentasi,
-    userId,
+  agenId: string | null,
+  input: MitraLengkapEsBalokInput,
+  agenDetailId: string | null = null
+): Promise<ActionResult<string>> {
+  return runAction(async () => {
+    const session = await gerbang();
+    const id = await aksiSimpanMitraEsBalok(KODE, session.user, sumber, agenId, agenDetailId, input);
+    segarkan(sumber);
+    return id;
   });
-  if (location) {
-    await setAgenLocation(KODE, sumber, agenId, { ...location, userId });
-  }
-  revalidatePath("/pmpersada/mitra");
-  return agenId;
 }
 
-export async function updateMitraAction(
+export async function jadikanLokasiUtamaEsBalokAction(
   sumber: SumberAgen,
   agenId: string,
-  input: MitraInput,
-  location: { latitude: number; longitude: number; alamat: string | null } | null
-) {
-  const session = await requirePmpersadaKeuangan();
-  const userId = String(session.user.id);
-  await updateMitra(KODE, sumber, agenId, input);
-  await setAgenProfil(KODE, sumber, agenId, {
-    kapasitasBalokKecil: input.kapasitasBalokKecil,
-    kapasitasBalokBesar: input.kapasitasBalokBesar,
-    segmentasi: input.segmentasi,
-    userId,
+  agenDetailId: string | null,
+  lokasiPengirimanId: number
+): Promise<ActionResult<{ wilayahLama: string | null; wilayahBaru: string | null }>> {
+  return runAction(async () => {
+    const session = await gerbang();
+    const hasil = await aksiJadikanLokasiUtamaEsBalok(KODE, session.user, sumber, agenId, agenDetailId, lokasiPengirimanId);
+    segarkan(sumber);
+    return hasil;
   });
-  if (location) {
-    await setAgenLocation(KODE, sumber, agenId, { ...location, userId });
-  }
-  revalidatePath("/pmpersada/mitra");
+}
+
+export async function tambahKompetitorEsBalokAction(bisnis: BisnisKompetitor, nama: string): Promise<ActionResult<Kompetitor>> {
+  return runAction(async () => {
+    const session = await gerbang();
+    return aksiTambahKompetitorEsBalok(session.user, bisnis, nama);
+  });
+}
+
+export async function getMitraFormKonteksEsBalokAction(
+  sumber: SumberAgen,
+  agenId: string | null
+): Promise<ActionResult<MitraFormKonteksEsBalok>> {
+  return runAction(async () => {
+    const session = await gerbang();
+    return aksiKonteksFormEsBalok(KODE, session.user, sumber, agenId);
+  });
+}
+
+export async function getMitraCardEsBalokAction(
+  sumber: SumberAgen,
+  agenId: string,
+  agenDetailId: string | null
+): Promise<ActionResult<MitraCard | null>> {
+  return runAction(async () => {
+    await gerbang();
+    return aksiMuatKartuEsBalok(KODE, sumber, agenId, agenDetailId);
+  });
 }
 
 export async function setMitraSuspendedAction(sumber: SumberAgen, agenId: string, isActive: boolean) {
-  await requirePmpersadaKeuangan();
+  await gerbang();
   await setMitraSuspended(KODE, sumber, agenId, isActive);
-  revalidatePath("/pmpersada/mitra");
+  segarkan(sumber);
 }
 
 export async function deleteMitraAction(sumber: SumberAgen, agenId: string) {
-  await requirePmpersadaKeuangan();
+  await gerbang();
   await deleteMitra(KODE, sumber, agenId);
-  revalidatePath("/pmpersada/mitra");
+  segarkan(sumber);
 }

@@ -1,6 +1,8 @@
 // src/lib/queries/mitra-es-balok.ts
 import { sql } from "@/lib/db";
 import { getCompanyPool, type CompanyKoneksiLabel } from "@/lib/db-company";
+import { AppError } from "@/lib/action-result";
+import type { AlamatFields, PinFields } from "@/lib/mitra-lokasi";
 
 export type SumberAgen = "utama" | "logistik";
 
@@ -41,8 +43,27 @@ function sourcesForKode(kode: string): SumberAgen[] {
 import type { Segmentasi } from "@/lib/segmentasi-mitra";
 export type { Segmentasi } from "@/lib/segmentasi-mitra";
 
+// Baris lokasi pengiriman tambahan Es Balok (DashboardAgenLokasiPengiriman).
+// `wilayah` berisi WilayahID (bukan nama) — slot Wilayah Es Balok = RegionID.
+export interface LokasiAgenRow extends AlamatFields, PinFields {
+  LokasiPengirimanID: number;
+  Urutan: number;
+  Label: string | null;
+  // PMP_Wilayah.Nama untuk `wilayah` (WilayahID) — hanya untuk tampilan.
+  wilayahNama: string | null;
+}
+
+// Alamat mitra Es Balok (DashboardAgenAlamat); `wilayah` = WilayahID.
+export type AlamatMitraAgen = AlamatFields & { wilayahNama: string | null };
+
 export interface MitraCard {
   agenId: string;
+  // Satu kartu = satu pasangan (AgenID, AgenDetailID). Agen dengan >1 baris
+  // PMP_AgenDetail aktif tampil sebagai beberapa kartu (keputusan pengguna
+  // 2026-10-23: semua dipertahankan, masing-masing dengan alamatnya sendiri),
+  // jadi setiap penulisan lokasi utama (Address1/RegionID) wajib menyasar
+  // AgenDetailID kartu ini. null = Agen belum punya baris detail.
+  agenDetailId: string | null;
   sumber: SumberAgen;
   nama: string;
   telepon: string | null;
@@ -50,6 +71,8 @@ export interface MitraCard {
   wilayah: string | null;
   wilayahId: string | null;
   alamat: string | null;
+  // Kecamatan lokasi utama (DashboardAgenProfil.Kecamatan, opsional).
+  kecamatan: string | null;
   hargaBalokKecil: number;
   hargaBalokBesar: number;
   maksimumHutang: number;
@@ -58,10 +81,19 @@ export interface MitraCard {
   segmentasi: Segmentasi | null;
   latitude: number | null;
   longitude: number | null;
+  // DashboardAgenLocation.Alamat (hasil reverse-geocode pin utama).
+  geoAlamat: string | null;
+  // Kotak "Lokasi Pengiriman Berbeda dengan Mitra" = ada baris DashboardAgenAlamat.
+  // Alamat mitra, lokasi tambahan, pin, dan profil dikunci per AgenID — kartu
+  // ganda dari Agen yang sama berbagi nilai-nilai ini.
+  lokasiBerbeda: boolean;
+  alamatMitra: AlamatMitraAgen | null;
+  lokasiTambahan: LokasiAgenRow[];
 }
 
 interface AgenRow {
   AgenID: string;
+  AgenDetailID: string | null;
   Nama: string;
   Telepon: string | null;
   IsActive: boolean;
@@ -71,12 +103,16 @@ interface AgenRow {
   Wilayah: string | null;
   WilayahId: string | null;
   Alamat: string | null;
+  Kecamatan: string | null;
   KapasitasBalokKecil: number | null;
   KapasitasBalokBesar: number | null;
   Segmentasi: Segmentasi | null;
   Latitude: number | null;
   Longitude: number | null;
+  GeoAlamat: string | null;
 }
+
+export type ExecAgen = sql.ConnectionPool | sql.Transaction;
 
 // Shared SELECT shape for one (kode,sumber) database -- LEFT JOINs
 // PMP_AgenDetail (an Agen may have zero detail rows) -> PMP_Wilayah,
@@ -85,44 +121,114 @@ interface AgenRow {
 // dashboard-owned, no ERP equivalent exists). IsDeleted=0 only -- deleted
 // Agen never appear in the list, matching Es Kristal's getMitraList
 // (deleteMitra there is also a soft IsDeleted=1).
-async function getAgenRows(kode: string, sumber: SumberAgen): Promise<AgenRow[]> {
-  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
-  const pool = await getCompanyPool(physKode, label);
-  const result = await pool.request().query(`
-    SELECT a.AgenID, a.Nama, a.Telepon, a.IsActive, a.BalokKecil, a.BalokBesar, a.MaksimumHutang,
+// `agenId` (opsional) membatasi ke satu Agen — dipakai memuat ulang satu kartu.
+async function getAgenRows(pool: sql.ConnectionPool, agenId?: string): Promise<AgenRow[]> {
+  const req = pool.request();
+  let where = "";
+  if (agenId !== undefined) {
+    req.input("agenId", sql.VarChar(16), agenId);
+    where = "AND a.AgenID = @agenId";
+  }
+  const result = await req.query(`
+    SELECT a.AgenID, ad.AgenDetailID, a.Nama, a.Telepon, a.IsActive, a.BalokKecil, a.BalokBesar, a.MaksimumHutang,
            w.Nama AS Wilayah, ad.RegionID AS WilayahId, ad.Address1 AS Alamat,
-           prof.KapasitasBalokKecil, prof.KapasitasBalokBesar, prof.Segmentasi,
-           loc.Latitude, loc.Longitude
+           prof.Kecamatan, prof.KapasitasBalokKecil, prof.KapasitasBalokBesar, prof.Segmentasi,
+           loc.Latitude, loc.Longitude, loc.Alamat AS GeoAlamat
     FROM PMP_Agen a
     LEFT JOIN PMP_AgenDetail ad ON ad.AgenID = a.AgenID AND ISNULL(ad.IsDeleted,0) = 0
     LEFT JOIN PMP_Wilayah w ON w.WilayahID = ad.RegionID
     LEFT JOIN DashboardAgenProfil prof ON prof.AgenID = a.AgenID
     LEFT JOIN DashboardAgenLocation loc ON loc.AgenID = a.AgenID
-    WHERE ISNULL(a.IsDeleted,0) = 0
-    ORDER BY a.Nama
+    WHERE ISNULL(a.IsDeleted,0) = 0 ${where}
+    ORDER BY a.Nama, a.AgenID, ad.AgenDetailID
   `);
   return result.recordset as AgenRow[];
 }
 
-function toCard(row: AgenRow, sumber: SumberAgen): MitraCard {
+const angkaAtauNull = (v: unknown): number | null => (v == null ? null : Number(v));
+
+/**
+ * Muat alamat mitra (DashboardAgenAlamat) + lokasi tambahan AKTIF
+ * (DashboardAgenLokasiPengiriman) satu DB fisik dalam satu batch, lalu
+ * dikelompokkan per AgenID di JS (tanpa N+1).
+ */
+export async function muatAlamatDanLokasiAgen(
+  exec: ExecAgen,
+  agenId?: string
+): Promise<{ alamat: Map<string, AlamatMitraAgen>; lokasi: Map<string, LokasiAgenRow[]> }> {
+  const req = exec.request();
+  let filterAlamat = "";
+  let filterLokasi = "";
+  if (agenId !== undefined) {
+    req.input("agenId", sql.VarChar(16), agenId);
+    filterAlamat = "WHERE AgenID = @agenId";
+    filterLokasi = "AND AgenID = @agenId";
+  }
+  const res = await req.query(`
+    SELECT aa.AgenID, aa.WilayahID AS wilayah, w.Nama AS wilayahNama, aa.Kecamatan AS kecamatan, aa.Alamat AS alamat, aa.Kontak AS kontak
+    FROM DashboardAgenAlamat aa
+    LEFT JOIN PMP_Wilayah w ON w.WilayahID = aa.WilayahID
+    ${filterAlamat.replace("AgenID", "aa.AgenID")};
+    SELECT lp.AgenID, lp.LokasiPengirimanID, lp.Urutan, lp.Label,
+           lp.WilayahID AS wilayah, w.Nama AS wilayahNama, lp.Kecamatan AS kecamatan, lp.Alamat AS alamat, lp.Kontak AS kontak,
+           lp.Latitude AS latitude, lp.Longitude AS longitude, lp.GeoAlamat AS geoAlamat
+    FROM DashboardAgenLokasiPengiriman lp
+    LEFT JOIN PMP_Wilayah w ON w.WilayahID = lp.WilayahID
+    WHERE lp.IsDeleted = 0 ${filterLokasi.replace("AgenID", "lp.AgenID")}
+    ORDER BY lp.AgenID, lp.Urutan, lp.LokasiPengirimanID;
+  `);
+  const rs = res.recordsets as unknown as [
+    Array<AlamatMitraAgen & { AgenID: string }>,
+    Array<LokasiAgenRow & { AgenID: string }>,
+  ];
+  const alamat = new Map<string, AlamatMitraAgen>();
+  for (const { AgenID, ...a } of rs[0]) alamat.set(AgenID, a);
+  const lokasi = new Map<string, LokasiAgenRow[]>();
+  for (const { AgenID, ...r } of rs[1]) {
+    const daftar = lokasi.get(AgenID) ?? [];
+    daftar.push({ ...r, latitude: angkaAtauNull(r.latitude), longitude: angkaAtauNull(r.longitude) });
+    lokasi.set(AgenID, daftar);
+  }
+  return { alamat, lokasi };
+}
+
+function toCard(
+  row: AgenRow,
+  sumber: SumberAgen,
+  tambahan: { alamat: Map<string, AlamatMitraAgen>; lokasi: Map<string, LokasiAgenRow[]> }
+): MitraCard {
+  const alamatMitra = tambahan.alamat.get(row.AgenID) ?? null;
   return {
     agenId: row.AgenID,
+    agenDetailId: row.AgenDetailID,
     sumber,
     nama: row.Nama,
     telepon: row.Telepon || null,
     isActive: row.IsActive,
     wilayah: row.Wilayah,
-    wilayahId: row.WilayahId,
+    wilayahId: row.WilayahId || null,
     alamat: row.Alamat,
+    kecamatan: row.Kecamatan,
     hargaBalokKecil: row.BalokKecil,
     hargaBalokBesar: row.BalokBesar,
     maksimumHutang: row.MaksimumHutang,
     kapasitasBalokKecil: row.KapasitasBalokKecil,
     kapasitasBalokBesar: row.KapasitasBalokBesar,
     segmentasi: row.Segmentasi,
-    latitude: row.Latitude,
-    longitude: row.Longitude,
+    latitude: angkaAtauNull(row.Latitude),
+    longitude: angkaAtauNull(row.Longitude),
+    geoAlamat: row.GeoAlamat,
+    lokasiBerbeda: alamatMitra !== null,
+    alamatMitra,
+    lokasiTambahan: tambahan.lokasi.get(row.AgenID) ?? [],
   };
+}
+
+async function getCardsSatuSumber(kode: string, sumber: SumberAgen, agenId?: string): Promise<MitraCard[]> {
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  const [rows, tambahan] = await Promise.all([getAgenRows(pool, agenId), muatAlamatDanLokasiAgen(pool, agenId)]);
+  return rows.map((r) => toCard(r, sumber, tambahan));
 }
 
 export async function getMitraList(kode: string): Promise<MitraCard[]> {
@@ -136,12 +242,25 @@ export async function getMitraList(kode: string): Promise<MitraCard[]> {
     // list view itself; per-Agen order/piutang totals (Task 4) DO combine
     // both databases, since kantong volume, not Agen metadata, is what
     // differs between them.
-    const rows = await getAgenRows("pmputra", "utama");
-    return rows.map((r) => toCard(r, "utama"));
+    return getCardsSatuSumber("pmputra", "utama");
   }
   const sources = sourcesForKode(kode);
-  const perSource = await Promise.all(sources.map((s) => getAgenRows(kode, s)));
-  return perSource.flatMap((rows, i) => rows.map((r) => toCard(r, sources[i])));
+  const perSource = await Promise.all(sources.map((s) => getCardsSatuSumber(kode, s)));
+  return perSource.flat();
+}
+
+/**
+ * Satu kartu (Agen + AgenDetailID tertentu) — dipakai form untuk memuat ulang
+ * setelah "Jadikan Utama". agenDetailId null = kartu Agen tanpa baris detail.
+ */
+export async function getMitraCard(
+  kode: string,
+  sumber: SumberAgen,
+  agenId: string,
+  agenDetailId: string | null
+): Promise<MitraCard | null> {
+  const cards = await getCardsSatuSumber(kode, kode === "pmputra" ? "utama" : sumber, agenId);
+  return cards.find((c) => c.agenDetailId === agenDetailId) ?? null;
 }
 
 export interface WilayahOption {
@@ -195,6 +314,9 @@ export async function nextSequentialId(
 const MAX_ID_RETRY_ATTEMPTS = 5;
 const SQL_PK_VIOLATION = 2627;
 
+const isPkViolation = (err: unknown) =>
+  typeof err === "object" && err !== null && "number" in err && (err as { number: number }).number === SQL_PK_VIOLATION;
+
 // Retries the whole (compute-ID, insert) pair on a PK collision (error
 // 2627) -- confirmed live that AgenID/AgenDetailID are plain varchar PKs,
 // NOT identity columns, so a duplicate insert fails loudly rather than
@@ -207,133 +329,192 @@ export async function withIdRetry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (err) {
       lastErr = err;
-      const isPkViolation = typeof err === "object" && err !== null && "number" in err && (err as { number: number }).number === SQL_PK_VIOLATION;
-      if (!isPkViolation) throw err;
+      if (!isPkViolation(err)) throw err;
     }
   }
   throw new Error(`Gagal membuat ID unik setelah ${MAX_ID_RETRY_ATTEMPTS} percobaan: ${String(lastErr)}`);
 }
 
-export async function createMitra(kode: string, sumber: SumberAgen, input: MitraInput): Promise<string> {
-  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
-  const pool = await getCompanyPool(physKode, label);
-
-  return withIdRetry(async () => {
-    const transaction = new sql.Transaction(pool);
-    await transaction.begin();
+// Varian withIdRetry di DALAM transaksi pemanggil: (hitung ID, INSERT) diulang
+// pada tabrakan PK. Galat 2627 hanya membatalkan satu pernyataan (XACT_ABORT
+// OFF, bawaan), jadi transaksi tetap bisa dipakai; MAX() berikutnya sudah
+// melihat baris milik transaksi lain yang menang.
+async function sisipkanDenganIdBaru(
+  tx: sql.Transaction,
+  tableName: "PMP_Agen" | "PMP_AgenDetail",
+  idColumn: string,
+  sisipkan: (id: string) => Promise<void>
+): Promise<string> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_ID_RETRY_ATTEMPTS; attempt++) {
+    const id = await nextSequentialId(tx, tableName, idColumn);
     try {
-      const agenId = await nextSequentialId(transaction, "PMP_Agen", "AgenID");
-      await new sql.Request(transaction)
-        .input("id", sql.VarChar(16), agenId)
-        .input("nama", sql.VarChar(128), input.nama)
-        .input("telepon", sql.VarChar(16), input.telepon)
-        .input("kecil", sql.Decimal(18, 2), input.hargaBalokKecil)
-        .input("besar", sql.Decimal(18, 2), input.hargaBalokBesar)
-        .input("maksHutang", sql.Decimal(18, 2), input.maksimumHutang).query(`
-          INSERT INTO PMP_Agen
-            (AgenID, Nama, MitraBisnisID, Telepon, IsActive, BalokKecil, BalokBesar, MaksimumHutang,
-             PiutangSaatIni, PiutangSaldoAwal, TabunganSaatIni, TabunganSaldoAwal, IsDeleted, ModifiedDate)
-          VALUES
-            (@id, @nama, '011', @telepon, 1, @kecil, @besar, @maksHutang, 0, 0, 0, 0, 0, GETDATE())
-        `);
-
-      if (input.wilayahId || input.alamat) {
-        const agenDetailId = await nextSequentialId(transaction, "PMP_AgenDetail", "AgenDetailID");
-        await new sql.Request(transaction)
-          .input("detailId", sql.VarChar(16), agenDetailId)
-          .input("id", sql.VarChar(16), agenId)
-          .input("address1", sql.VarChar(256), input.alamat)
-          .input("regionId", sql.VarChar(16), input.wilayahId).query(`
-            INSERT INTO PMP_AgenDetail (AgenDetailID, AgenID, Address1, RegionID, IsDeleted, ModifiedDate)
-            VALUES (@detailId, @id, @address1, @regionId, 0, GETDATE())
-          `);
-      }
-
-      await transaction.commit();
-      return agenId;
+      await sisipkan(id);
+      return id;
     } catch (err) {
-      await transaction.rollback();
-      throw err;
+      lastErr = err;
+      if (!isPkViolation(err)) throw err;
     }
+  }
+  throw new Error(`Gagal membuat ID unik setelah ${MAX_ID_RETRY_ATTEMPTS} percobaan: ${String(lastErr)}`);
+}
+
+async function sisipkanAgenDetail(tx: sql.Transaction, agenId: string, alamat: string | null, wilayahId: string | null): Promise<string> {
+  return sisipkanDenganIdBaru(tx, "PMP_AgenDetail", "AgenDetailID", async (detailId) => {
+    await new sql.Request(tx)
+      .input("detailId", sql.VarChar(16), detailId)
+      .input("id", sql.VarChar(16), agenId)
+      .input("address1", sql.VarChar(256), alamat)
+      .input("regionId", sql.VarChar(16), wilayahId).query(`
+        INSERT INTO PMP_AgenDetail (AgenDetailID, AgenID, Address1, RegionID, IsDeleted, ModifiedDate)
+        VALUES (@detailId, @id, @address1, @regionId, 0, GETDATE())
+      `);
   });
 }
 
-export async function updateMitra(kode: string, sumber: SumberAgen, agenId: string, input: MitraInput): Promise<void> {
+async function denganTransaksi<T>(pool: sql.ConnectionPool, fn: (tx: sql.Transaction) => Promise<T>): Promise<T> {
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const hasil = await fn(tx);
+    await tx.commit();
+    return hasil;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+async function createMitraDalamTx(tx: sql.Transaction, input: MitraInput): Promise<string> {
+  const agenId = await sisipkanDenganIdBaru(tx, "PMP_Agen", "AgenID", async (id) => {
+    await new sql.Request(tx)
+      .input("id", sql.VarChar(16), id)
+      .input("nama", sql.VarChar(128), input.nama)
+      .input("telepon", sql.VarChar(16), input.telepon)
+      .input("kecil", sql.Decimal(18, 2), input.hargaBalokKecil)
+      .input("besar", sql.Decimal(18, 2), input.hargaBalokBesar)
+      .input("maksHutang", sql.Decimal(18, 2), input.maksimumHutang).query(`
+        INSERT INTO PMP_Agen
+          (AgenID, Nama, MitraBisnisID, Telepon, IsActive, BalokKecil, BalokBesar, MaksimumHutang,
+           PiutangSaatIni, PiutangSaldoAwal, TabunganSaatIni, TabunganSaldoAwal, IsDeleted, ModifiedDate)
+        VALUES
+          (@id, @nama, '011', @telepon, 1, @kecil, @besar, @maksHutang, 0, 0, 0, 0, 0, GETDATE())
+      `);
+  });
+  if (input.wilayahId || input.alamat) {
+    await sisipkanAgenDetail(tx, agenId, input.alamat, input.wilayahId);
+  }
+  return agenId;
+}
+
+/**
+ * Buat PMP_Agen (+ PMP_AgenDetail bila ada wilayah/alamat). `tx` opsional:
+ * bila diberikan, semua tulisan ikut transaksi pemanggil (tidak di-commit di
+ * sini); tanpa `tx`, fungsi membuka & meng-commit transaksinya sendiri.
+ */
+export async function createMitra(kode: string, sumber: SumberAgen, input: MitraInput, tx?: sql.Transaction): Promise<string> {
+  if (tx) return createMitraDalamTx(tx, input);
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
+  return denganTransaksi(pool, (t) => createMitraDalamTx(t, input));
+}
 
-  await pool
-    .request()
+const teksSama = (a: string | null | undefined, b: string | null | undefined) => (a?.trim() || null) === (b?.trim() || null);
+
+async function updateMitraDalamTx(tx: sql.Transaction, agenId: string, input: MitraInput, agenDetailId: string | null | undefined): Promise<void> {
+  // PMP_Agen — hanya ditulis bila ada yang berubah (perbandingan di JS supaya
+  // peka huruf besar-kecil; kolasi DB tidak), agar simpan tanpa perubahan
+  // tidak menggeser ModifiedDate ERP.
+  const agenRes = await new sql.Request(tx)
     .input("id", sql.VarChar(16), agenId)
-    .input("nama", sql.VarChar(128), input.nama)
-    .input("telepon", sql.VarChar(16), input.telepon)
-    .input("kecil", sql.Decimal(18, 2), input.hargaBalokKecil)
-    .input("besar", sql.Decimal(18, 2), input.hargaBalokBesar)
-    .input("maksHutang", sql.Decimal(18, 2), input.maksimumHutang).query(`
-      UPDATE PMP_Agen SET
-        Nama = @nama, Telepon = @telepon, BalokKecil = @kecil, BalokBesar = @besar,
-        MaksimumHutang = @maksHutang, ModifiedDate = GETDATE()
-      WHERE AgenID = @id
-    `);
-
-  // Only touches PMP_AgenDetail when the caller actually supplied
-  // wilayah/alamat -- if both are empty/null, this Agen simply has no
-  // detail row and updateMitra leaves it that way (matches createMitra's
-  // same "only create AgenDetail if there's something to put in it" rule).
-  //
-  // Uses a single atomic MERGE ... WITH (HOLDLOCK) instead of a separate
-  // SELECT-then-branch (check-then-act), because two near-simultaneous
-  // updateMitra calls on the same Agen that both see "no existing row" via
-  // a plain SELECT would both take the INSERT branch and create two active
-  // AgenDetail rows -- confirmed live via a concurrency test. HOLDLOCK
-  // serializes concurrent MERGE statements against matching rows, which is
-  // the standard Microsoft-documented pattern for preventing this race.
-  if (input.wilayahId || input.alamat) {
-    await withIdRetry(async () => {
-      const transaction = new sql.Transaction(pool);
-      await transaction.begin();
-      try {
-        // Computed unconditionally, inside the transaction, even though
-        // it's only USED by the MERGE's INSERT branch -- if the WHEN
-        // MATCHED branch fires instead, this ID is simply wasted (a small,
-        // harmless gap in the sequence), which is far preferable to a
-        // second round-trip after learning whether MATCHED fired.
-        const agenDetailId = await nextSequentialId(transaction, "PMP_AgenDetail", "AgenDetailID");
-        await new sql.Request(transaction)
-          .input("id", sql.VarChar(16), agenId)
-          .input("detailId", sql.VarChar(16), agenDetailId)
-          .input("address1", sql.VarChar(256), input.alamat)
-          .input("regionId", sql.VarChar(16), input.wilayahId).query(`
-            MERGE PMP_AgenDetail WITH (HOLDLOCK) AS target
-            USING (SELECT @id AS AgenID) AS src
-            ON target.AgenID = src.AgenID AND ISNULL(target.IsDeleted,0) = 0
-            WHEN MATCHED THEN
-              UPDATE SET Address1 = @address1, RegionID = @regionId, ModifiedDate = GETDATE()
-            WHEN NOT MATCHED THEN
-              INSERT (AgenDetailID, AgenID, Address1, RegionID, IsDeleted, ModifiedDate)
-              VALUES (@detailId, @id, @address1, @regionId, 0, GETDATE());
-          `);
-        await transaction.commit();
-      } catch (err) {
-        await transaction.rollback();
-        throw err;
-      }
-    });
-  } else {
-    // Both Wilayah and Alamat were cleared by the caller. The MERGE branch
-    // above never runs in this case, so any existing PMP_AgenDetail row
-    // would otherwise keep its stale Address1/RegionID forever despite the
-    // form showing them empty. Explicitly blank the row instead (kept, not
-    // soft-deleted, so AgenDetailID stays stable for auditability) -- no
-    // ID generation or insert here, so this doesn't need withIdRetry.
-    await pool
-      .request()
+    .query(`SELECT Nama, Telepon, BalokKecil, BalokBesar, MaksimumHutang FROM PMP_Agen WITH (UPDLOCK) WHERE AgenID = @id`);
+  const agen = agenRes.recordset[0] as
+    | { Nama: string | null; Telepon: string | null; BalokKecil: number; BalokBesar: number; MaksimumHutang: number }
+    | undefined;
+  if (!agen) throw new AppError("Mitra tidak ditemukan.");
+  const agenBerubah =
+    (agen.Nama ?? "") !== input.nama ||
+    !teksSama(agen.Telepon, input.telepon) ||
+    Number(agen.BalokKecil) !== input.hargaBalokKecil ||
+    Number(agen.BalokBesar) !== input.hargaBalokBesar ||
+    Number(agen.MaksimumHutang) !== input.maksimumHutang;
+  if (agenBerubah) {
+    await new sql.Request(tx)
       .input("id", sql.VarChar(16), agenId)
-      .query(`
-        UPDATE PMP_AgenDetail SET Address1 = NULL, RegionID = NULL, ModifiedDate = GETDATE()
-        WHERE AgenID = @id AND ISNULL(IsDeleted,0) = 0
+      .input("nama", sql.VarChar(128), input.nama)
+      .input("telepon", sql.VarChar(16), input.telepon)
+      .input("kecil", sql.Decimal(18, 2), input.hargaBalokKecil)
+      .input("besar", sql.Decimal(18, 2), input.hargaBalokBesar)
+      .input("maksHutang", sql.Decimal(18, 2), input.maksimumHutang).query(`
+        UPDATE PMP_Agen SET
+          Nama = @nama, Telepon = @telepon, BalokKecil = @kecil, BalokBesar = @besar,
+          MaksimumHutang = @maksHutang, ModifiedDate = GETDATE()
+        WHERE AgenID = @id
       `);
   }
+
+  // PMP_AgenDetail — SELALU satu baris tertentu. Agen bisa punya >1 baris
+  // detail aktif (keputusan pengguna: semua kartu dipertahankan), jadi
+  // penulisan TIDAK PERNAH "WHERE AgenID = …" (itu menimpa semua baris).
+  let detailId = agenDetailId ?? null;
+  if (!detailId) {
+    // Kartu tanpa AgenDetailID = Agen belum punya baris detail saat dimuat.
+    // UPDLOCK+HOLDLOCK mengunci rentang supaya dua simpan bersamaan tidak
+    // sama-sama membuat baris baru.
+    const ada = await new sql.Request(tx)
+      .input("id", sql.VarChar(16), agenId)
+      .query(`SELECT AgenDetailID FROM PMP_AgenDetail WITH (UPDLOCK, HOLDLOCK) WHERE AgenID = @id AND ISNULL(IsDeleted,0) = 0`);
+    const ids = (ada.recordset as { AgenDetailID: string }[]).map((r) => r.AgenDetailID);
+    if (ids.length > 1) {
+      throw new AppError("Mitra ini punya lebih dari satu baris alamat ERP. Muat ulang halaman lalu edit kartu yang dimaksud.");
+    }
+    if (ids.length === 0) {
+      if (input.wilayahId || input.alamat) await sisipkanAgenDetail(tx, agenId, input.alamat, input.wilayahId);
+      return;
+    }
+    detailId = ids[0];
+  }
+
+  const detRes = await new sql.Request(tx)
+    .input("id", sql.VarChar(16), agenId)
+    .input("detailId", sql.VarChar(16), detailId)
+    .query(`SELECT Address1, RegionID FROM PMP_AgenDetail WITH (UPDLOCK)
+            WHERE AgenDetailID = @detailId AND AgenID = @id AND ISNULL(IsDeleted,0) = 0`);
+  const det = detRes.recordset[0] as { Address1: string | null; RegionID: string | null } | undefined;
+  if (!det) throw new AppError("Alamat ERP mitra ini sudah berubah atau dihapus. Muat ulang halaman lalu coba lagi.");
+  // Kedua isian dikosongkan → baris dikosongkan (bukan dihapus, AgenDetailID
+  // tetap stabil). Selain itu tulis nilai baru. Tanpa perubahan → tidak ditulis.
+  if (teksSama(det.Address1, input.alamat) && teksSama(det.RegionID, input.wilayahId)) return;
+  await new sql.Request(tx)
+    .input("detailId", sql.VarChar(16), detailId)
+    .input("address1", sql.VarChar(256), input.alamat)
+    .input("regionId", sql.VarChar(16), input.wilayahId).query(`
+      UPDATE PMP_AgenDetail SET Address1 = @address1, RegionID = @regionId, ModifiedDate = GETDATE()
+      WHERE AgenDetailID = @detailId
+    `);
+}
+
+/**
+ * Perbarui PMP_Agen + SATU baris PMP_AgenDetail (milik kartu). `agenDetailId`:
+ * - diisi → hanya baris itu yang ditulis (baris detail lain Agen yang sama
+ *   tidak tersentuh);
+ * - null/undefined → Agen dianggap tanpa baris detail: dibuat bila ada
+ *   wilayah/alamat; bila ternyata ada tepat satu, baris itu yang dipakai;
+ *   bila >1, ditolak (kartu harus menyebut AgenDetailID-nya).
+ * `tx` opsional, sama seperti createMitra.
+ */
+export async function updateMitra(
+  kode: string,
+  sumber: SumberAgen,
+  agenId: string,
+  input: MitraInput,
+  tx?: sql.Transaction,
+  agenDetailId?: string | null
+): Promise<void> {
+  if (tx) return updateMitraDalamTx(tx, agenId, input, agenDetailId);
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  const pool = await getCompanyPool(physKode, label);
+  await withIdRetry(() => denganTransaksi(pool, (t) => updateMitraDalamTx(t, agenId, input, agenDetailId)));
 }
 
 export async function setMitraSuspended(kode: string, sumber: SumberAgen, agenId: string, isActive: boolean): Promise<void> {
@@ -355,35 +536,49 @@ export async function deleteMitra(kode: string, sumber: SumberAgen, agenId: stri
     .query(`UPDATE PMP_Agen SET IsDeleted = 1, ModifiedDate = GETDATE() WHERE AgenID = @id`);
 }
 
+async function execUntuk(kode: string, sumber: SumberAgen, exec?: ExecAgen): Promise<ExecAgen> {
+  if (exec) return exec;
+  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+  return getCompanyPool(physKode, label);
+}
+
 // Kapasitas/Segmentasi are dashboard-owned (no ERP equivalent, confirmed
 // live) -- stored in DashboardAgenProfil, same MERGE-upsert pattern as
-// setAgenLocation just below. Called separately from createMitra/updateMitra
-// (not inside their own transaction) since this data has nothing to do with
-// PMP_Agen/PMP_AgenDetail's own ID-generation/concurrency concerns -- a
-// failure here should never roll back the core Agen record itself.
+// setAgenLocation just below. `kecamatan` (Kecamatan lokasi utama, spec
+// §6.2): undefined = kolom tidak disentuh. `exec` opsional — transaksi
+// pemanggil (form lengkap) atau pool DB fisik (bawaan).
 export async function setAgenProfil(
   kode: string,
   sumber: SumberAgen,
   agenId: string,
-  input: { kapasitasBalokKecil: number | null; kapasitasBalokBesar: number | null; segmentasi: Segmentasi | null; userId: string }
+  input: {
+    kapasitasBalokKecil: number | null;
+    kapasitasBalokBesar: number | null;
+    segmentasi: Segmentasi | null;
+    kecamatan?: string | null;
+    userId: string;
+  },
+  exec?: ExecAgen
 ): Promise<void> {
-  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
-  const pool = await getCompanyPool(physKode, label);
-  await pool
+  const e = await execUntuk(kode, sumber, exec);
+  const sentuhKecamatan = input.kecamatan !== undefined;
+  await e
     .request()
     .input("id", sql.VarChar(16), agenId)
     .input("kecil", sql.Decimal(18, 2), input.kapasitasBalokKecil)
     .input("besar", sql.Decimal(18, 2), input.kapasitasBalokBesar)
     .input("segmentasi", sql.VarChar(20), input.segmentasi)
+    .input("kecamatan", sql.VarChar(128), input.kecamatan ?? null)
     .input("userId", sql.VarChar(16), input.userId).query(`
-      MERGE DashboardAgenProfil AS target
+      MERGE DashboardAgenProfil WITH (HOLDLOCK) AS target
       USING (SELECT @id AS AgenID) AS src
       ON target.AgenID = src.AgenID
       WHEN MATCHED THEN
-        UPDATE SET KapasitasBalokKecil = @kecil, KapasitasBalokBesar = @besar, Segmentasi = @segmentasi, UpdatedAt = GETDATE()
+        UPDATE SET KapasitasBalokKecil = @kecil, KapasitasBalokBesar = @besar, Segmentasi = @segmentasi,
+                   ${sentuhKecamatan ? "Kecamatan = @kecamatan," : ""} UpdatedAt = GETDATE()
       WHEN NOT MATCHED THEN
-        INSERT (AgenID, KapasitasBalokKecil, KapasitasBalokBesar, Segmentasi, CreatedByUserID)
-        VALUES (@id, @kecil, @besar, @segmentasi, @userId);
+        INSERT (AgenID, KapasitasBalokKecil, KapasitasBalokBesar, Segmentasi, Kecamatan, CreatedByUserID)
+        VALUES (@id, @kecil, @besar, @segmentasi, @kecamatan, @userId);
     `);
 }
 
@@ -391,18 +586,18 @@ export async function setAgenLocation(
   kode: string,
   sumber: SumberAgen,
   agenId: string,
-  input: { latitude: number; longitude: number; alamat: string | null; userId: string }
+  input: { latitude: number; longitude: number; alamat: string | null; userId: string },
+  exec?: ExecAgen
 ): Promise<void> {
-  const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
-  const pool = await getCompanyPool(physKode, label);
-  await pool
+  const e = await execUntuk(kode, sumber, exec);
+  await e
     .request()
     .input("id", sql.VarChar(16), agenId)
     .input("lat", sql.Decimal(10, 7), input.latitude)
     .input("lng", sql.Decimal(10, 7), input.longitude)
     .input("alamat", sql.VarChar(512), input.alamat)
     .input("userId", sql.VarChar(16), input.userId).query(`
-      MERGE DashboardAgenLocation AS target
+      MERGE DashboardAgenLocation WITH (HOLDLOCK) AS target
       USING (SELECT @id AS AgenID) AS src
       ON target.AgenID = src.AgenID
       WHEN MATCHED THEN

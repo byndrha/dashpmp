@@ -93,6 +93,21 @@ export async function simpanIdentitasMitra(
   );
 }
 
+/**
+ * Isi tanggal_pendaftaran (YYYY-MM-DD) hanya bila masih kosong — dipakai saat
+ * mitra Es Balok dibuat dari dashboard (PMP_Agen tidak punya tanggal daftar,
+ * spec §6.3). Tanggal yang sudah ada tidak pernah ditimpa.
+ */
+export async function setTanggalPendaftaranBilaKosong(k: IdentitasKunci, tanggal: string, userId: string): Promise<void> {
+  await getPgPool().query(
+    `INSERT INTO mitra_identitas (perusahaan_kode, sumber, partner_id, tanggal_pendaftaran, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4::date, $5, now())
+     ON CONFLICT (perusahaan_kode, sumber, partner_id) DO UPDATE SET
+       tanggal_pendaftaran = COALESCE(mitra_identitas.tanggal_pendaftaran, EXCLUDED.tanggal_pendaftaran)`,
+    [...kunciParams(k), tanggal, userId]
+  );
+}
+
 // Nama kolom per jenis berkas — daftar tetap, bukan dari input pengguna.
 const KOLOM_BERKAS = {
   nik: { id: "nik_file_id", nama: "nik_file_nama", mime: "nik_file_mime" },
