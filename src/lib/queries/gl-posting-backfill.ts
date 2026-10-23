@@ -161,6 +161,12 @@ async function buildItemAccountMapping(pool: sql.ConnectionPool | sql.Transactio
     if (!pendapatanAccountNo || !hppAccountNo || !persediaanAccountNo) continue;
     mapping.set(itemId, { pendapatanAccountNo, hppAccountNo, persediaanAccountNo });
   }
+  // Item 0112 baru dipakai sejak September 2026 (barang bonus mitra 01343,
+  // dikirim bersama item 0111) sehingga tak punya histori sebelum
+  // BATAS_DATA_NORMAL. Atas keputusan user (22 Okt 2026), akunnya disamakan
+  // dengan item 0111. Histori asli tetap diutamakan jika kelak tersedia.
+  const map0111 = mapping.get("0111");
+  if (map0111 && !mapping.has("0112")) mapping.set("0112", { ...map0111 });
   return mapping;
 }
 
@@ -282,7 +288,23 @@ async function getItemAverage(
       ORDER BY Year DESC, Month DESC
     `);
   const fb = fallback.recordset[0] as { Average: number } | undefined;
-  return fb ? { average: fb.Average, provisional: true } : null;
+  if (fb) return { average: fb.Average, provisional: true };
+
+  // Item biaya-nol (mis. 0112, barang bonus): ItemAverage 0 di SEMUA bulan jendela
+  // fallback, jadi bulan baru yang belum dibuat ERP (closing belum jalan) memang 0 juga.
+  // Hanya dipakai bila ada >= 2 baris di jendela dan tidak satu pun > 0.
+  const nol = await pool
+    .request()
+    .input("itemId", sql.VarChar(16), itemId)
+    .input("periode", sql.Int, year * 12 + month)
+    .input("batas", sql.Int, BATAS_FALLBACK_BULAN)
+    .query(`
+      SELECT COUNT(*) AS n, MAX(Average) AS maks FROM ItemAverage
+      WHERE ItemID = @itemId AND IsDeleted = 0
+        AND (Year * 12 + Month) < @periode AND (Year * 12 + Month) >= @periode - @batas
+    `);
+  const z = nol.recordset[0] as { n: number; maks: number | null };
+  return z.n >= 2 && z.maks === 0 ? { average: 0, provisional: true } : null;
 }
 
 export interface DokumenBacklog {
@@ -894,7 +916,13 @@ export interface BacklogPostResult {
   jumlahGagal: number;
 }
 
-export async function postBacklogForDate(tanggal: string, dipostingOlehAkunId: number): Promise<BacklogPostResult> {
+// `hanyaVoucherNos` (opsional): batasi posting ke voucher tertentu saja -- dipakai
+// skrip koreksi terarah; pemanggil UI/Proses tidak mengisinya (perilaku lama).
+export async function postBacklogForDate(
+  tanggal: string,
+  dipostingOlehAkunId: number,
+  hanyaVoucherNos?: ReadonlySet<string>
+): Promise<BacklogPostResult> {
   const pool = await getPool();
   // Dihitung ulang FRESH di sini (bukan menerima preview dari client) --
   // lihat spec: "tiap dokumen 1 transaksi sendiri" + mencegah state basi
@@ -915,8 +943,9 @@ export async function postBacklogForDate(tanggal: string, dipostingOlehAkunId: n
   // sama seperti transdate-wib-utc-boundary-bug.
   const tanggalProses = getNaiveWibTransDate().toISOString().slice(0, 10);
 
-  const doDocs = rencana.postable.filter((d) => d.docType === "DELIVERYORDER");
-  const siDocs = rencana.postable.filter((d) => d.docType === "SALESINVOICE");
+  const boleh = (d: { voucherNo: string }) => !hanyaVoucherNos || hanyaVoucherNos.has(d.voucherNo);
+  const doDocs = rencana.postable.filter((d) => d.docType === "DELIVERYORDER" && boleh(d));
+  const siDocs = rencana.postable.filter((d) => d.docType === "SALESINVOICE" && boleh(d));
 
   // FIX ROUND 1, Finding 1 (code review): computeBacklogForDate's
   // `dipostingDiRunIni` cuma menandai bahwa DO induk sebuah SI DIRENCANAKAN
