@@ -8,7 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MODULE_KEYS, MODULE_LABEL, type ModuleKey, type PermissionMap } from "@/lib/permissions";
+import {
+  MODULE_KEYS,
+  MODULE_LABEL,
+  SPECIAL_PERMISSION_KEYS,
+  SPECIAL_PERMISSION_LABEL,
+  type ModuleKey,
+  type PermissionMap,
+  type SpecialPermissionKey,
+} from "@/lib/permissions";
 import type { PeranRow, PeranIzinRow, PerusahaanDirektoriOption } from "@/lib/queries/akun";
 import {
   createPeranAction,
@@ -23,7 +31,7 @@ import {
 
 function buildMap(izinList: PeranIzinRow[], peranId: number): PermissionMap {
   const map: PermissionMap = {};
-  for (const key of MODULE_KEYS) {
+  for (const key of [...MODULE_KEYS, ...SPECIAL_PERMISSION_KEYS]) {
     const row = izinList.find((r) => r.peranId === peranId && r.moduleKey === key);
     map[key] = { canView: row?.canView ?? false, canEdit: row?.canEdit ?? false };
   }
@@ -41,7 +49,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  function toggle(moduleKey: ModuleKey, field: "canView" | "canEdit") {
+  function toggle(moduleKey: ModuleKey | SpecialPermissionKey, field: "canView" | "canEdit") {
     setMap((prev) => {
       const current = prev[moduleKey] ?? { canView: false, canEdit: false };
       const next = { ...current, [field]: !current[field] };
@@ -81,7 +89,7 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     setError(null);
     startTransition(async () => {
       const results = await Promise.all([
-        ...MODULE_KEYS.map((key) =>
+        ...[...MODULE_KEYS, ...SPECIAL_PERMISSION_KEYS].map((key) =>
           setPeranIzinAction({
             peranId: peran.id,
             moduleKey: key,
@@ -149,6 +157,33 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="p-1.5 text-left font-medium">Izin Khusus</th>
+                <th className="p-1.5 text-center font-medium">Lihat</th>
+                <th className="p-1.5 text-center font-medium">Ubah</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SPECIAL_PERMISSION_KEYS.map((key) => (
+                <tr key={key} className="border-t border-border">
+                  <td className="p-1.5">{SPECIAL_PERMISSION_LABEL[key]}</td>
+                  <td className="p-1.5 text-center">
+                    <input type="checkbox" className="accent-primary" checked={map[key]?.canView ?? false} onChange={() => toggle(key, "canView")} />
+                  </td>
+                  <td className="p-1.5 text-center">
+                    <input type="checkbox" className="accent-primary" checked={map[key]?.canEdit ?? false} onChange={() => toggle(key, "canEdit")} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="px-1.5 pt-1 text-[11px] text-muted-foreground">
+            Super Admin dan Direktur selalu memiliki izin khusus ini.
+          </p>
         </div>
         <label className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
           <input type="checkbox" className="accent-primary" checked={isSatpam} onChange={toggleSatpam} />

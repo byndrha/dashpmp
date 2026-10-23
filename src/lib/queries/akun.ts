@@ -1,6 +1,12 @@
 import bcrypt from "bcryptjs";
 import { getPgPool } from "@/lib/pg";
-import { MODULE_KEYS, type ModuleKey, type PermissionMap } from "@/lib/permissions";
+import {
+  MODULE_KEYS,
+  SPECIAL_PERMISSION_KEYS,
+  type ModuleKey,
+  type PermissionMap,
+  type SpecialPermissionKey,
+} from "@/lib/permissions";
 import { AppError } from "@/lib/action-result";
 
 const LOCKOUT_THRESHOLD = 5;
@@ -104,8 +110,8 @@ export async function getPermissionMapForPeran(peranId: number): Promise<Permiss
   const result = await pool.query(`SELECT module_key, can_view, can_edit FROM peran_izin WHERE peran_id = $1`, [peranId]);
   const map: PermissionMap = {};
   for (const row of result.rows as { module_key: string; can_view: boolean; can_edit: boolean }[]) {
-    if ((MODULE_KEYS as readonly string[]).includes(row.module_key)) {
-      map[row.module_key as ModuleKey] = { canView: row.can_view, canEdit: row.can_edit };
+    if (([...MODULE_KEYS, ...SPECIAL_PERMISSION_KEYS] as readonly string[]).includes(row.module_key)) {
+      map[row.module_key as ModuleKey | SpecialPermissionKey] = { canView: row.can_view, canEdit: row.can_edit };
     }
   }
   return map;
@@ -389,7 +395,7 @@ export async function deletePeran(peranId: number): Promise<void> {
 
 export async function setPeranIzin(input: {
   peranId: number;
-  moduleKey: ModuleKey;
+  moduleKey: ModuleKey | SpecialPermissionKey;
   canView: boolean;
   canEdit: boolean;
 }): Promise<void> {

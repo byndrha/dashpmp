@@ -13,7 +13,7 @@ import {
   setPeranBolehGenerateKodeAmbilAlih,
   listAllPeran,
 } from "@/lib/queries/akun";
-import type { ModuleKey } from "@/lib/permissions";
+import { MODULE_KEYS, SPECIAL_PERMISSION_KEYS, type ModuleKey, type SpecialPermissionKey } from "@/lib/permissions";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 export async function createPeranAction(perusahaanId: number, nama: string): Promise<ActionResult<void>> {
@@ -40,12 +40,17 @@ export async function deletePeranAction(peranId: number): Promise<ActionResult<v
 
 export async function setPeranIzinAction(input: {
   peranId: number;
-  moduleKey: ModuleKey;
+  moduleKey: ModuleKey | SpecialPermissionKey;
   canView: boolean;
   canEdit: boolean;
 }): Promise<ActionResult<void>> {
   return runAction(async () => {
     await requireGrupAccess();
+    // Server action bisa dipanggil dengan payload apa pun — tolak kunci di
+    // luar daftar agar tidak ada baris peran_izin liar.
+    if (!([...MODULE_KEYS, ...SPECIAL_PERMISSION_KEYS] as readonly string[]).includes(input.moduleKey)) {
+      throw new AppError("Kunci izin tidak dikenal.");
+    }
     await setPeranIzin(input);
     revalidatePath("/grup/akun/peran");
   });

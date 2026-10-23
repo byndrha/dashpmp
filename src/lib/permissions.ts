@@ -28,10 +28,39 @@ export interface ModulePermission {
   canEdit: boolean;
 }
 
-export type PermissionMap = Partial<Record<ModuleKey, ModulePermission>>;
+// Izin khusus: disimpan di tabel peran_izin yang sama (module_key) tetapi
+// BUKAN modul/halaman — tidak pernah muncul di sidebar (sidebar hanya
+// membaca MODULE_KEYS/NAV_ITEMS). Dipakai untuk membatasi data sensitif di
+// dalam sebuah modul, mis. NIK & berkas identitas mitra.
+export const SPECIAL_PERMISSION_KEYS = ["mitra_identitas"] as const;
+export type SpecialPermissionKey = (typeof SPECIAL_PERMISSION_KEYS)[number];
+
+export const SPECIAL_PERMISSION_LABEL: Record<SpecialPermissionKey, string> = {
+  mitra_identitas: "Identitas Mitra (NIK & Berkas)",
+};
+
+export type PermissionMap = Partial<Record<ModuleKey | SpecialPermissionKey, ModulePermission>>;
 
 export function fullPermissionMap(): PermissionMap {
-  return Object.fromEntries(MODULE_KEYS.map((k) => [k, { canView: true, canEdit: true }])) as PermissionMap;
+  return Object.fromEntries(
+    [...MODULE_KEYS, ...SPECIAL_PERMISSION_KEYS].map((k) => [k, { canView: true, canEdit: true }])
+  ) as PermissionMap;
+}
+
+// Keputusan server-side: apakah NIK / berkas identitas mitra boleh dikirim
+// ke klien (lihat) dan diubah (ubah). Super Admin dan akun Direktur (tanpa
+// peran, accountScope "direktur") selalu boleh. Selain itu mengikuti izin
+// khusus mitra_identitas pada peran; "ubah" juga mensyaratkan "lihat".
+// permissions undefined (JWT lama) = tanpa akses.
+export function aksesIdentitasMitra(user: {
+  isSuperAdmin: boolean;
+  accountScope?: string | null;
+  permissions?: PermissionMap;
+}): { lihat: boolean; ubah: boolean } {
+  if (user.isSuperAdmin || user.accountScope === "direktur") return { lihat: true, ubah: true };
+  const izin = user.permissions?.mitra_identitas;
+  const lihat = izin?.canView === true;
+  return { lihat, ubah: lihat && izin?.canEdit === true };
 }
 
 // permissions can be undefined for a session whose JWT was issued before
