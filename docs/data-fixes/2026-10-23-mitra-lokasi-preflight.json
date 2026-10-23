@@ -1,0 +1,175 @@
+{
+  "generatedAt": "2026-10-23T03:28:41.153Z",
+  "esBalok": [
+    {
+      "kode": "pmputra",
+      "label": "utama",
+      "expectedDb": "FINAC_ES_PO",
+      "dbName": "FINAC_ES_PO",
+      "AgenAktif": 248,
+      "AgenDetailAktif": 248,
+      "AgenDenganDetailLebihDari1": 0,
+      "AgenAktifDenganDetailLebihDari1": 0,
+      "contohAgenID": []
+    },
+    {
+      "kode": "pmputra",
+      "label": "logistik",
+      "expectedDb": "FINAC_LOGISTIC_PO",
+      "dbName": "FINAC_LOGISTIC_PO",
+      "AgenAktif": 248,
+      "AgenDetailAktif": 201,
+      "AgenDenganDetailLebihDari1": 1,
+      "AgenAktifDenganDetailLebihDari1": 1,
+      "contohAgenID": [
+        {
+          "AgenID": "01100",
+          "JumlahDetailAktif": 2,
+          "AgenAktif": 1
+        }
+      ]
+    },
+    {
+      "kode": "pmpersada",
+      "label": "utama",
+      "expectedDb": "FINAC_ES_TB",
+      "dbName": "FINAC_ES_TB",
+      "AgenAktif": 104,
+      "AgenDetailAktif": 105,
+      "AgenDenganDetailLebihDari1": 0,
+      "AgenAktifDenganDetailLebihDari1": 0,
+      "contohAgenID": []
+    },
+    {
+      "kode": "pmpersada",
+      "label": "logistik",
+      "expectedDb": "FINAC_PMP_LOGISTIC",
+      "dbName": "FINAC_PMP_LOGISTIC",
+      "AgenAktif": 184,
+      "AgenDetailAktif": 184,
+      "AgenDenganDetailLebihDari1": 0,
+      "AgenAktifDenganDetailLebihDari1": 0,
+      "contohAgenID": []
+    },
+    {
+      "kode": "pmpakis",
+      "label": "utama",
+      "expectedDb": "FINAC_ES_PAKIS",
+      "dbName": "FINAC_ES_PAKIS",
+      "AgenAktif": 98,
+      "AgenDetailAktif": 124,
+      "AgenDenganDetailLebihDari1": 2,
+      "AgenAktifDenganDetailLebihDari1": 1,
+      "contohAgenID": [
+        {
+          "AgenID": "01123",
+          "JumlahDetailAktif": 2,
+          "AgenAktif": 0
+        },
+        {
+          "AgenID": "0163",
+          "JumlahDetailAktif": 2,
+          "AgenAktif": 1
+        }
+      ]
+    }
+  ],
+  "esKristal": {
+    "DbName": "MKEsindo",
+    "MitraAktif": 817,
+    "MitraAktifJoinDateNull": 22,
+    "SemuaMitraJoinDateNull": 23,
+    "CompetitorTotalBaris": 460,
+    "CompetitorBerisi": 78,
+    "CompetitorBerisiMitraAktif": 67,
+    "CompetitorBerisiMitraAktifTidakSuspend": 67,
+    "CompetitorMaxUpdatedAt": "2026-10-23T02:42:27.267Z",
+    "DOTotal": 249263,
+    "DOAddressDeliveryBerisi": 772,
+    "DOAddressDeliveryBerisiTidakDihapus": 765,
+    "DOAddressDeliveryMinTransDate": "2018-03-18T08:52:54.260Z",
+    "DOAddressDeliveryMaxTransDate": "2026-01-13T13:17:38.487Z",
+    "contohMitraJoinDateNull": [
+      {
+        "BusinessPartnerID": "01720",
+        "Name": "Toko Jolin Siman"
+      },
+      {
+        "BusinessPartnerID": "01721",
+        "Name": "Toko Lestari Siman"
+      },
+      {
+        "BusinessPartnerID": "01722",
+        "Name": "Mama Candra"
+      },
+      {
+        "BusinessPartnerID": "01723",
+        "Name": "Cefe Beras Kutah"
+      },
+      {
+        "BusinessPartnerID": "01724",
+        "Name": "Cafe Beras Kutah"
+      },
+      {
+        "BusinessPartnerID": "01725",
+        "Name": "Es Teler Nirwana/Mas Gunawan"
+      },
+      {
+        "BusinessPartnerID": "01726",
+        "Name": "Es Ciduk/Pak Agus"
+      },
+      {
+        "BusinessPartnerID": "01727",
+        "Name": "Toko Madura/Mbak Dwi"
+      },
+      {
+        "BusinessPartnerID": "01728",
+        "Name": "Bu Harmini/Es Teh Jumbo"
+      },
+      {
+        "BusinessPartnerID": "01729",
+        "Name": "Mbak Nissa/Teh Jumbo"
+      },
+      {
+        "BusinessPartnerID": "01730",
+        "Name": "Mas Rudi/Es Jeruk Peras"
+      },
+      {
+        "BusinessPartnerID": "01856",
+        "Name": "Retail Return"
+      },
+      {
+        "BusinessPartnerID": "0201",
+        "Name": "Mbak Eka/Teh Poci"
+      },
+      {
+        "BusinessPartnerID": "0202",
+        "Name": "Bu Atik/Es Cincau"
+      },
+      {
+        "BusinessPartnerID": "0203",
+        "Name": "Kedai Mamavie"
+      },
+      {
+        "BusinessPartnerID": "0204",
+        "Name": "Mas Yudi 1/Mie Ayam"
+      },
+      {
+        "BusinessPartnerID": "0205",
+        "Name": "Pak Tony/Es Teh Kota Atlas"
+      },
+      {
+        "BusinessPartnerID": "0206",
+        "Name": "Mbak Tri/Lapak Sayur"
+      },
+      {
+        "BusinessPartnerID": "0208",
+        "Name": "Bu Jiati Jenangan"
+      },
+      {
+        "BusinessPartnerID": "0209",
+        "Name": "Bu Afid Frozen Ce Lentid"
+      }
+    ]
+  }
+}
