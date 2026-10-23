@@ -1,6 +1,10 @@
 [
   {
-    "nama": "ATLAS",
+    "nama": "Atlas",
+    "alias": [
+      "ATLAS",
+      "Es atlas"
+    ],
     "mitra": [
       "01739",
       "01778",
@@ -9,6 +13,7 @@
       "01820",
       "01821",
       "01823",
+      "01831",
       "01832",
       "01833",
       "01845",
@@ -24,21 +29,100 @@
     ]
   },
   {
-    "nama": "LOKAL",
+    "nama": "Lokal",
+    "alias": [
+      "LOKAL",
+      "Lokal harga 7.000",
+      "Pabrik Lokal",
+      "Driver Lokal"
+    ],
     "mitra": [
+      "01736",
       "01739",
       "01740",
       "01744",
       "01748",
       "01750",
       "01751",
+      "01779",
       "01785",
       "01787",
+      "01790",
+      "01791",
       "01794",
       "01800",
       "01811",
       "01816",
       "01822"
+    ]
+  },
+  {
+    "nama": "Babadan",
+    "alias": [
+      "babadan",
+      "bbadan",
+      "Es babadan"
+    ],
+    "mitra": [
+      "01853",
+      "01874",
+      "01886"
+    ]
+  },
+  {
+    "nama": "Hadi",
+    "alias": [
+      "hadi",
+      "Es kristal dari pak hadi"
+    ],
+    "mitra": [
+      "01826",
+      "01860",
+      "01877"
+    ]
+  },
+  {
+    "nama": "Arif",
+    "alias": [
+      "arif",
+      "Dapat es dari pak arif"
+    ],
+    "mitra": [
+      "01777",
+      "01866"
+    ]
+  },
+  {
+    "nama": "Sukorejo",
+    "alias": [
+      "Es kristal dari Sukorejo"
+    ],
+    "mitra": [
+      "01840",
+      "01874",
+      "01877"
+    ]
+  },
+  {
+    "nama": "Bungkal",
+    "alias": [
+      "Eric bungkal"
+    ],
+    "mitra": [
+      "01755",
+      "01891"
+    ]
+  },
+  {
+    "nama": "Belum ada kompetitor",
+    "abaikan": true,
+    "alias": [
+      "Tidak ada kompetitor"
+    ],
+    "mitra": [
+      "01733",
+      "01734",
+      "01803"
     ]
   },
   {
@@ -97,31 +181,10 @@
     ]
   },
   {
-    "nama": "Belum ada kompetitor",
-    "mitra": [
-      "01733",
-      "01734"
-    ]
-  },
-  {
-    "nama": "hadi",
-    "mitra": [
-      "01826",
-      "01877"
-    ]
-  },
-  {
     "nama": "kasanah",
     "mitra": [
       "01875",
       "01880"
-    ]
-  },
-  {
-    "nama": "Lokal harga 7.000",
-    "mitra": [
-      "01790",
-      "01791"
     ]
   },
   {
@@ -132,28 +195,9 @@
     ]
   },
   {
-    "nama": "Sukorejo",
-    "mitra": [
-      "01874",
-      "01877"
-    ]
-  },
-  {
     "nama": "Agen anton",
     "mitra": [
       "01838"
-    ]
-  },
-  {
-    "nama": "arif",
-    "mitra": [
-      "01866"
-    ]
-  },
-  {
-    "nama": "babadan",
-    "mitra": [
-      "01874"
     ]
   },
   {
@@ -166,12 +210,6 @@
     "nama": "barista",
     "mitra": [
       "01871"
-    ]
-  },
-  {
-    "nama": "bbadan",
-    "mitra": [
-      "01886"
     ]
   },
   {
@@ -193,54 +231,6 @@
     ]
   },
   {
-    "nama": "Bungkal",
-    "mitra": [
-      "01755"
-    ]
-  },
-  {
-    "nama": "Dapat es dari pak arif",
-    "mitra": [
-      "01777"
-    ]
-  },
-  {
-    "nama": "Driver Lokal",
-    "mitra": [
-      "01779"
-    ]
-  },
-  {
-    "nama": "Eric bungkal",
-    "mitra": [
-      "01891"
-    ]
-  },
-  {
-    "nama": "Es atlas",
-    "mitra": [
-      "01831"
-    ]
-  },
-  {
-    "nama": "Es babadan",
-    "mitra": [
-      "01853"
-    ]
-  },
-  {
-    "nama": "Es kristal dari pak hadi",
-    "mitra": [
-      "01860"
-    ]
-  },
-  {
-    "nama": "Es kristal dari Sukorejo",
-    "mitra": [
-      "01840"
-    ]
-  },
-  {
     "nama": "Kaisar",
     "mitra": [
       "01867"
@@ -259,21 +249,9 @@
     ]
   },
   {
-    "nama": "Pabrik Lokal",
-    "mitra": [
-      "01736"
-    ]
-  },
-  {
     "nama": "SSS",
     "mitra": [
       "01808"
-    ]
-  },
-  {
-    "nama": "Tidak ada kompetitor",
-    "mitra": [
-      "01803"
     ]
   }
 ]

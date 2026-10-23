@@ -1,0 +1,681 @@
+{
+  "holdingKode": "pmp",
+  "bisnis": "es_kristal",
+  "createdBy": "migrasi-2026-10-23",
+  "kompetitorDibuat": [
+    {
+      "id": 6,
+      "nama": "Agen anton"
+    },
+    {
+      "id": 7,
+      "nama": "Alaska"
+    },
+    {
+      "id": 8,
+      "nama": "Arif"
+    },
+    {
+      "id": 9,
+      "nama": "Atlas"
+    },
+    {
+      "id": 10,
+      "nama": "atm"
+    },
+    {
+      "id": 11,
+      "nama": "Babadan"
+    },
+    {
+      "id": 12,
+      "nama": "Balong"
+    },
+    {
+      "id": 13,
+      "nama": "barista"
+    },
+    {
+      "id": 14,
+      "nama": "Bear tube"
+    },
+    {
+      "id": 15,
+      "nama": "Bintang"
+    },
+    {
+      "id": 16,
+      "nama": "Bringin"
+    },
+    {
+      "id": 17,
+      "nama": "Bungkal"
+    },
+    {
+      "id": 18,
+      "nama": "Hadi"
+    },
+    {
+      "id": 19,
+      "nama": "Kaisar"
+    },
+    {
+      "id": 20,
+      "nama": "kasanah"
+    },
+    {
+      "id": 21,
+      "nama": "Lokal"
+    },
+    {
+      "id": 22,
+      "nama": "Mam loundri"
+    },
+    {
+      "id": 23,
+      "nama": "mlarak"
+    },
+    {
+      "id": 24,
+      "nama": "Moya"
+    },
+    {
+      "id": 25,
+      "nama": "ra"
+    },
+    {
+      "id": 26,
+      "nama": "RR"
+    },
+    {
+      "id": 27,
+      "nama": "SSS"
+    },
+    {
+      "id": 28,
+      "nama": "Sukorejo"
+    },
+    {
+      "id": 29,
+      "nama": "wiko"
+    }
+  ],
+  "mitraKompetitor": [
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01736",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01739",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01739",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01740",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01744",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01748",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01750",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01751",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01755",
+      "kompetitorId": 17
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01755",
+      "kompetitorId": 23
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01777",
+      "kompetitorId": 8
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01778",
+      "kompetitorId": 15
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01778",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01779",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01780",
+      "kompetitorId": 24
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01780",
+      "kompetitorId": 29
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01781",
+      "kompetitorId": 29
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01781",
+      "kompetitorId": 24
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01785",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01787",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01790",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01791",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01793",
+      "kompetitorId": 24
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01794",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01800",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01808",
+      "kompetitorId": 14
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01808",
+      "kompetitorId": 27
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01808",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01811",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01816",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01818",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01818",
+      "kompetitorId": 25
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01819",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01819",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01820",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01820",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01821",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01821",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01822",
+      "kompetitorId": 21
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01823",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01823",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01826",
+      "kompetitorId": 29
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01826",
+      "kompetitorId": 18
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01831",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01832",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01833",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01838",
+      "kompetitorId": 6
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01838",
+      "kompetitorId": 29
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01839",
+      "kompetitorId": 12
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01840",
+      "kompetitorId": 28
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01845",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01846",
+      "kompetitorId": 7
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01846",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01850",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01853",
+      "kompetitorId": 11
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01854",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01860",
+      "kompetitorId": 18
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01866",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01866",
+      "kompetitorId": 8
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01867",
+      "kompetitorId": 19
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01867",
+      "kompetitorId": 29
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01867",
+      "kompetitorId": 25
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01869",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01869",
+      "kompetitorId": 24
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01871",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01871",
+      "kompetitorId": 13
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01874",
+      "kompetitorId": 28
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01874",
+      "kompetitorId": 11
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01875",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01875",
+      "kompetitorId": 20
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01876",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01876",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01877",
+      "kompetitorId": 18
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01877",
+      "kompetitorId": 28
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01879",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01879",
+      "kompetitorId": 29
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01880",
+      "kompetitorId": 20
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01880",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01882",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01882",
+      "kompetitorId": 7
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01884",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01885",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01886",
+      "kompetitorId": 24
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01886",
+      "kompetitorId": 11
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01887",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01888",
+      "kompetitorId": 9
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01889",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01889",
+      "kompetitorId": 26
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01890",
+      "kompetitorId": 16
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01891",
+      "kompetitorId": 17
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01892",
+      "kompetitorId": 24
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01892",
+      "kompetitorId": 10
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01893",
+      "kompetitorId": 22
+    },
+    {
+      "perusahaanKode": "mkesindo",
+      "sumber": "utama",
+      "partnerId": "01897",
+      "kompetitorId": 9
+    }
+  ],
+  "run": [
+    {
+      "waktu": "2026-10-23T14:35:24.796Z",
+      "kompetitorDibuat": 24,
+      "relasiDibuat": 94
+    },
+    {
+      "waktu": "2026-10-23T14:36:08.928Z",
+      "kompetitorDibuat": 0,
+      "relasiDibuat": 0
+    }
+  ]
+}
