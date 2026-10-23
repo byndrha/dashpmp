@@ -28,8 +28,13 @@ const myLocationIcon = L.divIcon({
 });
 
 export interface AgenLocationPoint {
+  // Kunci unik per titik (satu mitra bisa punya beberapa lokasi; kartu utama
+  // & logistik bisa berbagi AgenID).
+  kunci: string;
   agenId: string;
   nama: string;
+  // "Utama" atau label/"Lokasi n" lokasi tambahan.
+  label: string;
   wilayah: string | null;
   latitude: number;
   longitude: number;
@@ -176,7 +181,7 @@ function AgenSearchBox({
         <div className="max-h-48 overflow-y-auto rounded-md bg-card/95 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
           {matches.map((p) => (
             <button
-              key={p.agenId}
+              key={p.kunci}
               type="button"
               onClick={() => {
                 onSelect(p);
@@ -186,7 +191,7 @@ function AgenSearchBox({
               className="flex w-full flex-col items-start px-2 py-1.5 text-left text-xs hover:bg-accent"
             >
               <span className="truncate font-medium">{p.nama}</span>
-              {p.wilayah && <span className="text-[11px] text-muted-foreground">{p.wilayah}</span>}
+              <span className="text-[11px] text-muted-foreground">{[p.label, p.wilayah].filter(Boolean).join(" · ")}</span>
             </button>
           ))}
         </div>
@@ -226,7 +231,7 @@ export function AgenLocationsMap({
 
   function handleSelectAgen(point: AgenLocationPoint) {
     mapRef.current?.flyTo([point.latitude, point.longitude], 15);
-    markerRefs.current.get(point.agenId)?.openPopup();
+    markerRefs.current.get(point.kunci)?.openPopup();
   }
 
   return (
@@ -244,16 +249,18 @@ export function AgenLocationsMap({
         <MapZoomControl className="top-2 left-2" />
         {points.map((p) => (
           <Marker
-            key={p.agenId}
+            key={p.kunci}
             position={[p.latitude, p.longitude]}
             icon={agenIcon}
             ref={(instance) => {
-              if (instance) markerRefs.current.set(p.agenId, instance);
-              else markerRefs.current.delete(p.agenId);
+              if (instance) markerRefs.current.set(p.kunci, instance);
+              else markerRefs.current.delete(p.kunci);
             }}
           >
             <Popup>
-              <strong>{p.nama}</strong>
+              <strong>
+                {p.nama} — {p.label}
+              </strong>
               {p.wilayah && <div>{p.wilayah}</div>}
             </Popup>
           </Marker>

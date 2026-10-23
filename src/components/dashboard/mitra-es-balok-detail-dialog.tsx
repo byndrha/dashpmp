@@ -80,10 +80,36 @@ export function MitraEsBalokDetailDialog({
               </p>
             )}
 
+            {data.alamatMitra && (
+              <div>
+                <p className="text-xs text-muted-foreground">Alamat Mitra</p>
+                <p className="text-sm">
+                  {[data.alamatMitra.alamat, data.alamatMitra.kecamatan, data.alamatMitra.wilayahNama ?? data.alamatMitra.wilayah]
+                    .filter(Boolean)
+                    .join(", ") || "-"}
+                </p>
+              </div>
+            )}
+
             <div>
-              <p className="text-xs text-muted-foreground">Alamat Lengkap</p>
-              <p className="text-sm">{[data.alamat, data.wilayah].filter(Boolean).join(", ") || "-"}</p>
+              <p className="text-xs text-muted-foreground">
+                {data.lokasiTambahan.length > 0 || data.alamatMitra ? "Lokasi Pengiriman 1 (Utama)" : "Alamat Lengkap"}
+              </p>
+              <p className="text-sm">{[data.alamat, data.kecamatan, data.wilayah].filter(Boolean).join(", ") || "-"}</p>
             </div>
+
+            {data.lokasiTambahan.map((l, i) => (
+              <div key={l.LokasiPengirimanID}>
+                <p className="text-xs text-muted-foreground">
+                  Lokasi Pengiriman {i + 2}
+                  {l.Label ? ` — ${l.Label}` : ""}
+                </p>
+                <p className="text-sm">
+                  {[l.alamat, l.kecamatan, l.wilayahNama ?? l.wilayah].filter(Boolean).join(", ") || "-"}
+                  {l.kontak ? ` · ${l.kontak}` : ""}
+                </p>
+              </div>
+            ))}
 
             <div className="flex flex-col divide-y rounded-md border text-sm">
               <div className="flex items-center justify-between gap-3 px-3 py-2">

@@ -1,17 +1,17 @@
-import { getMitraList, getWilayahOptions } from "@/lib/queries/mitra-es-balok";
+import { getMitraList } from "@/lib/queries/mitra-es-balok";
 import { getMitraGrowthByWilayah } from "@/lib/queries/mitra-es-balok-growth";
 import { getPabrikLocationByKode } from "@/lib/queries/perusahaan";
 import { requirePmputra } from "@/lib/require-access";
 import { AgenLocationsPanel } from "@/components/dashboard/agen-locations-panel";
+import { titikPetaAgen } from "@/lib/mitra-es-balok-form";
 import { MitraPageClient } from "./mitra-page-client";
 
 const KODE = "pmputra";
 
 export default async function PmputraMitraPage() {
   await requirePmputra();
-  const [cards, wilayahOptions, growthRows, pabrikLocation] = await Promise.all([
+  const [cards, growthRows, pabrikLocation] = await Promise.all([
     getMitraList(KODE),
-    getWilayahOptions(KODE, "utama"),
     getMitraGrowthByWilayah(KODE),
     getPabrikLocationByKode(KODE),
   ]);
@@ -19,9 +19,8 @@ export default async function PmputraMitraPage() {
     ? [pabrikLocation.latitude, pabrikLocation.longitude]
     : undefined;
 
-  const points = cards
-    .filter((c): c is typeof c & { latitude: number; longitude: number } => c.latitude != null && c.longitude != null && c.isActive)
-    .map((c) => ({ agenId: c.agenId, nama: c.nama, wilayah: c.wilayah, latitude: c.latitude, longitude: c.longitude }));
+  // Satu titik per lokasi pengiriman (utama + tambahan) mitra aktif.
+  const points = titikPetaAgen(cards);
 
   return (
     <div className="flex flex-col gap-4">
@@ -30,7 +29,7 @@ export default async function PmputraMitraPage() {
         <p className="text-sm text-muted-foreground">PT Prima Maesa Putra — Es Balok</p>
       </div>
       <AgenLocationsPanel points={points} growthRows={growthRows} centerFallback={centerFallback} />
-      <MitraPageClient cards={cards} wilayahOptions={wilayahOptions} />
+      <MitraPageClient cards={cards} />
     </div>
   );
 }

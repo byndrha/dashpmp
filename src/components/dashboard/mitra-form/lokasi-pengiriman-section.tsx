@@ -25,6 +25,15 @@ export type RenderWilayahKecamatan = (p: {
 // Induk cukup meneruskan setter useState-nya.
 export type Pengubah<T> = (fn: (prev: T) => T) => void;
 
+// Penyesuai slot Wilayah untuk bisnis yang menyimpan ID, bukan nama (Es Balok:
+// WilayahID). keNama → teks untuk pencarian peta; dariNama → nilai yang
+// disimpan dari nama wilayah hasil reverse-geocode (null = jangan timpa).
+// Tanpa adaptor (Es Kristal), nilai wilayah = nama apa adanya.
+export interface AdaptorWilayah {
+  keNama: (wilayah: string | null) => string | null;
+  dariNama: (nama: string) => string | null;
+}
+
 export const ALAMAT_KOSONG: AlamatPin = {
   wilayah: null,
   kecamatan: null,
@@ -51,12 +60,14 @@ export function AlamatBaris({
   renderWilayahKecamatan,
   tampilkanPin = true,
   disabled = false,
+  adaptorWilayah,
 }: {
   value: AlamatPin;
   onChange: Pengubah<AlamatPin>;
   renderWilayahKecamatan: RenderWilayahKecamatan;
   tampilkanPin?: boolean;
   disabled?: boolean;
+  adaptorWilayah?: AdaptorWilayah;
 }) {
   const [petaTerbuka, setPetaTerbuka] = useState(false);
   const adaPin = punyaPin(value);
@@ -108,11 +119,14 @@ export function AlamatBaris({
               // hanya nilai yang ditemukan yang menimpa isian.
               const patch: Partial<AlamatPin> = {};
               if (s.alamat) patch.alamat = s.alamat;
-              if (s.wilayah) patch.wilayah = s.wilayah;
+              if (s.wilayah) {
+                const w = adaptorWilayah ? adaptorWilayah.dariNama(s.wilayah) : s.wilayah;
+                if (w) patch.wilayah = w;
+              }
               if (s.kecamatan) patch.kecamatan = s.kecamatan;
               ubah(patch);
             }}
-            wilayah={value.wilayah}
+            wilayah={adaptorWilayah ? adaptorWilayah.keNama(value.wilayah) : value.wilayah}
             kecamatan={value.kecamatan}
           />
         </div>
@@ -142,12 +156,14 @@ export function LokasiPengirimanSection({
   renderWilayahKecamatan,
   onJadikanUtama,
   sedangJadikanUtama = false,
+  adaptorWilayah,
 }: {
   value: MitraAlamatForm;
   onChange: Pengubah<MitraAlamatForm>;
   renderWilayahKecamatan: RenderWilayahKecamatan;
   onJadikanUtama?: (lokasi: LokasiTambahanInput) => void;
   sedangJadikanUtama?: boolean;
+  adaptorWilayah?: AdaptorWilayah;
 }) {
   const [kunci, setKunci] = useState<string[]>(() => value.lokasiTambahan.map(kunciBaru));
   // Sinkronkan bila daftar diganti dari luar (mis. dimuat ulang setelah
@@ -213,6 +229,7 @@ export function LokasiPengirimanSection({
               value={value.lokasiUtama}
               onChange={(fn) => onChange((v) => ({ ...v, lokasiUtama: fn(v.lokasiUtama) }))}
               renderWilayahKecamatan={renderWilayahKecamatan}
+              adaptorWilayah={adaptorWilayah}
             />
           </div>
 
@@ -258,6 +275,7 @@ export function LokasiPengirimanSection({
                 value={l}
                 onChange={(fn) => ubahTambahan(i, (x) => ({ ...x, ...fn(x) }))}
                 renderWilayahKecamatan={renderWilayahKecamatan}
+                adaptorWilayah={adaptorWilayah}
               />
             </div>
           ))}

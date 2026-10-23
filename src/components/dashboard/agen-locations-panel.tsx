@@ -29,6 +29,9 @@ export function AgenLocationsPanel({
   centerFallback?: [number, number];
 }) {
   const [growthOpen, setGrowthOpen] = useState(false);
+  // Satu titik per lokasi pengiriman (utama + tambahan), jadi jumlah mitra
+  // dihitung dari AgenID unik (kunci = sumber:agenId:lokasi).
+  const jumlahMitra = new Set(points.map((p) => p.kunci.split(":").slice(0, 2).join(":"))).size;
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 shadow-md">
@@ -36,7 +39,8 @@ export function AgenLocationsPanel({
         <AgenLocationsMap points={points} growthRows={growthRows} centerFallback={centerFallback} />
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <span className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-foreground shadow backdrop-blur">
-            {points.length} Mitra dengan lokasi tersimpan
+            {jumlahMitra} Mitra dengan lokasi tersimpan
+            {points.length > jumlahMitra && ` (${points.length} titik)`}
           </span>
         </div>
       </div>

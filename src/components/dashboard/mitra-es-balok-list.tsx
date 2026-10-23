@@ -13,6 +13,7 @@ import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { MitraCard, SumberAgen } from "@/lib/queries/mitra-es-balok";
 import { SEGMENTASI_OPTIONS, type Segmentasi } from "@/lib/segmentasi-mitra";
+import { kunciKartu } from "@/lib/mitra-es-balok-form";
 
 const PAGE_SIZE = 12;
 
@@ -309,7 +310,7 @@ export function MitraEsBalokList({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((c) => (
             <Card
-              key={`${c.sumber}-${c.agenId}`}
+              key={kunciKartu(c)}
               className={cn("cursor-pointer py-3.5 transition-colors hover:bg-accent/50", !c.isActive && "opacity-60")}
               onClick={() => onSelect(c)}
             >
@@ -326,6 +327,11 @@ export function MitraEsBalokList({
                       <Badge variant={c.segmentasi ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
                         {segmentasiLabel(c.segmentasi) ?? "Belum Ditentukan"}
                       </Badge>
+                      {c.lokasiTambahan.length > 0 && (
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                          {c.lokasiTambahan.length + 1} lokasi
+                        </Badge>
+                      )}
                       {!c.isActive && (
                         <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
                           Nonaktif
@@ -382,7 +388,7 @@ export function MitraEsBalokList({
         <div className="flex flex-col divide-y rounded-lg border">
           {visible.map((c) => (
             <div
-              key={`${c.sumber}-${c.agenId}`}
+              key={kunciKartu(c)}
               className={cn(
                 "flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm hover:bg-accent/50",
                 !c.isActive && "opacity-60"
@@ -400,6 +406,11 @@ export function MitraEsBalokList({
                   <Badge variant={c.segmentasi ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
                     {segmentasiLabel(c.segmentasi) ?? "Belum Ditentukan"}
                   </Badge>
+                  {c.lokasiTambahan.length > 0 && (
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                      {c.lokasiTambahan.length + 1} lokasi
+                    </Badge>
+                  )}
                   {!c.isActive && (
                     <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
                       Nonaktif
