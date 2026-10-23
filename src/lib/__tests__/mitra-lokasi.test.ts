@@ -68,9 +68,21 @@ test("pilihLokasiStop: lokasiDipilihId ada, dipilih tanpa pin → latitude/longi
     latitude: null, longitude: null, sumber: "dipilih",
   });
 });
-test("pilihLokasiStop: lokasiDipilihId ada tapi baris dipilih hilang → field null, sumber \"dipilih\"", () => {
+test("pilihLokasiStop: lokasiDipilihId ada tapi baris dipilih hilang → field null kecuali kontak (jatuh ke utama), sumber \"dipilih\"", () => {
   const r = pilihLokasiStop({ snapshot: null, dipilih: null, lokasiDipilihId: 9, utama });
-  assert.deepEqual(r, { wilayah: null, kecamatan: null, alamat: null, kontak: null, latitude: null, longitude: null, sumber: "dipilih" });
+  assert.deepEqual(r, { wilayah: null, kecamatan: null, alamat: null, kontak: utama.kontak, latitude: null, longitude: null, sumber: "dipilih" });
+});
+test("pilihLokasiStop: dipilih tanpa kontak → kontak utama, koordinat tetap null (pin TIDAK jatuh ke utama)", () => {
+  for (const kontak of [null, "", "   "]) {
+    const r = pilihLokasiStop({
+      snapshot: null, dipilih: { ...dipilih, kontak, latitude: null, longitude: null },
+      lokasiDipilihId: 9, utama: { ...utama, kontak: "0899-UTAMA" },
+    });
+    assert.deepEqual(r, {
+      wilayah: "Dipilih", kecamatan: "Klojen", alamat: "Jl. Dipilih", kontak: "0899-UTAMA",
+      latitude: null, longitude: null, sumber: "dipilih",
+    });
+  }
 });
 test("pilihLokasiStop: lokasiDipilihId null → utama", () => {
   const r = pilihLokasiStop({ snapshot: null, dipilih, lokasiDipilihId: null, utama });

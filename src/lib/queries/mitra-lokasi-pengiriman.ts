@@ -394,22 +394,26 @@ export const STOP_LOKASI_JOIN = (jdAlias: string, soAlias: string): string => `
  * Kolom alamat stop — cermin persis pilihLokasiStop() (src/lib/mitra-lokasi.ts):
  * 1. `KirimDibekukanAt IS NOT NULL` → snapshot Kirim*;
  * 2. selain itu `LokasiPengirimanID IS NOT NULL` → lp.* APA ADANYA (tanpa
- *    fallback ke ml/bp walau koordinat lp NULL atau barisnya hilang);
+ *    fallback ke ml/bp walau koordinat lp NULL atau barisnya hilang) —
+ *    KECUALI kontak: lp.Kontak kosong/NULL → bp.MobileNo (kontak mitra utama;
+ *    keputusan pengguna 2026-10-23). Pin TIDAK pernah jatuh ke utama;
  * 3. selain itu → bp.* + ml.*.
  * PEMANGGIL WAJIB sudah JOIN `BusinessPartner bp` dan STOP_LOKASI_JOIN.
  */
 export const STOP_LOKASI_COLUMNS = (jdAlias: string): string => {
+  // `dipilih` berupa ekspresi SQL utuh (bukan nama kolom) supaya kontak bisa
+  // memakai fallback ke kontak utama.
   const kolom = (snapshot: string, dipilih: string, utama: string, alias: string) => `
     CASE WHEN ${jdAlias}.KirimDibekukanAt IS NOT NULL THEN ${jdAlias}.${snapshot}
-         WHEN ${jdAlias}.LokasiPengirimanID IS NOT NULL THEN lp.${dipilih}
+         WHEN ${jdAlias}.LokasiPengirimanID IS NOT NULL THEN ${dipilih}
          ELSE ${utama} END AS ${alias}`;
   return [
-    kolom("KirimAlamat", "Alamat", "bp.Address", "StopAlamat"),
-    kolom("KirimWilayah", "Wilayah", "bp.NPWPName", "StopWilayah"),
-    kolom("KirimKecamatan", "Kecamatan", "bp.NPWPAddress", "StopKecamatan"),
-    kolom("KirimKontak", "Kontak", "bp.MobileNo", "StopKontak"),
-    kolom("KirimLatitude", "Latitude", "ml.Latitude", "StopLatitude"),
-    kolom("KirimLongitude", "Longitude", "ml.Longitude", "StopLongitude"),
+    kolom("KirimAlamat", "lp.Alamat", "bp.Address", "StopAlamat"),
+    kolom("KirimWilayah", "lp.Wilayah", "bp.NPWPName", "StopWilayah"),
+    kolom("KirimKecamatan", "lp.Kecamatan", "bp.NPWPAddress", "StopKecamatan"),
+    kolom("KirimKontak", "COALESCE(NULLIF(LTRIM(RTRIM(lp.Kontak)), ''), bp.MobileNo)", "bp.MobileNo", "StopKontak"),
+    kolom("KirimLatitude", "lp.Latitude", "ml.Latitude", "StopLatitude"),
+    kolom("KirimLongitude", "lp.Longitude", "ml.Longitude", "StopLongitude"),
     `
     CASE WHEN ${jdAlias}.KirimDibekukanAt IS NOT NULL THEN 'snapshot'
          WHEN ${jdAlias}.LokasiPengirimanID IS NOT NULL THEN 'dipilih'

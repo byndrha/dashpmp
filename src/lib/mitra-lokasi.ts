@@ -58,6 +58,9 @@ export type LokasiStop = AlamatFields & {
  * 1. snapshot (bila ada) — alamat yang dibekukan saat stop dibuat.
  * 2. lokasiDipilihId != null → baris dipilih, APA ADANYA. Tidak ada fallback ke
  *    pin/alamat utama, walau koordinat dipilih null atau barisnya sudah hilang.
+ *    SATU-SATUNYA pengecualian: kontak. Bila kontak dipilih kosong/null (atau
+ *    barisnya hilang) → kontak utama (keputusan pengguna 2026-10-23). Pin
+ *    tetap TIDAK jatuh ke utama.
  * 3. selain itu → lokasi utama.
  */
 export function pilihLokasiStop(s: StopLokasiSumber): LokasiStop {
@@ -71,7 +74,13 @@ export function pilihLokasiStop(s: StopLokasiSumber): LokasiStop {
     sumber,
   });
   if (s.snapshot) return jadi(s.snapshot, "snapshot");
-  if (s.lokasiDipilihId != null) return jadi(s.dipilih, "dipilih");
+  if (s.lokasiDipilihId != null) {
+    const r = jadi(s.dipilih, "dipilih");
+    // Cermin COALESCE(NULLIF(LTRIM(RTRIM(lp.Kontak)),''), bp.MobileNo).
+    const kontakDipilih = r.kontak?.trim() ?? "";
+    r.kontak = kontakDipilih !== "" ? kontakDipilih : (s.utama.kontak ?? null);
+    return r;
+  }
   return jadi(s.utama, "utama");
 }
 
