@@ -1,0 +1,5161 @@
+{
+  "generatedAt": "2026-10-23T15:10:02.881Z",
+  "mitraGrowthByWilayah": [
+    {
+      "wilayah": "Madiun",
+      "agen": {
+        "total": 71,
+        "newThisMonth": 3,
+        "newLastMonth": 3
+      },
+      "outlet": {
+        "total": 19,
+        "newThisMonth": 0,
+        "newLastMonth": 3
+      },
+      "takeaway": {
+        "total": 2,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 92,
+        "newThisMonth": 3,
+        "newLastMonth": 6
+      }
+    },
+    {
+      "wilayah": "Magetan",
+      "agen": {
+        "total": 60,
+        "newThisMonth": 2,
+        "newLastMonth": 3
+      },
+      "outlet": {
+        "total": 43,
+        "newThisMonth": 2,
+        "newLastMonth": 6
+      },
+      "takeaway": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 1,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 104,
+        "newThisMonth": 4,
+        "newLastMonth": 9
+      }
+    },
+    {
+      "wilayah": "Ngawi",
+      "agen": {
+        "total": 21,
+        "newThisMonth": 1,
+        "newLastMonth": 0
+      },
+      "outlet": {
+        "total": 9,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "takeaway": {
+        "total": 1,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 31,
+        "newThisMonth": 1,
+        "newLastMonth": 0
+      }
+    },
+    {
+      "wilayah": "Pacitan",
+      "agen": {
+        "total": 8,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "outlet": {
+        "total": 2,
+        "newThisMonth": 0,
+        "newLastMonth": 1
+      },
+      "takeaway": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 10,
+        "newThisMonth": 0,
+        "newLastMonth": 1
+      }
+    },
+    {
+      "wilayah": "Ponorogo",
+      "agen": {
+        "total": 174,
+        "newThisMonth": 1,
+        "newLastMonth": 6
+      },
+      "outlet": {
+        "total": 109,
+        "newThisMonth": 9,
+        "newLastMonth": 9
+      },
+      "takeaway": {
+        "total": 3,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 1,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 287,
+        "newThisMonth": 10,
+        "newLastMonth": 15
+      }
+    },
+    {
+      "wilayah": "Sragen",
+      "agen": {
+        "total": 3,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "outlet": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "takeaway": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 3,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      }
+    },
+    {
+      "wilayah": "Tidak Diketahui",
+      "agen": {
+        "total": 1,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "outlet": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "takeaway": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 1,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 2,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      }
+    },
+    {
+      "wilayah": "Trenggalek",
+      "agen": {
+        "total": 9,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "outlet": {
+        "total": 6,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "takeaway": {
+        "total": 1,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 16,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      }
+    },
+    {
+      "wilayah": "Wonogiri",
+      "agen": {
+        "total": 8,
+        "newThisMonth": 0,
+        "newLastMonth": 1
+      },
+      "outlet": {
+        "total": 1,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "takeaway": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "rpa": {
+        "total": 0,
+        "newThisMonth": 0,
+        "newLastMonth": 0
+      },
+      "total": {
+        "total": 9,
+        "newThisMonth": 0,
+        "newLastMonth": 1
+      }
+    }
+  ],
+  "pemilikMarketing": [
+    {
+      "BusinessPartnerID": "01760",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01788",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01242",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01506",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Ngariboyo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01390",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0195",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01122",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01516",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Sidorejo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01558",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01368",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01331",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01341",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Jiwan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01342",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01635",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Pulung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01892",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Sukomoro",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01885",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01884",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01891",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01522",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01477",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01591",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01882",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Balerejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01527",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Geneng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01523",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01546",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01838",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01670",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01673",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01816",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01183",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01599",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Panekan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01173",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01118",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Pulung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01543",
+      "Wilayah": "Kota Madiun",
+      "Kecamatan": "Mangu Harjo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01388",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dagangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01291",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01517",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01130",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01457",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01832",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01116",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01486",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01465",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01837",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01166",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01757",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01346",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Saradan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01636",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01596",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01333",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Plaosan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01323",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Sukomoro",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01226",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Karas",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01404",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01483",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kendal",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01497",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Balerejo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01142",
+      "Wilayah": "Sragen",
+      "Kecamatan": "Karang Anyar",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01421",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01303",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Panekan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01782",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Ngadirojo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01691",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01653",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01694",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0133",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01112",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01573",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01373",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01129",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01547",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Plaosan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01563",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01204",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Ngariboyo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01604",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01350",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0128",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01105",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Paron",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0184",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pacitan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01588",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ngrayun",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01539",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01564",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01177",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01180",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01239",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Nguntoronadi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01139",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Barat",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01279",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01181",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01270",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Karangjati",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0132",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01621",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Karangsoko",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01149",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01186",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01170",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Badegan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01329",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pacitan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01344",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Durenan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01125",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01393",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01143",
+      "Wilayah": "Sragen",
+      "Kecamatan": "Sragen",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01570",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Bendo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01845",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "013",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01389",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01422",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01651",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01574",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01784",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Pulung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01801",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MGR - Ferdi"
+    },
+    {
+      "BusinessPartnerID": "01154",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01397",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01429",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01428",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Tegalombo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01538",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0187",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01299",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01671",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01639",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01238",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01338",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Arjosari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01688",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01834",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01436",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01305",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01638",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pacitan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0143",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01437",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01447",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01848",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01850",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0209",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01785",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01630",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0202",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01697",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01700",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01728",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01707",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0208",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01787",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01871",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Bendo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01869",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Bendo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01793",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01875",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Bendo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01873",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Bendo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01229",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01518",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Balerejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01117",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01724",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0160",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01245",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01470",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01326",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kendal",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01419",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01723",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01460",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01677",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01349",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Karangan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01120",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01273",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Sukomoro",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01577",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01578",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01579",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Barat",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01581",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pringkuku",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01576",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01580",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01582",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Jatisrono",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01597",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01868",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0207",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0139",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01409",
+      "Wilayah": "",
+      "Kecamatan": "Kompleks Industr, Ruko dan Rukan Meiko Abadi VII, Blok E, No 3-5 ",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01674",
+      "Wilayah": "",
+      "Kecamatan": "Kompleks Industri, dan Pergudangan D.23 Gemurung, Gedangan, Kab. Sidoarjo, Jawa Timur",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01232",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01231",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01354",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Mejayan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01778",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01644",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Wungu",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01534",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Gerih",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0163",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01352",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01765",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01455",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01466",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01866",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01669",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Wonogiri",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01808",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01262",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01263",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kartoharjo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01366",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01365",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01798",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01799",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0123",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01822",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01308",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01215",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01324",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01178",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Barat",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01888",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Bendo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01672",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01734",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01304",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01287",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Slahung",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01703",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01776",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01715",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01463",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01537",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01508",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01109",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01626",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01629",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01718",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01880",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Geneng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01353",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Padas",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01658",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01438",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01168",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01217",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01744",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0177",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0176",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Paron",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01387",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01467",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01146",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01167",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01192",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01414",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Jatisrono",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01343",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Durenan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01371",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01216",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0119",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01357",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Nguntoronadi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01306",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01187",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01134",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01865",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Slahung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01190",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01182",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01402",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01194",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Purwantoro",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01176",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01292",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Suruh",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01121",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01355",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01175",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01589",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Nguntoronadi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01307",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01504",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Plaosan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01103",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0188",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01468",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01726",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01731",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01545",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01625",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01762",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01704",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01771",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01791",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01524",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Nguntoronadi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01712",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01511",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01512",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01690",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01890",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01526",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0161",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01618",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Mejayan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01585",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01781",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01595",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01764",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01774",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01479",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01725",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01743",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jambon",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01876",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Jiwan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "014",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01568",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01827",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01855",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0138",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01711",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01872",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01499",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01248",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01330",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Paron",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01646",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01446",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01611",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01384",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01886",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01461",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Bungkal",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01491",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Mejayan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0158",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01171",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01400",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01841",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Bungkal",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01544",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Saradan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01261",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sawoo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01557",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01683",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pacitan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01695",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01235",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0166",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01133",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01632",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01224",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kendal",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01312",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01282",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sawoo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01255",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01325",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01285",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01430",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Pulung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01340",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Purwantoro",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01126",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0171",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Jiwan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01797",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01136",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01227",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01345",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Mejayan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01374",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01131",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01311",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01233",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01314",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Padas",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0126",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0137",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01147",
+      "Wilayah": "Sragen",
+      "Kecamatan": "Karangmalang",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01811",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01642",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ngebel",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01208",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Watulimo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01222",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Barat",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01492",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Pilangkenceng",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0130",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Prigi",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01403",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "016",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01535",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0170",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01680",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01132",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01807",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01379",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Slogohimo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0149",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01310",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01532",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Paron",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01271",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Plaosan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01155",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0159",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0151",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Karangjati",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01533",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Gerih",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01878",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01614",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01559",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01648",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01469",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01431",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ngebel",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01383",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01328",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01550",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01185",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0162",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01123",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01628",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01169",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dagangan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01500",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01228",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01748",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01686",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "018",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01254",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01230",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01761",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01766",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0203",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01763",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01759",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01779",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01852",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01657",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Badegan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01864",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01386",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01509",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01206",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kendal",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01294",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01264",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Geneng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01548",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01364",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01612",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01634",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01637",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01496",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Bringin",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01643",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "019",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01401",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01370",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Arjosari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01290",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01655",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01210",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01382",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01179",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01202",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01489",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Karangjati",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0192",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01300",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01540",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01613",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Mejayan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01164",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01777",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01846",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01847",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01722",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01893",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01758",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01780",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01874",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01730",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0204",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01377",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01835",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0201",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01699",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01702",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01729",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01701",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01775",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01810",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01824",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0206",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01696",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01794",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01623",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01853",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01733",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01583",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01411",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Saradan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01790",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01410",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01236",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01316",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01443",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01610",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01372",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01867",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Kismantoro",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01682",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01452",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01554",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01555",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Arjosari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01405",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0174",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01322",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01200",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01406",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Wonoasri",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01369",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Nglongsor",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0181",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Wungu",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01705",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01741",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01742",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01767",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0110",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01502",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01150",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0111",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01458",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0140",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01188",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Pulung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01840",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01106",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01309",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01505",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Jiwan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01119",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Jiwan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01274",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ngebel",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0124",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01212",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Slahung",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0125",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01302",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dagangan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01395",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01339",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01157",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01681",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0157",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01172",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01556",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01800",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01877",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01567",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0179",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01214",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01337",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Selogiri",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01275",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01276",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01434",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Wungu",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01296",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01114",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01277",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01530",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Paron",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01706",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Karangjati",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01769",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0205",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Badegan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01879",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Tegalombo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01381",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Barat",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01531",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kwadungan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01451",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01408",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01752",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0164",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01160",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01432",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01662",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01679",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01363",
+      "Wilayah": null,
+      "Kecamatan": null,
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01148",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01138",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01459",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01600",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01448",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01140",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Plaosan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01156",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01598",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01896",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01485",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01609",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01739",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01656",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01189",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01416",
+      "Wilayah": "",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01856",
+      "Wilayah": null,
+      "Kecamatan": null,
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0190",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01603",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01298",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Pilangkenceng ",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01860",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01668",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01667",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01507",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01464",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01144",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01135",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01394",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01412",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Geneng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01895",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Pulung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0182",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0180",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0167",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0122",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0141",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Balerejo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0168",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0156",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Balerejo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0169",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0189",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01631",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01128",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01213",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Barat",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01244",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01267",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01666",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01418",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Jiwan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01385",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01894",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01601",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01107",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01108",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01826",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01515",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Plaosan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01478",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01617",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Kebonagung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01359",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Karangjati",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01195",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Nglongso",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01647",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01754",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01624",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Slogohimo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01295",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Panekan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01237",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01713",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01745",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01789",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01241",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kwadungan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01675",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01859",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01857",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01858",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01863",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01319",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01736",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01740",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01193",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01633",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0113",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01407",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01197",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01488",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Karangjati",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01367",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01111",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01145",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01592",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01124",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01100",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01211",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0145",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0165",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01751",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01313",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0197",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01687",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jambon",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01162",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01163",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01566",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01317",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01141",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01293",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Jatisrono",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01424",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01196",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0116",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01297",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Wonogiri",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01225",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0196",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01184",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Bungkal",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01198",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01174",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sawoo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01321",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Slahung",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01207",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01101",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01474",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01495",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Saradan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01102",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Trenggalek",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01320",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Gedong",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01223",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01336",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01151",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01590",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01127",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01605",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01654",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Slogohimo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0131",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01356",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01572",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01587",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Nglinggis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01551",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ngebel",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01575",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01110",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01392",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01717",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01327",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0193",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01137",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01844",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01334",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01482",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Badegan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01802",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MGR - Ferdi"
+    },
+    {
+      "BusinessPartnerID": "01829",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01716",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01881",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01833",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01514",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Sukowinangun",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01525",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01528",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Jiwan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01649",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01487",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01823",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01819",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01818",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Panekan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01820",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Ngariboyo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01821",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01472",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Geneng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01498",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01440",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Karangan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01501",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01481",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Karangrejo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01521",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01710",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01519",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01219",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01480",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kendal",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01471",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01503",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Panekan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01268",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Ngariboyo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01301",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Karas",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01883",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01854",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01714",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01652",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01828",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01205",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01240",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01676",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Pulung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01536",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01376",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01753",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01755",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01380",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01234",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01836",
+      "Wilayah": "Wonogiri",
+      "Kecamatan": "Jatipurno",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01391",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Takeran",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01152",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0121",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01549",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01593",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01425",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01783",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jambon",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01594",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Barat",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01569",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01445",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Geneng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01627",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01444",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01839",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01473",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01747",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01685",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01449",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01435",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01660",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Balong",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01426",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Poncol",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01442",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01806",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01661",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01462",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sambit",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01420",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01608",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sampung",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01450",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01351",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01423",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01553",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Karas",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01541",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Badegan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01720",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01427",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0210",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01622",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01484",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01542",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sawoo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01441",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01619",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sooko",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01772",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01721",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01476",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01398",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01727",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01510",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01650",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01456",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01565",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0199",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01678",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01552",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dagangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01862",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01641",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01415",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01560",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pacitan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01645",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pacitan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01684",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Kauman",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01413",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kwadungan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01861",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01897",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01831",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01475",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Parang",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01453",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01805",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01562",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01606",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Slahung",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01870",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Bendo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01803",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Lembeyan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01417",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Kebonsari",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0144",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01665",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Mejayan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01399",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01191",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01153",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Maospati",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01561",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0198",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0191",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ngebel",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01209",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Kwadungan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "0155",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01735",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01664",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01454",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Tugu",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01161",
+      "Wilayah": "",
+      "Kecamatan": "",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01825",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jetis",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0211",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Siman",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01396",
+      "Wilayah": "Trenggalek",
+      "Kecamatan": "Prigi",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01362",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Kebonagung",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01318",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01750",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01378",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01201",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Mlarak",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01286",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Slahung",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01663",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01358",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Geger",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01607",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Tegalombo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01773",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01693",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01709",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01698",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01770",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01692",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01889",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01768",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Sukorejo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01842",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01513",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Magetan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0118",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0136",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01361",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01272",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01280",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "0117",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Madiun",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01332",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Taman",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01348",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Plaosan",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "0147",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Dolopo",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01284",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Jenangan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01288",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01529",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Paron",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01289",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01203",
+      "Wilayah": "Magetan",
+      "Kecamatan": "Kawedanan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01221",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Ngawi",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01335",
+      "Wilayah": "Ngawi",
+      "Kecamatan": "Geneng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01616",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01433",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01887",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Pilangkenceng",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01199",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Babadan",
+      "MarketingNama": "MKT02"
+    },
+    {
+      "BusinessPartnerID": "01586",
+      "Wilayah": "Pacitan",
+      "Kecamatan": "Pacitan",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01315",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Manguharjo",
+      "MarketingNama": null
+    },
+    {
+      "BusinessPartnerID": "01375",
+      "Wilayah": "Ponorogo",
+      "Kecamatan": "Ponorogo",
+      "MarketingNama": "MKT03"
+    },
+    {
+      "BusinessPartnerID": "01851",
+      "Wilayah": "Madiun",
+      "Kecamatan": "Saradan",
+      "MarketingNama": "MKT02"
+    }
+  ]
+}

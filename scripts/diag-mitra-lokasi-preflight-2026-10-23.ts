@@ -8,6 +8,7 @@
 // Output: docs/data-fixes/2026-10-23-mitra-lokasi-preflight.json
 //         docs/data-fixes/2026-10-23-mitra-lokasi-baseline.json
 // Usage: npx tsx scripts/diag-mitra-lokasi-preflight-2026-10-23.ts
+//        npx tsx scripts/diag-mitra-lokasi-preflight-2026-10-23.ts --baseline-only --out 2026-10-23-mitra-lokasi-sesudah.json
 import "dotenv/config";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -104,11 +105,24 @@ async function esKristal() {
   return { ...r, contohMitraJoinDateNull: joinDateNullSample };
 }
 
+// --baseline-only : lewati bagian preflight, hanya tulis baseline.
+// --out <nama>    : nama berkas baseline di docs/data-fixes (default
+//                   2026-10-23-mitra-lokasi-baseline.json), mis. untuk
+//                   perbandingan "sesudah" tanpa menimpa baseline asli.
+function argValue(name: string): string | undefined {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
 async function main() {
   const generatedAt = new Date().toISOString();
-  const preflight = { generatedAt, esBalok: await esBalok(), esKristal: await esKristal() };
-  writeFileSync(join(OUT_DIR, "2026-10-23-mitra-lokasi-preflight.json"), JSON.stringify(preflight, null, 2));
-  console.log("Tertulis: docs/data-fixes/2026-10-23-mitra-lokasi-preflight.json");
+  const baselineOnly = process.argv.includes("--baseline-only");
+  const baselineFile = argValue("--out") ?? "2026-10-23-mitra-lokasi-baseline.json";
+  if (!baselineOnly) {
+    const preflight = { generatedAt, esBalok: await esBalok(), esKristal: await esKristal() };
+    writeFileSync(join(OUT_DIR, "2026-10-23-mitra-lokasi-preflight.json"), JSON.stringify(preflight, null, 2));
+    console.log("Tertulis: docs/data-fixes/2026-10-23-mitra-lokasi-preflight.json");
+  }
 
   const [growth, mitra] = await Promise.all([getMitraGrowthByWilayah(), getMitraList()]);
   const baseline = {
@@ -121,8 +135,8 @@ async function main() {
       MarketingNama: m.MarketingNama,
     })),
   };
-  writeFileSync(join(OUT_DIR, "2026-10-23-mitra-lokasi-baseline.json"), JSON.stringify(baseline, null, 2));
-  console.log(`Tertulis: docs/data-fixes/2026-10-23-mitra-lokasi-baseline.json (growth ${growth.length} wilayah, mitra ${mitra.length})`);
+  writeFileSync(join(OUT_DIR, baselineFile), JSON.stringify(baseline, null, 2));
+  console.log(`Tertulis: docs/data-fixes/${baselineFile} (growth ${growth.length} wilayah, mitra ${mitra.length})`);
 }
 
 main()
