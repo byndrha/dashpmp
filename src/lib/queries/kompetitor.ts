@@ -72,6 +72,15 @@ export async function getKompetitorMitraMap(
   return hasil;
 }
 
+/** ID kompetitor yang saat ini terpasang pada satu mitra. */
+export async function getKompetitorIdsMitra(k: IdentitasKunci): Promise<number[]> {
+  const { rows } = await getPgPool().query<{ kompetitor_id: number }>(
+    `SELECT kompetitor_id FROM mitra_kompetitor WHERE perusahaan_kode = $1 AND sumber = $2 AND partner_id = $3`,
+    [k.perusahaanKode, k.sumber, k.partnerId]
+  );
+  return rows.map((r) => Number(r.kompetitor_id));
+}
+
 /**
  * Ganti seluruh set kompetitor mitra. Pemanggil bertanggung jawab memastikan
  * ID berasal dari listKompetitor() holding & bisnis yang sama.

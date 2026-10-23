@@ -10,6 +10,7 @@ import { AppError } from "@/lib/action-result";
 import type { AlamatFields, PinFields, MitraAlamatTernormalisasi } from "@/lib/mitra-lokasi";
 import type { Exec } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
+import { daftarPinMitra, type PinMitra } from "@/lib/pin-mitra";
 
 export interface LokasiPengirimanRow extends AlamatFields, PinFields {
   LokasiPengirimanID: number;
@@ -73,6 +74,27 @@ export async function muatAlamatDanLokasiMitra(
     lokasi.set(r.BusinessPartnerID, daftar);
   }
   return { alamat, lokasi };
+}
+
+/**
+ * Semua pin satu mitra: pin utama (DashboardMitraLocation) + lokasi tambahan
+ * AKTIF yang punya koordinat. Dipakai validasi jarak check-in kunjungan
+ * (pinTerdekat) — check-in diterima di lokasi mana pun milik mitra (§9.4).
+ */
+export async function getSemuaPinMitra(bpId: string): Promise<PinMitra[]> {
+  const pool = await getPool();
+  const [utama, lokasi] = await Promise.all([
+    pool
+      .request()
+      .input("bpId", sql.VarChar(16), bpId)
+      .query(`SELECT Latitude AS latitude, Longitude AS longitude FROM DashboardMitraLocation WHERE BusinessPartnerID = @bpId`),
+    muatAlamatDanLokasiMitra(pool, bpId),
+  ]);
+  const pinUtama = (utama.recordset[0] as { latitude: number | null; longitude: number | null } | undefined) ?? null;
+  return daftarPinMitra(
+    pinUtama,
+    (lokasi.lokasi.get(bpId) ?? []).map((l) => ({ label: l.Label, latitude: l.latitude, longitude: l.longitude }))
+  );
 }
 
 /**

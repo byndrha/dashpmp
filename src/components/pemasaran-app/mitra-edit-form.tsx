@@ -6,31 +6,54 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MitraLocationField, type MitraLocationValue } from "@/components/dashboard/mitra-location-field";
-import { WilayahSelect } from "@/components/dashboard/wilayah-select";
-import { KecamatanSelect } from "@/components/dashboard/kecamatan-select";
+import {
+  AlamatBaris,
+  LokasiPengirimanSection,
+  type RenderWilayahKecamatan,
+} from "@/components/dashboard/mitra-form/lokasi-pengiriman-section";
+import { WilayahKecamatanField } from "@/components/dashboard/mitra-form/wilayah-kecamatan-field";
+import { KompetitorPicker } from "@/components/dashboard/mitra-form/kompetitor-picker";
 import { formatRupiah } from "@/lib/format";
-import { getPriceLevelOptionsAction, setMitraLocationAction, updateMitraAction } from "@/app/mkesindo/pemasaran-app/actions";
+import { mitraKeAlamatForm } from "@/lib/mitra-form";
+import type { MitraAlamatForm } from "@/lib/mitra-lokasi";
 import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
+import type { Kompetitor } from "@/lib/queries/kompetitor";
+import {
+  getPriceLevelOptionsAction,
+  simpanMitraPemasaranAction,
+  tambahKompetitorAction,
+} from "@/app/mkesindo/pemasaran-app/actions";
 
-function rowToLocation(mitra: MitraRow): MitraLocationValue | null {
-  if (mitra.Latitude == null || mitra.Longitude == null) return null;
-  return { latitude: mitra.Latitude, longitude: mitra.Longitude, alamat: mitra.GeoAlamat };
-}
+const renderWilayahKecamatan: RenderWilayahKecamatan = (p) => <WilayahKecamatanField {...p} />;
 
-export function MitraEditForm({ mitra }: { mitra: MitraRow }) {
+// Edit mitra versi ponsel — memakai komponen form Mitra dashboard
+// (AlamatBaris, LokasiPengirimanSection, KompetitorPicker) dan inti simpan
+// yang sama (simpanMitraPemasaranAction → simpanMitraLengkap). NIK tidak
+// pernah diubah dari sini. Jadikan Utama hanya tersedia di dashboard.
+export function MitraEditForm({
+  mitra,
+  namaPenanggungJawab,
+  kompetitorOpsi: opsiAwal,
+  kompetitorDipilih,
+}: {
+  mitra: MitraRow;
+  namaPenanggungJawab: string | null;
+  kompetitorOpsi: Kompetitor[];
+  kompetitorDipilih: number[];
+}) {
   const router = useRouter();
   const [priceLevels, setPriceLevels] = useState<PriceLevelOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const [address, setAddress] = useState(mitra.Alamat ?? "");
-  const [wilayah, setWilayah] = useState(mitra.Wilayah ?? "");
-  const [kecamatan, setKecamatan] = useState(mitra.Kecamatan ?? "");
-  const [regencyCode, setRegencyCode] = useState<string | null>(null);
-  const [location, setLocation] = useState<MitraLocationValue | null>(rowToLocation(mitra));
+  const [nama, setNama] = useState(mitra.Name);
+  const [penanggungJawab, setPenanggungJawab] = useState(namaPenanggungJawab ?? "");
+  const [alamat, setAlamat] = useState<MitraAlamatForm>(() => mitraKeAlamatForm(mitra));
+  const [priceLevel, setPriceLevel] = useState(mitra.PriceLevel != null ? String(mitra.PriceLevel) : "");
+  const [capacity, setCapacity] = useState(mitra.Capacity != null ? String(mitra.Capacity) : "");
+  const [kompetitorOpsi, setKompetitorOpsi] = useState<Kompetitor[]>(opsiAwal);
+  const [kompetitorIds, setKompetitorIds] = useState<number[]>(kompetitorDipilih);
 
   useEffect(() => {
     getPriceLevelOptionsAction().then((result) => {
@@ -38,47 +61,25 @@ export function MitraEditForm({ mitra }: { mitra: MitraRow }) {
     });
   }, []);
 
-  // Only clears Kecamatan when Wilayah actually changes to a different
-  // region — WilayahSelect also calls this to report the regencyCode it
-  // resolved for the mitra's CURRENT Wilayah on mount, which must not wipe
-  // out the Kecamatan that came with `mitra`. Matches mitra-list.tsx's
-  // MitraFormDialog exactly.
-  function handleWilayahChange(name: string, code: string | null) {
-    if (name !== wilayah) setKecamatan("");
-    setWilayah(name);
-    setRegencyCode(code);
-  }
-
-  function handleGeocode(suggestion: { alamat: string | null; wilayah: string | null; kecamatan: string | null }) {
-    if (suggestion.alamat) setAddress(suggestion.alamat);
-    if (suggestion.wilayah) setWilayah(suggestion.wilayah);
-    if (suggestion.kecamatan) setKecamatan(suggestion.kecamatan);
-  }
-
-  function handleSubmit(formData: FormData) {
+  function handleSubmit() {
     setError(null);
     startTransition(async () => {
-      const result = await updateMitraAction(mitra.BusinessPartnerID, {
-        name: String(formData.get("name") ?? ""),
-        mobileNo: String(formData.get("mobileNo") ?? "") || null,
-        address: address || null,
-        wilayah: wilayah || null,
-        kecamatan: kecamatan || null,
-        gender: mitra.Gender,
-        priceLevel: formData.get("priceLevel") ? Number(formData.get("priceLevel")) : null,
-        termOfPaymentId: mitra.TermOfPaymentID,
-        capacity: formData.get("capacity") ? Number(formData.get("capacity")) : null,
+      const result = await simpanMitraPemasaranAction(mitra.BusinessPartnerID, {
+        ...alamat,
+        mitra: {
+          name: nama,
+          // Segmentasi & Tenggat tidak diubah dari aplikasi pemasaran.
+          gender: mitra.Gender,
+          priceLevel: priceLevel ? Number(priceLevel) : null,
+          termOfPaymentId: mitra.TermOfPaymentID,
+          capacity: capacity !== "" ? Number(capacity) : null,
+        },
+        namaPenanggungJawab: penanggungJawab.trim() || null,
+        kompetitorIds,
       });
       if (!result.success) {
         setError(result.error);
         return;
-      }
-      if (location) {
-        const locationResult = await setMitraLocationAction({ businessPartnerId: mitra.BusinessPartnerID, ...location });
-        if (!locationResult.success) {
-          setError(locationResult.error);
-          return;
-        }
       }
       router.push(`/mkesindo/pemasaran-app/mitra/${mitra.BusinessPartnerID}`);
     });
@@ -93,66 +94,86 @@ export function MitraEditForm({ mitra }: { mitra: MitraRow }) {
         <h1 className="font-display text-base font-semibold">Edit Mitra</h1>
       </header>
 
-      <form action={handleSubmit} className="flex flex-col gap-3 p-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="name">Nama Mitra</Label>
-          <Input id="name" name="name" defaultValue={mitra.Name} required />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="mobileNo">Nomor Telepon</Label>
-          <Input id="mobileNo" name="mobileNo" defaultValue={mitra.Kontak ?? ""} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Jenis Usaha</Label>
-          <Input value={mitra.PartnerType} disabled className="text-muted-foreground" />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Wilayah</Label>
-          <WilayahSelect value={wilayah} onChange={handleWilayahChange} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Kecamatan</Label>
-          <KecamatanSelect regencyCode={regencyCode} value={kecamatan} onChange={setKecamatan} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="address">Alamat</Label>
-          <Textarea id="address" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Lokasi GPS</Label>
-          <MitraLocationField
-            value={location}
-            onChange={setLocation}
-            onGeocode={handleGeocode}
-            wilayah={wilayah}
-            kecamatan={kecamatan}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="priceLevel">Harga per Kantong</Label>
-          <Select name="priceLevel" defaultValue={mitra.PriceLevel != null ? String(mitra.PriceLevel) : undefined}>
-            <SelectTrigger id="priceLevel">
-              <SelectValue placeholder="Pilih tingkat harga">
-                {(value: string | null) => {
-                  if (!value) return "Pilih tingkat harga";
-                  const level = priceLevels?.find((p) => String(p.Level) === value);
-                  return level ? `Level ${level.Level} — ${formatRupiah(level.Price)}` : value;
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {priceLevels?.map((p) => (
-                <SelectItem key={p.Level} value={String(p.Level)}>
-                  Level {p.Level} — {formatRupiah(p.Price)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="capacity">Kebutuhan Kantong per Hari</Label>
-          <Input id="capacity" name="capacity" type="number" defaultValue={mitra.Capacity ?? ""} />
-        </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSubmit();
+        }}
+        className="flex flex-col gap-4 p-4"
+      >
+        <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold text-muted-foreground">Identitas</p>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="nama">Nama Mitra</Label>
+            <Input id="nama" value={nama} onChange={(e) => setNama(e.target.value)} required />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="penanggungJawab">Nama Penanggung Jawab</Label>
+            <Input id="penanggungJawab" value={penanggungJawab} onChange={(e) => setPenanggungJawab(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Jenis Usaha</Label>
+            <Input value={mitra.PartnerType} disabled className="text-muted-foreground" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>{alamat.lokasiBerbeda ? "Alamat Mitra" : "Alamat Mitra & Lokasi Pengiriman"}</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <AlamatBaris
+                value={alamat.alamatMitra}
+                onChange={(fn) => setAlamat((a) => ({ ...a, alamatMitra: fn(a.alamatMitra) }))}
+                renderWilayahKecamatan={renderWilayahKecamatan}
+                tampilkanPin={!alamat.lokasiBerbeda}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-2 gap-2 rounded-lg border border-border p-3">
+          <LokasiPengirimanSection value={alamat} onChange={setAlamat} renderWilayahKecamatan={renderWilayahKecamatan} />
+        </section>
+
+        <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
+          <p className="text-xs font-semibold text-muted-foreground">Harga, Kapasitas &amp; Kompetitor</p>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="priceLevel">Harga per Kantong</Label>
+            <Select value={priceLevel} onValueChange={(v) => setPriceLevel(v ?? "")}>
+              <SelectTrigger id="priceLevel">
+                <SelectValue placeholder="Pilih tingkat harga">
+                  {(value: string | null) => {
+                    if (!value) return "Pilih tingkat harga";
+                    const level = priceLevels?.find((p) => String(p.Level) === value);
+                    return level ? `Level ${level.Level} — ${formatRupiah(level.Price)}` : value;
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {priceLevels?.map((p) => (
+                  <SelectItem key={p.Level} value={String(p.Level)}>
+                    Level {p.Level} — {formatRupiah(p.Price)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="capacity">Kapasitas Harian (kantong)</Label>
+            <Input id="capacity" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Daftar Kompetitor</Label>
+            <KompetitorPicker
+              bisnis="es_kristal"
+              opsi={kompetitorOpsi}
+              onOpsiChange={setKompetitorOpsi}
+              value={kompetitorIds}
+              onChange={setKompetitorIds}
+              onTambah={tambahKompetitorAction}
+            />
+            {mitra.Kompetitor && kompetitorIds.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">Catatan lama: {mitra.Kompetitor}</p>
+            )}
+          </div>
+        </section>
 
         <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-2 flex flex-col gap-2 border-t border-border bg-background p-4">
           {error && <p className="text-sm text-destructive">{error}</p>}

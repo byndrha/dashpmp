@@ -19,6 +19,7 @@ import {
 import { setWilayahPotentialTarget } from "@/lib/queries/wilayah-potential-target";
 import { getMarketingVisitLogForDate, type MarketingVisitLogEntry } from "@/lib/queries/marketing-visit-log";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
+import { currentEskristalKode } from "@/lib/tenant-request";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { STAFF_ROLE_ID } from "@/lib/roles";
 import { MARKETING_ROLE_ID } from "@/lib/queries/mitra-pengajuan";
@@ -31,7 +32,7 @@ export async function createPengajuanAction(input: PengajuanInput): Promise<Acti
     const userId = session?.user?.id;
     if (!userId) throw new AppError("Unauthorized");
 
-    await createPengajuan(input, userId);
+    await createPengajuan(input, userId, { holdingKode: session?.user?.holdingKode || "pmp" });
     revalidatePath("/mkesindo/pemasaran");
   });
 }
@@ -54,7 +55,12 @@ export async function approvePengajuanAction(
 ): Promise<ActionResult<void>> {
   return runAction(async () => {
     const user = await requireApprover();
-    await approvePengajuan(pengajuanId, user.id, keterangan);
+    // Kompetitor pengajuan → mitra_kompetitor (Postgres) milik perusahaan
+    // Es Kristal & holding sesi ini.
+    await approvePengajuan(pengajuanId, user.id, keterangan, {
+      perusahaanKode: await currentEskristalKode(),
+      holdingKode: user.holdingKode || "pmp",
+    });
     revalidatePath("/mkesindo/pemasaran");
     revalidatePath("/mkesindo/mitra");
   });

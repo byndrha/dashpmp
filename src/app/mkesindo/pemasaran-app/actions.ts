@@ -14,15 +14,24 @@ import { getPengajuanList, createPengajuan, type PengajuanRow, type PengajuanInp
 import {
   getMitraList,
   getMitraDetail,
-  createMitra,
-  updateMitra,
   getPriceLevelOptions,
   type MitraRow,
-  type MitraInput,
   type PriceLevelOption,
 } from "@/lib/queries/mitra";
-import { setMitraLocation, getMitraLocation } from "@/lib/queries/mitra-location";
-import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
+import { setMitraLocation } from "@/lib/queries/mitra-location";
+import { getSemuaPinMitra } from "@/lib/queries/mitra-lokasi-pengiriman";
+import { simpanMitraLengkap, type MitraLengkapInput } from "@/lib/queries/mitra-lengkap";
+import { getIdentitasMitra, type IdentitasMitra } from "@/lib/queries/mitra-identitas";
+import {
+  getKompetitorIdsMitra,
+  listKompetitor,
+  tambahKompetitor,
+  type BisnisKompetitor,
+  type Kompetitor,
+} from "@/lib/queries/kompetitor";
+import { aksesIdentitasMitra } from "@/lib/permissions";
+import { currentEskristalKode } from "@/lib/tenant-request";
+import { pinTerdekat } from "@/lib/pin-mitra";
 import { getTopMitraPiutang, type TopMitraPiutangRow } from "@/lib/queries/top-mitra-piutang";
 import { setMitraNote } from "@/lib/queries/collection-priority";
 import type { SalesDayComparisonResult } from "@/lib/queries/sales-overview";
@@ -31,12 +40,17 @@ import { getMarketingPerformanceTrend, type MarketingPerformanceTrendData } from
 import { getPangsaPasarTrend, type PangsaPasarTrendData } from "@/lib/queries/pangsa-pasar-trend";
 import { saveVerifiedKunjungan, getVisitLogHistoryForMitra, getLatestVisitLogSnippets } from "@/lib/queries/marketing-visit-log";
 import { getAkunNamaMap } from "@/lib/queries/akun";
-import { haversineKm } from "@/lib/route-estimate";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { revalidatePath } from "next/cache";
 
 function ownMitra(all: MitraRow[], marketingName: string): MitraRow[] {
   return all.filter((m) => m.MarketingNama === marketingName);
+}
+
+// Holding akun (master kompetitor dipisah per holding); "pmp" hanya jaring
+// pengaman untuk token lama — sama dengan mitra/actions.ts dashboard.
+function holdingDari(user: { holdingKode?: string | null }): string {
+  return user.holdingKode || "pmp";
 }
 
 export type TopMitraPiutangRowWithKunjungan = TopMitraPiutangRow & {
@@ -156,7 +170,7 @@ export async function getPengajuanListAction(): Promise<ActionResult<PengajuanRo
 export async function createPengajuanAction(input: PengajuanInput): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireMarketing();
-    await createPengajuan(input, session.user.id);
+    await createPengajuan(input, session.user.id, { holdingKode: holdingDari(session.user) });
   });
 }
 
@@ -182,17 +196,73 @@ export async function getMitraDetailAction(businessPartnerId: string): Promise<A
   });
 }
 
-export async function createMitraAction(input: MitraInput): Promise<ActionResult<string>> {
+export interface MitraKonteksPemasaran {
+  // Hak NIK sesi ini (aksesIdentitasMitra). Aplikasi Pemasaran tidak pernah
+  // MENGUBAH NIK; `lihat` hanya menentukan NIK tampil atau "Tersembunyi".
+  akses: { lihat: boolean; ubah: boolean };
+  identitas: IdentitasMitra;
+  kompetitorOpsi: Kompetitor[];
+  kompetitorDipilih: Kompetitor[];
+}
+
+// Identitas (NIK hanya bila boleh lihat — getIdentitasMitra tidak men-SELECT
+// kolom sensitif tanpa izin) + kompetitor mitra, untuk detail & edit mitra.
+export async function getMitraKonteksPemasaranAction(businessPartnerId: string): Promise<ActionResult<MitraKonteksPemasaran>> {
   return runAction(async () => {
-    await requireMarketing();
-    return createMitra(input);
+    const session = await requireMarketing();
+    const akses = aksesIdentitasMitra(session.user);
+    const perusahaanKode = await currentEskristalKode();
+    const kunci = { perusahaanKode, sumber: "utama" as const, partnerId: businessPartnerId };
+    const [identitas, kompetitorOpsi, idsDipilih] = await Promise.all([
+      getIdentitasMitra(kunci, akses.lihat),
+      listKompetitor(holdingDari(session.user), "es_kristal"),
+      getKompetitorIdsMitra(kunci),
+    ]);
+    const dipilih = new Set(idsDipilih);
+    return { akses, identitas, kompetitorOpsi, kompetitorDipilih: kompetitorOpsi.filter((k) => dipilih.has(k.id)) };
   });
 }
 
-export async function updateMitraAction(id: string, input: MitraInput): Promise<ActionResult<void>> {
+// Edit mitra dari Aplikasi Pemasaran — inti simpan yang sama dengan form
+// Mitra dashboard (simpanMitraLengkap: kolom ERP = lokasi utama, alamat
+// mitra, lokasi tambahan, penanggung jawab, kompetitor). NIK TIDAK PERNAH
+// diubah dari sini: field `nik` dibuang apa pun isinya, bolehUbahNik=false.
+// Hanya untuk mitra yang sudah ada (pemasaran-app tidak membuat mitra
+// langsung; mitra baru lewat pengajuan).
+export async function simpanMitraPemasaranAction(
+  businessPartnerId: string,
+  input: Omit<MitraLengkapInput, "nik">
+): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireMarketing();
-    await updateMitra(id, input);
+    const session = await requireMarketing();
+    if (!businessPartnerId) throw new AppError("Mitra tidak ditemukan.");
+    const tanpaNik: MitraLengkapInput = { ...input };
+    delete tanpaNik.nik;
+    await simpanMitraLengkap(businessPartnerId, tanpaNik, {
+      userId: session.user.id,
+      perusahaanKode: await currentEskristalKode(),
+      holdingKode: holdingDari(session.user),
+      bolehUbahNik: false,
+    });
+    revalidatePath(`/mkesindo/pemasaran-app/mitra/${businessPartnerId}`);
+    revalidatePath("/mkesindo/mitra");
+  });
+}
+
+// Opsi KompetitorPicker untuk form pengajuan (master es_kristal holding ini).
+export async function getKompetitorOpsiAction(): Promise<ActionResult<Kompetitor[]>> {
+  return runAction(async () => {
+    const session = await requireMarketing();
+    return listKompetitor(holdingDari(session.user), "es_kristal");
+  });
+}
+
+// [+] di KompetitorPicker — menambah nama baru ke master es_kristal holding ini.
+export async function tambahKompetitorAction(bisnis: BisnisKompetitor, nama: string): Promise<ActionResult<Kompetitor>> {
+  return runAction(async () => {
+    const session = await requireMarketing();
+    if (bisnis !== "es_kristal") throw new AppError("Jenis bisnis tidak valid.");
+    return tambahKompetitor(holdingDari(session.user), "es_kristal", nama, session.user.id);
   });
 }
 
@@ -205,16 +275,6 @@ export async function setMitraLocationAction(input: {
   return runAction(async () => {
     const session = await requireMarketing();
     await setMitraLocation({ ...input, userId: session.user.id });
-  });
-}
-
-export async function setMitraCompetitorAction(input: {
-  businessPartnerId: string;
-  kompetitor: string | null;
-}): Promise<ActionResult<void>> {
-  return runAction(async () => {
-    const session = await requireMarketing();
-    await setMitraCompetitor({ ...input, userId: session.user.id });
   });
 }
 
@@ -268,21 +328,21 @@ export async function confirmKunjunganAction(input: {
       throw new AppError("Anda tidak memiliki akses ke mitra ini.");
     }
 
-    const mitraLocation = await getMitraLocation(input.businessPartnerId);
-    if (!mitraLocation) {
-      throw new AppError("Lokasi mitra belum tersimpan. Silakan pin lokasi mitra terlebih dahulu.");
-    }
-
     // Validasi jarak DIULANG di server — tidak boleh hanya percaya validasi
     // sisi client, mencegah manipulasi koordinat lewat DevTools (Review
-    // Focus plan ini).
-    const distanceKm = haversineKm(
-      { lat: mitraLocation.Latitude, lng: mitraLocation.Longitude },
-      { lat: input.latitude, lng: input.longitude }
-    );
-    if (distanceKm * 1000 > KUNJUNGAN_RADIUS_METERS) {
+    // Focus plan ini). Jarak = jarak ke pin TERDEKAT milik mitra (utama +
+    // lokasi pengiriman tambahan aktif, spec §9.4), sama dengan hitungan
+    // client di tambah-kunjungan-sheet.tsx.
+    const terdekat = pinTerdekat(await getSemuaPinMitra(input.businessPartnerId), {
+      lat: input.latitude,
+      lng: input.longitude,
+    });
+    if (!terdekat) {
+      throw new AppError("Lokasi mitra belum tersimpan. Silakan pin lokasi mitra terlebih dahulu.");
+    }
+    if (terdekat.jarakMeter > KUNJUNGAN_RADIUS_METERS) {
       throw new AppError(
-        `Anda berada ${Math.round(distanceKm * 1000)}m dari lokasi mitra — kunjungan hanya bisa dikonfirmasi dalam radius ${KUNJUNGAN_RADIUS_METERS}m.`
+        `Anda berada ${Math.round(terdekat.jarakMeter)}m dari lokasi mitra terdekat (${terdekat.pin.label}) — kunjungan hanya bisa dikonfirmasi dalam radius ${KUNJUNGAN_RADIUS_METERS}m.`
       );
     }
 

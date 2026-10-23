@@ -12,8 +12,15 @@ import { MitraLocationField, type MitraLocationValue } from "@/components/dashbo
 import { WilayahSelect } from "@/components/dashboard/wilayah-select";
 import { KecamatanSelect } from "@/components/dashboard/kecamatan-select";
 import { formatRupiah } from "@/lib/format";
-import { createPengajuanAction, getPriceLevelOptionsAction } from "@/app/mkesindo/pemasaran-app/actions";
+import {
+  createPengajuanAction,
+  getKompetitorOpsiAction,
+  getPriceLevelOptionsAction,
+  tambahKompetitorAction,
+} from "@/app/mkesindo/pemasaran-app/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
+import type { Kompetitor } from "@/lib/queries/kompetitor";
+import { KompetitorPicker } from "@/components/dashboard/mitra-form/kompetitor-picker";
 
 export function PengajuanForm() {
   const router = useRouter();
@@ -26,10 +33,15 @@ export function PengajuanForm() {
   const [kecamatan, setKecamatan] = useState("");
   const [regencyCode, setRegencyCode] = useState<string | null>(null);
   const [location, setLocation] = useState<MitraLocationValue | null>(null);
+  const [kompetitorOpsi, setKompetitorOpsi] = useState<Kompetitor[]>([]);
+  const [kompetitorIds, setKompetitorIds] = useState<number[]>([]);
 
   useEffect(() => {
     getPriceLevelOptionsAction().then((result) => {
       if (result.success) setPriceLevels(result.data);
+    });
+    getKompetitorOpsiAction().then((result) => {
+      if (result.success) setKompetitorOpsi(result.data);
     });
   }, []);
 
@@ -68,7 +80,7 @@ export function PengajuanForm() {
         latitude: location.latitude,
         longitude: location.longitude,
         kapasitas: qtyKantong,
-        kompetitor: String(formData.get("kompetitor") ?? "") || null,
+        kompetitorIds,
       });
       if (!result.success) {
         setError(result.error);
@@ -157,8 +169,15 @@ export function PengajuanForm() {
             <Input id="waktuPermintaanSampai" name="waktuPermintaanSampai" type="datetime-local" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kompetitor">Daftar Kompetitor</Label>
-            <Textarea id="kompetitor" name="kompetitor" rows={2} placeholder="Es kristal lain, es balok, dll." />
+            <Label>Daftar Kompetitor</Label>
+            <KompetitorPicker
+              bisnis="es_kristal"
+              opsi={kompetitorOpsi}
+              onOpsiChange={setKompetitorOpsi}
+              value={kompetitorIds}
+              onChange={setKompetitorIds}
+              onTambah={tambahKompetitorAction}
+            />
           </div>
         </div>
 

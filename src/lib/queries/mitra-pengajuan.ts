@@ -3,7 +3,13 @@ import { getPgPool } from "@/lib/pg";
 import { getBusinessDate, monthBoundary } from "@/lib/business-date";
 import { createMitra, type MitraInput } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
-import { setMitraCompetitor } from "@/lib/queries/mitra-competitor";
+import {
+  getKompetitorIdsMitra,
+  listKompetitor,
+  setKompetitorMitra,
+  tambahKompetitor,
+} from "@/lib/queries/kompetitor";
+import { pecahTeksKompetitor } from "@/lib/mitra-lokasi";
 import { createSalesOrderFromPengajuan } from "@/lib/queries/sales-order";
 import { MARKETING_ROLE_ID, APPROVER_ROLE_IDS } from "@/lib/roles";
 import { AGEN_QTY_THRESHOLD, RPA_QTY_THRESHOLD } from "@/lib/mitra-classification";
@@ -168,10 +174,52 @@ export interface PengajuanInput {
   latitude: number | null;
   longitude: number | null;
   kapasitas: number | null;
-  kompetitor: string | null;
+  // ID master kompetitor (Postgres `kompetitor`, bisnis es_kristal, holding
+  // akun pengaju). Disimpan ke DashboardMitraPengajuan.KompetitorIDs (CSV);
+  // kolom teks Kompetitor diisi nama-namanya untuk tampilan daftar.
+  kompetitorIds: number[];
 }
 
-export async function createPengajuan(input: PengajuanInput, marketingUserId: string): Promise<void> {
+// Konteks holding/perusahaan untuk kompetitor terstruktur — diisi server
+// action dari sesi (holdingKode) dan currentEskristalKode().
+export interface KonteksKompetitorPengajuan {
+  holdingKode: string;
+}
+export interface KonteksPersetujuanPengajuan extends KonteksKompetitorPengajuan {
+  perusahaanKode: string; // kode Es Kristal (mitra_kompetitor.perusahaan_kode)
+}
+
+const KOMPETITOR_IDS_MAKS = 512; // lebar DashboardMitraPengajuan.KompetitorIDs
+const KOMPETITOR_TEKS_MAKS = 1024; // lebar DashboardMitraPengajuan.Kompetitor
+
+/** "3,17,42" → [3, 17, 42]; NULL → null (pengajuan lama). Potongan tak sah diabaikan. */
+export function uraiKompetitorIds(csv: string | null): number[] | null {
+  if (csv == null) return null;
+  const ids = csv
+    .split(",")
+    .map((x) => Number(x.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  return [...new Set(ids)];
+}
+
+export async function createPengajuan(
+  input: PengajuanInput,
+  marketingUserId: string,
+  k: KonteksKompetitorPengajuan
+): Promise<void> {
+  // Validasi kompetitor terhadap master holding ini (es_kristal) sebelum menulis.
+  const ids = [...new Set(input.kompetitorIds ?? [])];
+  let kompetitorTeks: string | null = null;
+  let kompetitorCsv: string | null = null;
+  if (ids.length > 0) {
+    const master = new Map((await listKompetitor(k.holdingKode, "es_kristal")).map((x) => [x.id, x.nama]));
+    if (ids.some((id) => !master.has(id))) {
+      throw new AppError("Daftar kompetitor tidak valid. Muat ulang halaman lalu coba lagi.");
+    }
+    kompetitorCsv = ids.join(",");
+    if (kompetitorCsv.length > KOMPETITOR_IDS_MAKS) throw new AppError("Kompetitor terlalu banyak.");
+    kompetitorTeks = ids.map((id) => master.get(id)!).join(", ").slice(0, KOMPETITOR_TEKS_MAKS);
+  }
   const pool = await getPool();
   await pool
     .request()
@@ -187,20 +235,51 @@ export async function createPengajuan(input: PengajuanInput, marketingUserId: st
     .input("lat", sql.Decimal(10, 7), input.latitude)
     .input("lng", sql.Decimal(10, 7), input.longitude)
     .input("kapasitas", sql.Decimal(23, 4), input.kapasitas)
-    .input("kompetitor", sql.VarChar(1024), input.kompetitor).query(`
+    .input("kompetitor", sql.VarChar(1024), kompetitorTeks)
+    .input("kompetitorIds", sql.VarChar(512), kompetitorCsv).query(`
       INSERT INTO DashboardMitraPengajuan
         (MarketingUserID, NamaCalon, NoHP, WaktuPermintaanSampai, QtyKantong, PriceLevel,
-         Wilayah, Kecamatan, Alamat, Latitude, Longitude, Kapasitas, Kompetitor, Status, CreatedAt)
+         Wilayah, Kecamatan, Alamat, Latitude, Longitude, Kapasitas, Kompetitor, KompetitorIDs, Status, CreatedAt)
       VALUES
         (@marketingUserId, @namaCalon, @noHP, @waktu, @qty, @priceLevel,
-         @wilayah, @kecamatan, @alamat, @lat, @lng, @kapasitas, @kompetitor, 'Menunggu', GETDATE())
+         @wilayah, @kecamatan, @alamat, @lat, @lng, @kapasitas, @kompetitor, @kompetitorIds, 'Menunggu', GETDATE())
     `);
+}
+
+/**
+ * Kompetitor untuk mitra hasil persetujuan:
+ * - KompetitorIDs terisi → ID itu, disaring ke master holding ini (master
+ *   tidak pernah dihapus, jadi normalnya tidak ada yang terbuang);
+ * - KompetitorIDs NULL (pengajuan lama, teks bebas) → pecahTeksKompetitor +
+ *   tambahKompetitor per nama (nama yang sudah ada dipakai ulang).
+ */
+async function resolveKompetitorPengajuan(
+  row: { Kompetitor: string | null; KompetitorIDs: string | null },
+  k: KonteksKompetitorPengajuan,
+  reviewerUserId: string
+): Promise<number[]> {
+  const ids = uraiKompetitorIds(row.KompetitorIDs);
+  if (ids !== null) {
+    const master = new Set((await listKompetitor(k.holdingKode, "es_kristal")).map((x) => x.id));
+    const sah = ids.filter((id) => master.has(id));
+    if (sah.length !== ids.length) {
+      console.warn("[approvePengajuan] KompetitorIDs di luar master holding dibuang:", ids.filter((id) => !master.has(id)));
+    }
+    return sah;
+  }
+  const hasil: number[] = [];
+  for (const nama of pecahTeksKompetitor(row.Kompetitor)) {
+    const kompetitor = await tambahKompetitor(k.holdingKode, "es_kristal", nama, reviewerUserId);
+    if (!hasil.includes(kompetitor.id)) hasil.push(kompetitor.id);
+  }
+  return hasil;
 }
 
 export async function approvePengajuan(
   pengajuanId: number,
   reviewerUserId: string,
-  keterangan?: string | null
+  keterangan: string | null | undefined,
+  k: KonteksPersetujuanPengajuan
 ): Promise<void> {
   const pool = await getPool();
 
@@ -216,7 +295,7 @@ export async function approvePengajuan(
       SET Status = 'Diproses'
       OUTPUT inserted.NamaCalon, inserted.NoHP, inserted.Alamat, inserted.Wilayah,
              inserted.Kecamatan, inserted.PriceLevel, inserted.Latitude, inserted.Longitude,
-             inserted.Kapasitas, inserted.Kompetitor, inserted.QtyKantong, inserted.WaktuPermintaanSampai
+             inserted.Kapasitas, inserted.Kompetitor, inserted.KompetitorIDs, inserted.QtyKantong, inserted.WaktuPermintaanSampai
       WHERE PengajuanID = @id AND Status = 'Menunggu'
     `);
 
@@ -232,13 +311,20 @@ export async function approvePengajuan(
         Longitude: number | null;
         Kapasitas: number | null;
         Kompetitor: string | null;
+        KompetitorIDs: string | null;
         QtyKantong: number | null;
         WaktuPermintaanSampai: Date | null;
       }
     | undefined;
   if (!row) throw new AppError("Pengajuan tidak ditemukan atau sudah diproses");
 
+  let businessPartnerId: string;
+  let kompetitorIds: number[];
   try {
+    // Diselesaikan SEBELUM mitra dibuat: kegagalan di sini (mis. Postgres)
+    // masih bisa dikembalikan ke 'Menunggu' tanpa meninggalkan mitra.
+    kompetitorIds = await resolveKompetitorPengajuan(row, k, reviewerUserId);
+
     // Reuses the exact mitra-creation path the Mitra module's own "Tambah
     // Mitra" form uses — same Code/BusinessPartnerID generation, same
     // required-column defaults (see mitra.ts createMitra()).
@@ -258,7 +344,7 @@ export async function approvePengajuan(
       termOfPaymentId: null,
       capacity: row.Kapasitas,
     };
-    const businessPartnerId = await createMitra(mitraInput);
+    businessPartnerId = await createMitra(mitraInput);
 
     if (row.Latitude != null && row.Longitude != null) {
       await setMitraLocation({
@@ -268,10 +354,6 @@ export async function approvePengajuan(
         alamat: row.Alamat,
         userId: reviewerUserId,
       });
-    }
-
-    if (row.Kompetitor != null && row.Kompetitor.trim() !== "") {
-      await setMitraCompetitor({ businessPartnerId, kompetitor: row.Kompetitor, userId: reviewerUserId });
     }
 
     // A Pengajuan with no captured Qty has nothing to order yet — approving
@@ -306,6 +388,24 @@ export async function approvePengajuan(
       .input("id", sql.Int, pengajuanId)
       .query(`UPDATE DashboardMitraPengajuan SET Status = 'Menunggu' WHERE PengajuanID = @id AND Status = 'Diproses'`);
     throw err;
+  }
+
+  // Kompetitor terstruktur (Postgres mitra_kompetitor), bukan lagi teks
+  // DashboardMitraCompetitor. Ditulis SETELAH pengajuan berstatus Disetujui:
+  // mitra sudah ada, jadi kegagalan di sini tidak boleh mengembalikan status
+  // (persetujuan ulang akan membuat mitra ganda). Gabung dengan set yang
+  // sudah ada, bukan menimpa.
+  if (kompetitorIds.length > 0) {
+    const kunci = { perusahaanKode: k.perusahaanKode, sumber: "utama" as const, partnerId: businessPartnerId };
+    try {
+      const ada = await getKompetitorIdsMitra(kunci);
+      await setKompetitorMitra(kunci, [...new Set([...ada, ...kompetitorIds])]);
+    } catch (err) {
+      console.error("[approvePengajuan] kompetitor gagal disimpan setelah mitra dibuat:", businessPartnerId, err);
+      throw new AppError(
+        "Pengajuan disetujui dan mitra sudah dibuat, tetapi daftar kompetitor gagal disimpan — tambahkan lewat Edit Mitra."
+      );
+    }
   }
 }
 

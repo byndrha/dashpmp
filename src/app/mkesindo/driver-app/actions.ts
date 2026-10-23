@@ -40,6 +40,7 @@ import {
   type PengajuanRow,
 } from "@/lib/queries/mitra-pengajuan";
 import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
+import { listKompetitor, tambahKompetitor, type BisnisKompetitor, type Kompetitor } from "@/lib/queries/kompetitor";
 import {
   getSisaReturTersedia,
   jualUlangDalamRute,
@@ -303,8 +304,27 @@ export async function moveTerkendalaStopAction(
 export async function createPengajuanAction(input: PengajuanInput): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await requireDriver();
-    await createPengajuan(input, session.user.id);
+    await createPengajuan(input, session.user.id, { holdingKode: session.user.holdingKode || "pmp" });
     revalidatePath("/mkesindo/driver-app/pengajuan");
+  });
+}
+
+// Opsi KompetitorPicker form pengajuan driver — master es_kristal holding
+// akun ini (sama dengan form Mitra dashboard).
+export async function getKompetitorOpsiDriverAction(): Promise<ActionResult<Kompetitor[]>> {
+  return runAction(async () => {
+    const session = await requireDriver();
+    return listKompetitor(session.user.holdingKode || "pmp", "es_kristal");
+  });
+}
+
+// [+] di KompetitorPicker: menambah nama baru ke master es_kristal holding
+// akun ini (nama yang sudah ada dikembalikan apa adanya).
+export async function tambahKompetitorDriverAction(bisnis: BisnisKompetitor, nama: string): Promise<ActionResult<Kompetitor>> {
+  return runAction(async () => {
+    const session = await requireDriver();
+    if (bisnis !== "es_kristal") throw new AppError("Jenis bisnis tidak valid.");
+    return tambahKompetitor(session.user.holdingKode || "pmp", "es_kristal", nama, session.user.id);
   });
 }
 

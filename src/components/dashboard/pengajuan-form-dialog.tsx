@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -27,6 +25,9 @@ import { KecamatanSelect } from "@/components/dashboard/kecamatan-select";
 import { formatRupiah } from "@/lib/format";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { PengajuanInput } from "@/lib/queries/mitra-pengajuan";
+import type { Kompetitor } from "@/lib/queries/kompetitor";
+import { KompetitorPicker } from "@/components/dashboard/mitra-form/kompetitor-picker";
+import { getMitraFormKonteksAction, tambahKompetitorAction } from "@/app/mkesindo/(dashboard)/mitra/actions";
 
 export function PengajuanFormDialog({
   open,
@@ -49,11 +50,8 @@ export function PengajuanFormDialog({
   const [address, setAddress] = useState("");
   const [location, setLocation] = useState<MitraLocationValue | null>(null);
   const [priceLevel, setPriceLevel] = useState("");
-  // Tooltip's own uncontrolled hover/focus detection doesn't fire when its
-  // trigger is a Textarea passed via `render` — controlling `open` directly
-  // off the field's focus state sidesteps that and is proven reliable
-  // elsewhere (filter-bar.tsx's same-date warning uses the same approach).
-  const [kompetitorFocused, setKompetitorFocused] = useState(false);
+  const [kompetitorOpsi, setKompetitorOpsi] = useState<Kompetitor[]>([]);
+  const [kompetitorIds, setKompetitorIds] = useState<number[]>([]);
 
   // Same pattern as MitraFormDialog (mitra-list.tsx): only clears Kecamatan
   // when Wilayah actually changes to a different region.
@@ -76,7 +74,22 @@ export function PengajuanFormDialog({
     setAddress("");
     setLocation(null);
     setPriceLevel("");
+    setKompetitorIds([]);
   }
+
+  // Opsi master kompetitor (es_kristal, holding sesi) dimuat setiap dialog
+  // dibuka (dialog dibuka dari induk, jadi bukan lewat onOpenChange di
+  // bawah). Konteks mitra baru (null) tidak memuat identitas apa pun.
+  useEffect(() => {
+    if (!open) return;
+    let batal = false;
+    getMitraFormKonteksAction(null).then((r) => {
+      if (!batal && r.success) setKompetitorOpsi(r.data.kompetitorOpsi);
+    });
+    return () => {
+      batal = true;
+    };
+  }, [open]);
 
   function handleSubmit(formData: FormData) {
     if (!location) return;
@@ -92,7 +105,7 @@ export function PengajuanFormDialog({
       latitude: location.latitude,
       longitude: location.longitude,
       kapasitas: formData.get("kapasitas") ? Number(formData.get("kapasitas")) : null,
-      kompetitor: String(formData.get("kompetitor") ?? "").trim() || null,
+      kompetitorIds,
     });
   }
 
@@ -168,23 +181,16 @@ export function PengajuanFormDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="kompetitor" className="sr-only">Daftar Kompetitor</Label>
-            <Tooltip open={kompetitorFocused}>
-              <TooltipTrigger
-                render={
-                  <Textarea
-                    id="kompetitor"
-                    name="kompetitor"
-                    placeholder="Daftar Kompetitor"
-                    rows={1}
-                    onFocus={() => setKompetitorFocused(true)}
-                    onBlur={() => setKompetitorFocused(false)}
-                  />
-                }
-              />
-              <TooltipContent>Pisahkan satu kompetitor dengan koma</TooltipContent>
-            </Tooltip>
+          <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-4">
+            <Label className="sr-only">Daftar Kompetitor</Label>
+            <KompetitorPicker
+              bisnis="es_kristal"
+              opsi={kompetitorOpsi}
+              onOpsiChange={setKompetitorOpsi}
+              value={kompetitorIds}
+              onChange={setKompetitorIds}
+              onTambah={tambahKompetitorAction}
+            />
           </div>
           <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-4">
             <Label className="sr-only">Lokasi GPS</Label>

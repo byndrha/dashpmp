@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { haversineKm } from "@/lib/route-estimate";
+import { daftarPinMitra, pinTerdekat } from "@/lib/pin-mitra";
 import type { RouteInfo } from "@/components/pemasaran-app/kunjungan-route-map";
 import { useWatermarkCameraCapture } from "@/hooks/use-watermark-camera-capture";
 
@@ -336,18 +336,32 @@ export function TambahKunjunganSheet() {
   }
 
   const selectedMitra = mitraOptions?.find((m) => m.BusinessPartnerID === selectedId) ?? null;
-  // Lokasi efektif mitra: dari BusinessPartner/DashboardMitraLocation kalau
-  // sudah ada, atau dari pin yang BERHASIL disimpan sesi ini (savedPin;
-  // belum refresh mitraOptions). pinDraft TIDAK ikut di sini — itu cuma
-  // posisi pin yang sedang digeser user di peta pin-drop, belum tersimpan.
-  const mitraLat = savedPin?.lat ?? selectedMitra?.Latitude ?? null;
-  const mitraLng = savedPin?.lng ?? selectedMitra?.Longitude ?? null;
-  const needsPin = selectedMitra != null && selectedMitra.Latitude == null && savedPin == null;
+  // Semua pin mitra: pin utama (BusinessPartner/DashboardMitraLocation, atau
+  // pin yang BERHASIL disimpan sesi ini — savedPin, belum refresh
+  // mitraOptions) + lokasi pengiriman tambahan aktif yang ber-pin. pinDraft
+  // TIDAK ikut — itu cuma posisi pin yang sedang digeser di peta pin-drop.
+  // Check-in diterima di pin TERDEKAT (spec §9.4); server menghitung ulang
+  // dengan aturan yang sama (confirmKunjunganAction).
+  const pins = useMemo(() => {
+    if (!selectedMitra) return [];
+    const utama = savedPin
+      ? { latitude: savedPin.lat, longitude: savedPin.lng }
+      : { latitude: selectedMitra.Latitude, longitude: selectedMitra.Longitude };
+    return daftarPinMitra(
+      utama,
+      selectedMitra.LokasiTambahan.map((l) => ({ label: l.Label, latitude: l.latitude, longitude: l.longitude }))
+    );
+  }, [selectedMitra, savedPin]);
+  // Pin-drop hanya bila mitra belum punya pin sama sekali (utama maupun tambahan).
+  const needsPin = selectedMitra != null && pins.length === 0;
+  const terdekat = marketingPosition ? pinTerdekat(pins, { lat: marketingPosition[0], lng: marketingPosition[1] }) : null;
+  // Pin yang ditampilkan di peta rute: yang terdekat bila posisi marketing
+  // sudah diketahui, selain itu pin pertama (utama bila ada).
+  const pinTampil = terdekat?.pin ?? pins[0] ?? null;
+  const mitraLat = pinTampil?.lat ?? null;
+  const mitraLng = pinTampil?.lng ?? null;
 
-  const distanceMeters =
-    mitraLat != null && mitraLng != null && marketingPosition
-      ? haversineKm({ lat: mitraLat, lng: mitraLng }, { lat: marketingPosition[0], lng: marketingPosition[1] }) * 1000
-      : null;
+  const distanceMeters = terdekat?.jarakMeter ?? null;
   const withinRadius = distanceMeters != null && distanceMeters <= RADIUS_METERS;
 
   function handleSelectMitra(id: string) {
@@ -574,7 +588,7 @@ export function TambahKunjunganSheet() {
 
                   {marketingPosition && distanceMeters != null && (
                     <p className={cn("text-center text-sm font-medium", withinRadius ? "text-primary" : "text-destructive")}>
-                      Jarak ke mitra: {Math.round(distanceMeters)}m{" "}
+                      Jarak ke mitra{pins.length > 1 && terdekat ? ` (${terdekat.pin.label})` : ""}: {Math.round(distanceMeters)}m{" "}
                       {withinRadius ? "— dalam radius, silakan lanjutkan" : `— harus dalam ${RADIUS_METERS}m untuk melanjutkan`}
                     </p>
                   )}
