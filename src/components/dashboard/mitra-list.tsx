@@ -52,8 +52,11 @@ import {
   tambahKompetitorAction,
   getMitraFormKonteksAction,
   getMitraDetailAction,
-  type MitraLengkapInput,
 } from "@/app/mkesindo/(dashboard)/mitra/actions";
+// Tipe diimpor langsung dari modulnya, bukan diekspor ulang lewat actions.ts:
+// file "use server" yang mengekspor ulang tipe membuat seluruh modul action
+// gagal dimuat saat runtime (ReferenceError MitraLengkapInput).
+import type { MitraLengkapInput } from "@/lib/queries/mitra-lengkap";
 import type { MarketingUserOption } from "@/lib/queries/marketing-wilayah";
 
 // Leaflet menyentuh global browser saat impor — sama dengan mitra-locations-panel.tsx.

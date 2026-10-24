@@ -54,8 +54,6 @@ async function requireWilayahManager() {
   return user;
 }
 
-export type { MitraLengkapInput };
-
 async function requireUser() {
   const session = await auth();
   const user = session?.user;
