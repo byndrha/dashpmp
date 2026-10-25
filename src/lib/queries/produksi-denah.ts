@@ -9,9 +9,29 @@
 // menyentuh baris pabrik sungguhan.
 import { getPgPool } from "@/lib/pg";
 import { AppError } from "@/lib/action-result";
-import { kolomTerkunciBerubah, validasiDenah, type DenahDokumen, type GalatDenah } from "@/lib/produksi-denah";
+import {
+  kolomTerkunciBerubah,
+  validasiDenah,
+  type DenahDokumen,
+  type GalatDenah,
+  type KodeGalatSimpanDenah,
+  type KodeProduksi,
+} from "@/lib/produksi-denah";
 
-export type KodeProduksi = "pmpersada" | "pmpakis";
+export type { KodeProduksi } from "@/lib/produksi-denah";
+
+// Penolakan simpan yang TERSTRUKTUR: pesan ringkas untuk pengguna + kode
+// jenis penolakan + daftar galat per elemen/kolom (builder menyorot kolom
+// yang melanggar). Turunan AppError, jadi runAction tetap meneruskan pesannya.
+export class GalatSimpanDenah extends AppError {
+  readonly kodeGalat: KodeGalatSimpanDenah;
+  readonly galat: GalatDenah[];
+  constructor(message: string, kodeGalat: KodeGalatSimpanDenah, galat: GalatDenah[] = []) {
+    super(message);
+    this.kodeGalat = kodeGalat;
+    this.galat = galat;
+  }
+}
 
 export interface DenahTersimpan {
   versi: number;
@@ -76,7 +96,9 @@ export async function simpanDenahUntukKode(
   userId: string
 ): Promise<{ versi: number }> {
   const galatValidasi = validasiDenah(data);
-  if (galatValidasi.length > 0) throw new AppError(pesanPelanggaran("Denah belum valid:", galatValidasi));
+  if (galatValidasi.length > 0) {
+    throw new GalatSimpanDenah(pesanPelanggaran("Denah belum valid:", galatValidasi), "VALIDASI", galatValidasi);
+  }
 
   const client = await getPgPool().connect();
   try {
@@ -86,7 +108,7 @@ export async function simpanDenahUntukKode(
       [kode]
     );
     const barisLama = lama.rows[0] ?? null;
-    if ((barisLama?.versi ?? null) !== versiDasar) throw new AppError(PESAN_DENAH_BASI);
+    if ((barisLama?.versi ?? null) !== versiDasar) throw new GalatSimpanDenah(PESAN_DENAH_BASI, "VERSI_BASI");
 
     const isi = await client.query<{ kolom_id: string }>(
       `SELECT DISTINCT kolom_id FROM produksi_kolom_isi WHERE perusahaan_kode = $1 AND selesai_at IS NULL`,
@@ -94,7 +116,11 @@ export async function simpanDenahUntukKode(
     );
     const pelanggaran = kolomTerkunciBerubah(barisLama?.data ?? null, data, new Set(isi.rows.map((r) => r.kolom_id)));
     if (pelanggaran.length > 0) {
-      throw new AppError(pesanPelanggaran("Denah tidak bisa disimpan karena mengubah kolom yang masih berisi es:", pelanggaran));
+      throw new GalatSimpanDenah(
+        pesanPelanggaran("Denah tidak bisa disimpan karena mengubah kolom yang masih berisi es:", pelanggaran),
+        "KOLOM_TERKUNCI",
+        pelanggaran
+      );
     }
 
     let versi: number;
@@ -112,7 +138,7 @@ export async function simpanDenahUntukKode(
          ON CONFLICT (perusahaan_kode) DO NOTHING RETURNING versi`,
         [kode, JSON.stringify(data), userId]
       );
-      if (r.rows.length === 0) throw new AppError(PESAN_DENAH_BASI);
+      if (r.rows.length === 0) throw new GalatSimpanDenah(PESAN_DENAH_BASI, "VERSI_BASI");
       versi = r.rows[0].versi;
     }
     await client.query("COMMIT");

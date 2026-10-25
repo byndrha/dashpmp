@@ -104,6 +104,19 @@ export interface GalatDenah {
   pesan: string;
 }
 
+// Kode perusahaan pabrik Es Balok yang punya modul Produksi.
+export type KodeProduksi = "pmpersada" | "pmpakis";
+
+// ---------- Hasil simpan (dipakai server action & builder) ----------
+// VERSI_BASI     = denah sudah diubah orang lain sejak builder dibuka.
+// KOLOM_TERKUNCI = perubahan menyentuh kolom yang masih berisi es (galat per kolom).
+// VALIDASI       = validasiDenah() di server menolak dokumen (galat per elemen).
+export type KodeGalatSimpanDenah = "VERSI_BASI" | "KOLOM_TERKUNCI" | "VALIDASI";
+
+export type HasilSimpanDenah =
+  | { success: true; data: { versi: number } }
+  | { success: false; error: string; kodeGalat?: KodeGalatSimpanDenah; galat?: GalatDenah[] };
+
 // ---------- Batas ukuran dokumen (penjaga input mentah dari client) ----------
 // Denah nyata terbesar yang diketahui: 5 bak × 66 kolom × 36 ice can. Batas di
 // bawah ini jauh di atasnya; tujuannya hanya menolak data rusak/berbahaya.
