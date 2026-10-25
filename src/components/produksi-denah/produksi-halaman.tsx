@@ -46,7 +46,7 @@ export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: Ko
           <p className="text-sm text-muted-foreground">{namaPerusahaan} — Es Balok</p>
         </div>
         {ada && bolehEdit && (
-          <Button variant="outline" render={<Link href={hrefEdit} />}>
+          <Button variant="outline" nativeButton={false} render={<Link href={hrefEdit} />}>
             <PencilRuler /> Edit Denah
           </Button>
         )}
@@ -66,7 +66,7 @@ export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: Ko
           </CardHeader>
           {bolehEdit && (
             <CardContent>
-              <Button render={<Link href={hrefEdit} />}>
+              <Button nativeButton={false} render={<Link href={hrefEdit} />}>
                 <PencilRuler /> Edit Denah
               </Button>
             </CardContent>

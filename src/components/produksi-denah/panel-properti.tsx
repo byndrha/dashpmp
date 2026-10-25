@@ -230,8 +230,8 @@ function IsianBak({ bak, dok, dispatch, onKeKolom }: { bak: BakElemen; dok: Dena
           <InputAngka nilai={bak.iceCanPerKolomBawaan} min={1} max={200} onUbah={(iceCanPerKolomBawaan) => ubah({ iceCanPerKolomBawaan })} />
         </Bidang>
       </div>
-      <Button variant="outline" size="sm" className="w-full" disabled={beda === 0} onClick={() => setKonfirmasi(true)}>
-        <WandSparkles /> Terapkan bawaan ke semua kolom{beda > 0 ? ` (${beda} berbeda)` : ""}
+      <Button variant="outline" size="sm" className="h-auto min-h-8 w-full whitespace-normal" disabled={beda === 0} onClick={() => setKonfirmasi(true)}>
+        <WandSparkles /> Terapkan ke semua kolom{beda > 0 ? ` (${beda} beda)` : ""}
       </Button>
       <TombolKecil onClick={() => dispatch({ type: "nomoriUlang", bakId: bak.id })} title="Nomori ulang kolom 1..n mengikuti urutan">
         <ListOrdered /> Nomori ulang kolom
