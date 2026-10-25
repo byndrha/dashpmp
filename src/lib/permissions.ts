@@ -63,6 +63,17 @@ export function aksesIdentitasMitra(user: {
   return { lihat, ubah: lihat && izin?.canEdit === true };
 }
 
+// Izin "Edit Denah" produksi Es Balok (builder denah). Super Admin dan
+// Direktur selalu boleh; selain itu butuh produksi.canEdit pada peran.
+// Ditegakkan di server action simpan denah, bukan hanya di UI.
+export function bolehEditDenah(user: {
+  isSuperAdmin: boolean;
+  accountScope?: string | null;
+  permissions?: PermissionMap;
+}): boolean {
+  return user.isSuperAdmin || user.accountScope === "direktur" || !!user.permissions?.produksi?.canEdit;
+}
+
 // permissions can be undefined for a session whose JWT was issued before
 // this field existed (a user still logged in from before this deploy) —
 // treat that the same as "no access" (redirected to /akses-ditolak, where
