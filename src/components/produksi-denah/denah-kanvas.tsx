@@ -33,7 +33,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Fan, Maximize, Minus, Plus } from "lucide-react";
+import { Fan, Lock, Maximize, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   kotakElemen,
@@ -79,7 +79,18 @@ export interface DenahKanvasHandle {
   keGrid(clientX: number, clientY: number): Titik;
   /** Pusatkan viewport ke kotak (unit grid), zoom secukupnya. */
   fokusKe(kotak: { x: number; y: number; w: number; h: number }): void;
+  /** Geser viewport agar titik grid ini di tengah (zoom tetap). */
+  pusatkanKe(titik: Titik, animasi?: boolean): void;
+  /** Tampilan saat ini (null sebelum ukuran wadah diketahui). */
+  tampilan(): Tampilan | null;
   svg(): SVGSVGElement | null;
+}
+
+/** Pergeseran sementara (pratinjau drag) — elemen digeser lewat transform tanpa mengubah dokumen. */
+export interface GeserSementara {
+  ids: ReadonlySet<string>;
+  dx: number;
+  dy: number;
 }
 
 export interface DenahKanvasProps {
@@ -104,7 +115,8 @@ export interface DenahKanvasProps {
   onPointerDown?: (info: InfoPointerKanvas) => boolean | void;
   /** Gerak pointer saat gestur diambil alih, ATAU hover (tanpa tombol ditekan). */
   onPointerMove?: (info: InfoPointerKanvas, gesturAktif: boolean) => void;
-  onPointerUp?: (info: InfoPointerKanvas) => void;
+  /** Akhir gestur yang diambil alih. batal = pointercancel / kehilangan capture: JANGAN commit. */
+  onPointerUp?: (info: InfoPointerKanvas, batal: boolean) => void;
   /** Lapisan SVG tambahan di atas elemen, dalam unit grid (handle, kotak seleksi, garis bantu, hantu alat). */
   overlay?: (ctx: KonteksOverlay) => ReactNode;
   /** Konten HTML melayang di atas kanvas (toolbar, legenda). */
@@ -113,6 +125,19 @@ export interface DenahKanvasProps {
   kontrolZoom?: boolean;
   className?: string;
   ref?: Ref<DenahKanvasHandle>;
+  // ---- Tambahan mode edit (builder) ----
+  /** Kelas kursor Tailwind untuk svg (mis. "cursor-crosshair"); menimpa bawaan mode. */
+  kursor?: string;
+  /** Pratinjau drag: elemen ini digeser lewat transform (tanpa render ulang tubuhnya). */
+  geserSementara?: GeserSementara | null;
+  /** Elemen di bawah kursor (sorotan hover tipis). */
+  hoverId?: string | null;
+  /** Elemen bertumpuk (bak) — diberi warna peringatan. */
+  tumpukIds?: ReadonlySet<string>;
+  /** Kolom bermasalah (mis. ditolak server karena berisi es) — ditandai merah. */
+  kolomSorotIds?: ReadonlySet<string>;
+  /** Dipanggil setiap tampilan (pan/zoom) atau ukuran wadah berubah. */
+  onTampilanBerubah?: (tampilan: Tampilan, ukuran: { w: number; h: number }) => void;
 }
 
 // ---------- Konstanta ----------
@@ -182,6 +207,12 @@ export function DenahKanvas({
   kontrolZoom = true,
   className,
   ref,
+  kursor,
+  geserSementara = null,
+  hoverId = null,
+  tumpukIds = KOSONG,
+  kolomSorotIds = KOSONG,
+  onTampilanBerubah,
 }: DenahKanvasProps) {
   const idDasar = useId().replace(/[^a-zA-Z0-9]/g, "");
   const wadahRef = useRef<HTMLDivElement>(null);
@@ -212,12 +243,69 @@ export function DenahKanvas({
     return () => ro.disconnect();
   }, []);
 
-  const ubahTampilan = useCallback((fn: (t: Tampilan) => Tampilan) => {
-    setTampilanState((prev) => {
-      const dasar = prev ?? terbaru.current.pas;
-      return dasar ? fn(dasar) : prev;
-    });
+  // Laporkan tampilan ke pemanggil (minimap, persen zoom builder).
+  const onTampilanRef = useRef(onTampilanBerubah);
+  useLayoutEffect(() => {
+    onTampilanRef.current = onTampilanBerubah;
+  });
+  useEffect(() => {
+    if (tampilan && ukuran) onTampilanRef.current?.(tampilan, ukuran);
+  }, [tampilan, ukuran]);
+
+  // ---------- Animasi halus (tombol zoom, pas ke layar, fokus) ----------
+  // Pusat viewport & log(skala) diinterpolasi; gestur pengguna (pan, wheel,
+  // cubit) membatalkan animasi yang sedang berjalan.
+  const animasi = useRef<number | null>(null);
+  const hentikanAnimasi = useCallback(() => {
+    if (animasi.current !== null) cancelAnimationFrame(animasi.current);
+    animasi.current = null;
   }, []);
+  useEffect(() => hentikanAnimasi, [hentikanAnimasi]);
+
+  const animasiKe = useCallback(
+    (target: Tampilan, akhir: Tampilan | null = target) => {
+      hentikanAnimasi();
+      const { tampilan: awal, ukuran: u } = terbaru.current;
+      const reduksi = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      if (!awal || !u || reduksi) {
+        setTampilanState(akhir);
+        return;
+      }
+      const pusatA = { x: awal.x + u.w / awal.skala / 2, y: awal.y + u.h / awal.skala / 2 };
+      const pusatB = { x: target.x + u.w / target.skala / 2, y: target.y + u.h / target.skala / 2 };
+      const la = Math.log(awal.skala);
+      const lb = Math.log(target.skala);
+      const t0 = performance.now();
+      const DURASI = 220;
+      const langkah = (now: number) => {
+        const p = Math.min(1, (now - t0) / DURASI);
+        if (p >= 1) {
+          animasi.current = null;
+          setTampilanState(akhir);
+          return;
+        }
+        const e = 1 - Math.pow(1 - p, 3);
+        const skala = Math.exp(la + (lb - la) * e);
+        const cx = pusatA.x + (pusatB.x - pusatA.x) * e;
+        const cy = pusatA.y + (pusatB.y - pusatA.y) * e;
+        setTampilanState({ skala, x: cx - u.w / skala / 2, y: cy - u.h / skala / 2 });
+        animasi.current = requestAnimationFrame(langkah);
+      };
+      animasi.current = requestAnimationFrame(langkah);
+    },
+    [hentikanAnimasi]
+  );
+
+  const ubahTampilan = useCallback(
+    (fn: (t: Tampilan) => Tampilan) => {
+      hentikanAnimasi();
+      setTampilanState((prev) => {
+        const dasar = prev ?? terbaru.current.pas;
+        return dasar ? fn(dasar) : prev;
+      });
+    },
+    [hentikanAnimasi]
+  );
 
   const zoomDi = useCallback(
     (px: number, py: number, faktor: number) => {
@@ -231,13 +319,24 @@ export function DenahKanvas({
     [ubahTampilan]
   );
 
+  // Tombol zoom: animasi halus di sekitar pusat viewport.
   const zoomTengah = useCallback(
     (faktor: number) => {
-      const u = terbaru.current.ukuran;
-      if (u) zoomDi(u.w / 2, u.h / 2, faktor);
+      const { ukuran: u, tampilan: t } = terbaru.current;
+      if (!u || !t) return;
+      const skala = batasi(t.skala * faktor, SKALA_MIN, SKALA_MAX);
+      const gx = t.x + u.w / 2 / t.skala;
+      const gy = t.y + u.h / 2 / t.skala;
+      animasiKe({ skala, x: gx - u.w / 2 / skala, y: gy - u.h / 2 / skala });
     },
-    [zoomDi]
+    [animasiKe]
   );
+
+  const pasKeLayar = useCallback(() => {
+    const p = terbaru.current.pas;
+    if (p) animasiKe(p, null);
+    else setTampilanState(null);
+  }, [animasiKe]);
 
   const keGrid = useCallback((clientX: number, clientY: number): Titik => {
     const svg = svgRef.current;
@@ -250,17 +349,28 @@ export function DenahKanvas({
   useImperativeHandle(
     ref,
     () => ({
-      pasKeLayar: () => setTampilanState(null),
+      pasKeLayar,
       zoomMasuk: () => zoomTengah(1.4),
       zoomKeluar: () => zoomTengah(1 / 1.4),
       keGrid,
       fokusKe: (kotak) => {
         const { ukuran: u, kanvas: kv } = terbaru.current;
-        if (u) setTampilanState(hitungPas(u.w, u.h, kv, kotak));
+        if (u) animasiKe(hitungPas(u.w, u.h, kv, kotak));
       },
+      pusatkanKe: (titik, pakaiAnimasi = false) => {
+        const { ukuran: u, tampilan: t } = terbaru.current;
+        if (!u || !t) return;
+        const target = { skala: t.skala, x: titik.x - u.w / t.skala / 2, y: titik.y - u.h / t.skala / 2 };
+        if (pakaiAnimasi) animasiKe(target);
+        else {
+          hentikanAnimasi();
+          setTampilanState(target);
+        }
+      },
+      tampilan: () => terbaru.current.tampilan,
       svg: () => svgRef.current,
     }),
-    [zoomTengah, keGrid]
+    [zoomTengah, keGrid, pasKeLayar, animasiKe, hentikanAnimasi]
   );
 
   // Wheel harus non-passive agar halaman tidak ikut tergulir.
@@ -325,6 +435,7 @@ export function DenahKanvas({
     const t = terbaru.current.tampilan;
     const svg = svgRef.current;
     if (!t || !svg) return;
+    hentikanAnimasi();
     const [a, b] = [...penunjuk.current.values()];
     const r = svg.getBoundingClientRect();
     gestur.current = {
@@ -341,15 +452,19 @@ export function DenahKanvas({
     const svg = svgRef.current;
     const t = terbaru.current.tampilan;
     if (!svg || !t) return;
-    penunjuk.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    if (penunjuk.current.size === 2 && gestur.current?.jenis !== "konsumen") {
+    // Pointer dicatat HANYA bila lolos filter (tombol kiri/tengah/spasi, atau
+    // jari kedua untuk cubit) — entri basi (mis. klik kanan yang dilepas di
+    // luar svg) tidak boleh membuat sentuhan berikutnya terbaca sebagai cubit.
+    if (penunjuk.current.size === 1 && ev.pointerType === "touch" && gestur.current && gestur.current.jenis !== "konsumen") {
+      penunjuk.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       svg.setPointerCapture(ev.pointerId);
       mulaiCubit();
       return;
     }
-    if (penunjuk.current.size > 1) return;
+    if (penunjuk.current.size > 0) return;
     const panPaksa = ev.button === 1 || spasi.current;
     if (!panPaksa && ev.button !== 0) return;
+    penunjuk.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     const info = buatInfo(ev);
     svg.setPointerCapture(ev.pointerId);
     if (!panPaksa && onPointerDown?.(info) === true) {
@@ -357,6 +472,7 @@ export function DenahKanvas({
       return;
     }
     if (panPaksa) ev.preventDefault();
+    hentikanAnimasi();
     gestur.current = { jenis: panPaksa ? "pan" : "tekan", id: ev.pointerId, cx: ev.clientX, cy: ev.clientY, t0: t, info };
     if (panPaksa) setSedangGeser(true);
   };
@@ -396,27 +512,42 @@ export function DenahKanvas({
     setTampilanState({ skala: g.t0.skala, x: g.t0.x - dx / g.t0.skala, y: g.t0.y - dy / g.t0.skala });
   };
 
+  // pointerup (batal=false), pointercancel / lostpointercapture (batal=true).
+  // Status gestur dibereskan DULU, baru capture dilepas — lostpointercapture
+  // yang menyusul jadi no-op.
   const akhiri = (ev: React.PointerEvent<SVGSVGElement>, batal: boolean) => {
-    penunjuk.current.delete(ev.pointerId);
-    const svg = svgRef.current;
-    if (svg?.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId);
+    const tercatat = penunjuk.current.delete(ev.pointerId);
+    const lepasCapture = () => {
+      const svg = svgRef.current;
+      if (svg?.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId);
+    };
     const g = gestur.current;
-    if (!g) return;
+    if (!g || !tercatat) {
+      lepasCapture();
+      return;
+    }
     if (g.jenis === "cubit") {
       // Sisa satu jari setelah cubit tidak dihitung sebagai klik/pan.
       if (penunjuk.current.size < 2) {
         gestur.current = null;
+        penunjuk.current.clear();
         setSedangGeser(false);
       }
+      lepasCapture();
       return;
     }
-    if (ev.pointerId !== g.id) return;
+    if (ev.pointerId !== g.id) {
+      lepasCapture();
+      return;
+    }
     gestur.current = null;
     if (g.jenis === "konsumen") {
-      onPointerUp?.(buatInfo(ev, document.elementFromPoint(ev.clientX, ev.clientY)));
+      onPointerUp?.(buatInfo(ev, document.elementFromPoint(ev.clientX, ev.clientY)), batal);
+      lepasCapture();
       return;
     }
     setSedangGeser(false);
+    lepasCapture();
     if (g.jenis === "tekan" && !batal) klik(g.info);
   };
 
@@ -431,24 +562,58 @@ export function DenahKanvas({
     return s;
   }, [elemen, kolomTerpilihIds]);
 
-  const lapisanTautan = useMemo(() => <LapisanTautan elemen={elemen} terpilihIds={terpilihIds} />, [elemen, terpilihIds]);
+  const bakDenganKolomSorot = useMemo(() => {
+    const s = new Set<string>();
+    if (kolomSorotIds.size === 0) return s;
+    for (const e of elemen) if (e.tipe === "bak" && e.kolom.some((k) => kolomSorotIds.has(k.id))) s.add(e.id);
+    return s;
+  }, [elemen, kolomSorotIds]);
 
+  const lapisanTautan = useMemo(
+    () => <LapisanTautan elemen={elemen} terpilihIds={terpilihIds} geser={geserSementara} />,
+    [elemen, terpilihIds, geserSementara]
+  );
+
+  // Setiap elemen dibungkus <g> transform: saat drag hanya atribut transform
+  // pembungkus yang berubah; ElemenView (memo) tidak dirender ulang.
   const lapisanElemen = useMemo(
     () =>
-      elemen.map((e) => (
-        <ElemenView
-          key={e.id}
-          e={e}
-          terpilih={terpilihIds.has(e.id)}
-          sorot={sorotIds.has(e.id)}
-          kolomTerpilih={bakDenganKolomTerpilih.has(e.id) ? kolomTerpilihIds : KOSONG}
-          skalaKira={skalaKira}
-          ukuranGrid={kanvas.ukuranGrid}
-          idPola={idDasar}
-          mode={mode}
-        />
-      )),
-    [elemen, terpilihIds, sorotIds, bakDenganKolomTerpilih, kolomTerpilihIds, skalaKira, kanvas.ukuranGrid, idDasar, mode]
+      elemen.map((e) => {
+        const geser = geserSementara && !e.terkunci && geserSementara.ids.has(e.id) ? geserSementara : null;
+        return (
+          <g key={e.id} transform={geser ? `translate(${geser.dx} ${geser.dy})` : undefined}>
+            <ElemenView
+              e={e}
+              terpilih={terpilihIds.has(e.id)}
+              sorot={sorotIds.has(e.id)}
+              hover={hoverId === e.id}
+              tumpuk={tumpukIds.has(e.id)}
+              kolomTerpilih={bakDenganKolomTerpilih.has(e.id) ? kolomTerpilihIds : KOSONG}
+              kolomSorot={bakDenganKolomSorot.has(e.id) ? kolomSorotIds : KOSONG}
+              skalaKira={skalaKira}
+              ukuranGrid={kanvas.ukuranGrid}
+              idPola={idDasar}
+              mode={mode}
+            />
+          </g>
+        );
+      }),
+    [
+      elemen,
+      geserSementara,
+      terpilihIds,
+      sorotIds,
+      hoverId,
+      tumpukIds,
+      bakDenganKolomTerpilih,
+      kolomTerpilihIds,
+      bakDenganKolomSorot,
+      kolomSorotIds,
+      skalaKira,
+      kanvas.ukuranGrid,
+      idDasar,
+      mode,
+    ]
   );
 
   const lapisanDasar = useMemo(
@@ -468,13 +633,20 @@ export function DenahKanvas({
     >
       <svg
         ref={svgRef}
-        className={cn("absolute inset-0 size-full touch-none", sedangGeser ? "cursor-grabbing" : mode === "lihat" ? "cursor-grab" : "cursor-default")}
+        className={cn(
+          // Mode lihat di layar sempit: satu jari tetap bisa menggulir halaman
+          // secara vertikal; pan horizontal & cubit tetap ditangani kanvas.
+          "absolute inset-0 size-full",
+          mode === "lihat" ? "touch-pan-y" : "touch-none",
+          sedangGeser ? "cursor-grabbing" : (kursor ?? (mode === "lihat" ? "cursor-grab" : "cursor-default"))
+        )}
         viewBox={viewBox}
         preserveAspectRatio="xMinYMin meet"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={(ev) => akhiri(ev, false)}
         onPointerCancel={(ev) => akhiri(ev, true)}
+        onLostPointerCapture={(ev) => akhiri(ev, true)}
         onAuxClick={(ev) => ev.preventDefault()}
         role="img"
         aria-label="Denah produksi"
@@ -498,7 +670,7 @@ export function DenahKanvas({
           <TombolKanvas label="Perbesar" onClick={() => zoomTengah(1.4)}>
             <Plus className="size-4" />
           </TombolKanvas>
-          <TombolKanvas label="Pas ke layar" onClick={() => setTampilanState(null)}>
+          <TombolKanvas label="Pas ke layar" onClick={pasKeLayar}>
             <Maximize className="size-4" />
           </TombolKanvas>
         </div>
@@ -555,17 +727,29 @@ function pusat(e: DenahElemen): Titik {
   return { x: e.x + e.w / 2, y: e.y + e.h / 2 };
 }
 
-const LapisanTautan = memo(function LapisanTautan({ elemen, terpilihIds }: { elemen: DenahElemen[]; terpilihIds: ReadonlySet<string> }) {
+const LapisanTautan = memo(function LapisanTautan({
+  elemen,
+  terpilihIds,
+  geser,
+}: {
+  elemen: DenahElemen[];
+  terpilihIds: ReadonlySet<string>;
+  geser: GeserSementara | null;
+}) {
   const mesin = new Map<string, MesinElemen>();
   for (const e of elemen) if (e.tipe === "mesin") mesin.set(e.id, e);
+  const titikPusat = (e: DenahElemen) => {
+    const p = pusat(e);
+    return geser && !e.terkunci && geser.ids.has(e.id) ? { x: p.x + geser.dx, y: p.y + geser.dy } : p;
+  };
   const garis: ReactNode[] = [];
   for (const e of elemen) {
     if (e.tipe !== "bak") continue;
-    const a = pusat(e);
+    const a = titikPusat(e);
     for (const mid of e.mesinIds) {
       const m = mesin.get(mid);
       if (!m) continue;
-      const b = pusat(m);
+      const b = titikPusat(m);
       const aktif = terpilihIds.has(e.id) || terpilihIds.has(m.id);
       garis.push(
         <line
@@ -591,7 +775,10 @@ interface ElemenViewProps {
   e: DenahElemen;
   terpilih: boolean;
   sorot: boolean;
+  hover: boolean;
+  tumpuk: boolean;
   kolomTerpilih: ReadonlySet<string>;
+  kolomSorot: ReadonlySet<string>;
   skalaKira: number;
   ukuranGrid: number;
   idPola: string;
@@ -661,7 +848,7 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
       break;
     case "derek":
       // Titik derek dalam koordinat grid ABSOLUT (bukan relatif elemen) — tidak ikut rotasi.
-      return <DerekView d={e} terpilih={p.terpilih} sorot={p.sorot} fs={fs} />;
+      return <DerekView d={e} terpilih={p.terpilih} sorot={p.sorot} hover={p.hover} fs={fs} />;
     case "dinding":
       tubuh = <rect width={e.w} height={e.h} className="fill-slate-600 stroke-slate-700 dark:fill-slate-400 dark:stroke-slate-300" strokeWidth={1} vectorEffect={NS} />;
       break;
@@ -684,14 +871,48 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
   return (
     <g data-elemen-id={e.id} data-tipe={e.tipe} className={p.mode === "lihat" && e.tipe === "bak" ? "cursor-pointer" : undefined}>
       <g transform={tubuhTransform}>{tubuh}</g>
+      {p.tumpuk && (
+        <rect
+          x={kotak.x}
+          y={kotak.y}
+          width={kotak.w}
+          height={kotak.h}
+          className="fill-red-500/20 stroke-red-500/70"
+          strokeWidth={1}
+          strokeDasharray="3 2"
+          vectorEffect={NS}
+          pointerEvents="none"
+        />
+      )}
       {nama}
-      <GarisPilih kotak={kotak} terpilih={p.terpilih} sorot={p.sorot} />
+      <GarisPilih kotak={kotak} terpilih={p.terpilih} sorot={p.sorot} hover={p.hover} />
+      {p.mode === "edit" && e.terkunci && <IkonKunci kotak={kotak} skalaKira={p.skalaKira} />}
     </g>
   );
 });
 
-function GarisPilih({ kotak, terpilih, sorot }: { kotak: { x: number; y: number; w: number; h: number }; terpilih: boolean; sorot: boolean }) {
-  if (!terpilih && !sorot) return null;
+function IkonKunci({ kotak, skalaKira }: { kotak: { x: number; y: number; w: number; h: number }; skalaKira: number }) {
+  const s = 14 / skalaKira;
+  return (
+    <g pointerEvents="none">
+      <rect x={kotak.x + kotak.w - s * 1.1} y={kotak.y + s * 0.1} width={s} height={s} rx={s * 0.2} className="fill-background/90" />
+      <Lock x={kotak.x + kotak.w - s} y={kotak.y + s * 0.2} width={s * 0.8} height={s * 0.8} className="text-muted-foreground" />
+    </g>
+  );
+}
+
+function GarisPilih({
+  kotak,
+  terpilih,
+  sorot,
+  hover = false,
+}: {
+  kotak: { x: number; y: number; w: number; h: number };
+  terpilih: boolean;
+  sorot: boolean;
+  hover?: boolean;
+}) {
+  if (!terpilih && !sorot && !hover) return null;
   const pad = 0.25;
   return (
     <rect
@@ -700,8 +921,8 @@ function GarisPilih({ kotak, terpilih, sorot }: { kotak: { x: number; y: number;
       width={kotak.w + pad * 2}
       height={kotak.h + pad * 2}
       fill="none"
-      className={sorot ? "stroke-destructive" : "stroke-primary"}
-      strokeWidth={2}
+      className={sorot ? "stroke-destructive" : terpilih ? "stroke-primary" : "stroke-primary/50"}
+      strokeWidth={terpilih || sorot ? 2 : 1.5}
       strokeDasharray={terpilih ? "6 3" : undefined}
       vectorEffect={NS}
       pointerEvents="none"
@@ -761,7 +982,7 @@ function ukuranSelIceCan(bak: BakElemen, tata: ReturnType<typeof tataBak>) {
   return Math.min(tata.lebarKolom / lintang, lajurB / Math.ceil(n / lintang));
 }
 
-function BakTubuh({ bak, kolomTerpilih, skalaKira, idPola }: { bak: BakElemen } & ElemenViewProps) {
+function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: BakElemen } & ElemenViewProps) {
   const tata = useMemo(() => tataBak(bak), [bak]);
   const { lebarKolom, panjangB, pita, ke } = tata;
   const tampilIceCan = ukuranSelIceCan(bak, tata) * skalaKira >= 3;
@@ -785,6 +1006,7 @@ function BakTubuh({ bak, kolomTerpilih, skalaKira, idPola }: { bak: BakElemen } 
       {bak.kolom.map((k, i) => {
         const r = ke(posisiKolom(bak, i) * lebarKolom + celah / 2, 0, Math.max(lebarKolom - celah, 0.0001), panjangB);
         const pilih = kolomTerpilih.has(k.id);
+        const salah = kolomSorot.has(k.id);
         return (
           <rect
             key={k.id}
@@ -794,8 +1016,11 @@ function BakTubuh({ bak, kolomTerpilih, skalaKira, idPola }: { bak: BakElemen } 
             width={r.w}
             height={r.h}
             fill={k.nonaktif ? `url(#${idPola}-nonaktif)` : undefined}
-            className={cn(k.nonaktif ? "opacity-80" : KELAS_VARIAN[k.varian], pilih ? "stroke-primary" : "stroke-none")}
-            strokeWidth={pilih ? 2.5 : 0}
+            className={cn(
+              salah ? "fill-red-400/80 dark:fill-red-700/80" : k.nonaktif ? "opacity-80" : KELAS_VARIAN[k.varian],
+              salah ? "stroke-destructive" : pilih ? "stroke-primary" : "stroke-none"
+            )}
+            strokeWidth={pilih || salah ? 2.5 : 0}
             vectorEffect={NS}
           />
         );
@@ -836,7 +1061,7 @@ function MesinTubuh({ m }: { m: MesinElemen }) {
   );
 }
 
-function DerekView({ d, terpilih, sorot, fs }: { d: DerekElemen; terpilih: boolean; sorot: boolean; fs: number }) {
+function DerekView({ d, terpilih, sorot, hover, fs }: { d: DerekElemen; terpilih: boolean; sorot: boolean; hover: boolean; fs: number }) {
   let a = d.titikAwal;
   let b = d.titikAkhir;
   if (a.x === b.x && a.y === b.y) {
@@ -862,7 +1087,7 @@ function DerekView({ d, terpilih, sorot, fs }: { d: DerekElemen; terpilih: boole
       <Teks x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 - fs * 0.6} ukuran={fs} baseline="auto" tebal className="fill-orange-700 dark:fill-orange-300">
         {d.nama}
       </Teks>
-      <GarisPilih kotak={kotakElemen(d)} terpilih={terpilih} sorot={sorot} />
+      <GarisPilih kotak={kotakElemen(d)} terpilih={terpilih} sorot={sorot} hover={hover} />
     </g>
   );
 }
