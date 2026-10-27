@@ -95,6 +95,7 @@ import { verifikasiDanPakaiKodeAmbilAlih } from "@/lib/queries/kode-ambil-alih";
 import { syncVehicleGpsPositions, type ProviderSyncStatus } from "@/lib/gps-providers/sync";
 import {
   getLatestVehiclePositions,
+  getLatestArmadaPosition,
   getVehicleTrail,
   type VehiclePositionRow,
   type VehicleTrailPoint,
@@ -646,6 +647,15 @@ export async function getVehiclePositionsAction(): Promise<ActionResult<VehicleP
   return runAction(async () => {
     await requireModuleAccess("delivery");
     return getLatestVehiclePositions();
+  });
+}
+
+// Validasi Rute's fallback truck position for a Jadwal en route when the
+// driver app has sent no ping — see getLatestArmadaPosition.
+export async function getLatestArmadaPositionAction(armadaId: number): Promise<ActionResult<VehiclePositionRow | null>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getLatestArmadaPosition(armadaId);
   });
 }
 

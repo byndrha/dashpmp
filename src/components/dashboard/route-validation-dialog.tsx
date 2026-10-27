@@ -63,6 +63,7 @@ import {
   checkArmadaConflictAction,
   getPriceLevelOptionsAction,
   getDriverPositionAction,
+  getLatestArmadaPositionAction,
   getIstirahatForJadwalAction,
   getArmadaUtilisasiHarianAction,
   getArmadaUtilisasiPeriodeAction,
@@ -71,6 +72,7 @@ import {
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
+import type { TruckPosition } from "@/components/dashboard/route-map";
 import { shareImageBlob, shareTextBlock } from "@/lib/share-image";
 import { pilihanLokasiStopTampil } from "@/lib/mitra-lokasi";
 
@@ -384,7 +386,11 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   const [utilisasiPeriode, setUtilisasiPeriode] = useState<ArmadaUtilisasiHarian | null>(null);
   // Live driver GPS for RouteMap's rotating truck marker — polled every 10s
   // once Mulai Muat is done, see the effect below. Null hides the marker.
-  const [driverPosition, setDriverPosition] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [driverPosition, setDriverPosition] = useState<TruckPosition | null>(null);
+  // Fallback when the driver app has no ping: the armada's own GPS tracker
+  // (Hino Connect / SoloFleet, via armada_gps_riwayat), polled while the
+  // Jadwal is en route. See the effect after the driver-position one.
+  const [armadaGpsPosition, setArmadaGpsPosition] = useState<TruckPosition | null>(null);
   // The stop whose "Lihat bukti pengiriman" checkmark was clicked — null
   // closes StopDeliveryProofDialog, same open-via-prop convention this
   // dialog itself uses (open={jadwalId != null}).
@@ -579,7 +585,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     function poll() {
       getDriverPositionAction(salesmanIdForTracking!).then((pos) => {
         if (cancelled) return;
-        setDriverPosition(pos ? { latitude: pos.latitude, longitude: pos.longitude } : null);
+        setDriverPosition(pos ? { latitude: pos.latitude, longitude: pos.longitude, recordedAt: pos.recordedAt, source: "driver" } : null);
       });
     }
     poll();
@@ -589,6 +595,37 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       clearInterval(interval);
     };
   }, [jadwalId, jamMulaiMuat, salesmanIdForTracking]);
+
+  // Armada GPS tracker position for a Jadwal that is actually en route
+  // (departed, not yet back — the DATANG check closes the trip). Only reads
+  // what the GPS Kendaraan sync last stored, every 30s; the marker's own
+  // label shows how old that ping is. Used only when the driver app has no
+  // ping (see truckPosition below).
+  const enRoute = jadwal?.JamAktualBerangkat != null && !vehicleChecks.some((c) => c.tipe === "DATANG");
+  useEffect(() => {
+    if (jadwalId == null || armadaId == null || !enRoute) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setArmadaGpsPosition(null);
+      return;
+    }
+    let cancelled = false;
+    function poll() {
+      getLatestArmadaPositionAction(armadaId!).then((res) => {
+        if (cancelled) return;
+        const p = res.success ? res.data : null;
+        setArmadaGpsPosition(
+          p ? { latitude: p.latitude, longitude: p.longitude, heading: p.heading, recordedAt: p.recordedAt, source: p.provider } : null
+        );
+      });
+    }
+    poll();
+    const interval = setInterval(poll, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [jadwalId, armadaId, enRoute]);
+  const truckPosition = driverPosition ?? armadaGpsPosition;
 
   // Recomputes the route whenever the stop order or the pabrik location
   // changes. Every stop must have a saved coordinate — otherwise a full
@@ -1378,7 +1415,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
                     geometry={route?.geometry ?? null}
                     refitTrigger={refitTrigger}
-                    driverPosition={driverPosition}
+                    driverPosition={truckPosition}
                   />
                 ) : (
                   <Skeleton className="h-full w-full md:rounded-lg" />

@@ -7,7 +7,30 @@ import L from "leaflet";
 import { Search, X } from "lucide-react";
 import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
+import { formatRelativeTime } from "@/lib/format";
 import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
+
+// Truck marker input. `source` says where the ping came from (driver app or
+// the armada's GPS tracker) and `recordedAt` (ISO) when — both optional so
+// older callers that only pass coordinates keep working.
+export interface TruckPosition {
+  latitude: number;
+  longitude: number;
+  heading?: number | null;
+  recordedAt?: string;
+  source?: "driver" | "hino" | "solofleet";
+}
+
+const SOURCE_LABELS: Record<NonNullable<TruckPosition["source"]>, string> = {
+  driver: "Aplikasi Driver",
+  hino: "GPS Hino Connect",
+  solofleet: "GPS SoloFleet",
+};
+
+// A ping older than this is drawn grey and flagged "(lama)" — an armada
+// tracker only updates while the GPS Kendaraan sync runs, so a stale
+// position must not look like a live one.
+const STALE_MS = 15 * 60 * 1000;
 
 const pabrikIcon = L.divIcon({
   className: "",
@@ -29,13 +52,13 @@ function stopIcon(order: number) {
 // geographic north at bearingDeg=0 and rotates from there, so passing the
 // route's own heading at the driver's nearest point makes the icon's front
 // track the direction of travel rather than just marking a location.
-function truckIcon(bearingDeg: number) {
+function truckIcon(bearingDeg: number, stale = false) {
   return L.divIcon({
     className: "",
     html: `<div style="width:28px;height:28px;transform:rotate(${bearingDeg}deg);transform-origin:50% 50%;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">
       <svg viewBox="0 0 24 24" width="28" height="28">
-        <rect x="7" y="10" width="10" height="12" rx="1.5" fill="#2563eb" stroke="white" stroke-width="1.2" />
-        <rect x="8.5" y="2" width="7" height="9" rx="1.5" fill="#1d4ed8" stroke="white" stroke-width="1.2" />
+        <rect x="7" y="10" width="10" height="12" rx="1.5" fill="${stale ? "#9ca3af" : "#2563eb"}" stroke="white" stroke-width="1.2" />
+        <rect x="8.5" y="2" width="7" height="9" rx="1.5" fill="${stale ? "#6b7280" : "#1d4ed8"}" stroke="white" stroke-width="1.2" />
       </svg>
     </div>`,
     iconSize: [28, 28],
@@ -197,14 +220,27 @@ export function RouteMap({
   // out of FitBounds below: re-framing the whole map on every 10s ping
   // would fight any manual pan/zoom and jump the view around as the truck
   // moves, when the point is to watch it move within a fixed frame.
-  driverPosition?: { latitude: number; longitude: number } | null;
+  driverPosition?: TruckPosition | null;
 }) {
   const polylinePositions: [number, number][] | undefined = geometry?.map(([lng, lat]) => [lat, lng]);
   const mapRef = useRef<L.Map | null>(null);
   const markerRefs = useRef<Map<number, L.Marker>>(new Map());
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   const tile = TILE_SOURCES[mapStyle];
-  const driverBearing = driverPosition && polylinePositions ? bearingToNearestSegment([driverPosition.latitude, driverPosition.longitude], polylinePositions) : 0;
+  const driverBearing = driverPosition?.heading != null ? driverPosition.heading : driverPosition && polylinePositions ? bearingToNearestSegment([driverPosition.latitude, driverPosition.longitude], polylinePositions) : 0;
+
+  // Re-evaluated every 30s so a ping ages into "(lama)" and its relative
+  // time keeps counting even between position updates.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const ageMs = driverPosition?.recordedAt ? now - new Date(driverPosition.recordedAt).getTime() : null;
+  const isStale = ageMs != null && ageMs > STALE_MS;
+  const positionLabel = driverPosition?.source
+    ? `${SOURCE_LABELS[driverPosition.source]}${driverPosition.recordedAt ? ` · ${formatRelativeTime(driverPosition.recordedAt, new Date(now))}` : ""}${isStale ? " (lama)" : ""}`
+    : null;
 
   function handleSelectStop(stop: Stop) {
     mapRef.current?.flyTo([stop.Latitude, stop.Longitude], 15);
@@ -250,10 +286,21 @@ export function RouteMap({
         ))}
         {polylinePositions && <Polyline positions={polylinePositions} pathOptions={{ color: "#2563eb", weight: 4 }} />}
         {driverPosition && (
-          <Marker position={[driverPosition.latitude, driverPosition.longitude]} icon={truckIcon(driverBearing)} zIndexOffset={1000} />
+          <Marker position={[driverPosition.latitude, driverPosition.longitude]} icon={truckIcon(driverBearing, isStale)} zIndexOffset={1000}>
+            {positionLabel && <Popup>{positionLabel}</Popup>}
+          </Marker>
         )}
       </MapContainer>
 
+      {positionLabel && (
+        <div
+          className={`absolute top-12 left-2 z-1000 max-w-[calc(100%-1rem)] rounded-md px-2 py-1 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm ${
+            isStale ? "bg-amber-500/90 text-white" : "bg-card/90"
+          }`}
+        >
+          Posisi armada: {positionLabel}
+        </div>
+      )}
       <StopSearchBox stops={stops} onSelect={handleSelectStop} />
       <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="top-2 right-2" />
       <MapAttribution className="bottom-2 right-2" />
