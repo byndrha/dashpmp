@@ -651,10 +651,25 @@ export async function getVehiclePositionsAction(): Promise<ActionResult<VehicleP
 }
 
 // Validasi Rute's fallback truck position for a Jadwal en route when the
-// driver app has sent no ping — see getLatestArmadaPosition.
+// driver app has sent no ping — see getLatestArmadaPosition. Also pulls fresh
+// pings from the GPS providers first, so the dialog no longer depends on the
+// GPS Kendaraan tab being open to stay current. Throttled process-wide: many
+// open dialogs (or the GPS tab polling too) trigger at most one provider
+// sync per GPS_SYNC_MIN_INTERVAL_MS.
+const GPS_SYNC_MIN_INTERVAL_MS = 25_000;
+let lastGpsSyncStartedAt = 0;
+
 export async function getLatestArmadaPositionAction(armadaId: number): Promise<ActionResult<VehiclePositionRow | null>> {
   return runAction(async () => {
     await requireModuleAccess("delivery");
+    if (Date.now() - lastGpsSyncStartedAt >= GPS_SYNC_MIN_INTERVAL_MS) {
+      lastGpsSyncStartedAt = Date.now();
+      try {
+        await syncVehicleGpsPositions();
+      } catch (err) {
+        console.warn("[armada-gps] Sinkron dari Validasi Rute gagal:", err instanceof Error ? err.message : err);
+      }
+    }
     return getLatestArmadaPosition(armadaId);
   });
 }
