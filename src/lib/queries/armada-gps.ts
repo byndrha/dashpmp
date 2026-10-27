@@ -103,6 +103,47 @@ export async function getLatestVehiclePositions(): Promise<VehiclePositionRow[]>
   }));
 }
 
+// Newest ping for ONE armada across all providers — for Validasi Rute's
+// truck marker, which only needs "where is this Jadwal's truck now", not the
+// per-device rows getLatestVehiclePositions returns. Read-only: the data is
+// whatever the GPS Kendaraan sync last wrote, so recordedAt is the caller's
+// only signal for how stale it is. Null when the armada has no ping at all
+// (not matched by plate, or past the RETENTION_DAYS cleanup).
+export async function getLatestArmadaPosition(armadaId: number): Promise<VehiclePositionRow | null> {
+  const pool = getPgPool();
+  const result = await pool.query<{
+    armada_id: number | null;
+    provider: "hino" | "solofleet";
+    external_vehicle_id: string;
+    plat_nomor_raw: string;
+    latitude: number;
+    longitude: number;
+    speed_kmh: number | null;
+    heading: number | null;
+    recorded_at: Date;
+  }>(
+    `SELECT armada_id, provider, external_vehicle_id, plat_nomor_raw, latitude, longitude, speed_kmh, heading, recorded_at
+     FROM armada_gps_riwayat
+     WHERE armada_id = $1
+     ORDER BY recorded_at DESC
+     LIMIT 1`,
+    [armadaId]
+  );
+  const r = result.rows[0];
+  if (!r) return null;
+  return {
+    armadaId: r.armada_id,
+    provider: r.provider,
+    externalVehicleId: r.external_vehicle_id,
+    plateRaw: r.plat_nomor_raw,
+    latitude: r.latitude,
+    longitude: r.longitude,
+    speedKmh: r.speed_kmh,
+    heading: r.heading,
+    recordedAt: r.recorded_at.toISOString(),
+  };
+}
+
 // Every ping in the last `hoursBack` hours for one armada, ordered oldest ->
 // newest, ready to draw directly as a Polyline path (same shape as
 // akun-lokasi.ts's getMarketingPositionHistory, scoped to a single armada_id
