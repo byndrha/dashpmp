@@ -74,16 +74,22 @@ export async function shareTextBlock(text: string, title: string): Promise<void>
   }
 }
 
-// Stacks N route screenshots into ONE tall PNG, each preceded by a small
-// label band (armada + waktu) so the combined image still reads as "one
-// route per section" once flattened — batch Bagikan shares this single
-// merged image exactly like a normal one-route screenshot (one clipboard
-// copy, one shared file), per explicit request: "hanya satu gambar yang
-// tersalin ke clipboard", not one file per route.
-export async function mergeImagesVertically(parts: { label: string; blob: Blob }[]): Promise<Blob> {
+// Lays N route screenshots out as a grid in ONE PNG, each card preceded by a
+// small label band (armada + waktu). Cards are portrait (tall, narrow — the
+// dialog is forced into its stacked layout while capturing), so the grid
+// grows sideways first: up to 12 routes -> 4 columns (3 rows), more ->
+// 6 columns (5 rows for 30). Still a single image / single clipboard copy,
+// per the original "hanya satu gambar" requirement.
+export function gridColumnsFor(count: number): number {
+  return count <= 12 ? 4 : 6;
+}
+
+export async function mergeImagesGrid(parts: { label: string; blob: Blob }[]): Promise<Blob> {
   if (parts.length === 0) throw new Error("Tidak ada gambar untuk digabungkan.");
   const LABEL_HEIGHT = 44;
   const GAP = 20;
+  const CELL_WIDTH = 640;
+  const MAX_CANVAS_SIDE = 16000;
 
   const images = await Promise.all(
     parts.map(
@@ -98,32 +104,50 @@ export async function mergeImagesVertically(parts: { label: string; blob: Blob }
   );
 
   try {
-    const width = Math.max(...images.map((img) => img.width));
-    const totalHeight =
-      images.reduce((sum, img) => sum + img.height, 0) + parts.length * LABEL_HEIGHT + (parts.length - 1) * GAP;
+    const cols = Math.min(gridColumnsFor(parts.length), parts.length);
+    const rows = Math.ceil(parts.length / cols);
+    const drawnHeight = (img: HTMLImageElement) => Math.round((img.height * CELL_WIDTH) / img.width);
+
+    const rowHeights: number[] = [];
+    for (let r = 0; r < rows; r++) {
+      const inRow = images.slice(r * cols, r * cols + cols);
+      rowHeights.push(LABEL_HEIGHT + Math.max(...inRow.map(drawnHeight)));
+    }
+    const rawWidth = cols * CELL_WIDTH + (cols - 1) * GAP;
+    const rawHeight = rowHeights.reduce((a, b) => a + b, 0) + (rows - 1) * GAP;
+    // Browsers cap canvas side length — shrink everything uniformly if a
+    // very long route list would blow past it.
+    const k = Math.min(1, MAX_CANVAS_SIDE / rawWidth, MAX_CANVAS_SIDE / rawHeight);
 
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = totalHeight;
+    canvas.width = Math.round(rawWidth * k);
+    canvas.height = Math.round(rawHeight * k);
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D context tidak tersedia di browser ini.");
+    ctx.scale(k, k);
 
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, totalHeight);
+    ctx.fillRect(0, 0, rawWidth, rawHeight);
 
     let y = 0;
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      ctx.fillStyle = "#f1f5f9";
-      ctx.fillRect(0, y, width, LABEL_HEIGHT);
-      ctx.fillStyle = "#0f172a";
-      ctx.font = "600 20px system-ui, -apple-system, sans-serif";
-      ctx.textBaseline = "middle";
-      ctx.fillText(parts[i].label, 16, y + LABEL_HEIGHT / 2, width - 32);
-      y += LABEL_HEIGHT;
-      ctx.drawImage(img, 0, y, img.width, img.height);
-      y += img.height;
-      if (i < images.length - 1) y += GAP;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const idx = r * cols + c;
+        if (idx >= images.length) break;
+        const img = images[idx];
+        const x = c * (CELL_WIDTH + GAP);
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fillRect(x, y, CELL_WIDTH, LABEL_HEIGHT);
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "600 22px system-ui, -apple-system, sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.fillText(parts[idx].label, x + 14, y + LABEL_HEIGHT / 2, CELL_WIDTH - 28);
+        ctx.drawImage(img, x, y + LABEL_HEIGHT, CELL_WIDTH, drawnHeight(img));
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, CELL_WIDTH, LABEL_HEIGHT + drawnHeight(img));
+      }
+      y += rowHeights[r] + GAP;
     }
 
     return await new Promise<Blob>((resolve, reject) => {

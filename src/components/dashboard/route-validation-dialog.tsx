@@ -430,6 +430,10 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // destinations list's max-height/scroll so every stop renders in the
   // screenshot instead of only whatever was scrolled into view.
   const [capturing, setCapturing] = useState(false);
+  // True only during a batch capture: forces the narrow stacked (mobile-style)
+  // layout even on desktop so every route card is a portrait rectangle that
+  // tiles neatly into the batch grid image.
+  const [portrait, setPortrait] = useState(false);
   // Bumped right before a "Seluruhnya" capture to force RouteMap to
   // re-fit its bounds to the whole route (un-animated) before the
   // screenshot, overriding any manual pan/zoom — see FitBounds in
@@ -1249,7 +1253,15 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     async captureForBatch(targetJadwalId, mode) {
       const ready = await waitUntilReadyForBatch(targetJadwalId);
       if (!ready || jadwalIdRef.current !== targetJadwalId) return null;
-      return mode === "data" ? await captureDataRuteImage() : await captureDialogImage();
+      setPortrait(true);
+      // Let the narrow layout reflow (and the map resize) before capturing.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      try {
+        return mode === "data" ? await captureDataRuteImage() : await captureDialogImage();
+      } finally {
+        setPortrait(false);
+      }
     },
     async getTextForBatch(targetJadwalId) {
       const ready = await waitUntilReadyForBatch(targetJadwalId);
@@ -1267,7 +1279,9 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
           pengajuan-form-dialog.tsx. Scales further at lg: since this dialog
           holds a map + list side by side and genuinely benefits from a
           landscape screen's extra width, unlike a plain form dialog. */}
-      <DialogContent className="max-w-lg p-0 sm:max-w-3xl lg:max-w-6xl">
+      <DialogContent
+        className={cn("max-w-lg p-0", portrait ? "w-[440px] sm:max-w-[440px]" : "sm:max-w-3xl lg:max-w-6xl")}
+      >
         <div ref={captureRef}>
         <DialogHeader className="p-4 pb-0">
           <div className="flex items-center justify-between gap-2 pr-8">
@@ -1405,10 +1419,10 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             drag-to-resize sheet (out of scope here).
             md and up: reverts to config-left / map-right side by side,
             matching how a desktop map + form split is usually laid out. */}
-        <div className={cn("flex flex-col", showMap ? "md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]" : "md:p-4 md:pt-2")}>
+        <div className={cn("flex flex-col", !portrait && (showMap ? "md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]" : "md:p-4 md:pt-2"))}>
           {showMap && (
-            <div className="order-1 flex flex-col gap-3 md:order-2">
-              <div className="h-[34vh] min-h-[220px] w-full overflow-hidden md:h-auto md:min-h-[220px] md:rounded-lg">
+            <div className={cn("order-1 flex flex-col gap-3", !portrait && "md:order-2")}>
+              <div className={cn("h-[34vh] min-h-[220px] w-full overflow-hidden", portrait ? "h-[300px]" : "md:h-auto md:min-h-[220px] md:rounded-lg")}>
                 {pabrik && order.length > 0 ? (
                   <RouteMap
                     pabrik={pabrik}
@@ -1549,7 +1563,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
           <div
             className={cn(
               "flex flex-col gap-3 p-4",
-              showMap && "order-2 -mt-4 rounded-t-2xl bg-popover shadow-[0_-4px_12px_rgba(0,0,0,0.08)] md:order-1 md:mt-0 md:rounded-none md:p-0 md:shadow-none"
+              showMap && "order-2 -mt-4 rounded-t-2xl bg-popover shadow-[0_-4px_12px_rgba(0,0,0,0.08)]",
+              showMap && !portrait && "md:order-1 md:mt-0 md:rounded-none md:p-0 md:shadow-none"
             )}
           >
             {isDraft ? (

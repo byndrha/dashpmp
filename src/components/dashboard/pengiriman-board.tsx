@@ -32,7 +32,7 @@ import { DriverManager } from "@/components/dashboard/driver-manager";
 import { RouteValidationDialog, type RouteValidationDialogHandle } from "@/components/dashboard/route-validation-dialog";
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime, formatTimeWib, formatKemasanQty } from "@/lib/format";
-import { mergeImagesVertically, shareImageBlob, shareTextBlock } from "@/lib/share-image";
+import { mergeImagesGrid, shareImageBlob, shareTextBlock } from "@/lib/share-image";
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime, naiveWibTransDateToUtcInstant } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
@@ -1591,7 +1591,7 @@ export function PengirimanBoard({
   // reusing whatever share content each one would produce manually.
   // Per explicit spec: the result is always ONE shared file, never one per
   // route — "seluruhnya"/"data" stack every route's screenshot into a
-  // single tall image (mergeImagesVertically), "detail" concatenates every
+  // single grid image (mergeImagesGrid: 4 kolom / 6 kolom, kartu portrait), "detail" concatenates every
   // route's plain-text stop list into one text block.
   async function handleBagikanSemuaRute(mode: "seluruhnya" | "detail" | "data") {
     if (batchSharing) return;
@@ -1648,7 +1648,7 @@ export function PengirimanBoard({
       return;
     }
     try {
-      const merged = await mergeImagesVertically(imageParts);
+      const merged = await mergeImagesGrid(imageParts);
       await shareImageBlob(merged, `validasi-rute-${businessDate}.png`, `Validasi Rute — ${formatDate(businessDate)}`);
     } catch {
       toast.error("Gagal menggabungkan screenshot rute.");
