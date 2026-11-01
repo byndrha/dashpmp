@@ -3,16 +3,19 @@
 // Palet alat Builder Denah (kiri layar).
 
 import { memo, type ComponentType } from "react";
-import { BrickWall, Columns3, DoorOpen, Fan, Hand, MousePointer2, MoveHorizontal, SquareDashed, Type } from "lucide-react";
+import { Blocks, BrickWall, Columns3, Cylinder, DoorOpen, Fan, Hand, MousePointer2, MoveHorizontal, Ruler, SquareDashed, Type } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HURUF_ALAT, type Alat } from "@/components/produksi-denah/pintasan-keyboard";
 
 const DAFTAR: { alat: Alat; label: string; ikon: ComponentType<{ className?: string }>; petunjuk: string }[] = [
   { alat: "pilih", label: "Pilih", ikon: MousePointer2, petunjuk: "Pilih, geser, ubah ukuran" },
   { alat: "geser", label: "Geser kanvas", ikon: Hand, petunjuk: "Geser tampilan (atau tahan Spasi)" },
+  { alat: "ukur", label: "Ukur", ikon: Ruler, petunjuk: "Tarik untuk mengukur jarak & sudut (tidak disimpan)" },
   { alat: "bak", label: "Bak", ikon: Columns3, petunjuk: "Klik atau tarik kotak" },
   { alat: "mesin", label: "Mesin", ikon: Fan, petunjuk: "Klik atau tarik kotak" },
+  { alat: "tangki", label: "Tangki", ikon: Cylinder, petunjuk: "Klik atau tarik kotak" },
   { alat: "derek", label: "Derek", ikon: MoveHorizontal, petunjuk: "Tarik garis rel A → B" },
+  { alat: "beton", label: "Beton", ikon: Blocks, petunjuk: "Pondasi/plinth/saluran — klik atau tarik kotak" },
   { alat: "dinding", label: "Dinding", ikon: BrickWall, petunjuk: "Tarik garis dinding" },
   { alat: "pintu", label: "Pintu", ikon: DoorOpen, petunjuk: "Klik atau tarik kotak" },
   { alat: "area", label: "Area", ikon: SquareDashed, petunjuk: "Zona berlabel, tarik kotak" },
@@ -27,7 +30,7 @@ export const PaletAlat = memo(function PaletAlat({ alat, onPilih }: { alat: Alat
         const aktif = alat === d.alat;
         return (
           <div key={d.alat} className="contents">
-            {i === 2 && <div className="my-1 h-px w-8 bg-border" />}
+            {i === 3 && <div className="my-1 h-px w-8 bg-border" />}
             <button
               type="button"
               onClick={() => onPilih(d.alat)}

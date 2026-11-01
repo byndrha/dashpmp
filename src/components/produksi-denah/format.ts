@@ -40,3 +40,25 @@ export function panjangSkalaBatang(pxPerMeter: number): number {
   for (const m of LANGKAH_SKALA) if (m * pxPerMeter <= SKALA_BATANG_MAKS_PX) hasil = m;
   return hasil;
 }
+
+/**
+ * Hasil alat Ukur: jarak (meter) dan sudut (derajat, 0–<360) berlawanan
+ * jarum jam dari arah kanan kanvas (sumbu y kanvas mengarah ke bawah).
+ */
+export function ukurGaris(a: { x: number; y: number }, b: { x: number; y: number }): { jarak: number; sudut: number } {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const jarak = Math.hypot(dx, dy);
+  if (jarak === 0) return { jarak: 0, sudut: 0 };
+  const sudut = (Math.atan2(-dy, dx) * 180) / Math.PI;
+  return { jarak, sudut: sudut < 0 ? sudut + 360 : sudut === 0 ? 0 : sudut };
+}
+
+const FORMAT_SUDUT = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 });
+
+/** "12,35 m · 53,1°" — label alat Ukur. */
+export function formatUkur(a: { x: number; y: number }, b: { x: number; y: number }): string {
+  const { jarak, sudut } = ukurGaris(a, b);
+  const s = Math.round(sudut * 10) / 10;
+  return `${formatMeter(jarak)} · ${FORMAT_SUDUT.format(s >= 360 ? 0 : s)}°`;
+}

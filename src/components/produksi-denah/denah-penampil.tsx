@@ -6,11 +6,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DenahKanvas } from "@/components/produksi-denah/denah-kanvas";
+import { useLapisanTampil } from "@/components/produksi-denah/lapisan";
+import { MenuLapisan } from "@/components/produksi-denah/menu-lapisan";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { BakElemen, DenahDokumen, MesinElemen } from "@/lib/produksi-denah";
+import { lapisanElemen, type BakElemen, type DenahDokumen, type Lapisan, type MesinElemen } from "@/lib/produksi-denah";
 
 const angka = new Intl.NumberFormat("id-ID");
 const NAMA_VARIAN = { kecil: "Kecil", besar: "Besar" } as const;
@@ -18,6 +20,7 @@ const NAMA_VARIAN = { kecil: "Kecil", besar: "Besar" } as const;
 export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
   const [bakId, setBakId] = useState<string | null>(null);
   const [kolomId, setKolomId] = useState<string | null>(null);
+  const [lapisanTampil, aturLapisan] = useLapisanTampil();
 
   const bak = useMemo(
     () => (bakId ? (dokumen.elemen.find((e): e is BakElemen => e.tipe === "bak" && e.id === bakId) ?? null) : null),
@@ -26,12 +29,27 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
   const terpilihIds = useMemo(() => new Set(bakId ? [bakId] : []), [bakId]);
   const kolomTerpilihIds = useMemo(() => new Set(kolomId ? [kolomId] : []), [kolomId]);
 
+  const ubahLapisan = (l: Lapisan, tampil: boolean) => {
+    aturLapisan(l, tampil);
+    // Bak yang sedang dibuka ikut tertutup bila lapisannya disembunyikan.
+    if (!tampil && bak && lapisanElemen(bak) === l) {
+      setBakId(null);
+      setKolomId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2">
-      <Legenda />
+      <div className="flex items-center gap-2">
+        <Legenda />
+        <div className="ml-auto">
+          <MenuLapisan tampil={lapisanTampil} onUbah={ubahLapisan} elemen={dokumen.elemen} label />
+        </div>
+      </div>
       <DenahKanvas
         dokumen={dokumen}
         mode="lihat"
+        lapisanTampil={lapisanTampil}
         terpilihIds={terpilihIds}
         kolomTerpilihIds={kolomTerpilihIds}
         className="h-[65vh] min-h-[360px]"
@@ -76,6 +94,12 @@ function Legenda() {
       </span>
       <span className="flex items-center gap-1.5">
         <span className="w-4 border-t-2 border-dashed border-violet-500" /> Mesin
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="size-3 rounded-sm border border-stone-600 bg-[repeating-linear-gradient(45deg,#57534e_0_1px,#a8a29e_1px_4px)] opacity-80" /> Beton
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="size-3 rounded-full border border-sky-700 bg-sky-400/40 dark:border-sky-300" /> Tangki
       </span>
     </div>
   );

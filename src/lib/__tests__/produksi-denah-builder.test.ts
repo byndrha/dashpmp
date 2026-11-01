@@ -21,7 +21,10 @@ import {
   type AksiBuilder,
   type StateBuilder,
 } from "../../components/produksi-denah/builder-state";
-import { formatCm, formatMeter, panjangSkalaBatang } from "../../components/produksi-denah/format";
+import { formatCm, formatMeter, formatUkur, panjangSkalaBatang, ukurGaris } from "../../components/produksi-denah/format";
+import { HURUF_ALAT, cocokkanPintasan } from "../../components/produksi-denah/pintasan-keyboard";
+import { DAFTAR_LAPISAN, serialLapisan, uraiLapisan } from "../../components/produksi-denah/lapisan";
+import { WARNA_AIR, WARNA_BETON, WARNA_FLUIDA, WARNA_KABEL, WARNA_MESIN } from "../../components/produksi-denah/warna";
 import {
   buatBak,
   denahKosong,
@@ -342,4 +345,74 @@ test("kapasitasSiklusKg: Σ ice can × berat varian, kolom nonaktif tidak dihitu
   const b = buatBak(0, 0, { nama: "Bak 1" });
   const kolom = b.kolom.slice(0, 3).map((k, i) => ({ ...k, varian: (i === 1 ? "besar" : "kecil") as "kecil" | "besar", jumlahIceCan: 10, nonaktif: i === 2 ? true : undefined }));
   assert.equal(kapasitasSiklusKg({ ...b, kolom }), 10 * 25 + 10 * 50);
+});
+
+// ---------- Task 5: beton, tangki, ukur, lapisan, warna ----------
+
+test("buatElemen beton & tangki memakai bawaan spec §3", () => {
+  const k = { x: 3, y: 4, w: 2.5, h: 1.5 };
+  const beton = buatElemen("beton", k, []);
+  assert.deepEqual([beton.tipe, beton.elevasiM, beton.tinggiM, beton.x, beton.y, beton.w, beton.h], ["beton", -0.5, 0.5, 3, 4, 2.5, 1.5]);
+  assert.equal(beton.nama, "Beton 1");
+  const t = buatElemen("tangki", k, [beton]) as TangkiElemen;
+  assert.deepEqual([t.tipe, t.jenis, t.bentuk, t.elevasiM, t.tinggiM, t.levelIsiPersen], ["tangki", "tandon", "kotak", 0, 1.5, 70]);
+  assert.equal(t.kapasitasM3, undefined);
+  assert.equal(t.nama, "Tangki 1");
+});
+
+test("pintasan alat: O beton, T tangki, M ukur, E mesin, K label", () => {
+  const tekan = (key: string) => cocokkanPintasan({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false });
+  assert.deepEqual(tekan("o"), { jenis: "alat", alat: "beton" });
+  assert.deepEqual(tekan("t"), { jenis: "alat", alat: "tangki" });
+  assert.deepEqual(tekan("m"), { jenis: "alat", alat: "ukur" });
+  assert.deepEqual(tekan("e"), { jenis: "alat", alat: "mesin" });
+  assert.deepEqual(tekan("k"), { jenis: "alat", alat: "label" });
+  assert.equal(HURUF_ALAT.ukur, "M");
+  assert.equal(HURUF_ALAT.beton, "O");
+  // Huruf alat unik.
+  const huruf = Object.values(HURUF_ALAT);
+  assert.equal(new Set(huruf).size, huruf.length);
+});
+
+test("tombol panah menggeser sebesar langkah snap (Shift = ×10)", () => {
+  const panah = (key: string, shiftKey: boolean, langkah: number) => cocokkanPintasan({ key, ctrlKey: false, metaKey: false, shiftKey, altKey: false }, langkah);
+  assert.deepEqual(panah("ArrowLeft", false, 0.1), { jenis: "geser", dx: -0.1, dy: 0 });
+  assert.deepEqual(panah("ArrowDown", true, 0.1), { jenis: "geser", dx: 0, dy: 1 });
+  assert.deepEqual(panah("ArrowRight", true, 0.25), { jenis: "geser", dx: 2.5, dy: 0 });
+  assert.deepEqual(panah("ArrowUp", false, 0.5), { jenis: "geser", dx: 0, dy: -0.5 });
+});
+
+test("ukurGaris: jarak meter + sudut 0–360° berlawanan jarum jam dari kanan", () => {
+  assert.deepEqual(ukurGaris({ x: 0, y: 0 }, { x: 3, y: 0 }), { jarak: 3, sudut: 0 });
+  const u = ukurGaris({ x: 1, y: 1 }, { x: 4, y: -3 }); // ke kanan-atas layar
+  assert.equal(u.jarak, 5);
+  assert.equal(Math.round(u.sudut * 10) / 10, 53.1);
+  assert.equal(ukurGaris({ x: 0, y: 0 }, { x: 0, y: 2 }).sudut, 270); // ke bawah layar
+  assert.equal(formatUkur({ x: 0, y: 0 }, { x: 12.345, y: 0 }), "12,35 m · 0°");
+  assert.equal(formatUkur({ x: 1, y: 1 }, { x: 4, y: -3 }), "5,00 m · 53,1°");
+});
+
+test("lapisan tampil: bawaan semua, simpan daftar tersembunyi, data rusak = semua", () => {
+  assert.equal(uraiLapisan(null).size, DAFTAR_LAPISAN.length);
+  assert.equal(uraiLapisan("bukan json").size, DAFTAR_LAPISAN.length);
+  assert.equal(uraiLapisan('{"a":1}').size, DAFTAR_LAPISAN.length);
+  const s = uraiLapisan('["air","listrik","tidak-dikenal"]');
+  assert.equal(s.has("air"), false);
+  assert.equal(s.has("listrik"), false);
+  assert.equal(s.has("arsitektur"), true);
+  assert.equal(s.size, DAFTAR_LAPISAN.length - 2);
+  assert.deepEqual(uraiLapisan(serialLapisan(s)), s);
+  assert.equal(serialLapisan(new Set(DAFTAR_LAPISAN.map((l) => l.id))), "[]");
+});
+
+test("warna: setiap fluida, kabel, kategori mesin punya hex; beton & air hex", () => {
+  const hex = /^#[0-9a-f]{6}$/i;
+  const fluida = ["air-baku", "air-pendingin", "air-thawing", "drain", "brine", "nh3-cair", "nh3-gas", "udara"] as const;
+  for (const f of fluida) assert.match(WARNA_FLUIDA[f], hex, f);
+  assert.equal(Object.keys(WARNA_FLUIDA).length, fluida.length);
+  for (const k of ["daya", "kontrol"] as const) assert.match(WARNA_KABEL[k], hex);
+  for (const k of ["refrigerasi", "pompa", "listrik", "lainnya"] as const) assert.match(WARNA_MESIN[k], hex);
+  assert.match(WARNA_BETON, hex);
+  assert.match(WARNA_AIR, hex);
+  assert.equal(new Set(Object.values(WARNA_FLUIDA)).size, fluida.length, "warna fluida harus berbeda");
 });

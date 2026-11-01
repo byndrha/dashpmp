@@ -35,15 +35,21 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Fan, Lock, Maximize, Minus, Plus } from "lucide-react";
+import { Box, CircleDot, Droplets, Fan, GlassWater, Lock, Maximize, Minus, Plus, ThermometerSun, Wind, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { tataBakMeter, type TataBak } from "@/lib/produksi-denah-geometri";
 import { MawarAngin } from "@/components/produksi-denah/mawar-angin";
 import { formatAngka, panjangSkalaBatang } from "@/components/produksi-denah/format";
+import { WARNA_AIR, WARNA_BETON } from "@/components/produksi-denah/warna";
 import {
   kotakElemen,
+  lapisanElemen as lapisanDari,
   type AreaElemen,
   type BakElemen,
+  type BetonElemen,
+  type JenisTangki,
+  type Lapisan,
+  type TangkiElemen,
   type DenahDokumen,
   type DenahElemen,
   type DerekElemen,
@@ -147,6 +153,11 @@ export interface DenahKanvasProps {
   kolomSorotIds?: ReadonlySet<string>;
   /** Dipanggil setiap tampilan (pan/zoom) atau ukuran wadah berubah. */
   onTampilanBerubah?: (tampilan: Tampilan, ukuran: { w: number; h: number }) => void;
+  /**
+   * Lapisan yang tampil (spec v2 §4, useLapisanTampil). Elemen di lapisan
+   * tersembunyi tidak digambar — jadi juga tidak bisa diklik. Bawaan: semua.
+   */
+  lapisanTampil?: ReadonlySet<Lapisan>;
 }
 
 // ---------- Konstanta ----------
@@ -224,6 +235,7 @@ export function DenahKanvas({
   tumpukIds = KOSONG,
   kolomSorotIds = KOSONG,
   onTampilanBerubah,
+  lapisanTampil,
 }: DenahKanvasProps) {
   const idDasar = useId().replace(/[^a-zA-Z0-9]/g, "");
   const wadahRef = useRef<HTMLDivElement>(null);
@@ -231,7 +243,13 @@ export function DenahKanvas({
   const [ukuran, setUkuran] = useState<{ w: number; h: number } | null>(null);
   const [tampilanState, setTampilanState] = useState<Tampilan | null>(null);
   const [sedangGeser, setSedangGeser] = useState(false);
-  const { kanvas, elemen } = dokumen;
+  const { kanvas } = dokumen;
+  const elemenDok = dokumen.elemen;
+  // Elemen yang lapisannya tersembunyi dibuang SEBELUM digambar (tidak ada hit-test).
+  const elemen = useMemo(
+    () => (lapisanTampil ? elemenDok.filter((e) => lapisanTampil.has(lapisanDari(e))) : elemenDok),
+    [elemenDok, lapisanTampil]
+  );
 
   const pas = useMemo(() => (ukuran ? hitungPas(ukuran.w, ukuran.h, kanvas) : null), [ukuran, kanvas]);
   // Sebelum pengguna pan/zoom, tampilan = "pas ke layar" (diturunkan, tanpa effect).
@@ -753,6 +771,10 @@ const LatarKanvas = memo(function LatarKanvas({ lebar, tinggi, skalaKira, idPola
           <rect width={0.15} height={0.15} className="fill-muted" />
           <line x1={0} y1={0} x2={0} y2={0.15} className="stroke-muted-foreground/60" strokeWidth={0.045} />
         </pattern>
+        {/* Arsir beton (pondasi, plinth, saluran). */}
+        <pattern id={`${idPola}-beton`} width={0.3} height={0.3} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1={0} y1={0} x2={0} y2={0.3} className="stroke-stone-600/60 dark:stroke-stone-300/50" strokeWidth={0.04} />
+        </pattern>
         {/* Arsir merah: kolom/ice can yang melebihi ruang dalam bak. */}
         <pattern id={`${idPola}-lebih`} width={0.2} height={0.2} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width={0.2} height={0.2} className="fill-red-500/15" />
@@ -913,13 +935,23 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
     case "label":
       tubuh = <LabelTubuh l={e} ukuranGrid={p.ukuranGrid} />;
       break;
-    // Tampilan sementara tipe v2 (kotak sederhana); tampilan lengkap menyusul.
     case "beton":
-      tubuh = <rect width={e.w} height={e.h} className="fill-stone-400/60 stroke-stone-600" strokeWidth={1} vectorEffect={NS} />;
+      tubuh = <BetonTubuh b={e} idPola={p.idPola} />;
+      nama = (
+        <Teks x={kotak.x + fs * 0.4} y={kotak.y + fs * 0.4} ukuran={fs} anchor="start" baseline="hanging" className="fill-stone-700 dark:fill-stone-200">
+          {e.nama}
+        </Teks>
+      );
       break;
     case "tangki":
-      tubuh = <rect width={e.w} height={e.h} className="fill-sky-300/50 stroke-sky-700" strokeWidth={1} vectorEffect={NS} />;
+      tubuh = <TangkiTubuh t={e} skalaKira={p.skalaKira} />;
+      nama = (
+        <Teks x={kotak.x + kotak.w / 2} y={kotak.y + kotak.h + fs * 0.3} ukuran={fs} baseline="hanging" tebal>
+          {e.nama}
+        </Teks>
+      );
       break;
+    // Tampilan sementara jalur (kotak pembungkus); garis per fluida = Task 6.
     case "jalur":
       tubuh = <rect width={e.w} height={e.h} className="fill-blue-500/60" />;
       break;
@@ -1045,7 +1077,9 @@ function sisiIceCanTerkecil(tata: TataBak): number {
 
 function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: BakElemen } & ElemenViewProps) {
   const tata = useMemo(() => tataBakMeter(bak), [bak]);
-  const tebal = Math.max(0, Math.min(bak.tebalDindingM, bak.w / 2, bak.h / 2));
+  // Tebal mentah, SAMA dengan tataBakMeter (2D & 3D harus sepakat).
+  const tebal = bak.tebalDindingM;
+  const jarakKolom = bak.jarakAntarKolomMm / 1000;
   const tampilIceCan = sisiIceCanTerkecil(tata) * skalaKira >= 3;
   const iceCan = useMemo(() => (tampilIceCan ? pathIceCan(tata) : null), [tata, tampilIceCan]);
   const ruangB = Math.max(0, tata.ruangB);
@@ -1081,14 +1115,14 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: 
         vectorEffect={NS}
       />
       {tata.kolom.map((k) => {
-        // Lajur kolom selebar ice can, sepanjang ruang dalam bak.
+        // Lajur kolom selebar ice can (ukuran nyata), sepanjang ruang dalam bak.
         const r = tata.keXY(k.a0, tebal, k.lebar, ruangB);
         const pilih = kolomTerpilih.has(k.kolomId);
         const salah = kolomSorot.has(k.kolomId);
         return (
           <rect
             key={k.kolomId}
-            data-kolom-id={k.kolomId}
+            pointerEvents="none"
             x={r.x}
             y={r.y}
             width={Math.max(r.w, 0.0001)}
@@ -1100,6 +1134,22 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: 
             )}
             strokeWidth={pilih || salah ? 2.5 : 0}
             vectorEffect={NS}
+          />
+        );
+      })}
+      {/* Area klik tak terlihat per kolom: lajur + jarak antar-kolom (setengah tiap sisi),
+          agar kolom tetap mudah diklik walau lajur nyata hanya beberapa piksel. */}
+      {tata.kolom.map((k) => {
+        const r = tata.keXY(k.a0 - jarakKolom / 2, tebal, k.lebar + jarakKolom, ruangB);
+        return (
+          <rect
+            key={k.kolomId}
+            data-kolom-id={k.kolomId}
+            x={r.x}
+            y={r.y}
+            width={Math.max(r.w, 0.0001)}
+            height={Math.max(r.h, 0.0001)}
+            fill="transparent"
           />
         );
       })}
@@ -1130,6 +1180,49 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: 
             </Teks>
           );
         })}
+    </>
+  );
+}
+
+// ---------- Beton & tangki ----------
+
+function BetonTubuh({ b, idPola }: { b: BetonElemen; idPola: string }) {
+  return (
+    <>
+      <rect width={b.w} height={b.h} style={{ fill: WARNA_BETON }} fillOpacity={0.55} />
+      <rect width={b.w} height={b.h} fill={`url(#${idPola}-beton)`} className="stroke-stone-600 dark:stroke-stone-300" strokeWidth={1.5} vectorEffect={NS} />
+    </>
+  );
+}
+
+const IKON_TANGKI: Record<JenisTangki, LucideIcon> = {
+  tandon: Droplets,
+  filling: GlassWater,
+  thawing: ThermometerSun,
+  sumur: CircleDot,
+  "cooling-tower": Wind,
+  lainnya: Box,
+};
+
+function TangkiTubuh({ t, skalaKira }: { t: TangkiElemen; skalaKira: number }) {
+  const Ikon = IKON_TANGKI[t.jenis] ?? Box;
+  const s = Math.min(t.w, t.h) * (t.bentuk === "silinder" ? 0.45 : 0.5);
+  const isi = Math.max(0, Math.min(100, t.levelIsiPersen));
+  const fsIsi = s * 0.36;
+  const kelasBadan = "stroke-sky-700 dark:stroke-sky-300";
+  return (
+    <>
+      {t.bentuk === "silinder" ? (
+        <ellipse cx={t.w / 2} cy={t.h / 2} rx={t.w / 2} ry={t.h / 2} style={{ fill: WARNA_AIR }} fillOpacity={0.12 + 0.25 * (isi / 100)} className={kelasBadan} strokeWidth={1.5} vectorEffect={NS} />
+      ) : (
+        <rect width={t.w} height={t.h} rx={Math.min(t.w, t.h) * 0.08} style={{ fill: WARNA_AIR }} fillOpacity={0.12 + 0.25 * (isi / 100)} className={kelasBadan} strokeWidth={1.5} vectorEffect={NS} />
+      )}
+      <Ikon x={(t.w - s) / 2} y={(t.h - s) / 2 - fsIsi * 0.5} width={s} height={s} className="text-sky-700 dark:text-sky-300" pointerEvents="none" />
+      {fsIsi * skalaKira >= 7 && (
+        <Teks x={t.w / 2} y={(t.h + s) / 2 + fsIsi * 0.2} ukuran={fsIsi} className="fill-sky-800 dark:fill-sky-200">
+          {`${formatAngka(isi)}%`}
+        </Teks>
+      )}
     </>
   );
 }

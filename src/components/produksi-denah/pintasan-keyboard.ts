@@ -3,7 +3,8 @@
 
 import type { TipeElemen } from "@/lib/produksi-denah";
 
-export type Alat = "pilih" | "geser" | TipeElemen;
+/** "ukur" = alat Ukur sementara (tidak mengubah dokumen). */
+export type Alat = "pilih" | "geser" | "ukur" | TipeElemen;
 
 export type AksiPintasan =
   | { jenis: "alat"; alat: Alat }
@@ -33,12 +34,15 @@ export const TOMBOL_ALAT: Record<string, Alat> = {
   v: "pilih",
   h: "geser",
   b: "bak",
-  m: "mesin",
+  e: "mesin",
   d: "derek",
   w: "dinding",
   p: "pintu",
   a: "area",
-  t: "label",
+  k: "label",
+  o: "beton",
+  t: "tangki",
+  m: "ukur",
 };
 
 export const HURUF_ALAT: Record<Alat, string> = Object.fromEntries(
@@ -53,7 +57,11 @@ export interface EventTombol {
   altKey: boolean;
 }
 
-export function cocokkanPintasan(ev: EventTombol): AksiPintasan | null {
+/**
+ * @param langkahM langkah geser tombol panah (meter) — builder mengisi
+ *   kanvas.langkahSnapM; Shift = ×10.
+ */
+export function cocokkanPintasan(ev: EventTombol, langkahM = 1): AksiPintasan | null {
   const mod = ev.ctrlKey || ev.metaKey;
   const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
   if (mod) {
@@ -71,7 +79,8 @@ export function cocokkanPintasan(ev: EventTombol): AksiPintasan | null {
     return null;
   }
   if (ev.altKey) return null;
-  const langkah = ev.shiftKey ? 5 : 1;
+  // Dibulatkan ke 1 mm agar 0,1 × 10 tidak menjadi 1,0000000000000002.
+  const langkah = Math.round(langkahM * (ev.shiftKey ? 10 : 1) * 1000) / 1000;
   switch (k) {
     case "ArrowLeft":
       return { jenis: "geser", dx: -langkah, dy: 0 };
@@ -121,12 +130,15 @@ export const DAFTAR_PINTASAN: { grup: string; isi: [string, string][] }[] = [
       ["V", "Pilih"],
       ["H / tahan Spasi", "Geser kanvas"],
       ["B", "Bak"],
-      ["M", "Mesin"],
+      ["E", "Mesin"],
       ["D", "Derek (tarik garis A→B)"],
       ["W", "Dinding (tarik garis)"],
       ["P", "Pintu"],
       ["A", "Area"],
-      ["T", "Label"],
+      ["K", "Label"],
+      ["O", "Beton (pondasi, plinth, saluran)"],
+      ["T", "Tangki"],
+      ["M", "Ukur jarak & sudut (sementara)"],
       ["Shift saat menaruh", "Alat tetap aktif"],
     ],
   },
@@ -137,7 +149,7 @@ export const DAFTAR_PINTASAN: { grup: string; isi: [string, string][] }[] = [
       ["Tarik di ruang kosong", "Kotak seleksi"],
       ["Klik kolom bak terpilih", "Pilih kolom (Shift = rentang, Ctrl = satu-satu)"],
       ["Alt saat menarik", "Tanpa snap grid & garis bantu"],
-      ["← ↑ → ↓", "Geser 1 m (Shift = 5 m)"],
+      ["← ↑ → ↓", "Geser 1 langkah snap (Shift = ×10)"],
       ["R", "Putar 90°"],
       ["Ctrl+D", "Duplikat"],
       ["Ctrl+C / Ctrl+X / Ctrl+V", "Salin / potong / tempel"],

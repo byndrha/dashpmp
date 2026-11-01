@@ -38,9 +38,11 @@ import {
   type DenahElemen,
   type DerekElemen,
   type DimensiIceCan,
+  type JenisTangki,
   type KategoriMesin,
   type LabelElemen,
   type MesinElemen,
+  type TangkiElemen,
   type Varian,
 } from "@/lib/produksi-denah";
 import { tataBakMeter } from "@/lib/produksi-denah-geometri";
@@ -230,6 +232,8 @@ function IsianKhusus({ e, dok, dispatch, onKeKolom }: { e: DenahElemen; dok: Den
       return <IsianArea a={e} dispatch={dispatch} />;
     case "label":
       return <IsianLabel l={e} dispatch={dispatch} />;
+    case "tangki":
+      return <IsianTangki t={e} dispatch={dispatch} />;
     default:
       return null;
   }
@@ -637,6 +641,58 @@ function IsianLabel({ l, dispatch }: { l: LabelElemen; dispatch: Dispatch<AksiBu
           onKosong={() => dispatch({ type: "ubahElemen", id: l.id, patch: { ukuranHuruf: undefined } })}
         />
       </Bidang>
+    </div>
+  );
+}
+
+const PILIHAN_JENIS_TANGKI: { nilai: JenisTangki; label: string }[] = [
+  { nilai: "tandon", label: "Tandon air" },
+  { nilai: "filling", label: "Bak filling (isi ice can)" },
+  { nilai: "thawing", label: "Bak thawing (lepas es)" },
+  { nilai: "sumur", label: "Sumur" },
+  { nilai: "cooling-tower", label: "Cooling tower" },
+  { nilai: "lainnya", label: "Lainnya" },
+];
+
+function IsianTangki({ t, dispatch }: { t: TangkiElemen; dispatch: Dispatch<AksiBuilder> }) {
+  const ubah = (patch: Partial<TangkiElemen>, kunci?: string) => dispatch({ type: "ubahElemen", id: t.id, patch, gabung: kunci ? `${t.id}:${kunci}` : undefined });
+  // Volume geometris dari ukuran denah (silinder = elips w × h) — sekadar acuan.
+  const volume = (t.bentuk === "silinder" ? (Math.PI * t.w * t.h) / 4 : t.w * t.h) * t.tinggiM;
+  return (
+    <div className="flex flex-col gap-2">
+      <Bidang label="Jenis" petunjuk="Filling & thawing masuk lapisan Proses; lainnya lapisan Air.">
+        <Pilihan<JenisTangki> nilai={t.jenis} pilihan={PILIHAN_JENIS_TANGKI} ariaLabel="Jenis tangki" onUbah={(jenis) => ubah({ jenis })} />
+      </Bidang>
+      <Bidang label="Bentuk">
+        <Segmen<TangkiElemen["bentuk"]>
+          nilai={t.bentuk}
+          pilihan={[
+            { nilai: "kotak", label: "Kotak" },
+            { nilai: "silinder", label: "Silinder" },
+          ]}
+          onUbah={(bentuk) => ubah({ bentuk })}
+        />
+      </Bidang>
+      <div className="grid grid-cols-2 gap-2">
+        <Bidang label="Kapasitas">
+          <InputAngka
+            nilai={t.kapasitasM3 ?? null}
+            bulat={false}
+            min={0}
+            max={100000}
+            satuan="m³"
+            placeholder="—"
+            onUbah={(kapasitasM3) => ubah({ kapasitasM3 }, "kapasitas")}
+            onKosong={() => ubah({ kapasitasM3: undefined })}
+          />
+        </Bidang>
+        <Bidang label="Level isi">
+          <InputAngka nilai={t.levelIsiPersen} min={0} max={100} satuan="%" onUbah={(levelIsiPersen) => ubah({ levelIsiPersen }, "level")} />
+        </Bidang>
+      </div>
+      <p className="text-[10px] leading-tight text-muted-foreground">
+        Volume dari ukuran denah ≈ <b className="font-medium text-foreground">{formatAngka(volume)} m³</b>. Level isi hanya untuk tampilan.
+      </p>
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import {
   denahKosong,
   kotakElemen,
+  lapisanElemen,
   validasiDenah,
   type BakElemen,
   type DenahDokumen,
@@ -35,6 +36,7 @@ import {
   type GalatDenah,
   type HasilSimpanDenah,
   type KodeProduksi,
+  type Lapisan,
   type TipeElemen,
   type Titik,
 } from "@/lib/produksi-denah";
@@ -56,7 +58,9 @@ import {
   stateAwal,
   type Kotak,
 } from "@/components/produksi-denah/builder-state";
-import { formatMeter } from "@/components/produksi-denah/format";
+import { formatMeter, formatUkur } from "@/components/produksi-denah/format";
+import { useLapisanTampil } from "@/components/produksi-denah/lapisan";
+import { MenuLapisan } from "@/components/produksi-denah/menu-lapisan";
 import { cocokkanPintasan, DAFTAR_PINTASAN, type Alat } from "@/components/produksi-denah/pintasan-keyboard";
 import { PaletAlat } from "@/components/produksi-denah/palet-alat";
 import { PanelProperti } from "@/components/produksi-denah/panel-properti";
@@ -102,7 +106,11 @@ type Gestur =
   | { jenis: "kotak"; cx: number; cy: number; awal: Titik; tambah: boolean; bergerak: boolean; akhir: Titik }
   | { jenis: "ukuran"; id: string; handle: Handle; kotak: Kotak }
   | { jenis: "titik"; id: string; ujung: "a" | "b" }
-  | { jenis: "gambar"; alat: TipeElemen; cx: number; cy: number; awal: Titik; akhir: Titik; bergerak: boolean };
+  | { jenis: "gambar"; alat: TipeElemen; cx: number; cy: number; awal: Titik; akhir: Titik; bergerak: boolean }
+  | { jenis: "ukur"; awal: Titik };
+
+/** Garis alat Ukur — sementara, TIDAK pernah masuk dokumen. */
+type GarisUkur = { a: Titik; b: Titik };
 
 interface Visual {
   geser: GeserSementara | null;
@@ -206,7 +214,14 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const hrefKembali = `/${kode}/produksi`;
   const [state, dispatch] = useReducer(builderReducer, dokumenAwal, (d) => stateAwal(d ?? denahKosong()));
   const [versi, setVersi] = useState<number | null>(versiAwal);
-  const [alat, setAlat] = useState<Alat>("pilih");
+  const [alat, setAlatMentah] = useState<Alat>("pilih");
+  const [ukur, setUkur] = useState<GarisUkur | null>(null);
+  // Hasil ukur hilang setiap kali alat berganti.
+  const setAlat = useCallback((a: Alat) => {
+    setAlatMentah(a);
+    setUkur(null);
+  }, []);
+  const [lapisanTampil, aturLapisan] = useLapisanTampil();
   const [tab, setTab] = useState<Tab>("properti");
   const [visual, setVisual] = useState<Visual>(VISUAL_KOSONG);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -231,6 +246,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const kolomTerpilihSet = useMemo(() => new Set(state.kolomTerpilih), [state.kolomTerpilih]);
   const elemenTerpilih = useMemo(() => dok.elemen.filter((e) => terpilihSet.has(e.id)), [dok.elemen, terpilihSet]);
   const byId = useMemo(() => new Map(dok.elemen.map((e) => [e.id, e])), [dok.elemen]);
+  // Elemen di lapisan tersembunyi tidak digambar dan tidak bisa dipilih.
+  const tampilDiLapisan = useCallback((e: DenahElemen) => lapisanTampil.has(lapisanElemen(e)), [lapisanTampil]);
   const bakTerpilih = elemenTerpilih.length === 1 && elemenTerpilih[0].tipe === "bak" ? (elemenTerpilih[0] as BakElemen) : null;
 
   // Validasi langsung (ditunda agar drag ubah ukuran tetap halus).
@@ -322,12 +339,14 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     (g: GalatDenah) => {
       const e = g.elemenId ? byId.get(g.elemenId) : undefined;
       if (!e) return;
+      // Elemen di lapisan tersembunyi: tampilkan lapisannya dulu agar bisa disorot.
+      if (!tampilDiLapisan(e)) aturLapisan(lapisanElemen(e), true);
       if (g.kolomId && e.tipe === "bak" && e.kolom.some((k) => k.id === g.kolomId)) {
         dispatch({ type: "aturKolomTerpilih", bakId: e.id, kolomIds: [g.kolomId] });
       } else dispatch({ type: "pilih", ids: [e.id] });
       fokusKotak(kotakElemen(e));
     },
-    [byId, fokusKotak]
+    [byId, fokusKotak, tampilDiLapisan, aturLapisan]
   );
 
   // ---------- Gestur kanvas ----------
@@ -341,7 +360,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     const x = [0, dok.kanvas.lebar / 2, dok.kanvas.lebar];
     const y = [0, dok.kanvas.tinggi / 2, dok.kanvas.tinggi];
     for (const e of dok.elemen) {
-      if (abaikan.has(e.id)) continue;
+      if (abaikan.has(e.id) || !tampilDiLapisan(e)) continue;
       const k = kotakElemen(e);
       x.push(k.x, k.x + k.w / 2, k.x + k.w);
       y.push(k.y, k.y + k.h / 2, k.y + k.h);
@@ -354,6 +373,13 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     if (alat === "geser") return false;
     const snap = !ev.altKey;
     setHoverId(null);
+
+    if (alat === "ukur") {
+      const a = snapTitik(info.titik, snap, langkahSnap);
+      gestur.current = { jenis: "ukur", awal: a };
+      setUkur({ a, b: a });
+      return true;
+    }
 
     // Handle ubah ukuran / titik derek (overlay).
     const handleEl = ev.target instanceof Element ? ev.target.closest("[data-handle]") : null;
@@ -458,6 +484,9 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         dispatch({ type: "aturTitikDerek", id: g.id, titikAwal: g.ujung === "a" ? p : a, titikAkhir: g.ujung === "b" ? p : b });
         return;
       }
+      case "ukur":
+        setUkur({ a: g.awal, b: snapTitik(info.titik, snap, langkahSnap) });
+        return;
       case "gambar": {
         if (!g.bergerak && !lewatAmbang(g.cx, g.cy)) return;
         g.bergerak = true;
@@ -477,6 +506,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     const g = gestur.current;
     gestur.current = null;
     if (g && (g.jenis === "ukuran" || g.jenis === "titik")) dispatch({ type: "batalTransaksi" });
+    if (g?.jenis === "ukur") setUkur(null);
     setVisual(VISUAL_KOSONG);
   };
 
@@ -512,13 +542,17 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
           return;
         }
         const k = kotakDari(g.awal, g.akhir);
-        const ids = dok.elemen.filter((e) => bersinggungan(kotakElemen(e), k)).map((e) => e.id);
+        const ids = dok.elemen.filter((e) => tampilDiLapisan(e) && bersinggungan(kotakElemen(e), k)).map((e) => e.id);
         dispatch({ type: "pilih", ids, tambah: g.tambah });
         return;
       }
       case "ukuran":
       case "titik":
         dispatch({ type: "akhiriTransaksi" });
+        return;
+      case "ukur":
+        // Hasil tetap tampil sampai alat berganti / Esc; klik tanpa tarik = hapus.
+        setUkur((u) => (u && (u.a.x !== u.b.x || u.a.y !== u.b.y) ? u : null));
         return;
       case "gambar": {
         const snap = !ev.altKey;
@@ -546,7 +580,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const tanganiTombol = (ev: KeyboardEvent) => {
     if (ev.defaultPrevented || ev.repeat && !ev.key.startsWith("Arrow")) return;
     if (document.querySelector("[data-slot=dialog-content]")) return;
-    const a = cocokkanPintasan(ev);
+    const a = cocokkanPintasan(ev, langkahSnap);
     if (!a) return;
     if (ketikDiInput(ev.target)) {
       if (a.jenis === "simpan") {
@@ -590,7 +624,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         dispatch({ type: "tempel" });
         return;
       case "pilihSemua":
-        dispatch({ type: "pilihSemua" });
+        // Hanya elemen di lapisan yang tampil.
+        dispatch({ type: "pilih", ids: dok.elemen.filter(tampilDiLapisan).map((e) => e.id) });
         return;
       case "putar":
         if (ids.length) dispatch({ type: "putar", ids });
@@ -607,6 +642,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         return;
       case "batal":
         if (gestur.current) batalGestur();
+        else if (ukur) setUkur(null);
         else if (alat !== "pilih") setAlat("pilih");
         else if (state.kolomTerpilih.length && bakTerpilih) dispatch({ type: "aturKolomTerpilih", bakId: bakTerpilih.id, kolomIds: [] });
         else dispatch({ type: "pilih", ids: [] });
@@ -655,7 +691,18 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
             ? "cursor-move"
             : undefined;
 
-  const pilihAlat = useCallback((a: Alat) => setAlat(a), []);
+  const pilihAlat = setAlat;
+  const ubahLapisan = (l: Lapisan, tampil: boolean) => {
+    aturLapisan(l, tampil);
+    if (tampil) return;
+    // Elemen yang disembunyikan keluar dari seleksi (tidak bisa diedit tanpa terlihat).
+    const sisa = state.terpilih.filter((id) => {
+      const e = byId.get(id);
+      return e && lapisanElemen(e) !== l;
+    });
+    if (sisa.length !== state.terpilih.length) dispatch({ type: "pilih", ids: sisa });
+    setHoverId(null);
+  };
   const keKolom = useCallback(() => setTab("kolom"), []);
   const tutupServer = useCallback(() => setPenolakan(null), []);
   const onTampilan = useCallback((t: InfoTampilan["tampilan"], u: InfoTampilan["ukuran"]) => tampilanToko.set({ tampilan: t, ukuran: u }), [tampilanToko]);
@@ -705,6 +752,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
             <Maximize /> <span className="hidden lg:inline">Pas ke layar</span>
           </Button>
         </div>
+        <MenuLapisan tampil={lapisanTampil} onUbah={ubahLapisan} elemen={dok.elemen} />
         <Button variant="ghost" size="icon-sm" title="Pintasan keyboard (?)" aria-label="Pintasan keyboard" onClick={() => setContekan(true)}>
           <Keyboard />
         </Button>
@@ -752,10 +800,12 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onTampilanBerubah={onTampilan}
+            lapisanTampil={lapisanTampil}
             overlay={(ctx) => (
               <OverlayEdit
                 elemenTerpilih={elemenTerpilih}
                 visual={visual}
+                ukur={ukur}
                 alat={alat}
                 kursorToko={kursorToko}
                 unitPerPx={ctx.unitPerPx}
@@ -861,7 +911,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
       <footer className="flex h-7 shrink-0 items-center gap-3 border-t px-3 text-[11px] text-muted-foreground tabular-nums">
         <StatusKursor toko={kursorToko} />
         <span>
-          Alat: <b className="font-medium text-foreground">{alat === "pilih" ? "Pilih" : alat === "geser" ? "Geser kanvas" : NAMA_TIPE[alat]}</b>
+          Alat: <b className="font-medium text-foreground">{alat === "pilih" ? "Pilih" : alat === "geser" ? "Geser kanvas" : alat === "ukur" ? "Ukur" : NAMA_TIPE[alat]}</b>
         </span>
         <span>
           Terpilih: <b className="font-medium text-foreground">{state.terpilih.length}</b>
@@ -980,6 +1030,7 @@ function StatusKursor({ toko }: { toko: Toko<Titik | null> }) {
 const OverlayEdit = memo(function OverlayEdit({
   elemenTerpilih,
   visual,
+  ukur,
   alat,
   kursorToko,
   unitPerPx,
@@ -987,6 +1038,7 @@ const OverlayEdit = memo(function OverlayEdit({
 }: {
   elemenTerpilih: DenahElemen[];
   visual: Visual;
+  ukur: GarisUkur | null;
   alat: Alat;
   kursorToko: Toko<Titik | null>;
   unitPerPx: number;
@@ -1056,7 +1108,10 @@ const OverlayEdit = memo(function OverlayEdit({
       {visual.gambar && <PratinjauGambar g={visual.gambar} fs={fs} langkah={kanvas.langkahSnapM} />}
 
       {/* Hantu alat di bawah kursor */}
-      {alat !== "pilih" && alat !== "geser" && !visual.gambar && <HantuAlat alat={alat} toko={kursorToko} fs={fs} langkah={kanvas.langkahSnapM} />}
+      {alat !== "pilih" && alat !== "geser" && alat !== "ukur" && !visual.gambar && <HantuAlat alat={alat} toko={kursorToko} fs={fs} langkah={kanvas.langkahSnapM} />}
+
+      {/* Alat Ukur (sementara) */}
+      {ukur && <TampilanUkur u={ukur} fs={fs} />}
     </g>
   );
 });
@@ -1069,6 +1124,25 @@ function Pil({ x, y, fs, children }: { x: number; y: number; fs: number; childre
       <text x={x} y={y} fontSize={fs} textAnchor="middle" dominantBaseline="central" className="fill-background tabular-nums">
         {children}
       </text>
+    </g>
+  );
+}
+
+function TampilanUkur({ u, fs }: { u: GarisUkur; fs: number }) {
+  const r = fs * 0.32;
+  const ada = u.a.x !== u.b.x || u.a.y !== u.b.y;
+  return (
+    <g pointerEvents="none">
+      {ada && (
+        <line x1={u.a.x} y1={u.a.y} x2={u.b.x} y2={u.b.y} className="stroke-rose-600 dark:stroke-rose-400" strokeWidth={2} strokeDasharray="6 3" vectorEffect="non-scaling-stroke" />
+      )}
+      <circle cx={u.a.x} cy={u.a.y} r={r} className="fill-rose-600 stroke-background dark:fill-rose-400" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+      {ada && <circle cx={u.b.x} cy={u.b.y} r={r} className="fill-rose-600 stroke-background dark:fill-rose-400" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+      {ada && (
+        <Pil x={(u.a.x + u.b.x) / 2} y={(u.a.y + u.b.y) / 2 - fs * 1.4} fs={fs}>
+          {formatUkur(u.a, u.b)}
+        </Pil>
+      )}
     </g>
   );
 }
