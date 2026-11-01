@@ -199,6 +199,13 @@ export interface GalatDenah {
   elemenId?: string;
   kolomId?: string;
   pesan: string;
+  /**
+   * "galat" (bawaan bila tidak diisi) memblokir Simpan; "peringatan" (dari
+   * periksaTeknik) hanya ditampilkan & disorot, tidak pernah memblokir.
+   */
+  tingkat?: "galat" | "peringatan";
+  /** Elemen lain yang terlibat (mis. bak yang dilayani derek), ikut disorot. */
+  elemenTerkaitIds?: string[];
 }
 
 // Kode perusahaan pabrik Es Balok yang punya modul Produksi.
@@ -421,13 +428,17 @@ function labelElemen(e: DenahElemen): string {
   return nama ? `"${nama}"` : `${e.tipe} tanpa nama`;
 }
 
+// Tipe tanpa volume: area/label datar (tinggi 0 sah); tinggi jalur = diameter.
+const TIPE_TANPA_VOLUME: ReadonlySet<TipeElemen> = new Set<TipeElemen>(["area", "label", "jalur"]);
+
 function normalNama(s: string): string {
   return s.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
   const galat: GalatDenah[] = [];
-  const { lebar, tinggi } = dok.kanvas;
+  const { lebar, tinggi, utaraDerajat } = dok.kanvas;
+  if (!(utaraDerajat >= 0 && utaraDerajat <= 359)) galat.push({ pesan: "Arah utara harus 0–359 derajat." });
   const byId = new Map<string, DenahElemen>();
   const idKolom = new Set<string>();
 
@@ -445,6 +456,7 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
     if (k.x < 0 || k.y < 0 || k.x + k.w > lebar || k.y + k.h > tinggi) {
       galat.push({ elemenId: e.id, pesan: `${label} keluar dari batas kanvas.` });
     }
+    if (!TIPE_TANPA_VOLUME.has(e.tipe) && !(e.tinggiM > 0)) galat.push({ elemenId: e.id, pesan: `Tinggi ${label} harus lebih dari 0 m.` });
 
     if (e.tipe === "bak") {
       const kunci = normalNama(e.nama);
@@ -459,6 +471,14 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
         galat.push({ elemenId: e.id, pesan: `Durasi beku bak ${label} (Kecil & Besar) harus lebih dari 0 jam.` });
       }
       if (!(e.kolomPerPanen > 0)) galat.push({ elemenId: e.id, pesan: `Kolom per panen bak ${label} harus lebih dari 0.` });
+      if (!(e.tebalDindingM >= 0)) galat.push({ elemenId: e.id, pesan: `Tebal dinding bak ${label} tidak boleh negatif.` });
+      if (e.levelBrineM > e.tinggiM) galat.push({ elemenId: e.id, pesan: `Level brine bak ${label} melebihi kedalaman bak.` });
+      for (const v of ["kecil", "besar"] as const) {
+        const d = e.iceCan[v];
+        if (!(d.panjangMm > 0) || !(d.lebarMm > 0) || !(d.tinggiMm > 0) || !(d.beratKg > 0)) {
+          galat.push({ elemenId: e.id, pesan: `Dimensi & berat ice can ${v === "kecil" ? "Kecil" : "Besar"} bak ${label} harus lebih dari 0.` });
+        }
+      }
       for (const mid of e.mesinIds) {
         if (byId.get(mid)?.tipe !== "mesin") galat.push({ elemenId: e.id, pesan: `Bak ${label} menunjuk mesin yang tidak ada.` });
       }
@@ -473,6 +493,16 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
       for (const bid of e.bakIds) {
         if (byId.get(bid)?.tipe !== "bak") galat.push({ elemenId: e.id, pesan: `Derek ${label} menunjuk bak yang tidak ada.` });
       }
+    } else if (e.tipe === "jalur") {
+      if (e.titik.length < 2) galat.push({ elemenId: e.id, pesan: `Jalur ${label} harus punya minimal 2 titik.` });
+      if (!(e.diameterMm > 0)) galat.push({ elemenId: e.id, pesan: `Diameter jalur ${label} harus lebih dari 0 mm.` });
+      for (const [ujung, ref] of [["awal", e.dariId], ["akhir", e.keId]] as const) {
+        if (ref && !byId.has(ref)) {
+          galat.push({ elemenId: e.id, pesan: `Ujung ${ujung} jalur ${label} menunjuk elemen yang tidak ada.` });
+        }
+      }
+    } else if (e.tipe === "tangki") {
+      if (!(e.levelIsiPersen >= 0 && e.levelIsiPersen <= 100)) galat.push({ elemenId: e.id, pesan: `Level isi tangki ${label} harus 0–100%.` });
     }
   }
 

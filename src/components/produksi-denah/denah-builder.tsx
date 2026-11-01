@@ -59,6 +59,7 @@ import { PaletAlat } from "@/components/produksi-denah/palet-alat";
 import { PanelProperti } from "@/components/produksi-denah/panel-properti";
 import { PanelKolom } from "@/components/produksi-denah/panel-kolom";
 import { PanelValidasi } from "@/components/produksi-denah/panel-validasi";
+import { periksaTeknik } from "@/lib/produksi-denah-teknik";
 import { Minimap, type InfoTampilan } from "@/components/produksi-denah/minimap";
 import { buatToko, useToko, type Toko } from "@/components/produksi-denah/bidang";
 
@@ -227,6 +228,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   // Validasi langsung (ditunda agar drag ubah ukuran tetap halus).
   const dokTunda = useDeferredValue(dok);
   const galat = useMemo(() => validasiDenah(dokTunda), [dokTunda]);
+  // Peringatan teknik: hanya informasi, TIDAK pernah memblokir Simpan.
+  const peringatan = useMemo(() => periksaTeknik(dokTunda), [dokTunda]);
   const galatServer = penolakan?.jenis === "kolom" ? penolakan.galat : null;
   const sorotIds = useMemo(() => {
     const s = new Set<string>();
@@ -805,14 +808,24 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
                     {galat.length + (galatServer?.length ?? 0)}
                   </span>
                 )}
-                {t === "validasi" && galat.length === 0 && !galatServer?.length && <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓</span>}
+                {t === "validasi" && peringatan.length > 0 && (
+                  <span
+                    className="ml-1 inline-flex min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] text-white tabular-nums"
+                    title={`${peringatan.length} peringatan teknik`}
+                  >
+                    {peringatan.length}
+                  </span>
+                )}
+                {t === "validasi" && galat.length === 0 && !galatServer?.length && peringatan.length === 0 && (
+                  <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓</span>
+                )}
               </button>
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {tab === "properti" && <PanelProperti dok={dok} terpilih={elemenTerpilih} dispatch={dispatch} onKeKolom={keKolom} />}
             {tab === "kolom" && <PanelKolom bak={bakTerpilih} kolomTerpilih={state.kolomTerpilih} kolomSorotIds={kolomSorotIds} dispatch={dispatch} />}
-            {tab === "validasi" && <PanelValidasi galat={galat} galatServer={galatServer} elemen={dok.elemen} onFokus={fokusGalat} onTutupServer={tutupServer} />}
+            {tab === "validasi" && <PanelValidasi galat={galat} peringatan={peringatan} galatServer={galatServer} elemen={dok.elemen} onFokus={fokusGalat} onTutupServer={tutupServer} />}
           </div>
         </aside>
       </div>
