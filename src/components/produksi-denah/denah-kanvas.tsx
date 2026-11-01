@@ -866,6 +866,16 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
     case "label":
       tubuh = <LabelTubuh l={e} ukuranGrid={p.ukuranGrid} />;
       break;
+    // Tampilan sementara tipe v2 (kotak sederhana); tampilan lengkap menyusul.
+    case "beton":
+      tubuh = <rect width={e.w} height={e.h} className="fill-stone-400/60 stroke-stone-600" strokeWidth={1} vectorEffect={NS} />;
+      break;
+    case "tangki":
+      tubuh = <rect width={e.w} height={e.h} className="fill-sky-300/50 stroke-sky-700" strokeWidth={1} vectorEffect={NS} />;
+      break;
+    case "jalur":
+      tubuh = <rect width={e.w} height={e.h} className="fill-blue-500/60" />;
+      break;
   }
 
   return (

@@ -13,17 +13,33 @@ import {
   namaBerikut,
   namaUnik,
   stateAwal,
+  NAMA_TIPE,
+  UKURAN_BAWAAN,
   type AksiBuilder,
   type StateBuilder,
 } from "../../components/produksi-denah/builder-state";
-import { buatBak, denahKosong, validasiDenah, type BakElemen, type DenahDokumen, type DerekElemen, type MesinElemen } from "../produksi-denah";
+import {
+  buatBak,
+  denahKosong,
+  validasiBentukDenah,
+  validasiDenah,
+  type BakElemen,
+  type DenahDokumen,
+  type DerekElemen,
+  type JalurElemen,
+  type MesinElemen,
+  type TangkiElemen,
+} from "../produksi-denah";
 
 function jalankan(s: StateBuilder, ...aksi: AksiBuilder[]): StateBuilder {
   return aksi.reduce(builderReducer, s);
 }
 
 function mesin(x: number, y: number, nama = "Mesin 1"): MesinElemen {
-  return { tipe: "mesin", id: crypto.randomUUID(), nama, x, y, w: 4, h: 4, rotasi: 0, jenis: "Kompresor", catatan: "" };
+  return {
+    tipe: "mesin", id: crypto.randomUUID(), nama, x, y, w: 4, h: 4, rotasi: 0, elevasiM: 0, tinggiM: 1.8,
+    kategori: "refrigerasi", jenis: "Kompresor", catatan: "",
+  };
 }
 
 function dokDengan(...elemen: DenahDokumen["elemen"]): DenahDokumen {
@@ -48,7 +64,7 @@ test("tambah: elemen masuk dokumen, terpilih, satu entri riwayat", () => {
 
 test("pindah: menggeser x/y; derek ikut menggeser kedua titik absolut; elemen terkunci tidak bergeser", () => {
   const derek: DerekElemen = {
-    tipe: "derek", id: "d", nama: "Derek 1", x: 0, y: 5, w: 20, h: 1, rotasi: 0,
+    tipe: "derek", id: "d", nama: "Derek 1", x: 0, y: 5, w: 20, h: 1, rotasi: 0, elevasiM: 3.5, tinggiM: 0.3, tinggiKaitM: 0.8,
     titikAwal: { x: 0, y: 5 }, titikAkhir: { x: 20, y: 5 }, bakIds: [],
   };
   const m = { ...mesin(30, 30), terkunci: true };
@@ -233,7 +249,46 @@ test("nama otomatis bertambah; namaUnik", () => {
 
 test("buatElemen dinding diluruskan ke sumbu dominan", () => {
   const d = buatElemen("dinding", { x: 0, y: 0, w: 1, h: 1 }, [], { a: { x: 2, y: 3 }, b: { x: 12, y: 5 } });
-  assert.deepEqual([d.x, d.y, d.w, d.h], [2, 3, 10, 1]);
+  assert.deepEqual([d.x, d.y, d.w, d.h], [2, 3, 10, 0.2]);
+  assert.deepEqual([d.elevasiM, d.tinggiM], [0, 4]);
+});
+
+test("UKURAN_BAWAAN dalam meter & NAMA_TIPE tipe baru", () => {
+  assert.deepEqual(UKURAN_BAWAAN, {
+    bak: { w: 16, h: 6.5 },
+    mesin: { w: 2, h: 2 },
+    derek: { w: 16, h: 0.3 },
+    dinding: { w: 10, h: 0.2 },
+    pintu: { w: 1.2, h: 0.2 },
+    area: { w: 6, h: 4 },
+    label: { w: 4, h: 1 },
+    beton: { w: 2, h: 2 },
+    tangki: { w: 2, h: 2 },
+    jalur: { w: 1, h: 1 },
+  });
+  assert.equal(NAMA_TIPE.beton, "Beton");
+  assert.equal(NAMA_TIPE.tangki, "Tangki");
+  assert.equal(NAMA_TIPE.jalur, "Jalur");
+});
+
+test("buatElemen mengisi elevasi/tinggi bawaan spec §3 tiap tipe", () => {
+  const k = { x: 1, y: 1, w: 2, h: 2 };
+  const el = (t: Parameters<typeof buatElemen>[0]) => buatElemen(t, k, []);
+  const m = el("mesin") as MesinElemen;
+  assert.deepEqual([m.elevasiM, m.tinggiM, m.kategori], [0, 1.8, "refrigerasi"]);
+  const d = el("derek") as DerekElemen;
+  assert.deepEqual([d.elevasiM, d.tinggiM, d.tinggiKaitM], [3.5, 0.3, 0.8]);
+  const b = el("bak") as BakElemen;
+  assert.deepEqual([b.elevasiM, b.tinggiM, b.tebalDindingM], [-0.7, 1, 0.2]);
+  assert.deepEqual([el("dinding").tinggiM, el("pintu").tinggiM, el("area").elevasiM], [4, 2.4, 0]);
+  const beton = el("beton");
+  assert.deepEqual([beton.elevasiM, beton.tinggiM], [-0.5, 0.5]);
+  const t = el("tangki") as TangkiElemen;
+  assert.deepEqual([t.jenis, t.bentuk, t.tinggiM, t.levelIsiPersen], ["tandon", "kotak", 1.5, 70]);
+  const j = el("jalur") as JalurElemen;
+  assert.deepEqual([j.jenis, j.fluida, j.diameterMm, j.titik.length], ["pipa", "air-baku", 50, 2]);
+  const s = stateAwal(dokDengan(b, m, d, beton, t, j));
+  assert.equal(validasiBentukDenah(JSON.parse(JSON.stringify(s.dok))), null);
 });
 
 test("bakBertumpuk memperhitungkan pergeseran sementara", () => {

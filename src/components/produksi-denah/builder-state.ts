@@ -15,6 +15,13 @@
 import {
   buatBak,
   kotakElemen,
+  kotakJalur,
+  DIAMETER_JALUR_BAWAAN,
+  ELEVASI_TINGGI_BAWAAN,
+  FLUIDA_BAWAAN,
+  KATEGORI_MESIN_BAWAAN,
+  TANGKI_BAWAAN,
+  TINGGI_KAIT_BAWAAN,
   nomoriUlangKolom,
   ubahJumlahKolom,
   type BakElemen,
@@ -122,18 +129,31 @@ export const NAMA_TIPE: Record<TipeElemen, string> = {
   pintu: "Pintu",
   area: "Area",
   label: "Label",
+  beton: "Beton",
+  tangki: "Tangki",
+  jalur: "Jalur",
 };
 
-/** Ukuran bawaan saat alat diklik (tanpa drag), dalam unit grid. */
+/** Ukuran bawaan saat alat diklik (tanpa drag), dalam meter. */
 export const UKURAN_BAWAAN: Record<TipeElemen, { w: number; h: number }> = {
-  bak: { w: 20, h: 8 },
-  mesin: { w: 4, h: 4 },
-  derek: { w: 20, h: 1 },
-  dinding: { w: 10, h: 1 },
-  pintu: { w: 3, h: 1 },
-  area: { w: 12, h: 8 },
-  label: { w: 8, h: 2 },
+  bak: { w: 16, h: 6.5 },
+  mesin: { w: 2, h: 2 },
+  derek: { w: 16, h: 0.3 },
+  dinding: { w: 10, h: 0.2 },
+  pintu: { w: 1.2, h: 0.2 },
+  area: { w: 6, h: 4 },
+  label: { w: 4, h: 1 },
+  beton: { w: 2, h: 2 },
+  tangki: { w: 2, h: 2 },
+  jalur: { w: 1, h: 1 },
 };
+
+/** Tebal dinding bawaan (meter), juga untuk dinding yang ditarik dari garis. */
+export const TEBAL_DINDING = 0.2;
+/** Lebar minimum kotak derek (meter) = tinggi balok rel bawaan. */
+const LEBAR_MIN_DEREK = 0.3;
+/** z bawaan titik jalur baru (meter) sampai builder punya "elevasi kerja". */
+const Z_JALUR_BAWAAN = -0.1;
 
 function normal(s: string) {
   return s.trim().replace(/\s+/g, " ").toLowerCase();
@@ -164,11 +184,13 @@ export function namaUnik(nama: string, dipakai: Set<string>): string {
 }
 
 function garisKeKotak(a: Titik, b: Titik): Kotak {
-  // Kotak derek minimal 1 unit per sisi (validasi ukuran > 0); sisi yang
-  // lebih tipis dari 1 dipusatkan pada garis agar garis seleksi tidak miring.
+  // Kotak derek minimal LEBAR_MIN_DEREK per sisi (validasi ukuran > 0); sisi
+  // yang lebih tipis dipusatkan pada garis agar garis seleksi tidak miring.
   const sumbu = (p: number, q: number) => {
     const d = Math.abs(p - q);
-    return d >= 1 ? { awal: Math.min(p, q), panjang: d } : { awal: (p + q) / 2 - 0.5, panjang: 1 };
+    return d >= LEBAR_MIN_DEREK
+      ? { awal: Math.min(p, q), panjang: d }
+      : { awal: (p + q) / 2 - LEBAR_MIN_DEREK / 2, panjang: LEBAR_MIN_DEREK };
   };
   const sx = sumbu(a.x, b.x);
   const sy = sumbu(a.y, b.y);
@@ -178,7 +200,7 @@ function garisKeKotak(a: Titik, b: Titik): Kotak {
 /**
  * Buat elemen baru. Untuk derek/dinding `kotak` diabaikan bila `garis` diisi:
  * derek memakai titik A→B apa adanya; dinding diluruskan ke sumbu dominan
- * dengan tebal 1 unit.
+ * dengan tebal TEBAL_DINDING. Elevasi/tinggi memakai bawaan spec v2 §3.
  */
 export function buatElemen(
   tipe: TipeElemen,
@@ -188,24 +210,24 @@ export function buatElemen(
 ): DenahElemen {
   const id = crypto.randomUUID();
   const nama = namaBerikut(elemenAda, tipe);
-  const dasar = { id, nama, rotasi: 0 as Rotasi, ...kotak };
+  const dasar = { id, nama, rotasi: 0 as Rotasi, ...ELEVASI_TINGGI_BAWAAN[tipe], ...kotak };
   switch (tipe) {
     case "bak":
       return buatBak(kotak.x, kotak.y, { id, nama, w: kotak.w, h: kotak.h });
     case "mesin":
-      return { ...dasar, tipe, jenis: "Kompresor Amonia", catatan: "" };
+      return { ...dasar, tipe, jenis: "Kompresor Amonia", catatan: "", kategori: KATEGORI_MESIN_BAWAAN };
     case "derek": {
       const a = garis?.a ?? { x: kotak.x, y: kotak.y + kotak.h / 2 };
       const b = garis?.b ?? { x: kotak.x + kotak.w, y: kotak.y + kotak.h / 2 };
-      return { ...dasar, ...garisKeKotak(a, b), tipe, titikAwal: { ...a }, titikAkhir: { ...b }, bakIds: [] };
+      return { ...dasar, ...garisKeKotak(a, b), tipe, titikAwal: { ...a }, titikAkhir: { ...b }, bakIds: [], tinggiKaitM: TINGGI_KAIT_BAWAAN };
     }
     case "dinding": {
       if (!garis) return { ...dasar, tipe };
       const { a, b } = garis;
       const mendatar = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
       const k = mendatar
-        ? { x: Math.min(a.x, b.x), y: a.y, w: Math.max(1, Math.abs(b.x - a.x)), h: 1 }
-        : { x: a.x, y: Math.min(a.y, b.y), w: 1, h: Math.max(1, Math.abs(b.y - a.y)) };
+        ? { x: Math.min(a.x, b.x), y: a.y, w: Math.max(TEBAL_DINDING, Math.abs(b.x - a.x)), h: TEBAL_DINDING }
+        : { x: a.x, y: Math.min(a.y, b.y), w: TEBAL_DINDING, h: Math.max(TEBAL_DINDING, Math.abs(b.y - a.y)) };
       return { ...dasar, ...k, tipe };
     }
     case "pintu":
@@ -214,6 +236,28 @@ export function buatElemen(
       return { ...dasar, tipe };
     case "label":
       return { ...dasar, tipe, teks: "Label" };
+    case "beton":
+      return { ...dasar, tipe };
+    case "tangki":
+      return { ...dasar, tipe, jenis: TANGKI_BAWAAN.jenis, bentuk: TANGKI_BAWAAN.bentuk, levelIsiPersen: TANGKI_BAWAAN.levelIsiPersen };
+    case "jalur": {
+      // Sementara: pipa lurus sepanjang kotak/garis; alat Jalur titik-demi-titik menyusul.
+      const a = garis?.a ?? { x: kotak.x, y: kotak.y + kotak.h / 2 };
+      const b = garis?.b ?? { x: kotak.x + kotak.w, y: kotak.y + kotak.h / 2 };
+      const titik = [{ ...a, z: Z_JALUR_BAWAAN }, { ...b, z: Z_JALUR_BAWAAN }];
+      const diameterMm = DIAMETER_JALUR_BAWAAN.pipa;
+      return {
+        ...dasar,
+        ...kotakJalur(titik),
+        elevasiM: Z_JALUR_BAWAAN,
+        tinggiM: diameterMm / 1000,
+        tipe,
+        jenis: "pipa",
+        fluida: FLUIDA_BAWAAN,
+        diameterMm,
+        titik,
+      };
+    }
   }
 }
 
@@ -227,6 +271,9 @@ export function geserElemen<E extends DenahElemen>(e: E, dx: number, dy: number)
     const d = baru as DerekElemen;
     d.titikAwal = { x: d.titikAwal.x + dx, y: d.titikAwal.y + dy };
     d.titikAkhir = { x: d.titikAkhir.x + dx, y: d.titikAkhir.y + dy };
+  } else if (baru.tipe === "jalur") {
+    // Titik jalur juga absolut: ikut bergeser agar tetap di dalam kotak pembungkusnya.
+    baru.titik = baru.titik.map((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
   }
   return baru;
 }
@@ -544,7 +591,14 @@ export function builderReducer(s: StateBuilder, a: AksiBuilder): StateBuilder {
 
     case "ubahKanvas": {
       const kv = { ...s.dok.kanvas, ...a.kanvas };
-      const sama = kv.lebar === s.dok.kanvas.lebar && kv.tinggi === s.dok.kanvas.tinggi && kv.ukuranGrid === s.dok.kanvas.ukuranGrid;
+      const lama = s.dok.kanvas;
+      const sama =
+        kv.lebar === lama.lebar &&
+        kv.tinggi === lama.tinggi &&
+        kv.ukuranGrid === lama.ukuranGrid &&
+        kv.langkahSnapM === lama.langkahSnapM &&
+        kv.utaraDerajat === lama.utaraDerajat &&
+        kv.pelatLantai.tebalM === lama.pelatLantai.tebalM;
       return sama ? s : catat(s, { ...s.dok, kanvas: kv }, a.gabung ?? null);
     }
 

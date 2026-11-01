@@ -11,6 +11,7 @@ import { getPgPool } from "@/lib/pg";
 import { AppError } from "@/lib/action-result";
 import {
   kolomTerkunciBerubah,
+  migrasiDenah,
   validasiDenah,
   type DenahDokumen,
   type GalatDenah,
@@ -45,10 +46,12 @@ export const PESAN_DENAH_BASI =
 
 const BATAS_PESAN_PELANGGARAN = 20;
 
-type BarisDenah = { versi: number; data: DenahDokumen; updated_at: Date; updated_by: string | null };
+// Kolom `data` bisa berisi dokumen v1 (unit grid) atau v2 (meter): selalu
+// lewat migrasiDenah() sebelum dipakai. Penulisan selalu v2.
+type BarisDenah = { versi: number; data: unknown; updated_at: Date; updated_by: string | null };
 
 function keDenahTersimpan(r: BarisDenah): DenahTersimpan {
-  return { versi: r.versi, data: r.data, updatedAt: r.updated_at.toISOString(), updatedBy: r.updated_by };
+  return { versi: r.versi, data: migrasiDenah(r.data), updatedAt: r.updated_at.toISOString(), updatedBy: r.updated_by };
 }
 
 export async function getDenahUntukKode(kode: string): Promise<DenahTersimpan | null> {
@@ -103,7 +106,7 @@ export async function simpanDenahUntukKode(
   const client = await getPgPool().connect();
   try {
     await client.query("BEGIN");
-    const lama = await client.query<{ versi: number; data: DenahDokumen }>(
+    const lama = await client.query<{ versi: number; data: unknown }>(
       `SELECT versi, data FROM produksi_denah WHERE perusahaan_kode = $1 FOR UPDATE`,
       [kode]
     );
@@ -114,7 +117,8 @@ export async function simpanDenahUntukKode(
       `SELECT DISTINCT kolom_id FROM produksi_kolom_isi WHERE perusahaan_kode = $1 AND selesai_at IS NULL`,
       [kode]
     );
-    const pelanggaran = kolomTerkunciBerubah(barisLama?.data ?? null, data, new Set(isi.rows.map((r) => r.kolom_id)));
+    const dataLama = barisLama ? migrasiDenah(barisLama.data) : null;
+    const pelanggaran = kolomTerkunciBerubah(dataLama, data, new Set(isi.rows.map((r) => r.kolom_id)));
     if (pelanggaran.length > 0) {
       throw new GalatSimpanDenah(
         pesanPelanggaran("Denah tidak bisa disimpan karena mengubah kolom yang masih berisi es:", pelanggaran),
