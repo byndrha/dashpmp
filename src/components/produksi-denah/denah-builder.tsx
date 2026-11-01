@@ -59,7 +59,7 @@ import {
   type Kotak,
 } from "@/components/produksi-denah/builder-state";
 import { formatMeter, formatUkur } from "@/components/produksi-denah/format";
-import { useLapisanTampil } from "@/components/produksi-denah/lapisan";
+import { idTerlihat, lapisanTersembunyiDari, useLapisanTampil } from "@/components/produksi-denah/lapisan";
 import { MenuLapisan } from "@/components/produksi-denah/menu-lapisan";
 import { cocokkanPintasan, DAFTAR_PINTASAN, type Alat } from "@/components/produksi-denah/pintasan-keyboard";
 import { PaletAlat } from "@/components/produksi-denah/palet-alat";
@@ -242,12 +242,21 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const { dok } = state;
   const langkahSnap = dok.kanvas.langkahSnapM;
   const kotor = dokKotor(state);
-  const terpilihSet = useMemo(() => new Set(state.terpilih), [state.terpilih]);
+  // Seleksi EFEKTIF = hanya elemen di lapisan yang tampil. state.terpilih bisa
+  // memuat elemen tersembunyi (undo/redo, lapisan disembunyikan dari tab lain);
+  // elemen itu tidak pernah dikenai aksi, handle, atau label.
+  const terpilih = useMemo(() => idTerlihat(state.terpilih, dok.elemen, lapisanTampil), [state.terpilih, dok.elemen, lapisanTampil]);
+  const terpilihSet = useMemo(() => new Set(terpilih), [terpilih]);
   const kolomTerpilihSet = useMemo(() => new Set(state.kolomTerpilih), [state.kolomTerpilih]);
   const elemenTerpilih = useMemo(() => dok.elemen.filter((e) => terpilihSet.has(e.id)), [dok.elemen, terpilihSet]);
   const byId = useMemo(() => new Map(dok.elemen.map((e) => [e.id, e])), [dok.elemen]);
   // Elemen di lapisan tersembunyi tidak digambar dan tidak bisa dipilih.
   const tampilDiLapisan = useCallback((e: DenahElemen) => lapisanTampil.has(lapisanElemen(e)), [lapisanTampil]);
+  const dokMinimap = useMemo(() => ({ ...dok, elemen: dok.elemen.filter(tampilDiLapisan) }), [dok, tampilDiLapisan]);
+  /** Elemen yang baru dibuat/ditempel harus terlihat: tampilkan lapisannya bila tersembunyi. */
+  const tampilkanLapisanUntuk = (elemen: readonly DenahElemen[]) => {
+    for (const l of lapisanTersembunyiDari(elemen, lapisanTampil)) aturLapisan(l, true);
+  };
   const bakTerpilih = elemenTerpilih.length === 1 && elemenTerpilih[0].tipe === "bak" ? (elemenTerpilih[0] as BakElemen) : null;
 
   // Validasi langsung (ditunda agar drag ubah ukuran tetap halus).
@@ -404,9 +413,9 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
       const sudah = terpilihSet.has(id);
       const shift = ev.shiftKey;
       let ids: string[];
-      if (sudah) ids = state.terpilih;
+      if (sudah) ids = [...terpilih];
       else if (shift) {
-        ids = [...state.terpilih, id];
+        ids = [...terpilih, id];
         dispatch({ type: "pilih", ids: [id], tambah: true });
       } else {
         ids = [id];
@@ -529,11 +538,11 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         }
         if (!g.sudahTerpilih) return;
         const e = byId.get(g.id);
-        if (e?.tipe === "bak" && g.kolomId && state.terpilih.length === 1) {
+        if (e?.tipe === "bak" && g.kolomId && terpilih.length === 1) {
           dispatch({ type: "pilihKolom", bakId: e.id, kolomId: g.kolomId, rentang: g.shift, toggle: g.ctrl });
           setTab("kolom");
         } else if (g.shift) dispatch({ type: "togglePilih", id: g.id });
-        else if (state.terpilih.length > 1) dispatch({ type: "pilih", ids: [g.id] });
+        else if (terpilih.length > 1) dispatch({ type: "pilih", ids: [g.id] });
         return;
       }
       case "kotak": {
@@ -568,6 +577,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
           if (k.h < UKURAN_MIN) k.h = Math.min(1, u.h);
           elemenBaru = buatElemen(g.alat, k, dok.elemen);
         }
+        tampilkanLapisanUntuk([elemenBaru]);
         dispatch({ type: "tambah", elemen: [elemenBaru] });
         setTab("properti");
         if (!ev.shiftKey) setAlat("pilih");
@@ -591,7 +601,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
       return;
     }
     ev.preventDefault();
-    const ids = state.terpilih;
+    const ids = [...terpilih]; // hanya elemen di lapisan tampil
     switch (a.jenis) {
       case "alat":
         setAlat(a.alat);
@@ -621,6 +631,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         if (ids.length) dispatch({ type: "potong", ids });
         return;
       case "tempel":
+        tampilkanLapisanUntuk(state.papanKlip);
         dispatch({ type: "tempel" });
         return;
       case "pilihSemua":
@@ -839,7 +850,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
               </div>
             )}
             <div className="pointer-events-none absolute right-3 bottom-3 hidden sm:block">
-              <Minimap dokumen={dok} terpilih={terpilihSet} toko={tampilanToko} onPusatkan={pusatkan} />
+              <Minimap dokumen={dokMinimap} terpilih={terpilihSet} toko={tampilanToko} onPusatkan={pusatkan} />
             </div>
           </DenahKanvas>
         </div>
@@ -914,7 +925,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
           Alat: <b className="font-medium text-foreground">{alat === "pilih" ? "Pilih" : alat === "geser" ? "Geser kanvas" : alat === "ukur" ? "Ukur" : NAMA_TIPE[alat]}</b>
         </span>
         <span>
-          Terpilih: <b className="font-medium text-foreground">{state.terpilih.length}</b>
+          Terpilih: <b className="font-medium text-foreground">{terpilih.length}</b>
           {state.kolomTerpilih.length > 0 && ` · ${state.kolomTerpilih.length} kolom`}
         </span>
         <span className="hidden sm:inline">{dok.elemen.length} elemen</span>

@@ -9,7 +9,7 @@
 // berfungsi selama halaman terbuka.
 
 import { useCallback, useSyncExternalStore } from "react";
-import type { Lapisan } from "@/lib/produksi-denah";
+import { lapisanElemen, type DenahElemen, type Lapisan } from "@/lib/produksi-denah";
 
 export const KUNCI_LAPISAN = "produksi-denah:lapisan";
 
@@ -42,6 +42,31 @@ export function uraiLapisan(raw: string | null): Set<Lapisan> {
 /** Set lapisan tampil → teks storage (JSON daftar tersembunyi). */
 export function serialLapisan(tampil: ReadonlySet<Lapisan>): string {
   return JSON.stringify(DAFTAR_LAPISAN.map((l) => l.id).filter((id) => !tampil.has(id)));
+}
+
+/**
+ * ID (mis. seleksi) yang elemennya ada DAN lapisannya tampil. Elemen di
+ * lapisan tersembunyi tidak pernah dikenai aksi. Bila tidak ada yang dibuang,
+ * array masukan dikembalikan apa adanya (referensi stabil untuk memo).
+ */
+export function idTerlihat(ids: readonly string[], elemen: readonly DenahElemen[], tampil: ReadonlySet<Lapisan>): readonly string[] {
+  if (ids.length === 0) return ids;
+  const byId = new Map(elemen.map((e) => [e.id, e]));
+  const hasil = ids.filter((id) => {
+    const e = byId.get(id);
+    return !!e && tampil.has(lapisanElemen(e));
+  });
+  return hasil.length === ids.length ? ids : hasil;
+}
+
+/** Lapisan (unik, urut kemunculan) dari elemen ini yang sedang tersembunyi. */
+export function lapisanTersembunyiDari(elemen: readonly DenahElemen[], tampil: ReadonlySet<Lapisan>): Lapisan[] {
+  const hasil: Lapisan[] = [];
+  for (const e of elemen) {
+    const l = lapisanElemen(e);
+    if (!tampil.has(l) && !hasil.includes(l)) hasil.push(l);
+  }
+  return hasil;
 }
 
 // ---------- Toko modul (bersama semua komponen di halaman) ----------

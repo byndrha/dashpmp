@@ -23,7 +23,7 @@ import {
 } from "../../components/produksi-denah/builder-state";
 import { formatCm, formatMeter, formatUkur, panjangSkalaBatang, ukurGaris } from "../../components/produksi-denah/format";
 import { HURUF_ALAT, cocokkanPintasan } from "../../components/produksi-denah/pintasan-keyboard";
-import { DAFTAR_LAPISAN, serialLapisan, uraiLapisan } from "../../components/produksi-denah/lapisan";
+import { DAFTAR_LAPISAN, idTerlihat, lapisanTersembunyiDari, serialLapisan, uraiLapisan } from "../../components/produksi-denah/lapisan";
 import { WARNA_AIR, WARNA_BETON, WARNA_FLUIDA, WARNA_KABEL, WARNA_MESIN } from "../../components/produksi-denah/warna";
 import {
   buatBak,
@@ -415,4 +415,22 @@ test("warna: setiap fluida, kabel, kategori mesin punya hex; beton & air hex", (
   assert.match(WARNA_BETON, hex);
   assert.match(WARNA_AIR, hex);
   assert.equal(new Set(Object.values(WARNA_FLUIDA)).size, fluida.length, "warna fluida harus berbeda");
+});
+
+test("idTerlihat & lapisanTersembunyiDari: seleksi hanya elemen di lapisan tampil", () => {
+  const b = buatBak(0, 0, { nama: "Bak 1" }); // proses
+  const m = mesin(20, 0); // refrigerasi
+  const beton = buatElemen("beton", { x: 0, y: 10, w: 2, h: 2 }, []); // arsitektur
+  const elemen = [b, m, beton];
+  const semua = uraiLapisan(null);
+  const ids = [b.id, m.id, beton.id, "tidak-ada"];
+  assert.deepEqual(idTerlihat(ids, elemen, semua), [b.id, m.id, beton.id]);
+  const tanpaRefri = uraiLapisan('["refrigerasi"]');
+  assert.deepEqual(idTerlihat(ids, elemen, tanpaRefri), [b.id, beton.id]);
+  // Semua terlihat → referensi array yang sama (memo stabil).
+  const ids2 = [b.id, beton.id];
+  assert.equal(idTerlihat(ids2, elemen, tanpaRefri), ids2);
+  assert.deepEqual(lapisanTersembunyiDari(elemen, tanpaRefri), ["refrigerasi"]);
+  assert.deepEqual(lapisanTersembunyiDari([b, beton], tanpaRefri), []);
+  assert.deepEqual(lapisanTersembunyiDari([m, m], uraiLapisan('["refrigerasi","proses"]')), ["refrigerasi"]);
 });
