@@ -41,6 +41,7 @@ import {
 import { simpanDenahAction } from "@/app/produksi-denah-actions";
 import { DenahKanvas, type DenahKanvasHandle, type GeserSementara, type InfoPointerKanvas } from "@/components/produksi-denah/denah-kanvas";
 import {
+  ELEVASI_KERJA_BAWAAN,
   UKURAN_BAWAAN,
   NAMA_TIPE,
   bakBertumpuk,
@@ -51,9 +52,11 @@ import {
   garisDerek,
   kotakGabungan,
   kotor as dokKotor,
+  snapTitik,
   stateAwal,
   type Kotak,
 } from "@/components/produksi-denah/builder-state";
+import { formatMeter } from "@/components/produksi-denah/format";
 import { cocokkanPintasan, DAFTAR_PINTASAN, type Alat } from "@/components/produksi-denah/pintasan-keyboard";
 import { PaletAlat } from "@/components/produksi-denah/palet-alat";
 import { PanelProperti } from "@/components/produksi-denah/panel-properti";
@@ -140,25 +143,26 @@ function bersinggungan(a: Kotak, b: Kotak) {
 }
 
 const bulat2 = (v: number) => Math.round(v * 100) / 100;
-const snapTitik = (p: Titik, aktif: boolean): Titik => (aktif ? { x: Math.round(p.x), y: Math.round(p.y) } : { x: bulat2(p.x), y: bulat2(p.y) });
+/** Ukuran minimum elemen (meter), spec §1. */
+const UKURAN_MIN = 0.05;
 
 /** Kotak elemen saat alat diklik tanpa drag: ukuran bawaan, berpusat di kursor. */
-function kotakBawaan(alat: TipeElemen, c: Titik, snap: boolean): Kotak {
+function kotakBawaan(alat: TipeElemen, c: Titik, snap: boolean, langkah: number): Kotak {
   const u = UKURAN_BAWAAN[alat];
-  const p = snapTitik({ x: c.x - u.w / 2, y: c.y - u.h / 2 }, snap);
+  const p = snapTitik({ x: c.x - u.w / 2, y: c.y - u.h / 2 }, snap, langkah);
   return { x: p.x, y: p.y, w: u.w, h: u.h };
 }
 
-function garisBawaan(alat: TipeElemen, c: Titik, snap: boolean): { a: Titik; b: Titik } {
+function garisBawaan(alat: TipeElemen, c: Titik, snap: boolean, langkah: number): { a: Titik; b: Titik } {
   const u = UKURAN_BAWAAN[alat];
-  const a = snapTitik({ x: c.x - u.w / 2, y: c.y }, snap);
+  const a = snapTitik({ x: c.x - u.w / 2, y: c.y }, snap, langkah);
   return { a, b: { x: a.x + u.w, y: a.y } };
 }
 
 const ALAT_GARIS = new Set<TipeElemen>(["derek", "dinding"]);
 
-/** Snap pergeseran: garis bantu (tepi/tengah elemen lain) bila dekat, selain itu grid. */
-function hitungGeser(kotak: Kotak, rawDx: number, rawDy: number, snap: boolean, kandidat: { x: number[]; y: number[] }, ambang: number) {
+/** Snap pergeseran: garis bantu (tepi/tengah elemen lain) bila dekat, selain itu kelipatan langkah snap. */
+function hitungGeser(kotak: Kotak, rawDx: number, rawDy: number, snap: boolean, kandidat: { x: number[]; y: number[] }, ambang: number, langkah: number) {
   if (!snap) return { dx: bulat2(rawDx), dy: bulat2(rawDy), gx: [] as number[], gy: [] as number[] };
   const satuSumbu = (pos: number, panjang: number, raw: number, daftar: number[]) => {
     const fitur = [0, panjang / 2, panjang];
@@ -175,14 +179,15 @@ function hitungGeser(kotak: Kotak, rawDx: number, rawDy: number, snap: boolean, 
       const garis = fitur.map((f) => pos + delta + f).filter((v) => daftar.some((c) => Math.abs(c - v) < 1e-6));
       return { delta, garis };
     }
-    return { delta: Math.round(pos + raw) - pos, garis: [] as number[] };
+    const p = snapTitik({ x: pos + raw, y: 0 }, true, langkah).x;
+    return { delta: p - pos, garis: [] as number[] };
   };
   const sx = satuSumbu(kotak.x, kotak.w, rawDx, kandidat.x);
   const sy = satuSumbu(kotak.y, kotak.h, rawDy, kandidat.y);
   return { dx: sx.delta, dy: sy.delta, gx: sx.garis, gy: sy.garis };
 }
 
-function ubahUkuran(k: Kotak, h: Handle, p: Titik, min = 1): Kotak {
+function ubahUkuran(k: Kotak, h: Handle, p: Titik, min: number): Kotak {
   let x1 = k.x;
   let y1 = k.y;
   let x2 = k.x + k.w;
@@ -211,6 +216,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false);
   const [konfirmasiMuatUlang, setKonfirmasiMuatUlang] = useState(false);
   const [panelTerbuka, setPanelTerbuka] = useState(false);
+  // Elevasi kerja (z bawaan titik alat Jalur) — preferensi builder, TIDAK disimpan di dokumen.
+  const [elevasiKerja, setElevasiKerja] = useState(ELEVASI_KERJA_BAWAAN);
   const [kursorToko] = useState(() => buatToko<Titik | null>(null));
   const [tampilanToko] = useState(() => buatToko<InfoTampilan | null>(null));
   const kanvasRef = useRef<DenahKanvasHandle>(null);
@@ -218,6 +225,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const lewatiPeringatan = useRef(false);
 
   const { dok } = state;
+  const langkahSnap = dok.kanvas.langkahSnapM;
   const kotor = dokKotor(state);
   const terpilihSet = useMemo(() => new Set(state.terpilih), [state.terpilih]);
   const kolomTerpilihSet = useMemo(() => new Set(state.kolomTerpilih), [state.kolomTerpilih]);
@@ -237,6 +245,15 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     for (const g of galatServer ?? []) if (g.elemenId) s.add(g.elemenId);
     return s;
   }, [galat, galatServer]);
+  // Sorotan amber di 2D untuk elemen yang terkena peringatan teknik (spec §5).
+  const peringatanIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const g of peringatan) {
+      if (g.elemenId) s.add(g.elemenId);
+      for (const id of g.elemenTerkaitIds ?? []) s.add(id);
+    }
+    return s;
+  }, [peringatan]);
   const kolomSorotIds = useMemo(() => new Set((galatServer ?? []).map((g) => g.kolomId).filter((x): x is string => !!x)), [galatServer]);
   const tumpukIds = useMemo(() => bakBertumpuk(dok.elemen, visual.geser), [dok.elemen, visual.geser]);
 
@@ -317,7 +334,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
 
   const ambang = () => {
     const t = kanvasRef.current?.tampilan();
-    return t ? AMBANG_BANTU_PX / t.skala : 0.3;
+    return t ? AMBANG_BANTU_PX / t.skala : 0.15;
   };
 
   const kandidatBantu = (abaikan: ReadonlySet<string>) => {
@@ -350,7 +367,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     }
 
     if (alat !== "pilih") {
-      const a = snapTitik(info.titik, snap);
+      const a = snapTitik(info.titik, snap, langkahSnap);
       gestur.current = { jenis: "gambar", alat, cx: ev.clientX, cy: ev.clientY, awal: a, akhir: a, bergerak: false };
       setVisual({ ...VISUAL_KOSONG, gambar: { alat, a, b: a, bergerak: false } });
       return true;
@@ -413,7 +430,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         if (!g.bergerak && !lewatAmbang(g.cx, g.cy)) return;
         g.bergerak = true;
         if (!g.kotak) return;
-        const r = hitungGeser(g.kotak, info.titik.x - g.awal.x, info.titik.y - g.awal.y, snap, g.kandidat, ambang());
+        const r = hitungGeser(g.kotak, info.titik.x - g.awal.x, info.titik.y - g.awal.y, snap, g.kandidat, ambang(), langkahSnap);
         g.dx = r.dx;
         g.dy = r.dy;
         setVisual({ ...VISUAL_KOSONG, geser: { ids: g.idsGeser, dx: r.dx, dy: r.dy }, garisBantu: { x: r.gx, y: r.gy } });
@@ -427,7 +444,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         return;
       }
       case "ukuran": {
-        const k = ubahUkuran(g.kotak, g.handle, snapTitik(info.titik, snap), snap ? 1 : 0.25);
+        // Minimum saat resize = satu langkah snap (tanpa snap: 1 cm).
+        const k = ubahUkuran(g.kotak, g.handle, snapTitik(info.titik, snap, langkahSnap), snap ? langkahSnap : 0.01);
         dispatch({ type: "aturKotak", id: g.id, kotak: k });
         setVisual({ ...VISUAL_KOSONG, ukuran: k });
         return;
@@ -436,14 +454,14 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         const e = byId.get(g.id);
         if (e?.tipe !== "derek") return;
         const { a, b } = garisDerek(e);
-        const p = snapTitik(info.titik, snap);
+        const p = snapTitik(info.titik, snap, langkahSnap);
         dispatch({ type: "aturTitikDerek", id: g.id, titikAwal: g.ujung === "a" ? p : a, titikAkhir: g.ujung === "b" ? p : b });
         return;
       }
       case "gambar": {
         if (!g.bergerak && !lewatAmbang(g.cx, g.cy)) return;
         g.bergerak = true;
-        let b = snapTitik(info.titik, snap);
+        let b = snapTitik(info.titik, snap, langkahSnap);
         if (g.alat === "dinding" || (g.alat === "derek" && ev.shiftKey)) {
           // Dinding (dan derek + Shift) lurus mengikuti sumbu dominan.
           b = Math.abs(b.x - g.awal.x) >= Math.abs(b.y - g.awal.y) ? { x: b.x, y: g.awal.y } : { x: g.awal.x, y: b.y };
@@ -506,15 +524,14 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         const snap = !ev.altKey;
         let elemenBaru: DenahElemen;
         if (ALAT_GARIS.has(g.alat)) {
-          const garis = g.bergerak && (g.akhir.x !== g.awal.x || g.akhir.y !== g.awal.y) ? { a: g.awal, b: g.akhir } : garisBawaan(g.alat, g.awal, snap);
+          const garis = g.bergerak && (g.akhir.x !== g.awal.x || g.akhir.y !== g.awal.y) ? { a: g.awal, b: g.akhir } : garisBawaan(g.alat, g.awal, snap, langkahSnap);
           elemenBaru = buatElemen(g.alat, kotakDari(garis.a, garis.b), dok.elemen, garis);
         } else {
-          const k = g.bergerak ? kotakDari(g.awal, g.akhir) : kotakBawaan(g.alat, g.awal, snap);
-          if (k.w < 1 || k.h < 1) {
-            const u = UKURAN_BAWAAN[g.alat];
-            k.w = Math.max(k.w, Math.min(1, u.w));
-            k.h = Math.max(k.h, Math.min(1, u.h));
-          }
+          const k = g.bergerak ? kotakDari(g.awal, g.akhir) : kotakBawaan(g.alat, g.awal, snap, langkahSnap);
+          // Tarikan yang terlalu tipis (di bawah ukuran minimum 0,05 m) memakai ukuran bawaan sisi itu (maks. 1 m).
+          const u = UKURAN_BAWAAN[g.alat];
+          if (k.w < UKURAN_MIN) k.w = Math.min(1, u.w);
+          if (k.h < UKURAN_MIN) k.h = Math.min(1, u.h);
           elemenBaru = buatElemen(g.alat, k, dok.elemen);
         }
         dispatch({ type: "tambah", elemen: [elemenBaru] });
@@ -725,6 +742,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
             terpilihIds={terpilihSet}
             kolomTerpilihIds={kolomTerpilihSet}
             sorotIds={sorotIds}
+            peringatanIds={peringatanIds}
             kolomSorotIds={kolomSorotIds}
             tumpukIds={tumpukIds}
             hoverId={visual.geser ? null : hoverId}
@@ -823,7 +841,16 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {tab === "properti" && <PanelProperti dok={dok} terpilih={elemenTerpilih} dispatch={dispatch} onKeKolom={keKolom} />}
+            {tab === "properti" && (
+              <PanelProperti
+                dok={dok}
+                terpilih={elemenTerpilih}
+                dispatch={dispatch}
+                onKeKolom={keKolom}
+                elevasiKerja={elevasiKerja}
+                onUbahElevasiKerja={setElevasiKerja}
+              />
+            )}
             {tab === "kolom" && <PanelKolom bak={bakTerpilih} kolomTerpilih={state.kolomTerpilih} kolomSorotIds={kolomSorotIds} dispatch={dispatch} />}
             {tab === "validasi" && <PanelValidasi galat={galat} peringatan={peringatan} galatServer={galatServer} elemen={dok.elemen} onFokus={fokusGalat} onTutupServer={tutupServer} />}
           </div>
@@ -842,6 +869,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         </span>
         <span className="hidden sm:inline">{dok.elemen.length} elemen</span>
         <span className="hidden md:inline">Riwayat {state.lalu.length}</span>
+        <span className="hidden md:inline">Snap {formatMeter(langkahSnap)}</span>
         <span className="flex-1" />
         <span className="hidden lg:inline">Alt = tanpa snap · Spasi = geser kanvas · ? = pintasan</span>
       </footer>
@@ -935,10 +963,10 @@ function PersenZoom({ toko, ukuranGrid }: { toko: Toko<InfoTampilan | null>; uku
 function StatusKursor({ toko }: { toko: Toko<Titik | null> }) {
   const t = useToko(toko);
   return (
-    <span className="w-24">
+    <span className="w-44">
       {t ? (
         <>
-          X <b className="font-medium text-foreground">{Math.floor(t.x)}</b> · Y <b className="font-medium text-foreground">{Math.floor(t.y)}</b>
+          X <b className="font-medium text-foreground">{formatMeter(t.x)}</b> · Y <b className="font-medium text-foreground">{formatMeter(t.y)}</b>
         </>
       ) : (
         "X — · Y —"
@@ -947,7 +975,7 @@ function StatusKursor({ toko }: { toko: Toko<Titik | null> }) {
   );
 }
 
-// ---------- Overlay edit (SVG, unit grid) ----------
+// ---------- Overlay edit (SVG, meter) ----------
 
 const OverlayEdit = memo(function OverlayEdit({
   elemenTerpilih,
@@ -983,10 +1011,10 @@ const OverlayEdit = memo(function OverlayEdit({
       {/* Kotak gabungan multi-seleksi */}
       {gabung && (
         <rect
-          x={gabung.x - 0.5 + (visual.geser?.dx ?? 0)}
-          y={gabung.y - 0.5 + (visual.geser?.dy ?? 0)}
-          width={gabung.w + 1}
-          height={gabung.h + 1}
+          x={gabung.x - 6 * px + (visual.geser?.dx ?? 0)}
+          y={gabung.y - 6 * px + (visual.geser?.dy ?? 0)}
+          width={gabung.w + 12 * px}
+          height={gabung.h + 12 * px}
           fill="none"
           className="stroke-primary/60"
           strokeWidth={1}
@@ -996,6 +1024,9 @@ const OverlayEdit = memo(function OverlayEdit({
         />
       )}
 
+      {/* Label dimensi elemen terpilih (diam) */}
+      {satu && !sedangGeser && !visual.ukuran && <LabelDimensi e={satu} fs={fs} />}
+
       {/* Handle elemen tunggal */}
       {satu && !satu.terkunci && !sedangGeser && <HandleElemen e={satu} px={px} />}
 
@@ -1003,7 +1034,7 @@ const OverlayEdit = memo(function OverlayEdit({
       {visual.geser && satu && <LabelPosisi e={satu} dx={visual.geser.dx} dy={visual.geser.dy} fs={fs} />}
       {visual.ukuran && (
         <Pil x={visual.ukuran.x + visual.ukuran.w / 2} y={visual.ukuran.y + visual.ukuran.h + fs * 1.4} fs={fs}>
-          {`${bulat2(visual.ukuran.w)} × ${bulat2(visual.ukuran.h)}`}
+          {`${formatMeter(visual.ukuran.w)} × ${formatMeter(visual.ukuran.h)}`}
         </Pil>
       )}
 
@@ -1022,10 +1053,10 @@ const OverlayEdit = memo(function OverlayEdit({
       )}
 
       {/* Elemen yang sedang digambar */}
-      {visual.gambar && <PratinjauGambar g={visual.gambar} fs={fs} />}
+      {visual.gambar && <PratinjauGambar g={visual.gambar} fs={fs} langkah={kanvas.langkahSnapM} />}
 
       {/* Hantu alat di bawah kursor */}
-      {alat !== "pilih" && alat !== "geser" && !visual.gambar && <HantuAlat alat={alat} toko={kursorToko} fs={fs} />}
+      {alat !== "pilih" && alat !== "geser" && !visual.gambar && <HantuAlat alat={alat} toko={kursorToko} fs={fs} langkah={kanvas.langkahSnapM} />}
     </g>
   );
 });
@@ -1046,8 +1077,33 @@ function LabelPosisi({ e, dx, dy, fs }: { e: DenahElemen; dx: number; dy: number
   const k = kotakElemen(e);
   return (
     <Pil x={k.x + dx + k.w / 2} y={k.y + dy + k.h + fs * 1.4} fs={fs}>
-      {`${bulat2(k.x + dx)}, ${bulat2(k.y + dy)}`}
+      {`${formatMeter(k.x + dx)}, ${formatMeter(k.y + dy)}`}
     </Pil>
+  );
+}
+
+/** Panjang × lebar (meter) di sisi atas & kanan elemen terpilih; derek = panjang rel. */
+function LabelDimensi({ e, fs }: { e: DenahElemen; fs: number }) {
+  if (e.tipe === "derek") {
+    const { a, b } = garisDerek(e);
+    return (
+      <Pil x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 + fs * 1.6} fs={fs}>
+        {`Rel ${formatMeter(Math.hypot(b.x - a.x, b.y - a.y))}`}
+      </Pil>
+    );
+  }
+  const k = kotakElemen(e);
+  const lebarW = formatMeter(k.w);
+  const geserKanan = (formatMeter(k.h).length * 0.62 + 1) * fs * 0.5 + fs * 0.6;
+  return (
+    <>
+      <Pil x={k.x + k.w / 2} y={k.y - fs * 2.6} fs={fs}>
+        {lebarW}
+      </Pil>
+      <Pil x={k.x + k.w + geserKanan} y={k.y + k.h / 2} fs={fs}>
+        {formatMeter(k.h)}
+      </Pil>
+    </>
   );
 }
 
@@ -1114,7 +1170,8 @@ const KELAS_HANTU = "fill-primary/15 stroke-primary";
 
 /** Posisi relatif (0..1) garis kolom pada hantu bak. */
 function garisKolomHantu(lebar: number): number[] {
-  const n = Math.min(36, Math.floor(lebar));
+  // ±0,42 m per kolom (ice can 360 mm + jarak 60 mm).
+  const n = Math.min(36, Math.floor(lebar / 0.42));
   return Array.from({ length: n }, (_, i) => (i + 1) / (n + 1));
 }
 
@@ -1136,7 +1193,7 @@ function BentukHantu({ alat, kotak, garis, fs }: { alat: TipeElemen; kotak?: Kot
         <circle cx={garis.a.x} cy={garis.a.y} r={fs * 0.35} className="fill-primary" />
         <circle cx={garis.b.x} cy={garis.b.y} r={fs * 0.35} className="fill-primary" />
         <Pil x={(garis.a.x + garis.b.x) / 2} y={(garis.a.y + garis.b.y) / 2 - fs * 1.4} fs={fs}>
-          {`${bulat2(panjang)} grid`}
+          {formatMeter(panjang)}
         </Pil>
       </g>
     );
@@ -1144,40 +1201,40 @@ function BentukHantu({ alat, kotak, garis, fs }: { alat: TipeElemen; kotak?: Kot
   if (!kotak) return null;
   return (
     <g pointerEvents="none">
-      <rect x={kotak.x} y={kotak.y} width={kotak.w} height={kotak.h} rx={0.2} className={KELAS_HANTU} strokeWidth={1.5} strokeDasharray="5 3" vectorEffect="non-scaling-stroke" />
+      <rect x={kotak.x} y={kotak.y} width={kotak.w} height={kotak.h} className={KELAS_HANTU} strokeWidth={1.5} strokeDasharray="5 3" vectorEffect="non-scaling-stroke" />
       {alat === "bak" &&
         kotak.w >= 2 &&
         garisKolomHantu(kotak.w).map((f, i) => (
           <line
             key={i}
             x1={kotak.x + f * kotak.w}
-            y1={kotak.y + 0.3}
+            y1={kotak.y + 0.2}
             x2={kotak.x + f * kotak.w}
-            y2={kotak.y + kotak.h - 0.3}
+            y2={kotak.y + kotak.h - 0.2}
             className="stroke-primary/30"
             strokeWidth={1}
             vectorEffect="non-scaling-stroke"
           />
         ))}
       <Pil x={kotak.x + kotak.w / 2} y={kotak.y + kotak.h + fs * 1.4} fs={fs}>
-        {`${NAMA_TIPE[alat]} ${bulat2(kotak.w)} × ${bulat2(kotak.h)}`}
+        {`${NAMA_TIPE[alat]} ${formatMeter(kotak.w)} × ${formatMeter(kotak.h)}`}
       </Pil>
     </g>
   );
 }
 
-function PratinjauGambar({ g, fs }: { g: NonNullable<Visual["gambar"]>; fs: number }) {
+function PratinjauGambar({ g, fs, langkah }: { g: NonNullable<Visual["gambar"]>; fs: number; langkah: number }) {
   if (ALAT_GARIS.has(g.alat)) {
-    const garis = g.bergerak ? { a: g.a, b: g.b } : garisBawaan(g.alat, g.a, true);
+    const garis = g.bergerak ? { a: g.a, b: g.b } : garisBawaan(g.alat, g.a, true, langkah);
     return <BentukHantu alat={g.alat} garis={garis} fs={fs} />;
   }
-  const k = g.bergerak ? kotakDari(g.a, g.b) : kotakBawaan(g.alat, g.a, true);
+  const k = g.bergerak ? kotakDari(g.a, g.b) : kotakBawaan(g.alat, g.a, true, langkah);
   return <BentukHantu alat={g.alat} kotak={k} fs={fs} />;
 }
 
-function HantuAlat({ alat, toko, fs }: { alat: TipeElemen; toko: Toko<Titik | null>; fs: number }) {
+function HantuAlat({ alat, toko, fs, langkah }: { alat: TipeElemen; toko: Toko<Titik | null>; fs: number; langkah: number }) {
   const c = useToko(toko);
   if (!c) return null;
-  if (ALAT_GARIS.has(alat)) return <BentukHantu alat={alat} garis={garisBawaan(alat, c, true)} fs={fs} />;
-  return <BentukHantu alat={alat} kotak={kotakBawaan(alat, c, true)} fs={fs} />;
+  if (ALAT_GARIS.has(alat)) return <BentukHantu alat={alat} garis={garisBawaan(alat, c, true, langkah)} fs={fs} />;
+  return <BentukHantu alat={alat} kotak={kotakBawaan(alat, c, true, langkah)} fs={fs} />;
 }

@@ -155,6 +155,34 @@ const LEBAR_MIN_DEREK = 0.3;
 /** z bawaan titik jalur baru (meter) sampai builder punya "elevasi kerja". */
 const Z_JALUR_BAWAAN = -0.1;
 
+/** Pilihan langkah snap (meter), spec §1. */
+export const PILIHAN_LANGKAH_SNAP = [0.05, 0.1, 0.25, 0.5, 1] as const;
+/** Elevasi kerja bawaan (meter) — z titik alat Jalur; state builder, BUKAN dokumen. */
+export const ELEVASI_KERJA_BAWAAN = -0.1;
+
+const bulat2 = (v: number) => Math.round(v * 100) / 100;
+// Buang sisa floating-point (0.1 * 3 = 0.30000000000000004).
+const bersih = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
+
+/** Snap ke kelipatan `langkah` (meter); nonaktif (Alt) = presisi 1 cm. */
+export function snapTitik(p: Titik, aktif: boolean, langkah: number): Titik {
+  if (!aktif || !(langkah > 0)) return { x: bulat2(p.x), y: bulat2(p.y) };
+  return { x: bersih(Math.round(p.x / langkah) * langkah), y: bersih(Math.round(p.y / langkah) * langkah) };
+}
+
+/** Arah utara → derajat BULAT 0–359 (validasiDenah menolak pecahan / di luar rentang). */
+export function normalisasiUtara(derajat: number): number {
+  if (!Number.isFinite(derajat)) return 0;
+  return (((Math.round(derajat) % 360) + 360) % 360) + 0;
+}
+
+/** Kapasitas per siklus (kg) satu bak: Σ jumlah ice can × berat varian, kolom aktif saja. */
+export function kapasitasSiklusKg(bak: BakElemen): number {
+  let kg = 0;
+  for (const k of bak.kolom) if (!k.nonaktif) kg += k.jumlahIceCan * bak.iceCan[k.varian].beratKg;
+  return kg;
+}
+
 function normal(s: string) {
   return s.trim().replace(/\s+/g, " ").toLowerCase();
 }

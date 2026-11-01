@@ -12,12 +12,16 @@ import {
   kotor,
   namaBerikut,
   namaUnik,
+  kapasitasSiklusKg,
+  normalisasiUtara,
+  snapTitik,
   stateAwal,
   NAMA_TIPE,
   UKURAN_BAWAAN,
   type AksiBuilder,
   type StateBuilder,
 } from "../../components/produksi-denah/builder-state";
+import { formatCm, formatMeter, panjangSkalaBatang } from "../../components/produksi-denah/format";
 import {
   buatBak,
   denahKosong,
@@ -296,4 +300,46 @@ test("bakBertumpuk memperhitungkan pergeseran sementara", () => {
   const b = buatBak(30, 0, { nama: "Bak 2" });
   assert.equal(bakBertumpuk([a, b]).size, 0);
   assert.deepEqual([...bakBertumpuk([a, b], { ids: new Set([b.id]), dx: -15, dy: 0 })].sort(), [a.id, b.id].sort());
+});
+
+test("snapTitik membulatkan ke kelipatan langkah snap; nonaktif = presisi 1 cm", () => {
+  assert.deepEqual(snapTitik({ x: 1.13, y: 0.87 }, true, 0.25), { x: 1.25, y: 0.75 });
+  assert.deepEqual(snapTitik({ x: 1.13, y: 0.87 }, false, 0.25), { x: 1.13, y: 0.87 });
+  assert.deepEqual(snapTitik({ x: 1.134, y: 0.866 }, false, 0.25), { x: 1.13, y: 0.87 });
+  // Tanpa sisa floating-point (0.1 * 3 !== 0.3).
+  assert.deepEqual(snapTitik({ x: 0.27, y: 2.04 }, true, 0.1), { x: 0.3, y: 2 });
+  assert.deepEqual(snapTitik({ x: 3.4, y: -0.6 }, true, 1), { x: 3, y: -1 });
+});
+
+test("normalisasiUtara: bilangan bulat 0–359 (bulatkan & bungkus)", () => {
+  assert.equal(normalisasiUtara(-15), 345);
+  assert.equal(normalisasiUtara(360), 0);
+  assert.equal(normalisasiUtara(375), 15);
+  assert.equal(normalisasiUtara(12.6), 13);
+  assert.equal(normalisasiUtara(359.6), 0);
+  assert.equal(normalisasiUtara(-720), 0);
+  assert.equal(normalisasiUtara(Number.NaN), 0);
+});
+
+test("formatMeter & formatCm memakai format angka Indonesia", () => {
+  assert.equal(formatMeter(12.5), "12,50 m");
+  assert.equal(formatMeter(0), "0,00 m");
+  assert.equal(formatMeter(-0.7), "−0,70 m");
+  assert.equal(formatMeter(1234.567), "1.234,57 m");
+  assert.equal(formatCm(0.88), "88 cm");
+  assert.equal(formatCm(0.885), "88,5 cm");
+});
+
+test("panjangSkalaBatang: angka bulat terbesar {1,2,5,10,20,50} m yang ≤ 120 px", () => {
+  assert.equal(panjangSkalaBatang(20), 5); // 5 m = 100 px; 10 m = 200 px
+  assert.equal(panjangSkalaBatang(120), 1);
+  assert.equal(panjangSkalaBatang(2), 50);
+  assert.equal(panjangSkalaBatang(6), 20);
+  assert.equal(panjangSkalaBatang(200), 1); // tetap 1 m walau > 120 px
+});
+
+test("kapasitasSiklusKg: Σ ice can × berat varian, kolom nonaktif tidak dihitung", () => {
+  const b = buatBak(0, 0, { nama: "Bak 1" });
+  const kolom = b.kolom.slice(0, 3).map((k, i) => ({ ...k, varian: (i === 1 ? "besar" : "kecil") as "kecil" | "besar", jumlahIceCan: 10, nonaktif: i === 2 ? true : undefined }));
+  assert.equal(kapasitasSiklusKg({ ...b, kolom }), 10 * 25 + 10 * 50);
 });

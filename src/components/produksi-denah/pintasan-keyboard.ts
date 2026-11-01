@@ -137,7 +137,7 @@ export const DAFTAR_PINTASAN: { grup: string; isi: [string, string][] }[] = [
       ["Tarik di ruang kosong", "Kotak seleksi"],
       ["Klik kolom bak terpilih", "Pilih kolom (Shift = rentang, Ctrl = satu-satu)"],
       ["Alt saat menarik", "Tanpa snap grid & garis bantu"],
-      ["← ↑ → ↓", "Geser 1 grid (Shift = 5)"],
+      ["← ↑ → ↓", "Geser 1 m (Shift = 5 m)"],
       ["R", "Putar 90°"],
       ["Ctrl+D", "Duplikat"],
       ["Ctrl+C / Ctrl+X / Ctrl+V", "Salin / potong / tempel"],

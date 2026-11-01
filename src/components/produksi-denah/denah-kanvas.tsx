@@ -5,9 +5,11 @@
 // Task 3). Builder menambah perilaku edit lewat prop (onPointerDown/Move/Up,
 // overlay, terpilihIds, sorotIds), BUKAN dengan menyalin kode gambar.
 //
-// Sistem koordinat: semua gambar dalam UNIT GRID (lihat src/lib/produksi-denah.ts).
-// Pan/zoom = viewBox SVG: tampilan.x/y = titik grid di pojok kiri atas
-// viewport, tampilan.skala = piksel layar per unit grid.
+// Sistem koordinat: semua gambar dalam METER (skemaVersi 2, lihat
+// src/lib/produksi-denah.ts). Pan/zoom = viewBox SVG: tampilan.x/y = titik
+// (meter) di pojok kiri atas viewport, tampilan.skala = piksel layar per meter.
+// Bak (cangkang dinding, lajur kolom, ice can) digambar dari tataBakMeter()
+// — geometri yang sama dengan mode 3D.
 //
 // Performa (target 10 bak × 66 kolom × 36 ice can):
 // - Setiap elemen dirender oleh komponen memo; daftar elemen di-useMemo, jadi
@@ -35,6 +37,9 @@ import {
 } from "react";
 import { Fan, Lock, Maximize, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { tataBakMeter, type TataBak } from "@/lib/produksi-denah-geometri";
+import { MawarAngin } from "@/components/produksi-denah/mawar-angin";
+import { formatAngka, panjangSkalaBatang } from "@/components/produksi-denah/format";
 import {
   kotakElemen,
   type AreaElemen,
@@ -52,21 +57,21 @@ import {
 export type ModeKanvas = "lihat" | "edit";
 
 export interface Tampilan {
-  x: number; // unit grid di tepi kiri viewport
-  y: number; // unit grid di tepi atas viewport
-  skala: number; // piksel layar per unit grid
+  x: number; // meter di tepi kiri viewport
+  y: number; // meter di tepi atas viewport
+  skala: number; // piksel layar per meter
 }
 
 export interface InfoPointerKanvas {
   event: React.PointerEvent<SVGSVGElement>;
-  titik: Titik; // posisi kursor dalam unit grid (belum di-snap)
+  titik: Titik; // posisi kursor dalam meter (belum di-snap)
   elemenId: string | null; // elemen di bawah kursor saat pointerdown/move
   kolomId: string | null; // kolom bak di bawah kursor (elemenId = bak induknya)
 }
 
 export interface KonteksOverlay {
   tampilan: Tampilan;
-  unitPerPx: number; // 1 piksel layar dalam unit grid (untuk handle berukuran tetap)
+  unitPerPx: number; // 1 piksel layar dalam meter (untuk handle berukuran tetap)
   lebarPx: number;
   tinggiPx: number;
 }
@@ -75,11 +80,11 @@ export interface DenahKanvasHandle {
   pasKeLayar(): void;
   zoomMasuk(): void;
   zoomKeluar(): void;
-  /** Konversi koordinat layar (clientX/Y) ke unit grid. */
+  /** Konversi koordinat layar (clientX/Y) ke meter. */
   keGrid(clientX: number, clientY: number): Titik;
-  /** Pusatkan viewport ke kotak (unit grid), zoom secukupnya. */
+  /** Pusatkan viewport ke kotak (meter), zoom secukupnya. */
   fokusKe(kotak: { x: number; y: number; w: number; h: number }): void;
-  /** Geser viewport agar titik grid ini di tengah (zoom tetap). */
+  /** Geser viewport agar titik (meter) ini di tengah (zoom tetap). */
   pusatkanKe(titik: Titik, animasi?: boolean): void;
   /** Tampilan saat ini (null sebelum ukuran wadah diketahui). */
   tampilan(): Tampilan | null;
@@ -102,6 +107,8 @@ export interface DenahKanvasProps {
   kolomTerpilihIds?: ReadonlySet<string>;
   /** Elemen bermasalah (mis. galat validasi) — garis merah. */
   sorotIds?: ReadonlySet<string>;
+  /** Elemen terkena peringatan teknik (periksaTeknik) — garis amber, tidak memblokir. */
+  peringatanIds?: ReadonlySet<string>;
   /** Klik (tanpa geser) pada elemen, atau null pada ruang kosong. */
   onPilihElemen?: (elemenId: string | null, info: InfoPointerKanvas) => void;
   /** Klik pada kolom bak. Bila tidak diisi, klik kolom = onPilihElemen(bakId). */
@@ -117,12 +124,14 @@ export interface DenahKanvasProps {
   onPointerMove?: (info: InfoPointerKanvas, gesturAktif: boolean) => void;
   /** Akhir gestur yang diambil alih. batal = pointercancel / kehilangan capture: JANGAN commit. */
   onPointerUp?: (info: InfoPointerKanvas, batal: boolean) => void;
-  /** Lapisan SVG tambahan di atas elemen, dalam unit grid (handle, kotak seleksi, garis bantu, hantu alat). */
+  /** Lapisan SVG tambahan di atas elemen, dalam meter (handle, kotak seleksi, garis bantu, hantu alat). */
   overlay?: (ctx: KonteksOverlay) => ReactNode;
   /** Konten HTML melayang di atas kanvas (toolbar, legenda). */
   children?: ReactNode;
   /** Tombol zoom +/−/pas bawaan di pojok kanan bawah. */
   kontrolZoom?: boolean;
+  /** Mawar mata angin (kanan atas) & skala batang (kiri bawah). Bawaan true. */
+  penunjukArah?: boolean;
   className?: string;
   ref?: Ref<DenahKanvasHandle>;
   // ---- Tambahan mode edit (builder) ----
@@ -145,7 +154,7 @@ export interface DenahKanvasProps {
 const SKALA_MIN = 1;
 const SKALA_MAX = 200;
 const AMBANG_GESER_PX = 4;
-const MARGIN_PAS = 2; // unit grid di sekeliling kanvas saat "pas ke layar"
+const MARGIN_PAS = 2; // meter di sekeliling kanvas saat "pas ke layar"
 const KOSONG: ReadonlySet<string> = new Set();
 
 function batasi(n: number, min: number, max: number) {
@@ -197,6 +206,7 @@ export function DenahKanvas({
   terpilihIds = KOSONG,
   kolomTerpilihIds = KOSONG,
   sorotIds = KOSONG,
+  peringatanIds = KOSONG,
   onPilihElemen,
   onPilihKolom,
   onPointerDown,
@@ -205,6 +215,7 @@ export function DenahKanvas({
   overlay,
   children,
   kontrolZoom = true,
+  penunjukArah = true,
   className,
   ref,
   kursor,
@@ -586,6 +597,7 @@ export function DenahKanvas({
               e={e}
               terpilih={terpilihIds.has(e.id)}
               sorot={sorotIds.has(e.id)}
+              peringatan={peringatanIds.has(e.id)}
               hover={hoverId === e.id}
               tumpuk={tumpukIds.has(e.id)}
               kolomTerpilih={bakDenganKolomTerpilih.has(e.id) ? kolomTerpilihIds : KOSONG}
@@ -603,6 +615,7 @@ export function DenahKanvas({
       geserSementara,
       terpilihIds,
       sorotIds,
+      peringatanIds,
       hoverId,
       tumpukIds,
       bakDenganKolomTerpilih,
@@ -660,6 +673,12 @@ export function DenahKanvas({
           </>
         )}
       </svg>
+      {penunjukArah && tampilan && (
+        <>
+          <MawarAngin utaraDerajat={kanvas.utaraDerajat} ukuran={52} className="absolute top-2 right-2" />
+          <SkalaBatang pxPerMeter={tampilan.skala} />
+        </>
+      )}
       {children}
       {kontrolZoom && (
         <div className="absolute right-2 bottom-2 flex items-center gap-1 rounded-lg border bg-background/90 p-1 shadow-sm backdrop-blur">
@@ -693,6 +712,28 @@ function TombolKanvas({ label, onClick, children }: { label: string; onClick: ()
   );
 }
 
+// ---------- Skala batang (pojok kiri bawah) ----------
+
+function SkalaBatang({ pxPerMeter }: { pxPerMeter: number }) {
+  const m = panjangSkalaBatang(pxPerMeter);
+  const px = m * pxPerMeter;
+  return (
+    <div
+      className="pointer-events-none absolute bottom-2 left-2 rounded-md border bg-background/90 px-2 pt-0.5 pb-1 text-[10px] text-muted-foreground tabular-nums shadow-sm backdrop-blur"
+      role="img"
+      aria-label={`Skala: garis = ${m} meter`}
+    >
+      <div className="flex justify-between gap-2" style={{ width: Math.max(px, 24) }}>
+        <span>0</span>
+        <span>{formatAngka(m)} m</span>
+      </div>
+      <div className="flex h-1.5 border-x border-b border-foreground/70" style={{ width: px }}>
+        <div className="h-full w-1/2 bg-foreground/60" />
+      </div>
+    </div>
+  );
+}
+
 // ---------- Latar: area kanvas + grid ----------
 
 const LatarKanvas = memo(function LatarKanvas({ lebar, tinggi, skalaKira, idPola }: { lebar: number; tinggi: number; skalaKira: number; idPola: string }) {
@@ -708,9 +749,14 @@ const LatarKanvas = memo(function LatarKanvas({ lebar, tinggi, skalaKira, idPola
         <pattern id={`${idPola}-g5`} width={5} height={5} patternUnits="userSpaceOnUse">
           <path d="M 5 0 L 0 0 0 5" fill="none" className="stroke-muted-foreground/30" strokeWidth={px} />
         </pattern>
-        <pattern id={`${idPola}-nonaktif`} width={0.6} height={0.6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width={0.6} height={0.6} className="fill-muted" />
-          <line x1={0} y1={0} x2={0} y2={0.6} className="stroke-muted-foreground/60" strokeWidth={0.18} />
+        <pattern id={`${idPola}-nonaktif`} width={0.15} height={0.15} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width={0.15} height={0.15} className="fill-muted" />
+          <line x1={0} y1={0} x2={0} y2={0.15} className="stroke-muted-foreground/60" strokeWidth={0.045} />
+        </pattern>
+        {/* Arsir merah: kolom/ice can yang melebihi ruang dalam bak. */}
+        <pattern id={`${idPola}-lebih`} width={0.2} height={0.2} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width={0.2} height={0.2} className="fill-red-500/15" />
+          <line x1={0} y1={0} x2={0} y2={0.2} className="stroke-red-600/80 dark:stroke-red-400/80" strokeWidth={0.05} />
         </pattern>
       </defs>
       <rect x={0} y={0} width={lebar} height={tinggi} className="fill-card" />
@@ -775,6 +821,7 @@ interface ElemenViewProps {
   e: DenahElemen;
   terpilih: boolean;
   sorot: boolean;
+  peringatan: boolean;
   hover: boolean;
   tumpuk: boolean;
   kolomTerpilih: ReadonlySet<string>;
@@ -785,9 +832,9 @@ interface ElemenViewProps {
   mode: ModeKanvas;
 }
 
-// Ukuran teks nama (unit grid): ±11 px di layar, dibatasi agar tidak raksasa/hilang.
+// Ukuran teks nama (meter): ±11 px di layar, dibatasi agar tidak raksasa/hilang.
 function ukuranNama(skalaKira: number) {
-  return batasi(11 / skalaKira, 0.6, 3);
+  return batasi(11 / skalaKira, 0.12, 3);
 }
 
 function Teks({ x, y, ukuran, children, anchor = "middle", baseline = "central", tebal, className, transform }: {
@@ -847,8 +894,8 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
       );
       break;
     case "derek":
-      // Titik derek dalam koordinat grid ABSOLUT (bukan relatif elemen) — tidak ikut rotasi.
-      return <DerekView d={e} terpilih={p.terpilih} sorot={p.sorot} hover={p.hover} fs={fs} />;
+      // Titik derek dalam koordinat dunia ABSOLUT (meter) (bukan relatif elemen) — tidak ikut rotasi.
+      return <DerekView d={e} terpilih={p.terpilih} sorot={p.sorot} peringatan={p.peringatan} hover={p.hover} fs={fs} skalaKira={p.skalaKira} />;
     case "dinding":
       tubuh = <rect width={e.w} height={e.h} className="fill-slate-600 stroke-slate-700 dark:fill-slate-400 dark:stroke-slate-300" strokeWidth={1} vectorEffect={NS} />;
       break;
@@ -895,7 +942,7 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
         />
       )}
       {nama}
-      <GarisPilih kotak={kotak} terpilih={p.terpilih} sorot={p.sorot} hover={p.hover} />
+      <GarisPilih kotak={kotak} terpilih={p.terpilih} sorot={p.sorot} peringatan={p.peringatan} hover={p.hover} skalaKira={p.skalaKira} />
       {p.mode === "edit" && e.terkunci && <IkonKunci kotak={kotak} skalaKira={p.skalaKira} />}
     </g>
   );
@@ -915,116 +962,137 @@ function GarisPilih({
   kotak,
   terpilih,
   sorot,
+  peringatan = false,
   hover = false,
+  skalaKira,
 }: {
   kotak: { x: number; y: number; w: number; h: number };
   terpilih: boolean;
   sorot: boolean;
+  peringatan?: boolean;
   hover?: boolean;
+  skalaKira: number;
 }) {
-  if (!terpilih && !sorot && !hover) return null;
-  const pad = 0.25;
+  if (!terpilih && !sorot && !hover && !peringatan) return null;
+  // Jarak garis dari elemen dalam piksel layar (bukan meter) agar konsisten di semua zoom.
+  const pad = 4 / skalaKira;
+  // Peringatan teknik (amber) = garis luar terpisah, jadi tetap terlihat
+  // bersama garis pilih (biru) maupun galat (merah).
+  const padP = 8 / skalaKira;
   return (
-    <rect
-      x={kotak.x - pad}
-      y={kotak.y - pad}
-      width={kotak.w + pad * 2}
-      height={kotak.h + pad * 2}
-      fill="none"
-      className={sorot ? "stroke-destructive" : terpilih ? "stroke-primary" : "stroke-primary/50"}
-      strokeWidth={terpilih || sorot ? 2 : 1.5}
-      strokeDasharray={terpilih ? "6 3" : undefined}
-      vectorEffect={NS}
-      pointerEvents="none"
-    />
+    <>
+      {peringatan && (
+        <rect
+          x={kotak.x - padP}
+          y={kotak.y - padP}
+          width={kotak.w + padP * 2}
+          height={kotak.h + padP * 2}
+          fill="none"
+          className="stroke-amber-500 dark:stroke-amber-400"
+          strokeWidth={2}
+          strokeDasharray="3 2"
+          vectorEffect={NS}
+          pointerEvents="none"
+        />
+      )}
+      {(terpilih || sorot || hover) && (
+        <rect
+          x={kotak.x - pad}
+          y={kotak.y - pad}
+          width={kotak.w + pad * 2}
+          height={kotak.h + pad * 2}
+          fill="none"
+          className={sorot ? "stroke-destructive" : terpilih ? "stroke-primary" : "stroke-primary/50"}
+          strokeWidth={terpilih || sorot ? 2 : 1.5}
+          strokeDasharray={terpilih ? "6 3" : undefined}
+          vectorEffect={NS}
+          pointerEvents="none"
+        />
+      )}
+    </>
   );
 }
 
 // ---------- Bak ----------
 
-// Tata letak kolom dalam ruang (a, b): a = sumbu deret kolom, b = sumbu
-// sepanjang satu kolom. horizontal: kolom berjajar ke samping (a = x, setiap
-// kolom berupa lajur tegak); vertikal: kolom bertumpuk ke bawah (a = y).
-function tataBak(bak: BakElemen) {
-  const horizontal = bak.orientasiKolom === "horizontal";
-  const pad = Math.min(0.4, Math.min(bak.w, bak.h) * 0.06);
-  const panjangA = (horizontal ? bak.w : bak.h) - pad * 2;
-  const panjangB = (horizontal ? bak.h : bak.w) - pad * 2;
-  const n = Math.max(1, bak.kolom.length);
-  const lebarKolom = panjangA / n;
-  const pita = Math.min(panjangB * 0.2, 1.4); // pita nomor kolom di pangkal lajur
-  const ke = (a: number, b: number, da: number, db: number) =>
-    horizontal ? { x: pad + a, y: pad + b, w: da, h: db } : { x: pad + b, y: pad + a, w: db, h: da };
-  return { horizontal, pad, panjangA, panjangB, lebarKolom, pita, ke };
-}
+// Semua ukuran nyata (meter) dari tataBakMeter() — sumber yang sama dengan 3D
+// dan periksaTeknik. Koordinat lokal bak (a = sumbu deret kolom, b = sumbu
+// sepanjang kolom) diubah ke x/y lokal elemen lewat tata.keXY.
 
-function posisiKolom(bak: BakElemen, i: number) {
-  return bak.arahNomor === "mundur" ? bak.kolom.length - 1 - i : i;
-}
+const f3 = (v: number) => Math.round(v * 1000) / 1000;
 
-function pathIceCan(bak: BakElemen, tata: ReturnType<typeof tataBak>): { kecil: string; besar: string } {
+/** Satu <path> per varian berisi semua ice can kolom aktif (ukuran nyata). */
+function pathIceCan(tata: TataBak): { kecil: string; besar: string } {
   const bagian = { kecil: [] as string[], besar: [] as string[] };
-  const { lebarKolom, panjangB, pita, ke } = tata;
-  const lajurB = panjangB - pita;
-  const f = (v: number) => Math.round(v * 1000) / 1000;
-  bak.kolom.forEach((k, i) => {
-    if (k.nonaktif || k.jumlahIceCan <= 0) return;
-    const n = k.jumlahIceCan;
-    const lintang = Math.max(1, Math.round(Math.sqrt((n * lebarKolom) / Math.max(lajurB, 0.001))));
-    const bujur = Math.ceil(n / lintang);
-    const sel = Math.min(lebarKolom / lintang, lajurB / bujur);
-    const sisi = sel * 0.72;
-    const a0 = posisiKolom(bak, i) * lebarKolom + (lebarKolom - sel * lintang) / 2;
-    const b0 = pita + (lajurB - sel * bujur) / 2;
+  for (const k of tata.kolom) {
+    if (k.nonaktif || k.jumlah <= 0) continue;
     const out = bagian[k.varian];
-    for (let j = 0; j < n; j++) {
-      const r = ke(a0 + (j % lintang) * sel + (sel - sisi) / 2, b0 + Math.floor(j / lintang) * sel + (sel - sisi) / 2, sisi, sisi);
-      out.push(`M${f(r.x)} ${f(r.y)}h${f(r.w)}v${f(r.h)}h${f(-r.w)}z`);
+    const langkah = k.panjangCan + k.jarakCan;
+    for (let j = 0; j < k.jumlah; j++) {
+      const r = tata.keXY(k.a0, k.b0 + j * langkah, k.lebar, k.panjangCan);
+      out.push(`M${f3(r.x)} ${f3(r.y)}h${f3(r.w)}v${f3(r.h)}h${f3(-r.w)}z`);
     }
-  });
+  }
   return { kecil: bagian.kecil.join(""), besar: bagian.besar.join("") };
 }
 
-function ukuranSelIceCan(bak: BakElemen, tata: ReturnType<typeof tataBak>) {
-  const lajurB = tata.panjangB - tata.pita;
-  const n = bak.kolom.reduce((m, k) => Math.max(m, k.jumlahIceCan), 1);
-  const lintang = Math.max(1, Math.round(Math.sqrt((n * tata.lebarKolom) / Math.max(lajurB, 0.001))));
-  return Math.min(tata.lebarKolom / lintang, lajurB / Math.ceil(n / lintang));
+/** Sisi terkecil ice can (meter) di antara kolom aktif — untuk ambang tampil 3 px. */
+function sisiIceCanTerkecil(tata: TataBak): number {
+  let min = Infinity;
+  for (const k of tata.kolom) if (!k.nonaktif && k.jumlah > 0) min = Math.min(min, k.lebar, k.panjangCan);
+  return min;
 }
 
 function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: BakElemen } & ElemenViewProps) {
-  const tata = useMemo(() => tataBak(bak), [bak]);
-  const { lebarKolom, panjangB, pita, ke } = tata;
-  const tampilIceCan = ukuranSelIceCan(bak, tata) * skalaKira >= 3;
-  const iceCan = useMemo(() => (tampilIceCan ? pathIceCan(bak, tata) : null), [bak, tata, tampilIceCan]);
-  const celah = lebarKolom * skalaKira >= 5 ? lebarKolom * 0.08 : 0;
-  const fsNomor = Math.min(lebarKolom * 0.55, pita * 0.75, 1.1);
-  const tampilNomor = fsNomor * skalaKira >= 7;
-  const radius = Math.min(bak.w, bak.h) * 0.08;
+  const tata = useMemo(() => tataBakMeter(bak), [bak]);
+  const tebal = Math.max(0, Math.min(bak.tebalDindingM, bak.w / 2, bak.h / 2));
+  const tampilIceCan = sisiIceCanTerkecil(tata) * skalaKira >= 3;
+  const iceCan = useMemo(() => (tampilIceCan ? pathIceCan(tata) : null), [tata, tampilIceCan]);
+  const ruangB = Math.max(0, tata.ruangB);
   const lawanRotasi = bak.rotasi ? (cx: number, cy: number) => `rotate(${-bak.rotasi} ${cx} ${cy})` : () => undefined;
+
+  // Nomor kolom: di pita dinding bila cukup tebal, selain itu di atas pangkal lajur.
+  const lebarMin = tata.kolom.reduce((m, k) => Math.min(m, k.lebar), Infinity);
+  const fsNomor = Math.min(Number.isFinite(lebarMin) ? lebarMin * 0.7 : 0.25, 0.3);
+  const diDinding = tebal >= fsNomor * 1.1;
+  const bNomor = diDinding ? tebal / 2 : tebal + fsNomor * 0.7;
+  const tampilNomor = fsNomor * skalaKira >= 7;
+
+  // Area kebutuhan kolom/ice can yang melebihi ruang dalam → arsir merah.
+  const lebih: { x: number; y: number; w: number; h: number }[] = [];
+  if (tata.butuhA > tata.ruangA + 1e-9) {
+    lebih.push(tata.keXY(tebal + Math.max(0, tata.ruangA), tebal, tata.butuhA - Math.max(0, tata.ruangA), Math.max(ruangB, tata.butuhB)));
+  }
+  if (tata.butuhB > tata.ruangB + 1e-9) {
+    lebih.push(tata.keXY(tebal, tebal + ruangB, Math.max(0, Math.min(tata.butuhA, tata.ruangA)), tata.butuhB - ruangB));
+  }
 
   return (
     <>
+      {/* Cangkang beton: bidang luar = dinding, bidang dalam = ruang brine. */}
+      <rect width={bak.w} height={bak.h} className="fill-stone-400 stroke-stone-600 dark:fill-stone-600 dark:stroke-stone-400" strokeWidth={1.5} vectorEffect={NS} />
       <rect
-        width={bak.w}
-        height={bak.h}
-        rx={radius}
-        className="fill-slate-200 stroke-slate-500 dark:fill-slate-800 dark:stroke-slate-400"
-        strokeWidth={1.5}
+        x={tebal}
+        y={tebal}
+        width={Math.max(0, bak.w - tebal * 2)}
+        height={Math.max(0, bak.h - tebal * 2)}
+        className="fill-slate-100 stroke-stone-500/70 dark:fill-slate-900 dark:stroke-stone-500/70"
+        strokeWidth={1}
         vectorEffect={NS}
       />
-      {bak.kolom.map((k, i) => {
-        const r = ke(posisiKolom(bak, i) * lebarKolom + celah / 2, 0, Math.max(lebarKolom - celah, 0.0001), panjangB);
-        const pilih = kolomTerpilih.has(k.id);
-        const salah = kolomSorot.has(k.id);
+      {tata.kolom.map((k) => {
+        // Lajur kolom selebar ice can, sepanjang ruang dalam bak.
+        const r = tata.keXY(k.a0, tebal, k.lebar, ruangB);
+        const pilih = kolomTerpilih.has(k.kolomId);
+        const salah = kolomSorot.has(k.kolomId);
         return (
           <rect
-            key={k.id}
-            data-kolom-id={k.id}
+            key={k.kolomId}
+            data-kolom-id={k.kolomId}
             x={r.x}
             y={r.y}
-            width={r.w}
-            height={r.h}
+            width={Math.max(r.w, 0.0001)}
+            height={Math.max(r.h, 0.0001)}
             fill={k.nonaktif ? `url(#${idPola}-nonaktif)` : undefined}
             className={cn(
               salah ? "fill-red-400/80 dark:fill-red-700/80" : k.nonaktif ? "opacity-80" : KELAS_VARIAN[k.varian],
@@ -1037,14 +1105,28 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: 
       })}
       {iceCan?.kecil && <path d={iceCan.kecil} className={KELAS_ICE_CAN.kecil} pointerEvents="none" />}
       {iceCan?.besar && <path d={iceCan.besar} className={KELAS_ICE_CAN.besar} pointerEvents="none" />}
+      {lebih.map((r, i) => (
+        <rect
+          key={i}
+          x={r.x}
+          y={r.y}
+          width={r.w}
+          height={r.h}
+          fill={`url(#${idPola}-lebih)`}
+          className="stroke-red-600 dark:stroke-red-400"
+          strokeWidth={1}
+          strokeDasharray="3 2"
+          vectorEffect={NS}
+          pointerEvents="none"
+        />
+      ))}
       {tampilNomor &&
-        bak.kolom.map((k, i) => {
-          const r = ke(posisiKolom(bak, i) * lebarKolom, 0, lebarKolom, pita);
-          const cx = r.x + r.w / 2;
-          const cy = r.y + r.h / 2;
+        tata.kolom.map((k) => {
+          const nomor = bak.kolom[k.indeks].nomor;
+          const p = tata.keXY(k.a0 + k.lebar / 2, bNomor, 0, 0);
           return (
-            <Teks key={k.id} x={cx} y={cy} ukuran={fsNomor} transform={lawanRotasi(cx, cy)} className={k.nonaktif ? "fill-muted-foreground" : undefined}>
-              {k.nomor}
+            <Teks key={k.kolomId} x={p.x} y={p.y} ukuran={fsNomor} transform={lawanRotasi(p.x, p.y)} className={k.nonaktif ? "fill-muted-foreground" : undefined}>
+              {nomor}
             </Teks>
           );
         })}
@@ -1071,7 +1153,23 @@ function MesinTubuh({ m }: { m: MesinElemen }) {
   );
 }
 
-function DerekView({ d, terpilih, sorot, hover, fs }: { d: DerekElemen; terpilih: boolean; sorot: boolean; hover: boolean; fs: number }) {
+function DerekView({
+  d,
+  terpilih,
+  sorot,
+  peringatan,
+  hover,
+  fs,
+  skalaKira,
+}: {
+  d: DerekElemen;
+  terpilih: boolean;
+  sorot: boolean;
+  peringatan: boolean;
+  hover: boolean;
+  fs: number;
+  skalaKira: number;
+}) {
   let a = d.titikAwal;
   let b = d.titikAkhir;
   if (a.x === b.x && a.y === b.y) {
@@ -1085,7 +1183,7 @@ function DerekView({ d, terpilih, sorot, hover, fs }: { d: DerekElemen; terpilih
       b = { x: k.x + k.w / 2, y: k.y + k.h };
     }
   }
-  const r = Math.max(0.35, fs * 0.35);
+  const r = Math.max(0.12, fs * 0.35);
   return (
     <g data-elemen-id={d.id} data-tipe="derek">
       {/* Area klik lebar tak terlihat */}
@@ -1097,7 +1195,7 @@ function DerekView({ d, terpilih, sorot, hover, fs }: { d: DerekElemen; terpilih
       <Teks x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 - fs * 0.6} ukuran={fs} baseline="auto" tebal className="fill-orange-700 dark:fill-orange-300">
         {d.nama}
       </Teks>
-      <GarisPilih kotak={kotakElemen(d)} terpilih={terpilih} sorot={sorot} hover={hover} />
+      <GarisPilih kotak={kotakElemen(d)} terpilih={terpilih} sorot={sorot} peringatan={peringatan} hover={hover} skalaKira={skalaKira} />
     </g>
   );
 }

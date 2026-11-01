@@ -224,6 +224,37 @@ export function Segmen<T extends string>({ nilai, pilihan, onUbah }: { nilai: T 
   );
 }
 
+/** Pilihan tarik-turun (select bawaan peramban — ringkas untuk panel sempit). */
+export function Pilihan<T extends string>({
+  nilai,
+  pilihan,
+  onUbah,
+  disabled,
+  ariaLabel,
+}: {
+  nilai: T;
+  pilihan: { nilai: T; label: string }[];
+  onUbah: (v: T) => void;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) {
+  return (
+    <select
+      value={nilai}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onChange={(e) => onUbah(e.target.value as T)}
+      className={cn(KELAS_INPUT, "cursor-pointer pr-1 [&>option]:bg-background [&>option]:text-foreground")}
+    >
+      {pilihan.map((p) => (
+        <option key={p.nilai} value={p.nilai}>
+          {p.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function Centang({ nilai, onUbah, label }: { nilai: boolean | null; onUbah: (v: boolean) => void; label: ReactNode }) {
   return (
     <label className="flex cursor-pointer items-center gap-2 text-xs">
