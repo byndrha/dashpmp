@@ -12,10 +12,19 @@ import { getDenah } from "@/lib/queries/produksi-denah";
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import { getUserById } from "@/lib/queries/akun";
 import { bolehEditDenah } from "@/lib/permissions";
-import { ringkasDenah } from "@/lib/produksi-denah";
+import { ringkasDenah, type DenahDokumen } from "@/lib/produksi-denah";
+import { kapasitasSiklusKg } from "@/components/produksi-denah/builder-state";
 import type { Session } from "next-auth";
 
 const angka = new Intl.NumberFormat("id-ID");
+const ton = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 });
+
+/** Kapasitas per siklus seluruh bak (ton): Σ ice can kolom aktif × berat varian. */
+function kapasitasSiklusTon(dok: DenahDokumen): number {
+  let kg = 0;
+  for (const e of dok.elemen) if (e.tipe === "bak") kg += kapasitasSiklusKg(e);
+  return kg / 1000;
+}
 const formatWib = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" });
 
 // updated_by = session.user.id (ID akun Postgres). Tampilkan nama bila bisa,
@@ -74,7 +83,7 @@ export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: Ko
         </Card>
       ) : (
         <>
-          <Ringkasan r={ringkasDenah(denah.data)} />
+          <Ringkasan r={ringkasDenah(denah.data)} kapasitasTon={kapasitasSiklusTon(denah.data)} />
           <DenahPenampil dokumen={denah.data} />
           <p className="text-xs text-muted-foreground">
             Diperbarui {formatWib.format(new Date(denah.updatedAt))} WIB oleh {oleh} · versi {denah.versi}. Klik bak untuk melihat detail kolom.
@@ -85,20 +94,21 @@ export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: Ko
   );
 }
 
-function Ringkasan({ r }: { r: ReturnType<typeof ringkasDenah> }) {
-  const isi: [string, number][] = [
-    ["Bak", r.jumlahBak],
-    ["Kolom", r.jumlahKolom],
-    ["Ice can Kecil", r.iceCanKecil],
-    ["Ice can Besar", r.iceCanBesar],
-    ["Mesin", r.jumlahMesin],
+function Ringkasan({ r, kapasitasTon }: { r: ReturnType<typeof ringkasDenah>; kapasitasTon: number }) {
+  const isi: [string, string][] = [
+    ["Bak", angka.format(r.jumlahBak)],
+    ["Kolom", angka.format(r.jumlahKolom)],
+    ["Ice can Kecil", angka.format(r.iceCanKecil)],
+    ["Ice can Besar", angka.format(r.iceCanBesar)],
+    ["Mesin", angka.format(r.jumlahMesin)],
+    ["Kapasitas per siklus", `${ton.format(kapasitasTon)} ton`],
   ];
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       {isi.map(([label, nilai]) => (
         <div key={label} className="rounded-lg border bg-card px-3 py-2">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="text-lg font-semibold tabular-nums">{angka.format(nilai)}</div>
+          <div className="text-lg font-semibold tabular-nums">{nilai}</div>
         </div>
       ))}
     </div>

@@ -1,13 +1,16 @@
 "use client";
 
-// Penampil denah (read-only): DenahKanvas mode "lihat" + panel detail bak.
-// Klik bak/kolom membuka panel samping berisi daftar kolom, mesin, durasi
-// beku, dan kolom per panen.
+// Penampil denah (read-only): DenahKanvas mode "lihat" (atau Mode 3D Replika)
+// + panel detail bak. Klik bak/kolom (2D maupun 3D) membuka panel samping
+// berisi daftar kolom, mesin, durasi beku, dan kolom per panen.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { DenahKanvas } from "@/components/produksi-denah/denah-kanvas";
 import { useLapisanTampil } from "@/components/produksi-denah/lapisan";
 import { MenuLapisan } from "@/components/produksi-denah/menu-lapisan";
+import { Tampilan3D, Toggle2D3D } from "@/components/produksi-denah/3d/tampilan-3d";
+import { periksaTeknik } from "@/lib/produksi-denah-teknik";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +24,13 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
   const [bakId, setBakId] = useState<string | null>(null);
   const [kolomId, setKolomId] = useState<string | null>(null);
   const [lapisanTampil, aturLapisan] = useLapisanTampil();
+  const [mode3D, setMode3D] = useState(false);
+  // Peringatan teknik hanya dihitung saat 3D dibuka (warna kotak ruang bebas derek).
+  const peringatan = useMemo(() => (mode3D ? periksaTeknik(dokumen) : []), [mode3D, dokumen]);
+  const gagal3D = useCallback(() => {
+    setMode3D(false);
+    toast.error("Mode 3D tidak dapat ditampilkan di perangkat ini — kembali ke tampilan 2D.");
+  }, []);
 
   const bak = useMemo(
     () => (bakId ? (dokumen.elemen.find((e): e is BakElemen => e.tipe === "bak" && e.id === bakId) ?? null) : null),
@@ -42,10 +52,26 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Legenda />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Toggle2D3D mode3D={mode3D} onUbah={setMode3D} />
           <MenuLapisan tampil={lapisanTampil} onUbah={ubahLapisan} elemen={dokumen.elemen} label />
         </div>
       </div>
+      {mode3D ? (
+        <Tampilan3D
+          dokumen={dokumen}
+          terpilihIds={terpilihIds}
+          lapisanTampil={lapisanTampil}
+          peringatan={peringatan}
+          className="h-[65vh] min-h-[360px] rounded-lg border"
+          onPilih={(id, kid) => {
+            const e = id ? dokumen.elemen.find((x) => x.id === id) : null;
+            setBakId(e?.tipe === "bak" ? e.id : null);
+            setKolomId(e?.tipe === "bak" ? (kid ?? null) : null);
+          }}
+          onGagal={gagal3D}
+        />
+      ) : (
       <DenahKanvas
         dokumen={dokumen}
         mode="lihat"
@@ -63,6 +89,7 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
           setKolomId(kid);
         }}
       />
+      )}
       <Sheet
         open={!!bak}
         onOpenChange={(buka) => {

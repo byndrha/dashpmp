@@ -71,6 +71,7 @@ import { PILIHAN_FLUIDA, PILIHAN_SISTEM_KABEL } from "@/components/produksi-dena
 import { formatMeter, formatUkur } from "@/components/produksi-denah/format";
 import { idTerlihat, lapisanTersembunyiDari, useLapisanTampil } from "@/components/produksi-denah/lapisan";
 import { MenuLapisan } from "@/components/produksi-denah/menu-lapisan";
+import { Tampilan3D, Toggle2D3D } from "@/components/produksi-denah/3d/tampilan-3d";
 import { cocokkanPintasan, DAFTAR_PINTASAN, type Alat } from "@/components/produksi-denah/pintasan-keyboard";
 import { PaletAlat } from "@/components/produksi-denah/palet-alat";
 import { PanelProperti } from "@/components/produksi-denah/panel-properti";
@@ -260,6 +261,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false);
   const [konfirmasiMuatUlang, setKonfirmasiMuatUlang] = useState(false);
   const [panelTerbuka, setPanelTerbuka] = useState(false);
+  // Mode 3D Replika (state lokal): menggantikan kanvas 2D; panel properti & validasi tetap aktif.
+  const [mode3D, setMode3D] = useState(false);
   // Elevasi kerja (z bawaan titik alat Jalur) — preferensi builder, TIDAK disimpan di dokumen.
   const [elevasiKerja, setElevasiKerja] = useState(ELEVASI_KERJA_BAWAAN);
   const [kursorToko] = useState(() => buatToko<Titik | null>(null));
@@ -323,6 +326,25 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     window.addEventListener("beforeunload", f);
     return () => window.removeEventListener("beforeunload", f);
   }, [kotor]);
+
+  // ---------- Mode 3D ----------
+  const ubahMode3D = (ke3D: boolean) => {
+    if (ke3D) {
+      setAlat("pilih");
+      setHoverId(null);
+    }
+    setMode3D(ke3D);
+  };
+  const gagal3D = useCallback(() => {
+    setMode3D(false);
+    toast.error("Mode 3D tidak dapat ditampilkan di perangkat ini — kembali ke tampilan 2D.");
+  }, []);
+  /** Klik di 3D: seleksi berbagi state dengan 2D (dispatch pilih / kolom). */
+  const pilih3D = (elemenId: string | null, kolomId?: string | null) => {
+    if (!elemenId) dispatch({ type: "pilih", ids: [] });
+    else if (kolomId && terpilih.length === 1 && terpilih[0] === elemenId) dispatch({ type: "aturKolomTerpilih", bakId: elemenId, kolomIds: [kolomId] });
+    else dispatch({ type: "pilih", ids: [elemenId] });
+  };
 
   const keluar = () => {
     if (kotor) setKonfirmasiKeluar(true);
@@ -709,6 +731,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     const ids = [...terpilih]; // hanya elemen di lapisan tampil
     switch (a.jenis) {
       case "alat":
+        if (mode3D) return; // alat gambar hanya di 2D
         setAlat(a.alat);
         return;
       case "undo":
@@ -826,6 +849,22 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
 
   const tombolSimpanNonaktif = menyimpan || !kotor || galat.length > 0;
 
+  const bannerBasi = penolakan?.jenis === "basi" && (
+              <div className="absolute top-3 left-1/2 z-10 flex w-[min(560px,calc(100%-24px))] -translate-x-1/2 items-start gap-3 rounded-lg border border-destructive/50 bg-background/95 p-3 shadow-lg backdrop-blur">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+                <div className="min-w-0 flex-1 text-sm">
+                  <div className="font-medium">Denah sudah diubah orang lain</div>
+                  <div className="text-xs text-muted-foreground">{penolakan.pesan} Perubahan Anda di builder ini belum tersimpan.</div>
+                </div>
+                <Button size="sm" onClick={() => setKonfirmasiMuatUlang(true)}>
+                  <RefreshCw /> Muat ulang
+                </Button>
+                <button type="button" aria-label="Tutup" className="text-muted-foreground hover:text-foreground" onClick={() => setPenolakan(null)}>
+                  <X className="size-4" />
+                </button>
+              </div>
+            );
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background text-foreground">
       {/* ---------- Bilah atas ---------- */}
@@ -856,7 +895,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
           </Button>
         </div>
         <div className="mx-1 hidden h-5 w-px bg-border sm:block" />
-        <div className="hidden items-center gap-0.5 sm:flex">
+        <Toggle2D3D mode3D={mode3D} onUbah={ubahMode3D} />
+        <div className={cn("hidden items-center gap-0.5", !mode3D && "sm:flex")}>
           <Button variant="ghost" size="icon-sm" title="Perkecil (−)" aria-label="Perkecil" onClick={() => kanvasRef.current?.zoomKeluar()}>
             <ZoomOut />
           </Button>
@@ -886,7 +926,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
       </header>
 
       <div className="relative flex min-h-0 flex-1">
-        <PaletAlat alat={alat} onPilih={pilihAlat} />
+        {!mode3D && <PaletAlat alat={alat} onPilih={pilihAlat} />}
 
         {/* ---------- Kanvas ---------- */}
         <div
@@ -897,6 +937,17 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
             setHoverId(null);
           }}
         >
+          {mode3D ? (
+            <Tampilan3D
+              dokumen={dok}
+              terpilihIds={terpilihSet}
+              lapisanTampil={lapisanTampil}
+              peringatan={peringatan}
+              className="absolute inset-0"
+              onPilih={pilih3D}
+              onGagal={gagal3D}
+            />
+          ) : (
           <DenahKanvas
             ref={kanvasRef}
             dokumen={dok}
@@ -931,21 +982,7 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
               />
             )}
           >
-            {penolakan?.jenis === "basi" && (
-              <div className="absolute top-3 left-1/2 z-10 flex w-[min(560px,calc(100%-24px))] -translate-x-1/2 items-start gap-3 rounded-lg border border-destructive/50 bg-background/95 p-3 shadow-lg backdrop-blur">
-                <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
-                <div className="min-w-0 flex-1 text-sm">
-                  <div className="font-medium">Denah sudah diubah orang lain</div>
-                  <div className="text-xs text-muted-foreground">{penolakan.pesan} Perubahan Anda di builder ini belum tersimpan.</div>
-                </div>
-                <Button size="sm" onClick={() => setKonfirmasiMuatUlang(true)}>
-                  <RefreshCw /> Muat ulang
-                </Button>
-                <button type="button" aria-label="Tutup" className="text-muted-foreground hover:text-foreground" onClick={() => setPenolakan(null)}>
-                  <X className="size-4" />
-                </button>
-              </div>
-            )}
+            {bannerBasi}
             {alat === "jalur" && (
               <BilahOpsiJalur opsi={opsiJalur} onUbah={setOpsiJalur} elevasiKerja={elevasiKerja} jumlahTitik={jalurDigambar?.titik.length ?? 0} />
             )}
@@ -963,6 +1000,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
               <Minimap dokumen={dokMinimap} terpilih={terpilihSet} toko={tampilanToko} onPusatkan={pusatkan} />
             </div>
           </DenahKanvas>
+          )}
+          {mode3D && bannerBasi}
         </div>
 
         {/* ---------- Panel kanan ---------- */}
