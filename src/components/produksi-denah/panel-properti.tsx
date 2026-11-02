@@ -12,11 +12,13 @@ import {
   AlignEndVertical,
   AlignStartHorizontal,
   AlignStartVertical,
+  ArrowLeftRight,
   BringToFront,
   Copy,
   ListOrdered,
   Lock,
   LockOpen,
+  Plus,
   RotateCcw,
   RotateCw,
   SendToBack,
@@ -31,6 +33,8 @@ import {
   kotakElemen,
   ringkasDenah,
   BATAS_KANVAS,
+  BATAS_TITIK_JALUR,
+  FLUIDA_BAWAAN,
   PRESET_ICE_CAN,
   type AreaElemen,
   type BakElemen,
@@ -38,6 +42,8 @@ import {
   type DenahElemen,
   type DerekElemen,
   type DimensiIceCan,
+  type Fluida,
+  type JalurElemen,
   type JenisTangki,
   type KategoriMesin,
   type LabelElemen,
@@ -45,12 +51,13 @@ import {
   type TangkiElemen,
   type Varian,
 } from "@/lib/produksi-denah";
-import { tataBakMeter } from "@/lib/produksi-denah-geometri";
+import { segmenJalur, segmenTertanam, tataBakMeter } from "@/lib/produksi-denah-geometri";
 import {
   NAMA_TIPE,
   PILIHAN_LANGKAH_SNAP,
   kapasitasSiklusKg,
   normalisasiUtara,
+  panjangJalur,
   type AksiBuilder,
   type SisiRata,
 } from "@/components/produksi-denah/builder-state";
@@ -141,7 +148,7 @@ function AksiSeleksi({ ids, terkunci, dispatch }: { ids: string[]; terkunci: boo
 function Geometri({ e, dispatch }: { e: DenahElemen; dispatch: Dispatch<AksiBuilder> }) {
   const k = kotakElemen(e);
   const kunci = !!e.terkunci;
-  if (e.tipe === "derek") return null; // derek diatur lewat titiknya
+  if (e.tipe === "derek" || e.tipe === "jalur") return null; // derek & jalur diatur lewat titiknya
   return (
     <div className="flex flex-col gap-2">
       <Judul>Posisi & ukuran denah</Judul>
@@ -234,6 +241,8 @@ function IsianKhusus({ e, dok, dispatch, onKeKolom }: { e: DenahElemen; dok: Den
       return <IsianLabel l={e} dispatch={dispatch} />;
     case "tangki":
       return <IsianTangki t={e} dispatch={dispatch} />;
+    case "jalur":
+      return <IsianJalur j={e} dok={dok} dispatch={dispatch} />;
     default:
       return null;
   }
@@ -692,6 +701,113 @@ function IsianTangki({ t, dispatch }: { t: TangkiElemen; dispatch: Dispatch<Aksi
       </div>
       <p className="text-[10px] leading-tight text-muted-foreground">
         Volume dari ukuran denah ≈ <b className="font-medium text-foreground">{formatAngka(volume)} m³</b>. Level isi hanya untuk tampilan.
+      </p>
+    </div>
+  );
+}
+
+// ---------- Jalur (pipa & kabel) ----------
+
+export const PILIHAN_FLUIDA: { nilai: Fluida; label: string }[] = [
+  { nilai: "air-baku", label: "Air baku" },
+  { nilai: "air-pendingin", label: "Air pendingin" },
+  { nilai: "air-thawing", label: "Air thawing" },
+  { nilai: "drain", label: "Drain / buangan" },
+  { nilai: "brine", label: "Brine" },
+  { nilai: "nh3-cair", label: "NH3 cair" },
+  { nilai: "nh3-gas", label: "NH3 gas" },
+  { nilai: "udara", label: "Udara" },
+];
+
+export const PILIHAN_SISTEM_KABEL: { nilai: "daya" | "kontrol"; label: string }[] = [
+  { nilai: "daya", label: "Kabel daya" },
+  { nilai: "kontrol", label: "Kabel kontrol" },
+];
+
+function IsianJalur({ j, dok, dispatch }: { j: JalurElemen; dok: DenahDokumen; dispatch: Dispatch<AksiBuilder> }) {
+  const kunci = !!j.terkunci;
+  const ubah = (patch: Partial<JalurElemen>, k?: string) => dispatch({ type: "ubahElemen", id: j.id, patch, gabung: k ? `${j.id}:${k}` : undefined });
+  const aturTitik = (titik: JalurElemen["titik"]) => ubah({ titik });
+  const ubahTitik = (i: number, sumbu: "x" | "y" | "z", v: number) => aturTitik(j.titik.map((t, n) => (n === i ? { ...t, [sumbu]: v } : t)));
+  const tambahTitik = () => {
+    const akhir = j.titik[j.titik.length - 1] ?? { x: 0, y: 0, z: 0 };
+    aturTitik([...j.titik, { x: akhir.x + 1, y: akhir.y, z: akhir.z }]);
+  };
+  const hapusTitik = (i: number) => aturTitik(j.titik.filter((_, n) => n !== i));
+  const lain = dok.elemen.filter((e) => e.id !== j.id);
+  const pilihanUjung = [{ nilai: "", label: "— tidak tersambung —" }, ...lain.map((e) => ({ nilai: e.id, label: `${e.nama || "(tanpa nama)"} · ${NAMA_TIPE[e.tipe]}` }))];
+  const tertanam = segmenJalur(j).map((s) => segmenTertanam(s, dok));
+  return (
+    <div className="flex flex-col gap-2">
+      <Bidang label="Jenis">
+        <Segmen<JalurElemen["jenis"]>
+          nilai={j.jenis}
+          pilihan={[
+            { nilai: "pipa", label: "Pipa" },
+            { nilai: "kabel", label: "Kabel" },
+          ]}
+          onUbah={(jenis) => {
+            if (jenis === j.jenis) return;
+            ubah(jenis === "kabel" ? { jenis, sistem: j.sistem ?? "daya", fluida: undefined } : { jenis, fluida: j.fluida ?? FLUIDA_BAWAAN, sistem: undefined });
+          }}
+        />
+      </Bidang>
+      <div className="grid grid-cols-2 gap-2">
+        {j.jenis === "pipa" ? (
+          <Bidang label="Fluida">
+            <Pilihan<Fluida> nilai={j.fluida ?? FLUIDA_BAWAAN} pilihan={PILIHAN_FLUIDA} ariaLabel="Fluida" onUbah={(fluida) => ubah({ fluida })} />
+          </Bidang>
+        ) : (
+          <Bidang label="Sistem">
+            <Pilihan<"daya" | "kontrol"> nilai={j.sistem ?? "daya"} pilihan={PILIHAN_SISTEM_KABEL} ariaLabel="Sistem kabel" onUbah={(sistem) => ubah({ sistem })} />
+          </Bidang>
+        )}
+        <Bidang label="Diameter">
+          <InputAngka nilai={j.diameterMm} min={1} max={2000} satuan="mm" onUbah={(diameterMm) => ubah({ diameterMm }, "diameter")} />
+        </Bidang>
+      </div>
+      <Bidang label="Dari (ujung awal)">
+        <Pilihan<string> nilai={j.dariId ?? ""} pilihan={pilihanUjung} ariaLabel="Elemen ujung awal" onUbah={(v) => ubah({ dariId: v || undefined })} />
+      </Bidang>
+      <Bidang label="Ke (ujung akhir)">
+        <Pilihan<string> nilai={j.keId ?? ""} pilihan={pilihanUjung} ariaLabel="Elemen ujung akhir" onUbah={(v) => ubah({ keId: v || undefined })} />
+      </Bidang>
+      <Button variant="outline" size="sm" disabled={kunci || j.titik.length < 2} onClick={() => dispatch({ type: "balikJalur", id: j.id })}>
+        <ArrowLeftRight /> Balik arah aliran
+      </Button>
+      <Judul aksi={<span className="text-[10px] text-muted-foreground tabular-nums">{formatMeter(panjangJalur(j))}</span>}>Titik (urutan = arah aliran)</Judul>
+      <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-[1.25rem_1fr_1fr_1fr_1.75rem] items-center gap-1 text-[10px] text-muted-foreground">
+          <span>#</span>
+          <span>X (m)</span>
+          <span>Y (m)</span>
+          <span>Z (m)</span>
+          <span />
+        </div>
+        {j.titik.map((t, i) => (
+          <div key={i} className="flex flex-col gap-1">
+            {i > 0 && tertanam[i - 1] && (
+              <div className="ml-5 inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400">
+                <span className="inline-block h-0 w-4 border-t-2 border-dashed border-current" /> Tertanam di beton
+              </div>
+            )}
+            <div className="grid grid-cols-[1.25rem_1fr_1fr_1fr_1.75rem] items-center gap-1">
+              <span className="text-[10px] text-muted-foreground tabular-nums">{i + 1}</span>
+              <InputAngka nilai={t.x} bulat={false} disabled={kunci} onUbah={(v) => ubahTitik(i, "x", v)} />
+              <InputAngka nilai={t.y} bulat={false} disabled={kunci} onUbah={(v) => ubahTitik(i, "y", v)} />
+              <InputAngka nilai={t.z} bulat={false} min={-50} max={100} disabled={kunci} onUbah={(v) => ubahTitik(i, "z", v)} />
+              <TombolKecil title={j.titik.length <= 2 ? "Jalur minimal 2 titik" : `Hapus titik ${i + 1}`} bahaya disabled={kunci || j.titik.length <= 2} onClick={() => hapusTitik(i)}>
+                <Trash2 />
+              </TombolKecil>
+            </div>
+          </div>
+        ))}
+        <Button variant="ghost" size="sm" disabled={kunci || j.titik.length >= BATAS_TITIK_JALUR} onClick={tambahTitik}>
+          <Plus /> Tambah titik
+        </Button>
+      </div>
+      <p className="text-[10px] leading-tight text-muted-foreground">
+        Z = ketinggian sumbu jalur dari ±0,00. Segmen di pelat lantai (z −{formatAngka(dok.kanvas.pelatLantai.tebalM)} m s/d 0) atau di dalam beton ditandai tertanam.
       </p>
     </div>
   );

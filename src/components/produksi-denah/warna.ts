@@ -5,7 +5,7 @@
 // amonia (NH3) kuning/oranye, brine ungu, udara abu muda; kabel daya merah,
 // kabel kontrol hijau.
 
-import type { Fluida, KategoriMesin } from "@/lib/produksi-denah";
+import { FLUIDA_BAWAAN, SISTEM_KABEL_BAWAAN, type Fluida, type JalurElemen, type KategoriMesin } from "@/lib/produksi-denah";
 
 export const WARNA_FLUIDA: Record<Fluida, string> = {
   "air-baku": "#2563eb", // biru
@@ -34,3 +34,8 @@ export const WARNA_MESIN: Record<KategoriMesin, string> = {
 export const WARNA_BETON = "#a8a29e";
 /** Air di dalam tangki / brine. */
 export const WARNA_AIR = "#38bdf8";
+
+/** Warna jalur: pipa per fluida, kabel per sistem (bawaan bila kosong). */
+export function warnaJalur(j: Pick<JalurElemen, "jenis" | "fluida" | "sistem">): string {
+  return j.jenis === "kabel" ? WARNA_KABEL[j.sistem ?? SISTEM_KABEL_BAWAAN] : WARNA_FLUIDA[j.fluida ?? FLUIDA_BAWAAN];
+}

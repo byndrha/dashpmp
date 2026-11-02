@@ -43,6 +43,7 @@ export const TOMBOL_ALAT: Record<string, Alat> = {
   o: "beton",
   t: "tangki",
   m: "ukur",
+  j: "jalur",
 };
 
 export const HURUF_ALAT: Record<Alat, string> = Object.fromEntries(
@@ -139,6 +140,7 @@ export const DAFTAR_PINTASAN: { grup: string; isi: [string, string][] }[] = [
       ["O", "Beton (pondasi, plinth, saluran)"],
       ["T", "Tangki"],
       ["M", "Ukur jarak & sudut (sementara)"],
+      ["J", "Jalur pipa/kabel (klik titik; dobel klik/Enter selesai, Backspace hapus titik)"],
       ["Shift saat menaruh", "Alat tetap aktif"],
     ],
   },

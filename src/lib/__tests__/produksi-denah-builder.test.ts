@@ -8,6 +8,8 @@ import {
   bisaRedo,
   bisaUndo,
   buatElemen,
+  buatJalur,
+  tempelUjungJalur,
   builderReducer,
   kotor,
   namaBerikut,
@@ -28,6 +30,7 @@ import { WARNA_AIR, WARNA_BETON, WARNA_FLUIDA, WARNA_KABEL, WARNA_MESIN } from "
 import {
   buatBak,
   denahKosong,
+  kotakJalur,
   validasiBentukDenah,
   validasiDenah,
   type BakElemen,
@@ -433,4 +436,143 @@ test("idTerlihat & lapisanTersembunyiDari: seleksi hanya elemen di lapisan tampi
   assert.deepEqual(lapisanTersembunyiDari(elemen, tanpaRefri), ["refrigerasi"]);
   assert.deepEqual(lapisanTersembunyiDari([b, beton], tanpaRefri), []);
   assert.deepEqual(lapisanTersembunyiDari([m, m], uraiLapisan('["refrigerasi","proses"]')), ["refrigerasi"]);
+});
+
+// ---------- Task 6: alat jalur (pipa & kabel) ----------
+
+function jalurUji(titik: { x: number; y: number; z: number }[], extra: Partial<JalurElemen> = {}): JalurElemen {
+  return buatJalur(titik, { jenis: "pipa", fluida: "air-baku", diameterMm: 50 }, [], extra.dariId, extra.keId);
+}
+
+const T3 = [
+  { x: 0, y: 0, z: -0.1 },
+  { x: 4, y: 0, z: -0.1 },
+  { x: 4, y: 2, z: 0.5 },
+];
+
+test("buatJalur: kotak = kotakJalur, elevasi = z terendah, nama Jalur N, dari/ke opsional", () => {
+  const j = jalurUji(T3);
+  assert.equal(j.tipe, "jalur");
+  assert.equal(j.nama, "Jalur 1");
+  assert.deepEqual({ x: j.x, y: j.y, w: j.w, h: j.h }, kotakJalur(T3));
+  assert.equal(j.elevasiM, -0.1);
+  assert.equal(j.rotasi, 0);
+  assert.equal("dariId" in j, false);
+  assert.equal("keId" in j, false);
+  const k = buatJalur(T3, { jenis: "kabel", sistem: "kontrol", diameterMm: 25 }, [j], "m1", undefined);
+  assert.deepEqual([k.nama, k.jenis, k.sistem, k.fluida, k.dariId, "keId" in k], ["Jalur 2", "kabel", "kontrol", undefined, "m1", false]);
+  assert.equal(validasiBentukDenah(JSON.parse(JSON.stringify(dokDengan(j, k)))), null);
+});
+
+test("pindah jalur: semua titik bergeser, z tetap, kotak = kotakJalur", () => {
+  const j = jalurUji(T3);
+  const s = jalankan(stateAwal(dokDengan(j)), { type: "pindah", ids: [j.id], dx: 1, dy: 2 });
+  const b = s.dok.elemen[0] as JalurElemen;
+  assert.deepEqual(b.titik, [
+    { x: 1, y: 2, z: -0.1 },
+    { x: 5, y: 2, z: -0.1 },
+    { x: 5, y: 4, z: 0.5 },
+  ]);
+  assert.deepEqual({ x: b.x, y: b.y, w: b.w, h: b.h }, kotakJalur(b.titik));
+});
+
+test("putar jalur: titik diputar 90° searah jarum jam di pusat kotak, z tetap, rotasi tetap 0", () => {
+  const j = jalurUji(T3);
+  const s = jalankan(stateAwal(dokDengan(j)), { type: "putar", ids: [j.id] });
+  const b = s.dok.elemen[0] as JalurElemen;
+  // Pusat kotak (2, 1): (x, y) -> (cx − (y − cy), cy + (x − cx)).
+  assert.deepEqual(b.titik, [
+    { x: 3, y: -1, z: -0.1 },
+    { x: 3, y: 3, z: -0.1 },
+    { x: 1, y: 3, z: 0.5 },
+  ]);
+  assert.equal(b.rotasi, 0);
+  assert.deepEqual({ x: b.x, y: b.y, w: b.w, h: b.h }, kotakJalur(b.titik));
+  // 4 × putar = kembali ke titik semula.
+  const s4 = jalankan(s, { type: "putar", ids: [j.id] }, { type: "putar", ids: [j.id] }, { type: "putar", ids: [j.id] });
+  assert.deepEqual((s4.dok.elemen[0] as JalurElemen).titik, T3);
+});
+
+test("duplikat jalur: ID baru, titik sama + offset, dari/ke ikut dipetakan bila ujungnya ikut disalin", () => {
+  const m = mesin(10, 10);
+  const j = jalurUji(T3, { dariId: m.id, keId: "lain" });
+  const s = jalankan(stateAwal(dokDengan(m, j)), { type: "duplikat", ids: [j.id] });
+  const salinan = s.dok.elemen[2] as JalurElemen;
+  assert.notEqual(salinan.id, j.id);
+  assert.deepEqual(salinan.titik, T3.map((t) => ({ ...t, x: t.x + 2, y: t.y + 2 })));
+  assert.equal(salinan.dariId, m.id); // mesin tidak ikut disalin: referensi tetap
+  // Salin mesin + jalur bersama: dariId menunjuk salinan mesin.
+  const s2 = jalankan(stateAwal(dokDengan(m, j)), { type: "duplikat", ids: [m.id, j.id] });
+  const [mSalin, jSalin] = s2.dok.elemen.slice(2) as [MesinElemen, JalurElemen];
+  assert.equal(jSalin.dariId, mSalin.id);
+});
+
+test("undo mengembalikan titik jalur", () => {
+  const j = jalurUji(T3);
+  const s = jalankan(stateAwal(dokDengan(j)), { type: "pindah", ids: [j.id], dx: 1, dy: 2 }, { type: "putar", ids: [j.id] }, { type: "undo" }, { type: "undo" });
+  assert.deepEqual((s.dok.elemen[0] as JalurElemen).titik, T3);
+});
+
+test("balikJalur: urutan titik dibalik, dariId/keId ditukar (field kosong dibuang)", () => {
+  const j = jalurUji(T3, { dariId: "a" });
+  const s = jalankan(stateAwal(dokDengan(j)), { type: "balikJalur", id: j.id });
+  const b = s.dok.elemen[0] as JalurElemen;
+  assert.deepEqual(b.titik, [...T3].reverse());
+  assert.equal(b.keId, "a");
+  assert.equal("dariId" in b, false);
+  assert.equal(s.lalu.length, 1);
+  const s2 = jalankan(s, { type: "balikJalur", id: j.id });
+  assert.deepEqual((s2.dok.elemen[0] as JalurElemen).titik, T3);
+  assert.equal((s2.dok.elemen[0] as JalurElemen).dariId, "a");
+  // Bukan jalur / terkunci: tidak berubah.
+  const t = stateAwal(dokDengan({ ...j, terkunci: true }));
+  assert.equal(jalankan(t, { type: "balikJalur", id: j.id }), t);
+});
+
+test("ubahElemen titik jalur menghitung ulang x/y/w/h dengan kotakJalur", () => {
+  const j = jalurUji(T3);
+  const titik = [...T3, { x: -3, y: 7, z: 0 }];
+  const s = jalankan(stateAwal(dokDengan(j)), { type: "ubahElemen", id: j.id, patch: { titik } });
+  const b = s.dok.elemen[0] as JalurElemen;
+  assert.deepEqual({ x: b.x, y: b.y, w: b.w, h: b.h }, kotakJalur(titik));
+  assert.equal(b.elevasiM, -0.1);
+});
+
+test("aturKotak tidak berlaku untuk jalur", () => {
+  const j = jalurUji(T3);
+  const s = stateAwal(dokDengan(j));
+  assert.equal(jalankan(s, { type: "aturKotak", id: j.id, kotak: { x: 0, y: 0, w: 10, h: 10 } }), s);
+});
+
+test("hapus elemen membersihkan dariId/keId jalur yang menunjuknya", () => {
+  const m = mesin(10, 10);
+  const j = jalurUji(T3, { dariId: m.id, keId: m.id });
+  const s = jalankan(stateAwal(dokDengan(m, j)), { type: "hapus", ids: [m.id] });
+  const b = s.dok.elemen[0] as JalurElemen;
+  assert.equal("dariId" in b, false);
+  assert.equal("keId" in b, false);
+  assert.deepEqual(validasiDenah(s.dok).filter((g) => g.elemenId === j.id), []);
+});
+
+test("tempelUjungJalur: ujung jalur lain (radius) lalu tepi elemen non-jalur di bawah kursor", () => {
+  const m = mesin(10, 10); // kotak 10..14
+  const lain = jalurUji([
+    { x: 0, y: 0, z: 1.2 },
+    { x: 5, y: 0, z: 1.2 },
+  ]);
+  const elemen = [m, lain];
+  // Dekat ujung jalur lain: ikut x/y/z ujung itu.
+  assert.deepEqual(tempelUjungJalur({ x: 5.1, y: 0.05 }, elemen, 0.2, null), { x: 5, y: 0, z: 1.2, elemenId: lain.id });
+  assert.equal(tempelUjungJalur({ x: 5.5, y: 0 }, elemen, 0.2, null), null);
+  // Di dalam mesin: proyeksi ke tepi terdekat.
+  assert.deepEqual(tempelUjungJalur({ x: 13.5, y: 12 }, elemen, 0.2, m.id), { x: 14, y: 12, elemenId: m.id });
+  assert.deepEqual(tempelUjungJalur({ x: 11, y: 10.4 }, elemen, 0.2, m.id), { x: 11, y: 10, elemenId: m.id });
+  // Elemen jalur yang dikecualikan (jalur yang sedang digambar) diabaikan.
+  assert.equal(tempelUjungJalur({ x: 5, y: 0 }, elemen, 0.2, null, lain.id), null);
+});
+
+test("pintasan J = alat jalur", () => {
+  const a = cocokkanPintasan({ key: "j", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false });
+  assert.deepEqual(a, { jenis: "alat", alat: "jalur" });
+  assert.equal(HURUF_ALAT.jalur, "J");
 });

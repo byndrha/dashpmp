@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
+  DIAMETER_JALUR_BAWAAN,
+  FLUIDA_BAWAAN,
   denahKosong,
   kotakElemen,
   lapisanElemen,
@@ -33,12 +35,14 @@ import {
   type DenahDokumen,
   type DenahElemen,
   type DerekElemen,
+  type Fluida,
   type GalatDenah,
   type HasilSimpanDenah,
   type KodeProduksi,
   type Lapisan,
   type TipeElemen,
   type Titik,
+  type Titik3D,
 } from "@/lib/produksi-denah";
 import { simpanDenahAction } from "@/app/produksi-denah-actions";
 import { DenahKanvas, type DenahKanvasHandle, type GeserSementara, type InfoPointerKanvas } from "@/components/produksi-denah/denah-kanvas";
@@ -50,14 +54,20 @@ import {
   bisaRedo,
   bisaUndo,
   buatElemen,
+  buatJalur,
   builderReducer,
   garisDerek,
   kotakGabungan,
   kotor as dokKotor,
   snapTitik,
   stateAwal,
+  panjangJalur,
+  tempelUjungJalur,
   type Kotak,
+  type OpsiJalur,
 } from "@/components/produksi-denah/builder-state";
+import { warnaJalur } from "@/components/produksi-denah/warna";
+import { PILIHAN_FLUIDA, PILIHAN_SISTEM_KABEL } from "@/components/produksi-denah/panel-properti";
 import { formatMeter, formatUkur } from "@/components/produksi-denah/format";
 import { idTerlihat, lapisanTersembunyiDari, useLapisanTampil } from "@/components/produksi-denah/lapisan";
 import { MenuLapisan } from "@/components/produksi-denah/menu-lapisan";
@@ -68,7 +78,7 @@ import { PanelKolom } from "@/components/produksi-denah/panel-kolom";
 import { PanelValidasi } from "@/components/produksi-denah/panel-validasi";
 import { periksaTeknik } from "@/lib/produksi-denah-teknik";
 import { Minimap, type InfoTampilan } from "@/components/produksi-denah/minimap";
-import { buatToko, useToko, type Toko } from "@/components/produksi-denah/bidang";
+import { InputAngka, Pilihan, Segmen, buatToko, useToko, type Toko } from "@/components/produksi-denah/bidang";
 
 // ---------- Tipe ----------
 
@@ -111,6 +121,21 @@ type Gestur =
 
 /** Garis alat Ukur — sementara, TIDAK pernah masuk dokumen. */
 type GarisUkur = { a: Titik; b: Titik };
+
+/**
+ * Jalur yang sedang digambar (alat Jalur) — belum masuk dokumen sampai selesai.
+ * ujungIds[i] = elemen tempat titik i menempel; hanya titik pertama (dariId)
+ * dan terakhir (keId) yang dipakai saat selesai.
+ */
+type JalurDigambar = { titik: Titik3D[]; ujungIds: (string | undefined)[] };
+
+/** Radius tempel ke ujung jalur lain (piksel layar), spec §6. */
+const RADIUS_TEMPEL_PX = 8;
+/** Dua klik dalam waktu & jarak ini = dobel klik (selesai). */
+const DOBEL_KLIK_MS = 350;
+const DOBEL_KLIK_PX = 6;
+
+const OPSI_JALUR_BAWAAN: OpsiJalur = { jenis: "pipa", fluida: FLUIDA_BAWAAN, diameterMm: DIAMETER_JALUR_BAWAAN.pipa };
 
 interface Visual {
   geser: GeserSementara | null;
@@ -216,10 +241,14 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const [versi, setVersi] = useState<number | null>(versiAwal);
   const [alat, setAlatMentah] = useState<Alat>("pilih");
   const [ukur, setUkur] = useState<GarisUkur | null>(null);
-  // Hasil ukur hilang setiap kali alat berganti.
+  const [jalurDigambar, setJalurDigambar] = useState<JalurDigambar | null>(null);
+  const [opsiJalur, setOpsiJalur] = useState<OpsiJalur>(OPSI_JALUR_BAWAAN);
+  const klikJalurTerakhir = useRef<{ t: number; cx: number; cy: number } | null>(null);
+  // Hasil ukur & jalur setengah jadi hilang setiap kali alat berganti.
   const setAlat = useCallback((a: Alat) => {
     setAlatMentah(a);
     setUkur(null);
+    setJalurDigambar(null);
   }, []);
   const [lapisanTampil, aturLapisan] = useLapisanTampil();
   const [tab, setTab] = useState<Tab>("properti");
@@ -377,6 +406,57 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     return { x, y };
   };
 
+  // ---------- Alat Jalur ----------
+
+  /**
+   * Titik jalur dari posisi kursor: menempel ke ujung jalur lain (radius 8 px)
+   * atau ke tepi elemen di bawah kursor; selain itu snap grid. z = elevasi
+   * kerja (atau z ujung jalur yang ditempeli). Alt = tanpa snap & tempel.
+   */
+  const titikJalur = (p: Titik, elemenId: string | null, snap: boolean): { t: Titik3D; ujungId?: string } => {
+    if (snap) {
+      const t = kanvasRef.current?.tampilan();
+      const radius = t ? RADIUS_TEMPEL_PX / t.skala : 0.4;
+      const id = elemenId && byId.has(elemenId) && tampilDiLapisan(byId.get(elemenId)!) ? elemenId : null;
+      const tempel = tempelUjungJalur(p, dok.elemen.filter(tampilDiLapisan), radius, id);
+      if (tempel) return { t: { x: tempel.x, y: tempel.y, z: tempel.z ?? elevasiKerja }, ujungId: tempel.elemenId };
+    }
+    const s = snapTitik(p, snap, langkahSnap);
+    return { t: { x: s.x, y: s.y, z: elevasiKerja } };
+  };
+
+  /** Selesaikan jalur (≥ 2 titik) → elemen baru; kurang dari 2 titik = tidak ada yang dibuat. */
+  const selesaiJalur = (jd: JalurDigambar | null = jalurDigambar) => {
+    setJalurDigambar(null);
+    klikJalurTerakhir.current = null;
+    if (!jd || jd.titik.length < 2) {
+      if (jd && jd.titik.length > 0) toast("Jalur butuh minimal 2 titik.", { duration: 1500 });
+      return;
+    }
+    const baru = buatJalur(jd.titik, opsiJalur, dok.elemen, jd.ujungIds[0], jd.ujungIds[jd.ujungIds.length - 1]);
+    tampilkanLapisanUntuk([baru]);
+    dispatch({ type: "tambah", elemen: [baru] });
+    setTab("properti");
+    setAlat("pilih");
+  };
+
+  const klikJalur = (info: InfoPointerKanvas) => {
+    const ev = info.event;
+    const lalu = klikJalurTerakhir.current;
+    const dobel = !!lalu && ev.timeStamp - lalu.t <= DOBEL_KLIK_MS && Math.hypot(ev.clientX - lalu.cx, ev.clientY - lalu.cy) <= DOBEL_KLIK_PX;
+    klikJalurTerakhir.current = { t: ev.timeStamp, cx: ev.clientX, cy: ev.clientY };
+    // Dobel klik = selesai (klik pertama sudah menambah titiknya).
+    if (dobel && jalurDigambar) {
+      selesaiJalur();
+      return;
+    }
+    const { t, ujungId } = titikJalur(info.titik, info.elemenId, !ev.altKey);
+    const jd = jalurDigambar ?? { titik: [], ujungIds: [] };
+    const akhir = jd.titik[jd.titik.length - 1];
+    if (akhir && akhir.x === t.x && akhir.y === t.y && akhir.z === t.z) return; // titik kembar
+    setJalurDigambar({ titik: [...jd.titik, t], ujungIds: [...jd.ujungIds, ujungId] });
+  };
+
   const onPointerDown = (info: InfoPointerKanvas): boolean => {
     const ev = info.event;
     if (alat === "geser") return false;
@@ -387,6 +467,11 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
       const a = snapTitik(info.titik, snap, langkahSnap);
       gestur.current = { jenis: "ukur", awal: a };
       setUkur({ a, b: a });
+      return true;
+    }
+
+    if (alat === "jalur") {
+      klikJalur(info);
       return true;
     }
 
@@ -590,6 +675,26 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const tanganiTombol = (ev: KeyboardEvent) => {
     if (ev.defaultPrevented || ev.repeat && !ev.key.startsWith("Arrow")) return;
     if (document.querySelector("[data-slot=dialog-content]")) return;
+    // Alat Jalur sedang menggambar: Enter = selesai, Backspace = hapus titik terakhir, Esc = batal.
+    if (alat === "jalur" && jalurDigambar && !ketikDiInput(ev.target) && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        selesaiJalur();
+        return;
+      }
+      if (ev.key === "Backspace" || ev.key === "Delete") {
+        ev.preventDefault();
+        const n = jalurDigambar.titik.length - 1;
+        setJalurDigambar(n > 0 ? { titik: jalurDigambar.titik.slice(0, n), ujungIds: jalurDigambar.ujungIds.slice(0, n) } : null);
+        return;
+      }
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        setJalurDigambar(null);
+        klikJalurTerakhir.current = null;
+        return;
+      }
+    }
     const a = cocokkanPintasan(ev, langkahSnap);
     if (!a) return;
     if (ketikDiInput(ev.target)) {
@@ -818,6 +923,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
                 visual={visual}
                 ukur={ukur}
                 alat={alat}
+                jalurDigambar={jalurDigambar}
+                opsiJalur={opsiJalur}
                 kursorToko={kursorToko}
                 unitPerPx={ctx.unitPerPx}
                 kanvas={dok.kanvas}
@@ -838,6 +945,9 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
                   <X className="size-4" />
                 </button>
               </div>
+            )}
+            {alat === "jalur" && (
+              <BilahOpsiJalur opsi={opsiJalur} onUbah={setOpsiJalur} elevasiKerja={elevasiKerja} jumlahTitik={jalurDigambar?.titik.length ?? 0} />
             )}
             {dok.elemen.length === 0 && alat === "pilih" && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -1043,6 +1153,8 @@ const OverlayEdit = memo(function OverlayEdit({
   visual,
   ukur,
   alat,
+  jalurDigambar,
+  opsiJalur,
   kursorToko,
   unitPerPx,
   kanvas,
@@ -1051,6 +1163,8 @@ const OverlayEdit = memo(function OverlayEdit({
   visual: Visual;
   ukur: GarisUkur | null;
   alat: Alat;
+  jalurDigambar: JalurDigambar | null;
+  opsiJalur: OpsiJalur;
   kursorToko: Toko<Titik | null>;
   unitPerPx: number;
   kanvas: DenahDokumen["kanvas"];
@@ -1119,7 +1233,12 @@ const OverlayEdit = memo(function OverlayEdit({
       {visual.gambar && <PratinjauGambar g={visual.gambar} fs={fs} langkah={kanvas.langkahSnapM} />}
 
       {/* Hantu alat di bawah kursor */}
-      {alat !== "pilih" && alat !== "geser" && alat !== "ukur" && !visual.gambar && <HantuAlat alat={alat} toko={kursorToko} fs={fs} langkah={kanvas.langkahSnapM} />}
+      {alat !== "pilih" && alat !== "geser" && alat !== "ukur" && alat !== "jalur" && !visual.gambar && (
+        <HantuAlat alat={alat} toko={kursorToko} fs={fs} langkah={kanvas.langkahSnapM} />
+      )}
+
+      {/* Alat Jalur: titik yang sudah diklik + garis karet ke kursor */}
+      {alat === "jalur" && <PratinjauJalur jd={jalurDigambar} opsi={opsiJalur} toko={kursorToko} fs={fs} px={px} langkah={kanvas.langkahSnapM} />}
 
       {/* Alat Ukur (sementara) */}
       {ukur && <TampilanUkur u={ukur} fs={fs} />}
@@ -1158,6 +1277,85 @@ function TampilanUkur({ u, fs }: { u: GarisUkur; fs: number }) {
   );
 }
 
+function PratinjauJalur({ jd, opsi, toko, fs, px, langkah }: { jd: JalurDigambar | null; opsi: OpsiJalur; toko: Toko<Titik | null>; fs: number; px: number; langkah: number }) {
+  const c = useToko(toko);
+  const warna = warnaJalur(opsi);
+  const tebal = Math.max(2 * px, opsi.diameterMm / 1000);
+  const titik = jd?.titik ?? [];
+  const akhir = titik[titik.length - 1];
+  const kursor = c ? snapTitik(c, true, langkah) : null;
+  const r = fs * 0.32;
+  return (
+    <g pointerEvents="none">
+      {titik.length > 1 && (
+        <polyline points={titik.map((t) => `${t.x},${t.y}`).join(" ")} fill="none" stroke={warna} strokeWidth={tebal} strokeLinejoin="round" strokeLinecap="round" opacity={0.85} />
+      )}
+      {akhir && kursor && (
+        <>
+          <line x1={akhir.x} y1={akhir.y} x2={kursor.x} y2={kursor.y} stroke={warna} strokeWidth={tebal} strokeDasharray={`${6 * px} ${4 * px}`} opacity={0.6} />
+          <Pil x={(akhir.x + kursor.x) / 2} y={(akhir.y + kursor.y) / 2 - fs * 1.4} fs={fs}>
+            {formatMeter(Math.hypot(kursor.x - akhir.x, kursor.y - akhir.y))}
+          </Pil>
+        </>
+      )}
+      {titik.map((t, i) => (
+        <circle key={i} cx={t.x} cy={t.y} r={r} fill={warna} className="stroke-background" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+      ))}
+      {kursor && <circle cx={kursor.x} cy={kursor.y} r={r * 0.8} fill="none" stroke={warna} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+    </g>
+  );
+}
+
+/** Bilah opsi alat Jalur (melayang di atas kanvas): jenis, fluida/sistem, diameter. */
+function BilahOpsiJalur({ opsi, onUbah, elevasiKerja, jumlahTitik }: { opsi: OpsiJalur; onUbah: (o: OpsiJalur) => void; elevasiKerja: number; jumlahTitik: number }) {
+  return (
+    <div className="absolute top-3 left-1/2 z-10 flex w-[min(640px,calc(100%-24px))] -translate-x-1/2 flex-col gap-1.5 rounded-lg border bg-background/95 p-2 text-xs shadow-lg backdrop-blur">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="size-3 shrink-0 rounded-full border" style={{ background: warnaJalur(opsi) }} aria-hidden />
+        <div className="w-32">
+          <Segmen<OpsiJalur["jenis"]>
+            nilai={opsi.jenis}
+            pilihan={[
+              { nilai: "pipa", label: "Pipa" },
+              { nilai: "kabel", label: "Kabel" },
+            ]}
+            onUbah={(jenis) =>
+              onUbah(
+                jenis === opsi.jenis
+                  ? opsi
+                  : jenis === "kabel"
+                    ? { jenis, sistem: opsi.sistem ?? "daya", diameterMm: DIAMETER_JALUR_BAWAAN.kabel }
+                    : { jenis, fluida: opsi.fluida ?? FLUIDA_BAWAAN, diameterMm: DIAMETER_JALUR_BAWAAN.pipa }
+              )
+            }
+          />
+        </div>
+        <div className="w-40">
+          {opsi.jenis === "pipa" ? (
+            <Pilihan<Fluida> nilai={opsi.fluida ?? FLUIDA_BAWAAN} pilihan={PILIHAN_FLUIDA} ariaLabel="Fluida" onUbah={(fluida) => onUbah({ ...opsi, fluida })} />
+          ) : (
+            <Pilihan<"daya" | "kontrol"> nilai={opsi.sistem ?? "daya"} pilihan={PILIHAN_SISTEM_KABEL} ariaLabel="Sistem kabel" onUbah={(sistem) => onUbah({ ...opsi, sistem })} />
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">Ø</span>
+          <div className="w-24">
+            <InputAngka nilai={opsi.diameterMm} min={1} max={2000} satuan="mm" onUbah={(diameterMm) => onUbah({ ...opsi, diameterMm })} />
+          </div>
+        </div>
+        <span className="text-muted-foreground">
+          z <b className="font-medium text-foreground">{formatMeter(elevasiKerja)}</b>
+        </span>
+      </div>
+      <div className="text-[11px] text-muted-foreground">
+        {jumlahTitik === 0
+          ? "Klik untuk titik awal (menempel ke ujung jalur lain / tepi elemen)."
+          : `${jumlahTitik} titik · klik = tambah titik · dobel klik / Enter = selesai · Backspace = hapus titik · Esc = batal`}
+      </div>
+    </div>
+  );
+}
+
 function LabelPosisi({ e, dx, dy, fs }: { e: DenahElemen; dx: number; dy: number; fs: number }) {
   const k = kotakElemen(e);
   return (
@@ -1174,6 +1372,14 @@ function LabelDimensi({ e, fs }: { e: DenahElemen; fs: number }) {
     return (
       <Pil x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 + fs * 1.6} fs={fs}>
         {`Rel ${formatMeter(Math.hypot(b.x - a.x, b.y - a.y))}`}
+      </Pil>
+    );
+  }
+  if (e.tipe === "jalur") {
+    const k = kotakElemen(e);
+    return (
+      <Pil x={k.x + k.w / 2} y={k.y + k.h + fs * 1.8} fs={fs}>
+        {`Panjang ${formatMeter(panjangJalur(e))}`}
       </Pil>
     );
   }
@@ -1194,6 +1400,16 @@ function LabelDimensi({ e, fs }: { e: DenahElemen; fs: number }) {
 
 function HandleElemen({ e, px }: { e: DenahElemen; px: number }) {
   const s = 9 * px;
+  if (e.tipe === "jalur") {
+    // Jalur tanpa handle ubah ukuran (aturKotak tidak berlaku): hanya penanda titik; edit lewat tabel titik.
+    return (
+      <g pointerEvents="none">
+        {e.titik.map((t, i) => (
+          <circle key={i} cx={t.x} cy={t.y} r={s * 0.4} className="fill-background stroke-primary" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+        ))}
+      </g>
+    );
+  }
   if (e.tipe === "derek") {
     const { a, b } = garisDerek(e as DerekElemen);
     return (

@@ -3,7 +3,7 @@
 // Palet alat Builder Denah (kiri layar).
 
 import { memo, type ComponentType } from "react";
-import { Blocks, BrickWall, Columns3, Cylinder, DoorOpen, Fan, Hand, MousePointer2, MoveHorizontal, Ruler, SquareDashed, Type } from "lucide-react";
+import { Blocks, BrickWall, Columns3, Cylinder, DoorOpen, Fan, Hand, MousePointer2, MoveHorizontal, Ruler, Spline, SquareDashed, Type } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HURUF_ALAT, type Alat } from "@/components/produksi-denah/pintasan-keyboard";
 
@@ -15,6 +15,7 @@ const DAFTAR: { alat: Alat; label: string; ikon: ComponentType<{ className?: str
   { alat: "mesin", label: "Mesin", ikon: Fan, petunjuk: "Klik atau tarik kotak" },
   { alat: "tangki", label: "Tangki", ikon: Cylinder, petunjuk: "Klik atau tarik kotak" },
   { alat: "derek", label: "Derek", ikon: MoveHorizontal, petunjuk: "Tarik garis rel A → B" },
+  { alat: "jalur", label: "Jalur", ikon: Spline, petunjuk: "Pipa/kabel — klik titik demi titik, dobel klik atau Enter untuk selesai" },
   { alat: "beton", label: "Beton", ikon: Blocks, petunjuk: "Pondasi/plinth/saluran — klik atau tarik kotak" },
   { alat: "dinding", label: "Dinding", ikon: BrickWall, petunjuk: "Tarik garis dinding" },
   { alat: "pintu", label: "Pintu", ikon: DoorOpen, petunjuk: "Klik atau tarik kotak" },

@@ -37,10 +37,10 @@ import {
 } from "react";
 import { Box, CircleDot, Droplets, Fan, GlassWater, Lock, Maximize, Minus, Plus, ThermometerSun, Wind, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { tataBakMeter, type TataBak } from "@/lib/produksi-denah-geometri";
+import { segmenJalur, segmenTertanam, tataBakMeter, type TataBak } from "@/lib/produksi-denah-geometri";
 import { MawarAngin } from "@/components/produksi-denah/mawar-angin";
 import { formatAngka, panjangSkalaBatang } from "@/components/produksi-denah/format";
-import { WARNA_AIR, WARNA_BETON } from "@/components/produksi-denah/warna";
+import { WARNA_AIR, WARNA_BETON, warnaJalur } from "@/components/produksi-denah/warna";
 import {
   kotakElemen,
   lapisanElemen as lapisanDari,
@@ -53,6 +53,7 @@ import {
   type DenahDokumen,
   type DenahElemen,
   type DerekElemen,
+  type JalurElemen,
   type LabelElemen,
   type MesinElemen,
   type Titik,
@@ -624,11 +625,13 @@ export function DenahKanvas({
               ukuranGrid={kanvas.ukuranGrid}
               idPola={idDasar}
               mode={mode}
+              tertanam={e.tipe === "jalur" ? maskTertanam(e, dokumen) : undefined}
             />
           </g>
         );
       }),
     [
+      dokumen,
       elemen,
       geserSementara,
       terpilihIds,
@@ -852,6 +855,8 @@ interface ElemenViewProps {
   ukuranGrid: number;
   idPola: string;
   mode: ModeKanvas;
+  /** Jalur: "1"/"0" per segmen (tertanam di beton) — string agar memo tetap stabil. */
+  tertanam?: string;
 }
 
 // Ukuran teks nama (meter): ±11 px di layar, dibatasi agar tidak raksasa/hilang.
@@ -951,10 +956,9 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
         </Teks>
       );
       break;
-    // Tampilan sementara jalur (kotak pembungkus); garis per fluida = Task 6.
     case "jalur":
-      tubuh = <rect width={e.w} height={e.h} className="fill-blue-500/60" />;
-      break;
+      // Titik jalur dalam koordinat dunia ABSOLUT (meter) — tidak ikut transform tubuh.
+      return <JalurView j={e} tertanam={p.tertanam ?? ""} terpilih={p.terpilih} sorot={p.sorot} peringatan={p.peringatan} hover={p.hover} fs={fs} skalaKira={p.skalaKira} />;
   }
 
   return (
@@ -1289,6 +1293,132 @@ function DerekView({
         {d.nama}
       </Teks>
       <GarisPilih kotak={kotakElemen(d)} terpilih={terpilih} sorot={sorot} peringatan={peringatan} hover={hover} skalaKira={skalaKira} />
+    </g>
+  );
+}
+
+// ---------- Jalur (pipa & kabel) ----------
+
+/** "1"/"0" per segmen jalur: tertanam di beton (segmenTertanam, sama dengan 3D & periksaTeknik). */
+function maskTertanam(j: JalurElemen, dok: DenahDokumen): string {
+  return segmenJalur(j)
+    .map((s) => (segmenTertanam(s, dok) ? "1" : "0"))
+    .join("");
+}
+
+/** Jarak antar-panah arah aliran (meter, sepanjang denah). */
+const JARAK_PANAH_M = 3;
+
+/** Posisi & sudut panah arah aliran: tiap ±3 m (tengah tiap rentang 3 m), minimal satu di tengah jalur. */
+function posisiPanah(titik: readonly Titik[]): { x: number; y: number; sudut: number }[] {
+  const seg: { a: Titik; b: Titik; awal: number; l: number }[] = [];
+  let total = 0;
+  for (let i = 1; i < titik.length; i++) {
+    const a = titik[i - 1];
+    const b = titik[i];
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    if (l < 1e-6) continue; // segmen tegak (naik/turun) tidak terlihat di denah
+    seg.push({ a, b, awal: total, l });
+    total += l;
+  }
+  if (total === 0) return [];
+  const n = Math.max(1, Math.round(total / JARAK_PANAH_M));
+  const hasil: { x: number; y: number; sudut: number }[] = [];
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    const d = ((i + 0.5) * total) / n;
+    while (k < seg.length - 1 && seg[k].awal + seg[k].l < d) k++;
+    const s = seg[k];
+    const f = Math.min(1, Math.max(0, (d - s.awal) / s.l));
+    hasil.push({
+      x: s.a.x + (s.b.x - s.a.x) * f,
+      y: s.a.y + (s.b.y - s.a.y) * f,
+      sudut: (Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x) * 180) / Math.PI,
+    });
+  }
+  return hasil;
+}
+
+function JalurView({
+  j,
+  tertanam,
+  terpilih,
+  sorot,
+  peringatan,
+  hover,
+  fs,
+  skalaKira,
+}: {
+  j: JalurElemen;
+  tertanam: string;
+  terpilih: boolean;
+  sorot: boolean;
+  peringatan: boolean;
+  hover: boolean;
+  fs: number;
+  skalaKira: number;
+}) {
+  const warna = warnaJalur(j);
+  const px = 1 / skalaKira;
+  // Tebal = diameter nyata, minimal 2 px di layar.
+  const tebal = Math.max(2 * px, j.diameterMm / 1000);
+  const putus = `${Math.max(6 * px, tebal * 3)} ${Math.max(4 * px, tebal * 2)}`;
+  const poin = j.titik.map((t) => `${t.x},${t.y}`).join(" ");
+  const ukPanah = Math.max(5 * px, tebal * 1.6);
+  // Nama di tengah segmen terpanjang (di denah).
+  let label: { x: number; y: number } | null = null;
+  let terpanjang = 0;
+  for (let i = 1; i < j.titik.length; i++) {
+    const a = j.titik[i - 1];
+    const b = j.titik[i];
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    if (l > terpanjang) {
+      terpanjang = l;
+      label = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+  }
+  return (
+    <g data-elemen-id={j.id} data-tipe="jalur">
+      {/* Area klik lebar tak terlihat */}
+      <polyline points={poin} fill="none" stroke="transparent" strokeWidth={Math.max(14 * px, tebal + 8 * px)} strokeLinejoin="round" pointerEvents="stroke" />
+      {j.titik.slice(1).map((b, i) => {
+        const a = j.titik[i];
+        const tanam = tertanam[i] === "1";
+        return (
+          <line
+            key={i}
+            x1={a.x}
+            y1={a.y}
+            x2={b.x}
+            y2={b.y}
+            stroke={warna}
+            strokeWidth={tebal}
+            strokeLinecap={tanam ? "butt" : "round"}
+            strokeDasharray={tanam ? putus : undefined}
+            pointerEvents="none"
+          >
+            {tanam && <title>Tertanam di beton</title>}
+          </line>
+        );
+      })}
+      {posisiPanah(j.titik).map((p, i) => (
+        <path
+          key={i}
+          d={`M ${ukPanah} 0 L ${-ukPanah * 0.7} ${-ukPanah * 0.75} L ${-ukPanah * 0.7} ${ukPanah * 0.75} Z`}
+          transform={`translate(${p.x} ${p.y}) rotate(${p.sudut})`}
+          fill={warna}
+          className="stroke-background"
+          strokeWidth={1}
+          vectorEffect={NS}
+          pointerEvents="none"
+        />
+      ))}
+      {label && terpanjang * skalaKira > 60 && (
+        <Teks x={label.x} y={label.y - tebal / 2 - fs * 0.4} ukuran={fs * 0.9} baseline="auto">
+          {j.nama}
+        </Teks>
+      )}
+      <GarisPilih kotak={kotakElemen(j)} terpilih={terpilih} sorot={sorot} peringatan={peringatan} hover={hover} skalaKira={skalaKira} />
     </g>
   );
 }

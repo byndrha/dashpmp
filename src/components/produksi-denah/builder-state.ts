@@ -20,6 +20,7 @@ import {
   ELEVASI_TINGGI_BAWAAN,
   FLUIDA_BAWAAN,
   KATEGORI_MESIN_BAWAAN,
+  SISTEM_KABEL_BAWAAN,
   TANGKI_BAWAAN,
   TINGGI_KAIT_BAWAAN,
   nomoriUlangKolom,
@@ -29,9 +30,12 @@ import {
   type DenahElemen,
   type DenahKolom,
   type DerekElemen,
+  type Fluida,
+  type JalurElemen,
   type Rotasi,
   type TipeElemen,
   type Titik,
+  type Titik3D,
 } from "@/lib/produksi-denah";
 
 export const BATAS_RIWAYAT = 200;
@@ -78,6 +82,8 @@ export type AksiBuilder =
   | { type: "aturKotak"; id: string; kotak: Kotak }
   | { type: "aturTitikDerek"; id: string; titikAwal: Titik; titikAkhir: Titik }
   | { type: "putar"; ids: string[] }
+  /** Balik arah aliran jalur: urutan titik dibalik, dariId/keId ditukar. */
+  | { type: "balikJalur"; id: string }
   | { type: "urutan"; ids: string[]; ke: "depan" | "belakang" }
   | { type: "kunci"; ids: string[]; terkunci: boolean }
   | { type: "ratakan"; ids: string[]; sisi: SisiRata }
@@ -273,20 +279,106 @@ export function buatElemen(
       const a = garis?.a ?? { x: kotak.x, y: kotak.y + kotak.h / 2 };
       const b = garis?.b ?? { x: kotak.x + kotak.w, y: kotak.y + kotak.h / 2 };
       const titik = [{ ...a, z: Z_JALUR_BAWAAN }, { ...b, z: Z_JALUR_BAWAAN }];
-      const diameterMm = DIAMETER_JALUR_BAWAAN.pipa;
-      return {
-        ...dasar,
-        ...kotakJalur(titik),
-        elevasiM: Z_JALUR_BAWAAN,
-        tinggiM: diameterMm / 1000,
-        tipe,
-        jenis: "pipa",
-        fluida: FLUIDA_BAWAAN,
-        diameterMm,
-        titik,
-      };
+      return { ...buatJalur(titik, { jenis: "pipa", fluida: FLUIDA_BAWAAN, diameterMm: DIAMETER_JALUR_BAWAAN.pipa }, elemenAda), id, nama };
     }
   }
+}
+
+/** Opsi alat Jalur (bilah opsi saat alat aktif). */
+export interface OpsiJalur {
+  jenis: JalurElemen["jenis"];
+  fluida?: Fluida;
+  sistem?: "daya" | "kontrol";
+  diameterMm: number;
+}
+
+/** Kotak, elevasi (z terendah) & tinggi (= diameter) jalur diturunkan dari titik/diameter. */
+export function rapikanJalur(j: JalurElemen): JalurElemen {
+  const elevasiM = j.titik.length ? Math.min(...j.titik.map((t) => t.z)) : j.elevasiM;
+  const baru: JalurElemen = { ...j, ...kotakJalur(j.titik), rotasi: 0, elevasiM, tinggiM: j.diameterMm > 0 ? j.diameterMm / 1000 : j.tinggiM };
+  // Field opsional yang dikosongkan (patch `undefined`) dibuang agar dokumen ringkas.
+  for (const k of ["fluida", "sistem", "dariId", "keId"] as const) if (baru[k] === undefined) delete baru[k];
+  return baru;
+}
+
+/** Jalur baru dari titik (urutan = arah aliran). Pipa memakai fluida, kabel memakai sistem. */
+export function buatJalur(titik: readonly Titik3D[], opsi: OpsiJalur, elemenAda: readonly DenahElemen[], dariId?: string, keId?: string): JalurElemen {
+  const j: JalurElemen = {
+    tipe: "jalur",
+    id: crypto.randomUUID(),
+    nama: namaBerikut(elemenAda, "jalur"),
+    rotasi: 0,
+    x: 0,
+    y: 0,
+    w: 0,
+    h: 0,
+    elevasiM: 0,
+    tinggiM: 0,
+    jenis: opsi.jenis,
+    diameterMm: opsi.diameterMm,
+    titik: titik.map((t) => ({ x: t.x, y: t.y, z: t.z })),
+  };
+  if (opsi.jenis === "kabel") j.sistem = opsi.sistem ?? SISTEM_KABEL_BAWAAN;
+  else j.fluida = opsi.fluida ?? FLUIDA_BAWAAN;
+  if (dariId) j.dariId = dariId;
+  if (keId) j.keId = keId;
+  return rapikanJalur(j);
+}
+
+/** Panjang total jalur (meter, 3D: termasuk naik/turun). */
+export function panjangJalur(j: Pick<JalurElemen, "titik">): number {
+  let l = 0;
+  for (let i = 1; i < j.titik.length; i++) {
+    const a = j.titik[i - 1];
+    const b = j.titik[i];
+    l += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  }
+  return l;
+}
+
+/** Hasil tempel ujung jalur: posisi baru (+ z bila menempel ke ujung jalur lain) & elemen yang disambung. */
+export interface TempelUjung {
+  x: number;
+  y: number;
+  z?: number;
+  elemenId: string;
+}
+
+// Area & label adalah zona/teks: jalur boleh melintas tanpa ditarik ke tepinya.
+const TIDAK_DITEMPEL = new Set<TipeElemen>(["jalur", "area", "label"]);
+
+/**
+ * Tempel titik ujung jalur (spec §6): (1) ke ujung jalur lain dalam `radiusM`
+ * (ikut z-nya agar benar-benar tersambung), atau (2) ke tepi terdekat elemen
+ * non-jalur `idDiBawah` (elemen di bawah kursor). null = tidak menempel.
+ */
+export function tempelUjungJalur(
+  p: Titik,
+  elemen: readonly DenahElemen[],
+  radiusM: number,
+  idDiBawah: string | null,
+  kecualiId?: string
+): TempelUjung | null {
+  let terbaik: (TempelUjung & { d: number }) | null = null;
+  for (const e of elemen) {
+    if (e.tipe !== "jalur" || e.id === kecualiId || e.titik.length === 0) continue;
+    for (const t of [e.titik[0], e.titik[e.titik.length - 1]]) {
+      const d = Math.hypot(t.x - p.x, t.y - p.y);
+      if (d <= radiusM && (!terbaik || d < terbaik.d)) terbaik = { x: t.x, y: t.y, z: t.z, elemenId: e.id, d };
+    }
+  }
+  if (terbaik) return { x: terbaik.x, y: terbaik.y, z: terbaik.z, elemenId: terbaik.elemenId };
+  const e = idDiBawah ? elemen.find((x) => x.id === idDiBawah) : undefined;
+  if (!e || TIDAK_DITEMPEL.has(e.tipe)) return null;
+  const k = kotakElemen(e);
+  const x = Math.min(Math.max(p.x, k.x), k.x + k.w);
+  const y = Math.min(Math.max(p.y, k.y), k.y + k.h);
+  const jarak = [x - k.x, k.x + k.w - x, y - k.y, k.y + k.h - y];
+  const i = jarak.indexOf(Math.min(...jarak));
+  if (i === 0) return { x: k.x, y, elemenId: e.id };
+  if (i === 1) return { x: k.x + k.w, y, elemenId: e.id };
+  if (i === 2) return { x, y: k.y, elemenId: e.id };
+  return { x, y: k.y + k.h, elemenId: e.id };
 }
 
 // ---------- Geometri ----------
@@ -337,6 +429,14 @@ function putar90(e: DenahElemen): DenahElemen {
     const tb = r(b);
     return { ...e, ...garisKeKotak(ta, tb), titikAwal: ta, titikAkhir: tb };
   }
+  if (e.tipe === "jalur") {
+    // Titik jalur absolut: putar 90° searah jarum jam di pusat kotak pembungkus; z tetap.
+    const k = kotakJalur(e.titik);
+    const cx = k.x + k.w / 2;
+    const cy = k.y + k.h / 2;
+    const titik = e.titik.map((t) => ({ x: bersih(cx - (t.y - cy)), y: bersih(cy + (t.x - cx)), z: t.z }));
+    return rapikanJalur({ ...e, titik });
+  }
   return { ...e, rotasi: ((e.rotasi + 90) % 360) as Rotasi };
 }
 
@@ -378,6 +478,16 @@ function salinElemen(sumber: readonly DenahElemen[], elemenAda: readonly DenahEl
       namaBakDipakai.add(normal(e.nama));
     } else if (e.tipe === "derek") {
       e.bakIds = e.bakIds.filter((id) => petaId.has(id) || idAda.has(id)).map(peta);
+    } else if (e.tipe === "jalur") {
+      // Ujung ke elemen yang ikut disalin -> salinannya; ke elemen yang sudah tidak ada -> dibuang.
+      if (e.dariId !== undefined) {
+        if (petaId.has(e.dariId) || idAda.has(e.dariId)) e.dariId = peta(e.dariId);
+        else delete e.dariId;
+      }
+      if (e.keId !== undefined) {
+        if (petaId.has(e.keId) || idAda.has(e.keId)) e.keId = peta(e.keId);
+        else delete e.keId;
+      }
     }
     return e;
   });
@@ -459,6 +569,12 @@ export function builderReducer(s: StateBuilder, a: AksiBuilder): StateBuilder {
         .map((e) => {
           if (e.tipe === "bak" && e.mesinIds.some((m) => ids.has(m))) return { ...e, mesinIds: e.mesinIds.filter((m) => !ids.has(m)) };
           if (e.tipe === "derek" && e.bakIds.some((b) => ids.has(b))) return { ...e, bakIds: e.bakIds.filter((b) => !ids.has(b)) };
+          if (e.tipe === "jalur" && ((e.dariId && ids.has(e.dariId)) || (e.keId && ids.has(e.keId)))) {
+            const j = { ...e };
+            if (j.dariId && ids.has(j.dariId)) delete j.dariId;
+            if (j.keId && ids.has(j.keId)) delete j.keId;
+            return j;
+          }
           return e;
         });
       return rapikanSeleksi(catat(s, { ...s.dok, elemen }));
@@ -496,14 +612,17 @@ export function builderReducer(s: StateBuilder, a: AksiBuilder): StateBuilder {
       const dok = petaUbah(s.dok, new Set([a.id]), (e) => {
         const kunci = Object.keys(a.patch) as (keyof DenahElemen)[];
         if (kunci.every((k) => Object.is(e[k], a.patch[k]))) return e;
-        return { ...e, ...a.patch, id: e.id, tipe: e.tipe } as DenahElemen;
+        const baru = { ...e, ...a.patch, id: e.id, tipe: e.tipe } as DenahElemen;
+        // Jalur: kotak/elevasi selalu diturunkan dari titik (bukan disunting langsung).
+        return baru.tipe === "jalur" ? rapikanJalur(baru) : baru;
       });
       return catat(s, dok, a.gabung ?? null);
     }
 
     case "aturKotak": {
       const dok = petaUbah(s.dok, new Set([a.id]), (e) => {
-        if (e.terkunci) return e;
+        // Jalur tidak punya handle ubah ukuran: bentuknya diatur lewat titik.
+        if (e.terkunci || e.tipe === "jalur") return e;
         const k = dariKotakEfektif(e.rotasi, a.kotak);
         if (k.x === e.x && k.y === e.y && k.w === e.w && k.h === e.h) return e;
         if (e.tipe === "derek") {
@@ -532,6 +651,19 @@ export function builderReducer(s: StateBuilder, a: AksiBuilder): StateBuilder {
 
     case "putar":
       return catat(s, petaUbah(s.dok, new Set(a.ids), (e) => (e.terkunci ? e : putar90(e))));
+
+    case "balikJalur": {
+      const dok = petaUbah(s.dok, new Set([a.id]), (e) => {
+        if (e.tipe !== "jalur" || e.terkunci || e.titik.length < 2) return e;
+        const j: JalurElemen = { ...e, titik: [...e.titik].reverse() };
+        delete j.dariId;
+        delete j.keId;
+        if (e.keId !== undefined) j.dariId = e.keId;
+        if (e.dariId !== undefined) j.keId = e.dariId;
+        return j;
+      });
+      return catat(s, dok);
+    }
 
     case "urutan": {
       const ids = new Set(a.ids);
