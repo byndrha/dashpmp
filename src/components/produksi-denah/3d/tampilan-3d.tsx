@@ -8,6 +8,7 @@
 // Tanggung jawab:
 // - Deteksi WebGL: bila tidak ada → tampilkan pesan + panggil onGagal.
 // - Error boundary: galat saat memuat/merender adegan → pesan + onGagal.
+// - Konteks WebGL hilang (webglcontextlost, dipasang di adegan) → onGagal.
 //   Induk (builder/penampil) lalu kembali ke 2D.
 
 import { Component, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
@@ -29,7 +30,7 @@ export interface Tampilan3DProps {
   onUbahLapisan?: (l: Lapisan, tampil: boolean) => void;
   className?: string;
   onPilih: (elemenId: string | null, kolomId?: string | null) => void;
-  /** Dipanggil bila WebGL tak ada / error boundary menangkap → induk kembali ke 2D. */
+  /** Dipanggil bila WebGL tak ada / error boundary menangkap / konteks WebGL hilang → induk kembali ke 2D. */
   onGagal?: () => void;
 }
 
@@ -109,7 +110,7 @@ export function Tampilan3D({ className, onGagal, ...props }: Tampilan3DProps) {
         <PesanGagal pesan="Perangkat/browser ini tidak mendukung WebGL." />
       ) : webgl ? (
         <BatasGalat3D onGalat={() => onGagalRef.current?.()}>
-          <Adegan3D {...props} />
+          <Adegan3D {...props} onGagal={() => onGagalRef.current?.()} />
         </BatasGalat3D>
       ) : null}
     </div>

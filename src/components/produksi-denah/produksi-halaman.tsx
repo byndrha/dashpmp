@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DenahPenampil } from "@/components/produksi-denah/denah-penampil";
 import { getDenah } from "@/lib/queries/produksi-denah";
+import { PesanDenahRusak } from "@/components/produksi-denah/pesan-denah-rusak";
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import { getUserById } from "@/lib/queries/akun";
 import { bolehEditDenah } from "@/lib/permissions";
@@ -42,6 +43,7 @@ async function namaPengubah(id: string | null): Promise<string> {
 
 export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: KodeProduksi; namaPerusahaan: string; user: Session["user"] }) {
   const denah = await getDenah(kode);
+  if (denah?.rusak) return <PesanDenahRusak />;
   const bolehEdit = bolehEditDenah(user);
   const hrefEdit = `/${kode}/produksi/denah`;
   const ada = !!denah && denah.data.elemen.length > 0;

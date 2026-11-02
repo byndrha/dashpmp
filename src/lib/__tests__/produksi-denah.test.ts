@@ -18,6 +18,7 @@ import {
   BATAS_ELEMEN,
   BATAS_KOLOM_PER_BAK,
   BATAS_ICE_CAN_PER_KOLOM,
+  BATAS_UKURAN_GRID,
   type BakElemen,
   type DenahDokumen,
   type DerekElemen,
@@ -501,4 +502,45 @@ test("kolomTerkunciBerubah: ubah dimensi Kecil saat hanya kolom Besar berisi es 
   const g = kolomTerkunciBerubah(d, baruBesar, new Set([a.kolom[0].id]));
   assert.equal(g.length, 1);
   assert.match(g[0].pesan, /dimensi ice can Besar/);
+});
+
+// ---------- Perbaikan tinjauan akhir ----------
+
+function jalurDariTitik(titik: JalurElemen["titik"]): JalurElemen {
+  return jalur({ titik, ...kotakJalur(titik) });
+}
+
+test("validasiDenah: jalur tepat di tepi kanvas (x=0, y=tinggi) sah; titik di luar tetap galat", () => {
+  const { lebar, tinggi } = denahKosong().kanvas;
+  const keluar = (j: JalurElemen) => validasiDenah(dok(j)).some((g) => /keluar dari batas kanvas/.test(g.pesan));
+  assert.equal(keluar(jalurDariTitik([{ x: 0, y: 1, z: 0.5 }, { x: 0, y: 5, z: 0.5 }])), false, "sepanjang x=0");
+  assert.equal(keluar(jalurDariTitik([{ x: 1, y: tinggi, z: 0.5 }, { x: 5, y: tinggi, z: 0.5 }])), false, "sepanjang y=tinggi");
+  assert.equal(keluar(jalurDariTitik([{ x: lebar, y: 0, z: 0 }, { x: lebar, y: tinggi, z: 0 }])), false, "sepanjang x=lebar");
+  assert.equal(keluar(jalurDariTitik([{ x: -0.1, y: 1, z: 0.5 }, { x: 3, y: 1, z: 0.5 }])), true, "x=-0,1");
+  assert.equal(keluar(jalurDariTitik([{ x: 1, y: 1, z: 0 }, { x: 1, y: tinggi + 0.1, z: 0 }])), true, "y>tinggi");
+});
+
+test("validasiBentukDenah: jarak bak, diameter jalur, langkah snap — tanda & batas", () => {
+  const b = buatBak(2, 2);
+  assert.ok(validasiBentukDenah(dok({ ...b, jarakAntarKolomMm: -1 })), "jarak kolom negatif");
+  assert.ok(validasiBentukDenah(dok({ ...b, jarakAntarCanMm: -0.5 })), "jarak can negatif");
+  assert.equal(validasiBentukDenah(dok({ ...b, jarakAntarKolomMm: 0, jarakAntarCanMm: 0 })), null, "jarak 0 sah");
+  assert.ok(validasiBentukDenah(dok(jalur({ diameterMm: 0 }))), "diameter 0");
+  assert.ok(validasiBentukDenah(dok(jalur({ diameterMm: -10 }))), "diameter negatif");
+  const kv = denahKosong().kanvas;
+  assert.ok(validasiBentukDenah({ ...denahKosong(), kanvas: { ...kv, langkahSnapM: 0 } }), "snap 0");
+  assert.ok(validasiBentukDenah({ ...denahKosong(), kanvas: { ...kv, langkahSnapM: -0.1 } }), "snap negatif");
+  assert.ok(validasiBentukDenah({ ...denahKosong(), kanvas: { ...kv, langkahSnapM: 10.5 } }), "snap > 10");
+  assert.equal(validasiBentukDenah({ ...denahKosong(), kanvas: { ...kv, langkahSnapM: 10 } }), null, "snap 10 sah");
+});
+
+test("migrasiDenah v1: ukuranGrid ×2 di-clamp ke BATAS_UKURAN_GRID", () => {
+  const raw = dokV1();
+  raw.kanvas.ukuranGrid = 150;
+  const d = migrasiDenah(raw);
+  assert.equal(d.kanvas.ukuranGrid, BATAS_UKURAN_GRID);
+  assert.equal(validasiBentukDenah(d), null);
+  const kecil = dokV1();
+  kecil.kanvas.ukuranGrid = 30;
+  assert.equal(migrasiDenah(kecil).kanvas.ukuranGrid, 60);
 });

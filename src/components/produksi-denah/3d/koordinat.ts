@@ -72,6 +72,16 @@ export function iceCanBak(bak: BakElemen): Record<Varian, InstansIceCan[]> {
   return hasil;
 }
 
+/** Di atas ini (total ice can semua bak tampil) ice can tidak digambar — hanya cangkang bak. */
+export const BATAS_INSTANS_ICE_CAN = 200_000;
+
+/** Total instans ice can yang akan digambar (semua kolom, termasuk nonaktif — sama dengan iceCanBak). */
+export function hitungInstansIceCan(elemen: readonly DenahElemen[]): number {
+  let n = 0;
+  for (const e of elemen) if (e.tipe === "bak") for (const k of e.kolom) n += Math.max(0, k.jumlahIceCan);
+  return n;
+}
+
 /**
  * Kotak ruang bebas derek di atas bak (aturan 3): tapak bak × rentang dari
  * ruangBebasDerekDibutuhkan (fungsi yang sama dengan periksaTeknik, jadi
@@ -175,20 +185,34 @@ export function potongDinding(d: Pick<DindingElemen, "x" | "y" | "w" | "h" | "ro
 
 // ---------- Pelat lantai ----------
 
+/** Penyusutan tiap sisi lubang pelat (m) — ≈1 mm, tak terlihat di layar. */
+export const SUSUT_LUBANG_PELAT = 0.001;
+
 /**
  * Lubang di pelat lantai untuk bak/tangki yang tertanam (elevasi < 0), agar
- * pelat tidak menutupi isi bak. Hanya lubang yang utuh di dalam lahan dan
- * tidak bertumpuk dengan lubang lain (syarat triangulasi Shape).
+ * pelat tidak menutupi isi bak. Triangulasi Shape menuntut lubang tidak
+ * bertumpuk/bersinggungan satu sama lain maupun dengan tepi pelat, jadi:
+ * - tiap lubang dipotong (clamp) ke lahan lalu disusutkan SUSUT_LUBANG_PELAT
+ *   per sisi — bak yang menempel tepi lahan atau menempel bak lain (berbagi
+ *   tepi, sah menurut validasiDenah) tetap berlubang;
+ * - lubang yang masih bertumpuk SUNGGUHAN (uji ketat) dengan lubang
+ *   sebelumnya dilewati.
  */
 export function lubangPelat(dok: DenahDokumen): Kotak2D[] {
   const { lebar, tinggi } = dok.kanvas;
+  const s = SUSUT_LUBANG_PELAT;
   const hasil: Kotak2D[] = [];
   for (const e of dok.elemen) {
     if ((e.tipe !== "bak" && e.tipe !== "tangki") || !(e.elevasiM < 0)) continue;
     const k = kotakElemen(e);
-    if (k.x < EPS || k.y < EPS || k.x + k.w > lebar - EPS || k.y + k.h > tinggi - EPS) continue;
-    const tumpuk = hasil.some((l) => Math.min(l.x + l.w, k.x + k.w) - Math.max(l.x, k.x) > -EPS && Math.min(l.y + l.h, k.y + k.h) - Math.max(l.y, k.y) > -EPS);
-    if (!tumpuk) hasil.push(k);
+    const x1 = Math.max(k.x, 0) + s;
+    const y1 = Math.max(k.y, 0) + s;
+    const x2 = Math.min(k.x + k.w, lebar) - s;
+    const y2 = Math.min(k.y + k.h, tinggi) - s;
+    if (!(x2 - x1 > EPS) || !(y2 - y1 > EPS)) continue;
+    const l2: Kotak2D = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    const tumpuk = hasil.some((l) => Math.min(l.x + l.w, x2) - Math.max(l.x, x1) > EPS && Math.min(l.y + l.h, y2) - Math.max(l.y, y1) > EPS);
+    if (!tumpuk) hasil.push(l2);
   }
   return hasil;
 }

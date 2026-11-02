@@ -12,6 +12,7 @@ import { AppError } from "@/lib/action-result";
 import {
   kolomTerkunciBerubah,
   migrasiDenah,
+  PESAN_DENAH_RUSAK,
   validasiDenah,
   type DenahDokumen,
   type GalatDenah,
@@ -35,8 +36,21 @@ export class GalatSimpanDenah extends AppError {
 }
 
 export interface DenahTersimpan {
+  rusak: false;
   versi: number;
   data: DenahDokumen;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+/**
+ * Baris denah ada tetapi isinya tidak bisa dibaca (migrasiDenah melempar).
+ * Halaman menampilkan PESAN_DENAH_RUSAK tanpa detail internal; builder
+ * menolak membuka editor agar data lama tidak tertimpa diam-diam.
+ */
+export interface DenahRusak {
+  rusak: true;
+  versi: number;
   updatedAt: string;
   updatedBy: string | null;
 }
@@ -50,19 +64,26 @@ const BATAS_PESAN_PELANGGARAN = 20;
 // lewat migrasiDenah() sebelum dipakai. Penulisan selalu v2.
 type BarisDenah = { versi: number; data: unknown; updated_at: Date; updated_by: string | null };
 
-function keDenahTersimpan(r: BarisDenah): DenahTersimpan {
-  return { versi: r.versi, data: migrasiDenah(r.data), updatedAt: r.updated_at.toISOString(), updatedBy: r.updated_by };
+function keDenahTersimpan(r: BarisDenah, kode: string): DenahTersimpan | DenahRusak {
+  const meta = { versi: r.versi, updatedAt: r.updated_at.toISOString(), updatedBy: r.updated_by };
+  try {
+    return { rusak: false, data: migrasiDenah(r.data), ...meta };
+  } catch (err) {
+    // Detail hanya ke log server; pengguna melihat PESAN_DENAH_RUSAK.
+    console.error(`produksi_denah ${kode} versi ${r.versi} tidak bisa dibaca:`, err);
+    return { rusak: true, ...meta };
+  }
 }
 
-export async function getDenahUntukKode(kode: string): Promise<DenahTersimpan | null> {
+export async function getDenahUntukKode(kode: string): Promise<DenahTersimpan | DenahRusak | null> {
   const { rows } = await getPgPool().query<BarisDenah>(
     `SELECT versi, data, updated_at, updated_by FROM produksi_denah WHERE perusahaan_kode = $1`,
     [kode]
   );
-  return rows[0] ? keDenahTersimpan(rows[0]) : null;
+  return rows[0] ? keDenahTersimpan(rows[0], kode) : null;
 }
 
-export async function getDenah(kode: KodeProduksi): Promise<DenahTersimpan | null> {
+export async function getDenah(kode: KodeProduksi): Promise<DenahTersimpan | DenahRusak | null> {
   return getDenahUntukKode(kode);
 }
 
@@ -117,7 +138,16 @@ export async function simpanDenahUntukKode(
       `SELECT DISTINCT kolom_id FROM produksi_kolom_isi WHERE perusahaan_kode = $1 AND selesai_at IS NULL`,
       [kode]
     );
-    const dataLama = barisLama ? migrasiDenah(barisLama.data) : null;
+    // Tetap KETAT: baris lama yang rusak menolak simpan (tidak pernah ditimpa diam-diam).
+    let dataLama: DenahDokumen | null = null;
+    if (barisLama) {
+      try {
+        dataLama = migrasiDenah(barisLama.data);
+      } catch (err) {
+        console.error(`produksi_denah ${kode} versi ${barisLama.versi} tidak bisa dibaca saat simpan:`, err);
+        throw new AppError(`${PESAN_DENAH_RUSAK} Denah tidak disimpan agar data lama tidak tertimpa.`);
+      }
+    }
     const pelanggaran = kolomTerkunciBerubah(dataLama, data, new Set(isi.rows.map((r) => r.kolom_id)));
     if (pelanggaran.length > 0) {
       throw new GalatSimpanDenah(

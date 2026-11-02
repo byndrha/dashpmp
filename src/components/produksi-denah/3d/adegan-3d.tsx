@@ -17,13 +17,13 @@ import { lapisanElemen, type DenahDokumen, type DenahElemen, type PintuElemen } 
 import { MawarAngin } from "@/components/produksi-denah/mawar-angin";
 import { formatMeter } from "@/components/produksi-denah/format";
 import { useLapisanTampil } from "@/components/produksi-denah/lapisan";
-import { arahUtaraThree, batasElemen, derekTerlaluRendah, keThree, lubangPelat, sudutLayarUtara, type Vek3 } from "./koordinat";
+import { arahUtaraThree, BATAS_INSTANS_ICE_CAN, batasElemen, derekTerlaluRendah, hitungInstansIceCan, keThree, lubangPelat, sudutLayarUtara, type Vek3 } from "./koordinat";
 import { buatSumberDaya, Elemen3D, SumberDayaKonteks, TepiKotak, useSumberDaya } from "./elemen-3d";
 import { gabungKotak, kotakAdegan, posisiPreset, zoomOrtografis, type Kotak3D, type PresetKamera } from "./kamera";
 import { ALAT_3D_AWAL, AlatUkur, AnimasiAliran, BilahAlat3D, TerapkanAlat, type StateAlat3D } from "./alat-3d";
 import type { Tampilan3DProps } from "./tampilan-3d";
 
-export type Adegan3DProps = Omit<Tampilan3DProps, "className" | "onGagal">;
+export type Adegan3DProps = Omit<Tampilan3DProps, "className">;
 
 const NAMA_TIPE: Record<DenahElemen["tipe"], string> = {
   bak: "Bak",
@@ -78,6 +78,26 @@ export default function Adegan3D(props: Adegan3DProps) {
   });
 
   const kotakSeluruh = useMemo(() => kotakAdegan(dokumen), [dokumen]);
+  // Batas kinerja: terlalu banyak instans → ice can tidak digambar (cangkang bak saja).
+  const jumlahIceCan = useMemo(() => hitungInstansIceCan(dokumen.elemen.filter((e) => e.tipe === "bak" && lapisanTampil.has(lapisanElemen(e)))), [dokumen.elemen, lapisanTampil]);
+  const tampilIceCan = jumlahIceCan <= BATAS_INSTANS_ICE_CAN;
+  const onGagalRef = useRef(props.onGagal);
+  useLayoutEffect(() => {
+    onGagalRef.current = props.onGagal;
+  });
+  // Konteks WebGL hilang (perangkat mobile / memori GPU habis) → induk kembali ke 2D.
+  // Listener dipasang lewat efek (bukan langsung di onCreated) agar ikut
+  // dipasang ulang setelah unmount simulasi StrictMode dan dilepas saat unmount.
+  const [kanvasGl, setKanvasGl] = useState<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!kanvasGl) return;
+    const onHilang = (ev: Event) => {
+      ev.preventDefault();
+      onGagalRef.current?.();
+    };
+    kanvasGl.addEventListener("webglcontextlost", onHilang);
+    return () => kanvasGl.removeEventListener("webglcontextlost", onHilang);
+  }, [kanvasGl]);
   const [permintaan, setPermintaan] = useState<PermintaanKamera>(() => ({ preset: "iso", kotak: kotakAdegan(dokumen), seq: 0, transisi: false }));
 
   const terpilihTampil = useMemo(() => dokumen.elemen.filter((e) => terpilihIds.has(e.id) && lapisanTampil.has(lapisanElemen(e))), [dokumen.elemen, terpilihIds, lapisanTampil]);
@@ -135,6 +155,7 @@ export default function Adegan3D(props: Adegan3DProps) {
         onCreated={({ gl }) => {
           // Alat potongan: clipping plane per material (buatSumberDaya().aturPotongan).
           gl.localClippingEnabled = true;
+          setKanvasGl(gl.domElement);
         }}
         onPointerMissed={(ev) => {
           if (ukurRef.current) return; // klik alat Ukur tidak mengubah seleksi
@@ -155,8 +176,14 @@ export default function Adegan3D(props: Adegan3DProps) {
           jangkauan={Math.max(kotakSeluruh.w, kotakSeluruh.h, 5)}
           titikUkur={titikUkur}
           onTitikUkur={tambahTitikUkur}
+          tampilIceCan={tampilIceCan}
         />
       </Canvas>
+      {!tampilIceCan && (
+        <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+          Ice can tidak ditampilkan: terlalu banyak ({jumlahIceCan.toLocaleString("id-ID")})
+        </div>
+      )}
       <BilahAlat3D
         alat={alat}
         onUbah={ubahAlat}
@@ -195,12 +222,26 @@ interface IsiAdeganProps extends Adegan3DProps {
   jangkauan: number;
   titikUkur: readonly Vek3[];
   onTitikUkur: (p: Vek3) => void;
+  tampilIceCan: boolean;
 }
 
-function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, onPilihRef, ukurRef, hoverId, setHoverId, hudRef, alat, permintaan, jangkauan, titikUkur, onTitikUkur }: IsiAdeganProps) {
+function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, onPilihRef, ukurRef, hoverId, setHoverId, hudRef, alat, permintaan, jangkauan, titikUkur, onTitikUkur, tampilIceCan }: IsiAdeganProps) {
   // Sumber daya dibuat sekali per kanvas dan dibuang saat kanvas ditutup.
-  const sd = useMemo(() => buatSumberDaya(), []);
-  useEffect(() => () => sd.buang(), [sd]);
+  // Aman untuk StrictMode (dev): unmount simulasi menjalankan cleanup → sd
+  // dibuang, lalu mount simulasi menjalankan efek lagi dengan state yang SAMA.
+  // Efek mendeteksi sd.dibuang dan membuat sumber daya baru (render ulang
+  // seluruh konsumen konteks + TerapkanAlat menerapkan ulang x-ray/potongan),
+  // jadi pohon hidup tidak pernah memakai material yang sudah dibuang atau
+  // material berwarna yang tidak terdaftar di cache (luput clipping/x-ray).
+  const [sd, setSd] = useState(buatSumberDaya);
+  useEffect(() => {
+    if (sd.dibuang) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pemulihan setelah unmount simulasi StrictMode; terjadi paling banyak sekali
+      setSd(buatSumberDaya());
+      return;
+    }
+    return () => sd.buang();
+  }, [sd]);
 
   const elemenTampil = useMemo(() => dokumen.elemen.filter((e) => lapisanTampil.has(lapisanElemen(e))), [dokumen.elemen, lapisanTampil]);
   const byId = useMemo(() => new Map(dokumen.elemen.map((e) => [e.id, e])), [dokumen.elemen]);
@@ -253,6 +294,7 @@ function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, onPilihRef
           daftarPintu={e.tipe === "dinding" ? daftarPintu : PINTU_KOSONG}
           derekRendah={e.tipe === "derek" ? derekRendah : SET_KOSONG}
           aliran={e.tipe === "jalur" && alat.aliran}
+          tampilIceCan={e.tipe !== "bak" || tampilIceCan}
           onKlik={onKlik}
           onHover={onHover}
         />

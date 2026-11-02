@@ -5,6 +5,8 @@ import { keDunia, tataBakMeter } from "../produksi-denah-geometri";
 import { periksaTeknik } from "../produksi-denah-teknik";
 import {
   balokAntara,
+  BATAS_INSTANS_ICE_CAN,
+  hitungInstansIceCan,
   derekTerlaluRendah,
   kunciDerekBak,
   iceCanBak,
@@ -12,6 +14,7 @@ import {
   kotakLokalKeDunia,
   kotakThree,
   lubangPelat,
+  SUSUT_LUBANG_PELAT,
   potongDinding,
   ruangBebasDerek,
   sudutLayarUtara,
@@ -102,15 +105,41 @@ test("potongDinding: pintu bersinggungan memotong dinding setinggi pintu", () =>
   assert.equal(bv.length, 3);
 });
 
-test("lubangPelat: bak di dalam lahan jadi lubang, bertumpuk/keluar lahan dilewati", () => {
+test("lubangPelat: bak di dalam lahan jadi lubang (susut 1 mm), bertumpuk dilewati, keluar lahan di-clamp", () => {
   const dok: DenahDokumen = { ...denahKosong(), elemen: [] };
+  const L = dok.kanvas.lebar;
+  const s = SUSUT_LUBANG_PELAT;
   const a = buatBak(1, 1, { w: 4, h: 2 });
   const b = buatBak(2, 2, { w: 4, h: 2 }); // bertumpuk dengan a
-  const c = buatBak(dok.kanvas.lebar - 1, 1, { w: 4, h: 2 }); // keluar lahan
+  const c = buatBak(L - 1, 10, { w: 4, h: 2 }); // menjulur keluar lahan → di-clamp
   const d = buatBak(10, 10, { w: 4, h: 2, elevasiM: 0.1 }); // di atas lantai: tidak melubangi
   const lubang = lubangPelat({ ...dok, elemen: [a, b, c, d] });
+  assert.equal(lubang.length, 2);
+  const samaKotak = (k: { x: number; y: number; w: number; h: number }, x: number, y: number, w: number, h: number) =>
+    assert.ok(dekat(k.x, x) && dekat(k.y, y) && dekat(k.w, w) && dekat(k.h, h), JSON.stringify(k));
+  samaKotak(lubang[0], 1 + s, 1 + s, 4 - 2 * s, 2 - 2 * s);
+  samaKotak(lubang[1], L - 1 + s, 10 + s, 1 - 2 * s, 2 - 2 * s);
+});
+
+test("lubangPelat: dua bak berdampingan berbagi tepi → dua lubang terpisah", () => {
+  const dok: DenahDokumen = { ...denahKosong(), elemen: [] };
+  const a = buatBak(5, 5, { w: 4, h: 2 });
+  const b = buatBak(9, 5, { w: 4, h: 2 }); // tepi kanan a = tepi kiri b
+  const c = buatBak(5, 7, { w: 4, h: 2 }); // tepi bawah a = tepi atas c
+  const lubang = lubangPelat({ ...dok, elemen: [a, b, c] });
+  assert.equal(lubang.length, 3);
+  // Celah 2 mm di antara lubang: tidak bersinggungan.
+  assert.ok(lubang[1].x - (lubang[0].x + lubang[0].w) > 0);
+  assert.ok(lubang[2].y - (lubang[0].y + lubang[0].h) > 0);
+});
+
+test("lubangPelat: bak menempel x=0 tetap berlubang (di-clamp ke dalam pelat)", () => {
+  const dok: DenahDokumen = { ...denahKosong(), elemen: [] };
+  const a = buatBak(0, 3, { w: 4, h: 2 });
+  const lubang = lubangPelat({ ...dok, elemen: [a] });
   assert.equal(lubang.length, 1);
-  assert.deepEqual(lubang[0], { x: 1, y: 1, w: 4, h: 2 });
+  assert.ok(lubang[0].x > 0 && dekat(lubang[0].x, SUSUT_LUBANG_PELAT));
+  assert.ok(dekat(lubang[0].x + lubang[0].w, 4 - SUSUT_LUBANG_PELAT));
 });
 
 test("ruangBebasDerek: dari bibir bak setinggi can tertinggi aktif + 0,20 m", () => {
@@ -155,4 +184,13 @@ test("sudutLayarUtara: proyeksi arah utara ke layar → derajat dari atas, seara
   assert.ok(dekat(sudutLayarUtara({ x: 0, y: 0 }, { x: 0, y: -10 }), 0));
   assert.ok(dekat(sudutLayarUtara({ x: 0, y: 0 }, { x: 10, y: 0 }), 90));
   assert.ok(dekat(sudutLayarUtara({ x: 5, y: 5 }, { x: 0, y: 5 }), 270));
+});
+
+test("hitungInstansIceCan: jumlah ice can semua kolom bak (termasuk nonaktif), tipe lain diabaikan", () => {
+  const a = buatBak(1, 1, { kolom: buatKolom(3, { varian: "kecil", jumlahIceCan: 10 }) });
+  a.kolom[0] = { ...a.kolom[0], nonaktif: true };
+  const b = buatBak(20, 1, { kolom: buatKolom(2, { varian: "besar", jumlahIceCan: 5 }) });
+  assert.equal(hitungInstansIceCan([a, b]), 40);
+  assert.equal(hitungInstansIceCan([a, b]), iceCanBak(a).kecil.length + iceCanBak(b).besar.length);
+  assert.equal(BATAS_INSTANS_ICE_CAN, 200_000);
 });

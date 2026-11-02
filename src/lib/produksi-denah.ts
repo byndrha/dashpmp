@@ -233,6 +233,9 @@ export type KodeProduksi = "pmpersada" | "pmpakis";
 // VALIDASI       = validasiDenah() di server menolak dokumen (galat per elemen).
 export type KodeGalatSimpanDenah = "VERSI_BASI" | "KOLOM_TERKUNCI" | "VALIDASI";
 
+/** Baris denah tersimpan tidak bisa dibaca (migrasiDenah melempar) — tanpa detail internal. */
+export const PESAN_DENAH_RUSAK = "Data denah tersimpan rusak — hubungi admin.";
+
 export type HasilSimpanDenah =
   | { success: true; data: { versi: number } }
   | { success: false; error: string; kodeGalat?: KodeGalatSimpanDenah; galat?: GalatDenah[] };
@@ -246,6 +249,7 @@ export const BATAS_TOTAL_KOLOM = 20000;
 export const BATAS_ICE_CAN_PER_KOLOM = 200;
 export const BATAS_KANVAS = 5000; // meter, per sisi
 export const BATAS_UKURAN_GRID = 200; // piksel per meter
+export const BATAS_LANGKAH_SNAP_M = 10; // meter
 export const BATAS_TITIK_JALUR = 1000; // titik per jalur
 export const BATAS_PANJANG_TEKS = 1000; // karakter per field teks
 export const BATAS_REFERENSI = 500; // panjang mesinIds / bakIds
@@ -468,8 +472,17 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
     const label = labelElemen(e);
     if (!e.nama.trim()) galat.push({ elemenId: e.id, pesan: `Nama ${e.tipe} tidak boleh kosong.` });
     if (!(e.w > 0) || !(e.h > 0)) galat.push({ elemenId: e.id, pesan: `Ukuran ${label} harus lebih dari 0.` });
-    const k = kotakElemen(e);
-    if (k.x < 0 || k.y < 0 || k.x + k.w > lebar || k.y + k.h > tinggi) {
+    // Jalur: yang dicek titiknya, bukan kotak pembungkus — kotakJalur
+    // melebarkan sisi tipis ke SISI_MIN_JALUR di sekitar titik, jadi jalur
+    // tepat di tepi kanvas (x=0 / y=tinggi) akan "keluar" padahal sah.
+    const keluar =
+      e.tipe === "jalur"
+        ? e.titik.some((t) => t.x < 0 || t.y < 0 || t.x > lebar || t.y > tinggi)
+        : (() => {
+            const k = kotakElemen(e);
+            return k.x < 0 || k.y < 0 || k.x + k.w > lebar || k.y + k.h > tinggi;
+          })();
+    if (keluar) {
       galat.push({ elemenId: e.id, pesan: `${label} keluar dari batas kanvas.` });
     }
     if (!TIPE_TANPA_VOLUME.has(e.tipe) && !(e.tinggiM > 0)) galat.push({ elemenId: e.id, pesan: `Tinggi ${label} harus lebih dari 0 m.` });
@@ -710,6 +723,7 @@ function cekElemen(e: unknown): string | null {
       if (!daftarId(e.mesinIds)) return "daftar mesin tidak sah";
       if (!teks(e.catatan)) return "catatan bak tidak sah";
       if (![e.tebalDindingM, e.levelBrineM, e.jarakAntarKolomMm, e.jarakAntarCanMm].every(angka)) return "ukuran dinding/brine/jarak bak tidak sah";
+      if ((e.jarakAntarKolomMm as number) < 0 || (e.jarakAntarCanMm as number) < 0) return "jarak antar kolom/ice can tidak boleh negatif";
       if (!objek(e.iceCan) || !dimensiIceCan(e.iceCan.kecil) || !dimensiIceCan(e.iceCan.besar)) return "dimensi ice can tidak sah";
       if (!Array.isArray(e.kolom)) return "daftar kolom tidak sah";
       if (e.kolom.length > BATAS_KOLOM_PER_BAK) return `jumlah kolom melebihi ${BATAS_KOLOM_PER_BAK} per bak`;
@@ -738,7 +752,7 @@ function cekElemen(e: unknown): string | null {
       if (!anggota(e.jenis, JENIS_JALUR_SAH)) return "jenis jalur tidak sah";
       if (e.fluida !== undefined && !anggota(e.fluida, FLUIDA_SAH)) return "fluida jalur tidak dikenal";
       if (e.sistem !== undefined && !anggota(e.sistem, SISTEM_KABEL_SAH)) return "sistem kabel tidak sah";
-      if (!angka(e.diameterMm)) return "diameter jalur tidak sah";
+      if (!angka(e.diameterMm) || e.diameterMm <= 0) return "diameter jalur tidak sah";
       if (!Array.isArray(e.titik)) return "titik jalur tidak sah";
       if (e.titik.length > BATAS_TITIK_JALUR) return `titik jalur melebihi ${BATAS_TITIK_JALUR}`;
       if (!e.titik.every(titik3D)) return "titik jalur tidak sah";
@@ -768,7 +782,7 @@ export function validasiBentukDenah(raw: unknown): string | null {
     return tolak(`ukuran lahan harus lebih dari 0 dan paling besar ${BATAS_KANVAS} m`);
   }
   if (kv.ukuranGrid <= 0 || kv.ukuranGrid > BATAS_UKURAN_GRID) return tolak("ukuran grid tidak sah");
-  if (!angka(kv.langkahSnapM) || kv.langkahSnapM <= 0) return tolak("langkah snap tidak sah");
+  if (!angka(kv.langkahSnapM) || kv.langkahSnapM <= 0 || kv.langkahSnapM > BATAS_LANGKAH_SNAP_M) return tolak("langkah snap tidak sah");
   if (!angka(kv.utaraDerajat) || kv.utaraDerajat < 0 || kv.utaraDerajat > 359) return tolak("arah utara harus 0–359 derajat");
   if (!objek(kv.pelatLantai) || !angka(kv.pelatLantai.tebalM) || kv.pelatLantai.tebalM < 0) return tolak("tebal pelat lantai tidak sah");
   if (!Array.isArray(raw.elemen)) return tolak("daftar elemen tidak sah");
@@ -897,7 +911,9 @@ export function migrasiDenah(raw: unknown): DenahDokumen {
   if (skala !== 1) {
     if (angka(kv.lebar)) kv.lebar *= skala;
     if (angka(kv.tinggi)) kv.tinggi *= skala;
-    if (angka(kv.ukuranGrid)) kv.ukuranGrid /= skala;
+    // ×2 bisa melewati BATAS_UKURAN_GRID (mis. v1 150 → 300) dan membuat
+    // dokumen hasil migrasi ditolak validasiBentukDenah saat disimpan.
+    if (angka(kv.ukuranGrid)) kv.ukuranGrid = Math.min(kv.ukuranGrid / skala, BATAS_UKURAN_GRID);
   }
   const bawaan = kanvasBawaan();
   isi(kv, "lebar", bawaan.lebar);

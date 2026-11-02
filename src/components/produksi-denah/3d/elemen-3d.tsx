@@ -127,6 +127,7 @@ export function buatSumberDaya() {
   };
   // Nilai asli material beton, dipulihkan saat X-ray dimatikan.
   const asliBeton = [materi.pelat, materi.beton, materi.dinding].map((m) => ({ m, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }));
+  let dibuang = false;
 
   return {
     materi,
@@ -189,12 +190,18 @@ export function buatSumberDaya() {
     lewatiKlik(ev: ThreeEvent<PointerEvent | MouseEvent>): boolean {
       return this.terpotong(ev.point) || this.tembusXray((ev.object as Mesh).material);
     },
+    /** Sudah dibuang (buang()) — pemilik harus membuat sumber daya baru, bukan memakainya lagi. */
+    get dibuang(): boolean {
+      return dibuang;
+    },
+    /** Idempoten. Cache TIDAK dikosongkan agar semuaMateri() tetap lengkap bila ada yang masih memegang objek ini. */
     buang() {
+      if (dibuang) return;
+      dibuang = true;
       for (const m of this.semuaMateri()) m.dispose();
       for (const m of Object.values(tepi)) m.dispose();
       for (const g of Object.values(geo)) g.dispose();
       teksturAliran.dispose();
-      cache.clear();
     },
   };
 }
@@ -281,10 +288,13 @@ function IceCanVarian({ bak, varian, onKlikKolom }: { bak: BakElemen; varian: Va
   );
 }
 
-function Bak3D({ bak, onKlikKolom }: { bak: BakElemen; onKlikKolom: (kolomId: string, ev: ThreeEvent<MouseEvent>) => void }) {
+function Bak3D({ bak, tampilIceCan, onKlikKolom }: { bak: BakElemen; tampilIceCan: boolean; onKlikKolom: (kolomId: string, ev: ThreeEvent<MouseEvent>) => void }) {
   const { materi } = useSumberDaya();
   const k = kotakElemen(bak);
-  const t = Math.min(bak.tebalDindingM, k.w / 2, k.h / 2);
+  // Tebal mentah, SAMA dengan tataBakMeter & 2D (BakTubuh) — tidak di-clamp,
+  // agar 2D/3D sepakat. Bila dinding melebihi setengah sisi, kotak bersisi
+  // ≤ 0 tidak digambar oleh <Kotak>.
+  const t = bak.tebalDindingM;
   const zB = bak.elevasiM;
   const tata = useMemo(() => tataBakMeter(bak), [bak]);
   const zA = tata.bibirZ;
@@ -300,8 +310,8 @@ function Bak3D({ bak, onKlikKolom }: { bak: BakElemen; onKlikKolom: (kolomId: st
       <KotakZ kotak={dalam} zBawah={zB} zAtas={tata.lantaiDalamZ} materi={materi.beton} />
       {/* Permukaan brine (transparan, tidak menghalangi klik ice can). */}
       {brineZ > tata.lantaiDalamZ && <KotakZ kotak={dalam} zBawah={brineZ - 0.004} zAtas={brineZ} materi={materi.brine} tembus />}
-      <IceCanVarian bak={bak} varian="kecil" onKlikKolom={onKlikKolom} />
-      <IceCanVarian bak={bak} varian="besar" onKlikKolom={onKlikKolom} />
+      {tampilIceCan && <IceCanVarian bak={bak} varian="kecil" onKlikKolom={onKlikKolom} />}
+      {tampilIceCan && <IceCanVarian bak={bak} varian="besar" onKlikKolom={onKlikKolom} />}
     </group>
   );
 }
@@ -421,18 +431,20 @@ export interface Elemen3DProps {
   derekRendah: ReadonlySet<string>;
   /** Animasi aliran (hanya berarti untuk jalur; tipe lain selalu false agar memo efektif). */
   aliran: boolean;
+  /** Gambar ice can (bak saja). false bila total instans melebihi BATAS_INSTANS_ICE_CAN. */
+  tampilIceCan: boolean;
   onKlik: (elemenId: string, kolomId: string | null, ev: ThreeEvent<MouseEvent>) => void;
   onHover: (elemenId: string | null) => void;
 }
 
 /** Satu elemen + penanganan klik/hover. Di-memo: elemen yang tidak berubah tidak dirender ulang. */
-export const Elemen3D = memo(function Elemen3D({ e, byId, daftarPintu, derekRendah, aliran, onKlik, onHover }: Elemen3DProps) {
+export const Elemen3D = memo(function Elemen3D({ e, byId, daftarPintu, derekRendah, aliran, tampilIceCan, onKlik, onHover }: Elemen3DProps) {
   const sd = useSumberDaya();
   const { materi } = sd;
   let isi: React.ReactNode = null;
   switch (e.tipe) {
     case "bak":
-      isi = <Bak3D bak={e} onKlikKolom={(kolomId, ev) => onKlik(e.id, kolomId, ev)} />;
+      isi = <Bak3D bak={e} tampilIceCan={tampilIceCan} onKlikKolom={(kolomId, ev) => onKlik(e.id, kolomId, ev)} />;
       break;
     case "derek":
       isi = <Derek3D derek={e} byId={byId} terlaluRendah={derekRendah} />;

@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
+  BATAS_TITIK_JALUR,
   DIAMETER_JALUR_BAWAAN,
   FLUIDA_BAWAAN,
   denahKosong,
@@ -480,6 +481,11 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
     const jd = jalurDigambar ?? { titik: [], ujungIds: [] };
     const akhir = jd.titik[jd.titik.length - 1];
     if (akhir && akhir.x === t.x && akhir.y === t.y && akhir.z === t.z) return; // titik kembar
+    // Batas server (validasiBentukDenah): titik tidak ditambah lagi, beri tahu pengguna.
+    if (jd.titik.length >= BATAS_TITIK_JALUR) {
+      toast(`Jalur paling banyak ${BATAS_TITIK_JALUR.toLocaleString("id-ID")} titik — dobel klik atau Enter untuk menyelesaikan.`, { id: "batas-titik-jalur", duration: 2500 });
+      return;
+    }
     setJalurDigambar({ titik: [...jd.titik, t], ujungIds: [...jd.ujungIds, ujungId] });
   };
 
