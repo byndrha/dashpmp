@@ -21,7 +21,12 @@ export interface Tampilan3DProps {
   terpilihIds: ReadonlySet<string>;
   lapisanTampil: ReadonlySet<Lapisan>;
   peringatan: GalatDenah[];
+  /** Elemen yang difokuskan kamera — diterapkan saat fokusId/fokusSeq BERGANTI selama 3D terbuka. */
   fokusId?: string | null;
+  /** Naikkan untuk memfokuskan ulang elemen yang sama (klik peringatan yang sama lagi). */
+  fokusSeq?: number;
+  /** Toggle lapisan dari bilah alat 3D; bawaan langsung ke toko useLapisanTampil. */
+  onUbahLapisan?: (l: Lapisan, tampil: boolean) => void;
   className?: string;
   onPilih: (elemenId: string | null, kolomId?: string | null) => void;
   /** Dipanggil bila WebGL tak ada / error boundary menangkap → induk kembali ke 2D. */

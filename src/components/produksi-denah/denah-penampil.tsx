@@ -63,6 +63,7 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
           terpilihIds={terpilihIds}
           lapisanTampil={lapisanTampil}
           peringatan={peringatan}
+          onUbahLapisan={ubahLapisan}
           className="h-[65vh] min-h-[360px] rounded-lg border"
           onPilih={(id, kid) => {
             const e = id ? dokumen.elemen.find((x) => x.id === id) : null;

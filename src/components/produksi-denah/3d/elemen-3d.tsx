@@ -15,21 +15,27 @@ import {
   CylinderGeometry,
   DoubleSide,
   EdgesGeometry,
+  DataTexture,
   LineBasicMaterial,
   LineCurve3,
   MeshStandardMaterial,
+  Plane,
+  RepeatWrapping,
   SphereGeometry,
+  SRGBColorSpace,
   TubeGeometry,
   Vector3,
   Object3D,
   type InstancedMesh,
   type Material,
+  type Mesh,
 } from "three";
 import { useThree, type ThreeEvent } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { kotakElemen, type BakElemen, type DenahElemen, type DerekElemen, type DindingElemen, type JalurElemen, type KategoriMesin, type PintuElemen, type TangkiElemen, type Varian } from "@/lib/produksi-denah";
 import { garisRel, segmenJalur, tataBakMeter } from "@/lib/produksi-denah-geometri";
 import { WARNA_AIR, WARNA_BETON, WARNA_MESIN, warnaJalur } from "@/components/produksi-denah/warna";
+import type { ModePotongan } from "./kamera";
 import { balokAntara, diameterVisualM, iceCanBak, keThree, kunciDerekBak, kotakThree, potongDinding, ruangBebasDerek, type Kotak2D, type Vek3 } from "./koordinat";
 
 // ---------- Sumber daya (material + geometri dasar) ----------
@@ -37,6 +43,26 @@ import { balokAntara, diameterVisualM, iceCanBak, keThree, kunciDerekBak, kotakT
 const WARNA_CAN: Record<Varian | "nonaktif", string> = { kecil: "#7dd3fc", besar: "#fbbf24", nonaktif: "#9ca3af" };
 const WARNA_AREA_BAWAAN = "#10b981";
 const POLA_WARNA = /^#[0-9a-fA-F]{3,8}$|^[a-z]+$/;
+/** Opasitas material beton/arsitektur saat X-ray beton menyala. */
+export const OPASITAS_XRAY = 0.15;
+/** Panjang satu pita tekstur aliran sepanjang pipa (m). */
+export const PANJANG_PITA_ALIRAN_M = 0.6;
+
+/** Tekstur pita terang/gelap (8×1) untuk animasi aliran, berulang sepanjang pipa. */
+function buatTeksturAliran(): DataTexture {
+  const n = 8;
+  const data = new Uint8Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const v = i < n / 2 ? 255 : 120;
+    data.set([v, v, v, 255], i * 4);
+  }
+  const t = new DataTexture(data, n, 1);
+  t.wrapS = RepeatWrapping;
+  t.wrapT = RepeatWrapping;
+  t.colorSpace = SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
 
 export function buatSumberDaya() {
   const std = (color: string, o: Partial<ConstructorParameters<typeof MeshStandardMaterial>[0]> = {}) =>
@@ -68,7 +94,18 @@ export function buatSumberDaya() {
   const tepi = {
     pilih: new LineBasicMaterial({ color: "#0ea5e9", depthTest: false, transparent: true }),
     hover: new LineBasicMaterial({ color: "#64748b", depthTest: false, transparent: true, opacity: 0.8 }),
+    // Elemen yang terkena peringatan teknik (spec §7 "Sorotan peringatan").
+    peringatan: new LineBasicMaterial({ color: "#facc15", depthTest: false, transparent: true }),
   };
+  const teksturAliran = buatTeksturAliran();
+
+  // Potongan: SATU bidang bersama, dipasang ke clippingPlanes semua material mesh.
+  const bidang = new Plane();
+  let modePotongan: ModePotongan = "tidak";
+  const planesAktif: Plane[] = [bidang];
+  const planesKosong: Plane[] = [];
+  const planesSaatIni = () => (modePotongan === "tidak" ? planesKosong : planesAktif);
+  let xray = false;
   const kotak = new BoxGeometry(1, 1, 1);
   const geo = {
     kotak,
@@ -83,10 +120,13 @@ export function buatSumberDaya() {
     let m = cache.get(kunci);
     if (!m) {
       m = buat();
+      m.clippingPlanes = planesSaatIni(); // material baru ikut potongan yang sedang aktif
       cache.set(kunci, m);
     }
     return m;
   };
+  // Nilai asli material beton, dipulihkan saat X-ray dimatikan.
+  const asliBeton = [materi.pelat, materi.beton, materi.dinding].map((m) => ({ m, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }));
 
   return {
     materi,
@@ -94,17 +134,66 @@ export function buatSumberDaya() {
     geo,
     warnaJalur: (hex: string) => berwarna(`jalur:${hex}`, () => std(hex, { roughness: 0.4, metalness: 0.3 })),
     warnaArea: (hex: string) => berwarna(`area:${hex}`, () => transparan(hex, 0.28)),
-    /** Material beton/arsitektur — sasaran x-ray (Task 8). */
+    /** Material jalur bertekstur pita bergerak (animasi aliran). */
+    warnaJalurAliran: (hex: string) => berwarna(`aliran:${hex}`, () => std(hex, { roughness: 0.4, metalness: 0.3, map: teksturAliran })),
+    /** Geser pita aliran sejauh `pita` (satuan panjang pita). Offset negatif → pita bergerak ke arah u bertambah (a→b, urutan titik). */
+    majukanAliran(pita: number) {
+      teksturAliran.offset.x = (teksturAliran.offset.x - pita) % 1;
+    },
+    /** Material beton/arsitektur (pelat, beton, dinding, cangkang bak) — sasaran x-ray. */
     materiBeton: (): MeshStandardMaterial[] => [materi.pelat, materi.beton, materi.dinding],
-    /** Semua material mesh — sasaran clipping plane potongan (Task 8). */
+    /** Semua material mesh — sasaran clipping plane potongan. */
     semuaMateri(): Material[] {
       const { mesin: m, ...lain } = materi;
       return [...Object.values(lain), ...Object.values(m), ...cache.values()];
+    },
+    /** X-ray beton: material beton jadi transparan (opasitas OPASITAS_XRAY). */
+    aturXray(nyala: boolean) {
+      if (nyala === xray) return;
+      xray = nyala;
+      for (const a of asliBeton) {
+        a.m.transparent = nyala ? true : a.transparent;
+        a.m.opacity = nyala ? OPASITAS_XRAY : a.opacity;
+        a.m.depthWrite = nyala ? false : a.depthWrite;
+        a.m.needsUpdate = true;
+      }
+    },
+    /**
+     * Potongan: horizontal menyisakan bagian di bawah elevasi `posisi`;
+     * vertikal X/Y menyisakan bagian di sisi kecil sumbu denah. Menggeser
+     * slider hanya mengganti konstanta bidang (tanpa kompilasi ulang shader).
+     */
+    aturPotongan(mode: ModePotongan, posisi: number) {
+      if (mode === "horizontal") bidang.normal.set(0, -1, 0);
+      else if (mode === "x") bidang.normal.set(-1, 0, 0);
+      else bidang.normal.set(0, 0, -1); // y denah = z three
+      bidang.constant = posisi;
+      if (mode === modePotongan) return;
+      modePotongan = mode;
+      const planes = planesSaatIni();
+      for (const m of this.semuaMateri()) m.clippingPlanes = planes;
+    },
+    /** Titik (three) berada di bagian yang dibuang potongan. */
+    terpotong(p: Vector3): boolean {
+      return modePotongan !== "tidak" && bidang.distanceToPoint(p) < 0;
+    },
+    /** Material ini sedang tembus pandang karena X-ray beton. */
+    tembusXray(m: unknown): boolean {
+      return xray && (m === materi.pelat || m === materi.beton || m === materi.dinding);
+    },
+    /**
+     * Klik/hover yang harus menembus objek ini: titiknya terpotong, atau
+     * mengenai beton yang sedang di-x-ray. Penangan lalu TIDAK menghentikan
+     * propagasi sehingga objek di belakangnya yang menerima.
+     */
+    lewatiKlik(ev: ThreeEvent<PointerEvent | MouseEvent>): boolean {
+      return this.terpotong(ev.point) || this.tembusXray((ev.object as Mesh).material);
     },
     buang() {
       for (const m of this.semuaMateri()) m.dispose();
       for (const m of Object.values(tepi)) m.dispose();
       for (const g of Object.values(geo)) g.dispose();
+      teksturAliran.dispose();
       cache.clear();
     },
   };
@@ -136,9 +225,10 @@ function KotakZ({ kotak, zBawah, zAtas, materi, tembus }: { kotak: Kotak2D; zBaw
 }
 
 /** Kerangka kotak (outline seleksi/hover) — selalu di atas benda lain. */
-export function TepiKotak({ kotak, zBawah, zAtas, jenis }: { kotak: Kotak2D; zBawah: number; zAtas: number; jenis: "pilih" | "hover" }) {
+export function TepiKotak({ kotak, zBawah, zAtas, jenis }: { kotak: Kotak2D; zBawah: number; zAtas: number; jenis: "pilih" | "hover" | "peringatan" }) {
   const { geo, tepi } = useSumberDaya();
-  const pad = 0.03;
+  // Outline peringatan sedikit lebih lebar agar tetap terlihat di luar outline seleksi.
+  const pad = jenis === "peringatan" ? 0.07 : 0.03;
   const k = kotakThree({ x: kotak.x - pad, y: kotak.y - pad, w: kotak.w + 2 * pad, h: kotak.h + 2 * pad }, zBawah - pad, zAtas - zBawah + 2 * pad);
   return <lineSegments geometry={geo.tepiKotak} material={tepi[jenis]} position={k.pusat} scale={k.ukuran} renderOrder={10} raycast={tanpaRaycast} />;
 }
@@ -149,7 +239,8 @@ const bantu = new Object3D();
 const warnaBantu = new Color();
 
 function IceCanVarian({ bak, varian, onKlikKolom }: { bak: BakElemen; varian: Varian; onKlikKolom: (kolomId: string, ev: ThreeEvent<MouseEvent>) => void }) {
-  const { geo, materi } = useSumberDaya();
+  const sd = useSumberDaya();
+  const { geo, materi } = sd;
   const invalidate = useThree((s) => s.invalidate);
   const instans = useMemo(() => iceCanBak(bak)[varian], [bak, varian]);
   const ref = useRef<InstancedMesh>(null);
@@ -181,7 +272,7 @@ function IceCanVarian({ bak, varian, onKlikKolom }: { bak: BakElemen; varian: Va
       ref={ref}
       args={[geo.kotak, materi.iceCan, instans.length]}
       onClick={(ev) => {
-        if (ev.instanceId === undefined) return;
+        if (ev.instanceId === undefined || sd.lewatiKlik(ev)) return;
         ev.stopPropagation(); // grup bak tidak boleh menimpa pilihan kolom
         const c = instans[ev.instanceId];
         if (c) onKlikKolom(c.kolomId, ev);
@@ -285,16 +376,25 @@ function Tangki3D({ tangki }: { tangki: TangkiElemen }) {
 
 // ---------- Jalur ----------
 
-function Jalur3D({ jalur }: { jalur: JalurElemen }) {
+function Jalur3D({ jalur, aliran }: { jalur: JalurElemen; aliran: boolean }) {
   const sd = useSumberDaya();
-  const materi = sd.warnaJalur(warnaJalur(jalur));
+  const materi = aliran ? sd.warnaJalurAliran(warnaJalur(jalur)) : sd.warnaJalur(warnaJalur(jalur));
   const r = diameterVisualM(jalur) / 2;
-  // TubeGeometry per segmen (sudut siku tajam), di-memo per elemen.
+  // TubeGeometry per segmen (sudut siku tajam), di-memo per elemen. u tabung
+  // berjalan a→b (urutan titik) dan diskalakan ke panjang/PANJANG_PITA_ALIRAN_M
+  // agar pita aliran berjarak sama di semua segmen dan bergerak searah titik.
   const tabung = useMemo(
     () =>
       segmenJalur(jalur)
         .filter((s) => s.panjang > 1e-6)
-        .map((s) => new TubeGeometry(new LineCurve3(new Vector3(...keThree(s.a.x, s.a.y, s.a.z)), new Vector3(...keThree(s.b.x, s.b.y, s.b.z))), 1, r, 12, false)),
+        .map((s) => {
+          const g = new TubeGeometry(new LineCurve3(new Vector3(...keThree(s.a.x, s.a.y, s.a.z)), new Vector3(...keThree(s.b.x, s.b.y, s.b.z))), 1, r, 12, false);
+          const uv = g.attributes.uv;
+          const skala = s.panjang / PANJANG_PITA_ALIRAN_M;
+          for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * skala);
+          uv.needsUpdate = true;
+          return g;
+        }),
     [jalur, r]
   );
   useLayoutEffect(() => () => tabung.forEach((g) => g.dispose()), [tabung]);
@@ -319,12 +419,14 @@ export interface Elemen3DProps {
   daftarPintu: readonly PintuElemen[];
   /** Pasangan derek–bak (kunciDerekBak) yang terkena aturan 3. */
   derekRendah: ReadonlySet<string>;
+  /** Animasi aliran (hanya berarti untuk jalur; tipe lain selalu false agar memo efektif). */
+  aliran: boolean;
   onKlik: (elemenId: string, kolomId: string | null, ev: ThreeEvent<MouseEvent>) => void;
   onHover: (elemenId: string | null) => void;
 }
 
 /** Satu elemen + penanganan klik/hover. Di-memo: elemen yang tidak berubah tidak dirender ulang. */
-export const Elemen3D = memo(function Elemen3D({ e, byId, daftarPintu, derekRendah, onKlik, onHover }: Elemen3DProps) {
+export const Elemen3D = memo(function Elemen3D({ e, byId, daftarPintu, derekRendah, aliran, onKlik, onHover }: Elemen3DProps) {
   const sd = useSumberDaya();
   const { materi } = sd;
   let isi: React.ReactNode = null;
@@ -351,7 +453,7 @@ export const Elemen3D = memo(function Elemen3D({ e, byId, daftarPintu, derekRend
       isi = <Tangki3D tangki={e} />;
       break;
     case "jalur":
-      isi = <Jalur3D jalur={e} />;
+      isi = <Jalur3D jalur={e} aliran={aliran} />;
       break;
     case "area": {
       const warna = e.warna && POLA_WARNA.test(e.warna) ? e.warna : WARNA_AREA_BAWAAN;
@@ -371,10 +473,12 @@ export const Elemen3D = memo(function Elemen3D({ e, byId, daftarPintu, derekRend
   return (
     <group
       onClick={(ev) => {
+        if (sd.lewatiKlik(ev)) return; // terpotong / beton x-ray: teruskan ke objek di belakang
         ev.stopPropagation();
         onKlik(e.id, null, ev);
       }}
       onPointerOver={(ev) => {
+        if (sd.lewatiKlik(ev)) return;
         ev.stopPropagation();
         onHover(e.id);
       }}

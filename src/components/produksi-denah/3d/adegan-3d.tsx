@@ -11,13 +11,16 @@
 
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
-import { CameraControls, Grid, Html } from "@react-three/drei";
-import { Box3, DoubleSide, ExtrudeGeometry, Path, Shape, ShapeGeometry, Vector3 } from "three";
+import { CameraControls, Grid, Html, OrthographicCamera } from "@react-three/drei";
+import { DoubleSide, ExtrudeGeometry, Path, Shape, ShapeGeometry, Vector3, type OrthographicCamera as KameraOrto } from "three";
 import { lapisanElemen, type DenahDokumen, type DenahElemen, type PintuElemen } from "@/lib/produksi-denah";
 import { MawarAngin } from "@/components/produksi-denah/mawar-angin";
 import { formatMeter } from "@/components/produksi-denah/format";
-import { arahUtaraThree, batasElemen, derekTerlaluRendah, keThree, lubangPelat, sudutLayarUtara } from "./koordinat";
+import { useLapisanTampil } from "@/components/produksi-denah/lapisan";
+import { arahUtaraThree, batasElemen, derekTerlaluRendah, keThree, lubangPelat, sudutLayarUtara, type Vek3 } from "./koordinat";
 import { buatSumberDaya, Elemen3D, SumberDayaKonteks, TepiKotak, useSumberDaya } from "./elemen-3d";
+import { gabungKotak, kotakAdegan, posisiPreset, zoomOrtografis, type Kotak3D, type PresetKamera } from "./kamera";
+import { ALAT_3D_AWAL, AlatUkur, AnimasiAliran, BilahAlat3D, TerapkanAlat, type StateAlat3D } from "./alat-3d";
 import type { Tampilan3DProps } from "./tampilan-3d";
 
 export type Adegan3DProps = Omit<Tampilan3DProps, "className" | "onGagal">;
@@ -40,46 +43,132 @@ const MAKS_LABEL_TERPILIH = 20;
 const MAP_KOSONG: ReadonlyMap<string, DenahElemen> = new Map();
 const PINTU_KOSONG: readonly PintuElemen[] = [];
 const SET_KOSONG: ReadonlySet<string> = new Set();
+const TITIK_KOSONG: readonly Vek3[] = [];
+/** Batas outline peringatan yang digambar sekaligus. */
+const MAKS_SOROT_PERINGATAN = 200;
+const FOV = 45;
 
 interface HudHandle {
   atur(derajat: number): void;
 }
 
+/** Permintaan kamera (preset bilah alat / fokus dari panel validasi). seq naik tiap permintaan. */
+interface PermintaanKamera {
+  preset: PresetKamera;
+  kotak: Kotak3D;
+  seq: number;
+  transisi: boolean;
+}
+
 export default function Adegan3D(props: Adegan3DProps) {
+  const { dokumen, terpilihIds, lapisanTampil, fokusId, fokusSeq } = props;
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [alat, setAlat] = useState<StateAlat3D>(ALAT_3D_AWAL);
+  // Hasil alat Ukur: sementara, tidak pernah masuk dokumen.
+  const [titikUkur, setTitikUkur] = useState<readonly Vek3[]>(TITIK_KOSONG);
+  const [, aturLapisanToko] = useLapisanTampil();
+  const onUbahLapisan = props.onUbahLapisan ?? aturLapisanToko;
   const hudRef = useRef<HudHandle>(null);
   const awalPointer = useRef<{ x: number; y: number } | null>(null);
   const onPilihRef = useRef(props.onPilih);
+  const ukurRef = useRef(false);
   useLayoutEffect(() => {
     onPilihRef.current = props.onPilih;
+    ukurRef.current = alat.ukur;
   });
+
+  const kotakSeluruh = useMemo(() => kotakAdegan(dokumen), [dokumen]);
+  const [permintaan, setPermintaan] = useState<PermintaanKamera>(() => ({ preset: "iso", kotak: kotakAdegan(dokumen), seq: 0, transisi: false }));
+
+  const terpilihTampil = useMemo(() => dokumen.elemen.filter((e) => terpilihIds.has(e.id) && lapisanTampil.has(lapisanElemen(e))), [dokumen.elemen, terpilihIds, lapisanTampil]);
+  const mintaKamera = (preset: PresetKamera) => {
+    const kotak = preset === "fokus" ? gabungKotak(terpilihTampil.map(batasElemen)) : kotakSeluruh;
+    if (kotak) setPermintaan((p) => ({ preset, kotak, seq: p.seq + 1, transisi: true }));
+  };
+
+  // Fokus dari luar (klik peringatan di panel validasi): hanya saat fokusId/fokusSeq
+  // BERGANTI selama kanvas terbuka (bukan saat dibuka), disesuaikan saat render.
+  const kunciFokus = `${fokusId ?? ""}#${fokusSeq ?? 0}`;
+  const [kunciFokusLama, setKunciFokusLama] = useState(kunciFokus);
+  if (kunciFokus !== kunciFokusLama) {
+    setKunciFokusLama(kunciFokus);
+    const e = fokusId ? dokumen.elemen.find((x) => x.id === fokusId) : undefined;
+    if (e) setPermintaan((p) => ({ preset: "fokus", kotak: gabungKotak([batasElemen(e)])!, seq: p.seq + 1, transisi: true }));
+  }
+
+  const ubahAlat = (ubah: Partial<StateAlat3D>) => {
+    if (ubah.ukur === false) setTitikUkur(TITIK_KOSONG); // ganti alat → hasil ukur hilang
+    setAlat((a) => ({ ...a, ...ubah }));
+  };
+  const tambahTitikUkur = useCallback((p: Vek3) => setTitikUkur((lama) => (lama.length >= 2 ? [p] : [...lama, p])), []);
+
+  // Esc: hapus hasil ukur (lalu matikan alat Ukur). Fase capture agar Esc builder
+  // (batal pilih) tidak ikut jalan selagi masih ada hasil ukur.
+  const adaTitik = titikUkur.length > 0;
+  useEffect(() => {
+    if (!alat.ukur) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      if (adaTitik) {
+        ev.stopPropagation();
+        setTitikUkur(TITIK_KOSONG);
+      } else setAlat((a) => ({ ...a, ukur: false }));
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [alat.ukur, adaTitik]);
 
   return (
     <div
       className="relative h-full w-full bg-gradient-to-b from-sky-100 to-slate-100 dark:from-slate-900 dark:to-slate-950"
-      style={{ cursor: hoverId ? "pointer" : undefined }}
+      style={{ cursor: alat.ukur ? "crosshair" : hoverId ? "pointer" : undefined }}
       onPointerDown={(ev) => {
         awalPointer.current = { x: ev.clientX, y: ev.clientY };
       }}
     >
       <Canvas
-        frameloop="demand"
+        // Render berkelanjutan HANYA saat animasi aliran menyala (spec §7 "Kinerja").
+        frameloop={alat.aliran ? "always" : "demand"}
         dpr={[1, 2]}
-        camera={{ fov: 45, near: 0.05, far: 10000, position: [0, 40, 40] }}
+        camera={{ fov: FOV, near: 0.05, far: 10000, position: [0, 40, 40] }}
         gl={{ antialias: true }}
         onCreated={({ gl }) => {
-          // Disiapkan untuk alat potongan (clipping plane per material) di Task 8.
+          // Alat potongan: clipping plane per material (buatSumberDaya().aturPotongan).
           gl.localClippingEnabled = true;
         }}
         onPointerMissed={(ev) => {
+          if (ukurRef.current) return; // klik alat Ukur tidak mengubah seleksi
           const a = awalPointer.current;
           if (a && Math.hypot(ev.clientX - a.x, ev.clientY - a.y) > BATAS_GESER_PX) return;
           onPilihRef.current(null, null);
         }}
       >
-        <IsiAdegan {...props} onPilihRef={onPilihRef} hoverId={hoverId} setHoverId={setHoverId} hudRef={hudRef} />
+        <IsiAdegan
+          {...props}
+          onPilihRef={onPilihRef}
+          ukurRef={ukurRef}
+          hoverId={hoverId}
+          setHoverId={setHoverId}
+          hudRef={hudRef}
+          alat={alat}
+          permintaan={permintaan}
+          jangkauan={Math.max(kotakSeluruh.w, kotakSeluruh.h, 5)}
+          titikUkur={titikUkur}
+          onTitikUkur={tambahTitikUkur}
+        />
       </Canvas>
-      <HudUtara ref={hudRef} awal={props.dokumen.kanvas.utaraDerajat} />
+      <BilahAlat3D
+        alat={alat}
+        onUbah={ubahAlat}
+        onKamera={mintaKamera}
+        adaTerpilih={terpilihTampil.length > 0}
+        kotakAdegan={kotakSeluruh}
+        jumlahTitikUkur={titikUkur.length}
+        lapisanTampil={lapisanTampil}
+        onUbahLapisan={onUbahLapisan}
+        elemen={dokumen.elemen}
+      />
+      <HudUtara ref={hudRef} awal={dokumen.kanvas.utaraDerajat} />
     </div>
   );
 }
@@ -96,12 +185,19 @@ function HudUtara({ ref, awal }: { ref: Ref<HudHandle>; awal: number }) {
 
 interface IsiAdeganProps extends Adegan3DProps {
   onPilihRef: { current: Adegan3DProps["onPilih"] };
+  ukurRef: { current: boolean };
   hoverId: string | null;
   setHoverId: (f: (id: string | null) => string | null) => void;
   hudRef: { current: HudHandle | null };
+  alat: StateAlat3D;
+  permintaan: PermintaanKamera;
+  /** Ukuran terbesar adegan (m) — batas jarak kamera. */
+  jangkauan: number;
+  titikUkur: readonly Vek3[];
+  onTitikUkur: (p: Vek3) => void;
 }
 
-function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, fokusId, onPilihRef, hoverId, setHoverId, hudRef }: IsiAdeganProps) {
+function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, onPilihRef, ukurRef, hoverId, setHoverId, hudRef, alat, permintaan, jangkauan, titikUkur, onTitikUkur }: IsiAdeganProps) {
   // Sumber daya dibuat sekali per kanvas dan dibuang saat kanvas ditutup.
   const sd = useMemo(() => buatSumberDaya(), []);
   useEffect(() => () => sd.buang(), [sd]);
@@ -114,9 +210,10 @@ function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, fokusId, o
   const onKlik = useCallback(
     (elemenId: string, kolomId: string | null, ev: ThreeEvent<MouseEvent>) => {
       if (ev.delta > BATAS_GESER_PX) return; // kamera diputar, bukan klik
+      if (ukurRef.current) return; // klik alat Ukur tidak mengubah seleksi
       onPilihRef.current(elemenId, kolomId);
     },
-    [onPilihRef]
+    [onPilihRef, ukurRef]
   );
   const onHover = useCallback((id: string | null) => setHoverId((lama) => (id === null ? null : id === lama ? lama : id)), [setHoverId]);
 
@@ -128,6 +225,16 @@ function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, fokusId, o
     if (h && !terpilihIds.has(h.id) && lapisanTampil.has(lapisanElemen(h))) hasil.push({ e: h, jenis: "hover" });
     return hasil;
   }, [elemenTampil, terpilihIds, hoverId, byId, lapisanTampil]);
+
+  // Outline kuning: elemen (dan elemen terkait) yang terkena peringatan teknik, di lapisan tampil.
+  const sorotPeringatan = useMemo(() => {
+    const ids = new Set<string>();
+    for (const g of peringatan) {
+      if (g.elemenId) ids.add(g.elemenId);
+      for (const id of g.elemenTerkaitIds ?? []) ids.add(id);
+    }
+    return elemenTampil.filter((e) => ids.has(e.id)).slice(0, MAKS_SOROT_PERINGATAN);
+  }, [peringatan, elemenTampil]);
 
   return (
     <SumberDayaKonteks.Provider value={sd}>
@@ -145,14 +252,22 @@ function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, fokusId, o
           byId={e.tipe === "derek" ? byId : MAP_KOSONG}
           daftarPintu={e.tipe === "dinding" ? daftarPintu : PINTU_KOSONG}
           derekRendah={e.tipe === "derek" ? derekRendah : SET_KOSONG}
+          aliran={e.tipe === "jalur" && alat.aliran}
           onKlik={onKlik}
           onHover={onHover}
         />
       ))}
+      {sorotPeringatan.map((e) => {
+        const b = batasElemen(e);
+        return <TepiKotak key={`peringatan:${e.id}`} kotak={b.kotak} zBawah={b.zBawah} zAtas={b.zAtas} jenis="peringatan" />;
+      })}
       {sorot.map(({ e, jenis }) => (
         <Sorotan key={`${jenis}:${e.id}`} e={e} jenis={jenis} />
       ))}
-      <Kamera dokumen={dokumen} fokusId={fokusId ?? null} byId={byId} hudRef={hudRef} />
+      <TerapkanAlat xray={alat.xray} potongan={alat.potongan} posisiPotongan={alat.posisiPotongan} />
+      {alat.aliran && <AnimasiAliran />}
+      {alat.ukur && <AlatUkur titik={titikUkur} onTitik={onTitikUkur} />}
+      <Kamera permintaan={permintaan} jangkauan={jangkauan} utaraDerajat={dokumen.kanvas.utaraDerajat} hudRef={hudRef} />
     </SumberDayaKonteks.Provider>
   );
 }
@@ -268,11 +383,19 @@ function Sorotan({ e, jenis }: { e: DenahElemen; jenis: "pilih" | "hover" }) {
 const vTarget = new Vector3();
 const vUtara = new Vector3();
 
-function Kamera({ dokumen, fokusId, byId, hudRef }: { dokumen: DenahDokumen; fokusId: string | null; byId: ReadonlyMap<string, DenahElemen>; hudRef: { current: HudHandle | null } }) {
+/**
+ * Kamera + CameraControls. Preset "atas" memakai kamera ORTOGRAFIS (drei
+ * OrthographicCamera makeDefault; dilepas → kamera perspektif kanvas kembali).
+ * drei membuat ulang CameraControls saat kamera bawaan berganti, jadi
+ * permintaan baru diterapkan setelah kontrol memegang kamera yang sesuai.
+ */
+function Kamera({ permintaan, jangkauan, utaraDerajat, hudRef }: { permintaan: PermintaanKamera; jangkauan: number; utaraDerajat: number; hudRef: { current: HudHandle | null } }) {
   const ref = useRef<CameraControls>(null);
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
-  const { lebar, tinggi, utaraDerajat } = dokumen.kanvas;
+  const orto = permintaan.preset === "atas";
+  const diterapkan = useRef(-1);
+  const kameraTerakhir = useRef<typeof camera | null>(null);
 
   const perbaruiHud = useCallback(() => {
     const c = ref.current;
@@ -285,32 +408,33 @@ function Kamera({ dokumen, fokusId, byId, hudRef }: { dokumen: DenahDokumen; fok
     hudRef.current?.atur(sudutLayarUtara(ke(vTarget), ke(vUtara)));
   }, [camera, size.width, size.height, utaraDerajat, hudRef]);
 
-  // Pandangan awal isometrik ke tengah lahan (sekali saat kanvas dibuka).
-  const awalRef = useRef({ lebar, tinggi });
-  useEffect(() => {
-    const c = ref.current;
-    if (!c) return;
-    const { lebar: l, tinggi: t } = awalRef.current;
-    const L = Math.max(l, t, 5);
-    c.minDistance = 0.5;
-    c.maxDistance = L * 4;
-    void c.setLookAt(l / 2 - L * 0.45, L * 0.7, t / 2 + L * 0.85, l / 2, 0, t / 2, false);
-  }, []);
-
   useEffect(() => {
     perbaruiHud();
   }, [perbaruiHud]);
 
+  // Terapkan permintaan (awal = isometrik ke seluruh adegan, sekali saat kanvas dibuka).
+  // Perubahan dokumen tidak memindahkan kamera; hanya permintaan baru (seq).
   useEffect(() => {
     const c = ref.current;
-    const e = fokusId ? byId.get(fokusId) : undefined;
-    if (!c || !e) return;
-    const b = batasElemen(e);
-    const kotak = new Box3(new Vector3(...keThree(b.kotak.x, b.kotak.y, b.zBawah)), new Vector3(...keThree(b.kotak.x + b.kotak.w, b.kotak.y + b.kotak.h, b.zAtas)));
-    void c.fitToBox(kotak, true, { paddingTop: 1, paddingBottom: 1, paddingLeft: 1, paddingRight: 1 });
-    // Hanya saat fokusId berganti; perubahan dokumen tidak memindahkan kamera.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fokusId]);
+    if (!c || diterapkan.current === permintaan.seq) return;
+    const kameraOrto = (camera as KameraOrto).isOrthographicCamera === true;
+    if (kameraOrto !== orto || c.camera !== camera) return; // tunggu kamera & kontrol berganti
+    const gantiKamera = kameraTerakhir.current !== null && kameraTerakhir.current !== camera;
+    kameraTerakhir.current = camera;
+    diterapkan.current = permintaan.seq;
+    const { posisi, target } = posisiPreset(permintaan.preset, permintaan.kotak, { fovDerajat: FOV, aspek: size.width / Math.max(size.height, 1) });
+    const jarak = Math.hypot(posisi[0] - target[0], posisi[1] - target[1], posisi[2] - target[2]);
+    c.minDistance = 0.5;
+    c.maxDistance = Math.max(jangkauan * 4, jarak * 1.5);
+    const transisi = permintaan.transisi && !gantiKamera;
+    void c.setLookAt(...posisi, ...target, transisi);
+    if (orto) void c.zoomTo(zoomOrtografis(permintaan.kotak, size.width, size.height), transisi);
+  }, [permintaan, camera, orto, size.width, size.height, jangkauan]);
 
-  return <CameraControls ref={ref} makeDefault onUpdate={perbaruiHud} />;
+  return (
+    <>
+      {orto && <OrthographicCamera makeDefault near={0.05} far={10000} />}
+      <CameraControls ref={ref} makeDefault onUpdate={perbaruiHud} />
+    </>
+  );
 }

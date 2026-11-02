@@ -263,6 +263,8 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
   const [panelTerbuka, setPanelTerbuka] = useState(false);
   // Mode 3D Replika (state lokal): menggantikan kanvas 2D; panel properti & validasi tetap aktif.
   const [mode3D, setMode3D] = useState(false);
+  // Permintaan fokus kamera 3D (klik baris panel validasi / pintasan fokus) — tidak disimpan.
+  const [fokus3D, setFokus3D] = useState<{ id: string; seq: number } | null>(null);
   // Elevasi kerja (z bawaan titik alat Jalur) — preferensi builder, TIDAK disimpan di dokumen.
   const [elevasiKerja, setElevasiKerja] = useState(ELEVASI_KERJA_BAWAAN);
   const [kursorToko] = useState(() => buatToko<Titik | null>(null));
@@ -404,9 +406,11 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
       if (g.kolomId && e.tipe === "bak" && e.kolom.some((k) => k.id === g.kolomId)) {
         dispatch({ type: "aturKolomTerpilih", bakId: e.id, kolomIds: [g.kolomId] });
       } else dispatch({ type: "pilih", ids: [e.id] });
-      fokusKotak(kotakElemen(e));
+      // Mode 3D: kamera memfokuskan elemen itu (seq naik agar klik ulang tetap memfokuskan).
+      if (mode3D) setFokus3D((f) => ({ id: e.id, seq: (f?.seq ?? 0) + 1 }));
+      else fokusKotak(kotakElemen(e));
     },
-    [byId, fokusKotak, tampilDiLapisan, aturLapisan]
+    [byId, fokusKotak, tampilDiLapisan, aturLapisan, mode3D]
   );
 
   // ---------- Gestur kanvas ----------
@@ -790,6 +794,11 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
         kanvasRef.current?.pasKeLayar();
         return;
       case "fokusSeleksi": {
+        if (mode3D) {
+          const e = elemenTerpilih[0];
+          if (e) setFokus3D((f) => ({ id: e.id, seq: (f?.seq ?? 0) + 1 }));
+          return;
+        }
         const k = kotakGabungan(elemenTerpilih);
         if (k) fokusKotak(k);
         return;
@@ -943,6 +952,9 @@ export function DenahBuilder({ kode, namaPerusahaan, dokumenAwal, versiAwal, onS
               terpilihIds={terpilihSet}
               lapisanTampil={lapisanTampil}
               peringatan={peringatan}
+              fokusId={fokus3D?.id ?? null}
+              fokusSeq={fokus3D?.seq}
+              onUbahLapisan={ubahLapisan}
               className="absolute inset-0"
               onPilih={pilih3D}
               onGagal={gagal3D}
