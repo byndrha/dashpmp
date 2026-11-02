@@ -206,7 +206,23 @@ export interface GalatDenah {
   tingkat?: "galat" | "peringatan";
   /** Elemen lain yang terlibat (mis. bak yang dilayani derek), ikut disorot. */
   elemenTerkaitIds?: string[];
+  /**
+   * Kode aturan peringatan teknik (diisi periksaTeknik) — untuk logika
+   * (mis. 3D mewarnai kotak ruang bebas derek). `pesan` hanya untuk tampilan.
+   */
+  kode?: KodePeringatan;
 }
+
+/** Kode aturan periksaTeknik (spec v2 §5 aturan 1–7). */
+export type KodePeringatan =
+  | "ice-can-tidak-muat"
+  | "ice-can-sentuh-dasar"
+  | "brine-rendah"
+  | "derek-terlalu-rendah"
+  | "rel-tidak-melintasi-bak"
+  | "pipa-menembus-bak"
+  | "nh3-tertanam"
+  | "ujung-menggantung";
 
 // Kode perusahaan pabrik Es Balok yang punya modul Produksi.
 export type KodeProduksi = "pmpersada" | "pmpakis";

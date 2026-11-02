@@ -16,7 +16,7 @@ import { Box3, DoubleSide, ExtrudeGeometry, Path, Shape, ShapeGeometry, Vector3 
 import { lapisanElemen, type DenahDokumen, type DenahElemen, type PintuElemen } from "@/lib/produksi-denah";
 import { MawarAngin } from "@/components/produksi-denah/mawar-angin";
 import { formatMeter } from "@/components/produksi-denah/format";
-import { arahUtaraThree, batasElemen, derekTerlaluRendahIds, keThree, lubangPelat, sudutLayarUtara } from "./koordinat";
+import { arahUtaraThree, batasElemen, derekTerlaluRendah, keThree, lubangPelat, sudutLayarUtara } from "./koordinat";
 import { buatSumberDaya, Elemen3D, SumberDayaKonteks, TepiKotak, useSumberDaya } from "./elemen-3d";
 import type { Tampilan3DProps } from "./tampilan-3d";
 
@@ -39,6 +39,7 @@ const BATAS_GESER_PX = 4;
 const MAKS_LABEL_TERPILIH = 20;
 const MAP_KOSONG: ReadonlyMap<string, DenahElemen> = new Map();
 const PINTU_KOSONG: readonly PintuElemen[] = [];
+const SET_KOSONG: ReadonlySet<string> = new Set();
 
 interface HudHandle {
   atur(derajat: number): void;
@@ -108,7 +109,7 @@ function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, fokusId, o
   const elemenTampil = useMemo(() => dokumen.elemen.filter((e) => lapisanTampil.has(lapisanElemen(e))), [dokumen.elemen, lapisanTampil]);
   const byId = useMemo(() => new Map(dokumen.elemen.map((e) => [e.id, e])), [dokumen.elemen]);
   const daftarPintu = useMemo(() => elemenTampil.filter((e): e is PintuElemen => e.tipe === "pintu"), [elemenTampil]);
-  const derekRendah = useMemo(() => derekTerlaluRendahIds(peringatan), [peringatan]);
+  const derekRendah = useMemo(() => derekTerlaluRendah(peringatan), [peringatan]);
 
   const onKlik = useCallback(
     (elemenId: string, kolomId: string | null, ev: ThreeEvent<MouseEvent>) => {
@@ -143,7 +144,7 @@ function IsiAdegan({ dokumen, terpilihIds, lapisanTampil, peringatan, fokusId, o
           // agar memo Elemen3D (terutama bak dengan ribuan ice can) tetap efektif.
           byId={e.tipe === "derek" ? byId : MAP_KOSONG}
           daftarPintu={e.tipe === "dinding" ? daftarPintu : PINTU_KOSONG}
-          derekRendah={derekRendah.has(e.id)}
+          derekRendah={e.tipe === "derek" ? derekRendah : SET_KOSONG}
           onKlik={onKlik}
           onHover={onHover}
         />

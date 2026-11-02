@@ -4,7 +4,7 @@
 // tetap di validasiDenah). CLIENT-SAFE & murni: tanpa impor server.
 // Geometri memakai produksi-denah-geometri (sama dengan kanvas 2D & 3D).
 
-import { kotakElemen, type BakElemen, type DenahDokumen, type DenahElemen, type Fluida, type GalatDenah, type JalurElemen, type Titik3D } from "./produksi-denah";
+import { kotakElemen, type BakElemen, type DenahDokumen, type DenahElemen, type Fluida, type GalatDenah, type JalurElemen, type KodePeringatan, type Titik3D } from "./produksi-denah";
 import { garisRel, potongSegmenKotak, segmenJalur, segmenTertanam, tataBakMeter } from "./produksi-denah-geometri";
 
 /** Ruang bebas minimum antara dasar ice can terangkat dan bibir bak (aturan 3). */
@@ -30,12 +30,27 @@ function nama(e: DenahElemen): string {
   return e.nama.trim() || e.tipe;
 }
 
-function peringatan(elemenId: string, pesan: string, elemenTerkaitIds?: string[]): GalatDenah {
-  return elemenTerkaitIds ? { elemenId, pesan, tingkat: "peringatan", elemenTerkaitIds } : { elemenId, pesan, tingkat: "peringatan" };
+function peringatan(kode: KodePeringatan, elemenId: string, pesan: string, elemenTerkaitIds?: string[]): GalatDenah {
+  return elemenTerkaitIds ? { elemenId, pesan, tingkat: "peringatan", kode, elemenTerkaitIds } : { elemenId, pesan, tingkat: "peringatan", kode };
+}
+
+/**
+ * Rentang ruang bebas derek di atas bak (aturan 3): dari bibir bak
+ * (tataBakMeter) sampai bibir + can tertinggi aktif + RUANG_BEBAS_DEREK_M.
+ * null bila tidak ada kolom aktif. Dipakai juga oleh kotak ruang bebas 3D.
+ */
+export function ruangBebasDerekDibutuhkan(bak: BakElemen): { zBawah: number; zAtas: number } | null {
+  const t = tinggiCanAktif(bak);
+  if (t === null) return null;
+  return { zBawah: tataBakMeter(bak).bibirZ, zAtas: elevasiBebasDerekDibutuhkan(bak, t) };
+}
+
+function elevasiBebasDerekDibutuhkan(bak: BakElemen, tinggiCan: number): number {
+  return tataBakMeter(bak).bibirZ + tinggiCan + RUANG_BEBAS_DEREK_M;
 }
 
 /** Tinggi (m) ice can tertinggi di antara varian yang dipakai kolom aktif; null bila tidak ada kolom aktif. */
-function tinggiCanAktif(bak: BakElemen): number | null {
+export function tinggiCanAktif(bak: BakElemen): number | null {
   let maks: number | null = null;
   for (const k of bak.kolom) {
     if (k.nonaktif) continue;
@@ -52,10 +67,10 @@ function periksaBak(bak: BakElemen, hasil: GalatDenah[]): void {
 
   // 1. Ice can tidak muat di bak.
   if (t.butuhA > t.ruangA + EPS) {
-    hasil.push(peringatan(bak.id, `${n}: ${bak.kolom.length} kolom butuh ${meter(t.butuhA)}, ruang dalam ${meter(t.ruangA)} (kurang ${meter(t.butuhA - t.ruangA)}).`));
+    hasil.push(peringatan("ice-can-tidak-muat", bak.id, `${n}: ${bak.kolom.length} kolom butuh ${meter(t.butuhA)}, ruang dalam ${meter(t.ruangA)} (kurang ${meter(t.butuhA - t.ruangA)}).`));
   }
   if (t.butuhB > t.ruangB + EPS) {
-    hasil.push(peringatan(bak.id, `${n}: deret ice can terpanjang butuh ${meter(t.butuhB)}, ruang dalam ${meter(t.ruangB)} (kurang ${meter(t.butuhB - t.ruangB)}).`));
+    hasil.push(peringatan("ice-can-tidak-muat", bak.id, `${n}: deret ice can terpanjang butuh ${meter(t.butuhB)}, ruang dalam ${meter(t.ruangB)} (kurang ${meter(t.butuhB - t.ruangB)}).`));
   }
 
   // 2. Ice can vs kedalaman & brine (bibir can sejajar bibir bak).
@@ -63,12 +78,12 @@ function periksaBak(bak: BakElemen, hasil: GalatDenah[]): void {
   if (tinggiCan === null || !(tinggiCan > 0)) return;
   const dasarCan = t.bibirZ - tinggiCan;
   if (dasarCan < t.lantaiDalamZ - EPS) {
-    hasil.push(peringatan(bak.id, `${n}: ice can menyentuh dasar bak (dasar ice can ${elevasi(dasarCan)}, lantai dalam bak ${elevasi(t.lantaiDalamZ)}).`));
+    hasil.push(peringatan("ice-can-sentuh-dasar", bak.id, `${n}: ice can menyentuh dasar bak (dasar ice can ${elevasi(dasarCan)}, lantai dalam bak ${elevasi(t.lantaiDalamZ)}).`));
   }
   const rendam = Math.min(1, Math.max(0, (t.brineZ - dasarCan) / tinggiCan));
   if (rendam < RENDAM_MIN - EPS) {
     const persen = Math.floor(rendam * 100 + EPS);
-    hasil.push(peringatan(bak.id, `${n}: brine terlalu rendah, ice can hanya terendam ${persen}% (minimal ${Math.round(RENDAM_MIN * 100)}%).`));
+    hasil.push(peringatan("brine-rendah", bak.id, `${n}: brine terlalu rendah, ice can hanya terendam ${persen}% (minimal ${Math.round(RENDAM_MIN * 100)}%).`));
   }
 }
 
@@ -118,18 +133,18 @@ export function periksaTeknik(dok: DenahDokumen): GalatDenah[] {
       // 3. Derek terlalu rendah.
       const tinggiCan = tinggiCanAktif(bak);
       if (tinggiCan !== null) {
-        const butuh = bak.elevasiM + bak.tinggiM + tinggiCan + RUANG_BEBAS_DEREK_M;
+        const butuh = elevasiBebasDerekDibutuhkan(bak, tinggiCan);
         if (kaitZ < butuh - EPS) {
           const kurangCm = Math.max(1, Math.round((butuh - kaitZ) * 100));
           hasil.push(
-            peringatan(e.id, `${nama(e)}: kait terlalu rendah untuk ${nama(bak)} — dasar kait ${elevasi(kaitZ)}, butuh ${elevasi(butuh)} (kurang ${kurangCm} cm).`, [bak.id])
+            peringatan("derek-terlalu-rendah", e.id, `${nama(e)}: kait terlalu rendah untuk ${nama(bak)} — dasar kait ${elevasi(kaitZ)}, butuh ${elevasi(butuh)} (kurang ${kurangCm} cm).`, [bak.id])
           );
         }
       }
       // 4. Rel tidak melintasi bak yang dilayaninya (2D).
       const k = kotakElemen(bak);
       if (!potongSegmenKotak({ ...rel.a, z: 0 }, { ...rel.b, z: 0 }, { ...k, zBawah: 0, zAtas: 0 })) {
-        hasil.push(peringatan(e.id, `${nama(e)}: rel tidak melintasi bak ${nama(bak)} yang dilayaninya.`, [bak.id]));
+        hasil.push(peringatan("rel-tidak-melintasi-bak", e.id, `${nama(e)}: rel tidak melintasi bak ${nama(bak)} yang dilayaninya.`, [bak.id]));
       }
     }
   }
@@ -153,13 +168,13 @@ export function periksaTeknik(dok: DenahDokumen): GalatDenah[] {
       };
       if (kotak.w <= 0 || kotak.h <= 0 || kotak.zAtas <= kotak.zBawah) continue;
       if (segmen.some((s) => potongSegmenKotak(s.a, s.b, kotak))) {
-        hasil.push(peringatan(j.id, `${jenis} ${nama(j)} menembus bak ${nama(bak)} padahal tidak berujung di bak itu.`, [bak.id]));
+        hasil.push(peringatan("pipa-menembus-bak", j.id, `${jenis} ${nama(j)} menembus bak ${nama(bak)} padahal tidak berujung di bak itu.`, [bak.id]));
       }
     }
 
     // 6. NH3 tertanam di beton.
     if (j.jenis === "pipa" && j.fluida && FLUIDA_NH3.has(j.fluida) && segmen.some((s) => segmenTertanam(s, dok))) {
-      hasil.push(peringatan(j.id, `Pipa NH3 ${nama(j)} tertanam di beton — pipa amonia sebaiknya terlihat untuk inspeksi.`));
+      hasil.push(peringatan("nh3-tertanam", j.id, `Pipa NH3 ${nama(j)} tertanam di beton — pipa amonia sebaiknya terlihat untuk inspeksi.`));
     }
 
     // 7. Ujung menggantung.
@@ -170,7 +185,7 @@ export function periksaTeknik(dok: DenahDokumen): GalatDenah[] {
     for (const [sebut, p, ref] of ujung) {
       if (ref) continue;
       if (bertemuJalurLain(p, j, daftarJalur)) continue;
-      hasil.push(peringatan(j.id, `Ujung ${sebut} ${jenis.toLowerCase()} ${nama(j)} menggantung (tidak tersambung ke elemen atau jalur lain).`));
+      hasil.push(peringatan("ujung-menggantung", j.id, `Ujung ${sebut} ${jenis.toLowerCase()} ${nama(j)} menggantung (tidak tersambung ke elemen atau jalur lain).`));
     }
   }
 

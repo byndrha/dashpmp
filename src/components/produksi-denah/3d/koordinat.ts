@@ -11,7 +11,7 @@
 
 import { kotakElemen, type BakElemen, type DenahDokumen, type DenahElemen, type DindingElemen, type GalatDenah, type JalurElemen, type PintuElemen, type Titik, type Varian } from "@/lib/produksi-denah";
 import { keDunia, tataBakMeter } from "@/lib/produksi-denah-geometri";
-import { RUANG_BEBAS_DEREK_M } from "@/lib/produksi-denah-teknik";
+import { ruangBebasDerekDibutuhkan } from "@/lib/produksi-denah-teknik";
 
 export type Vek3 = [number, number, number];
 
@@ -72,35 +72,32 @@ export function iceCanBak(bak: BakElemen): Record<Varian, InstansIceCan[]> {
   return hasil;
 }
 
-/** Tinggi (m) can tertinggi di kolom aktif; null bila tidak ada kolom aktif. */
-function tinggiCanAktif(bak: BakElemen): number | null {
-  let maks: number | null = null;
-  for (const k of bak.kolom) {
-    if (k.nonaktif) continue;
-    const t = bak.iceCan[k.varian].tinggiMm / 1000;
-    maks = maks === null ? t : Math.max(maks, t);
-  }
-  return maks;
-}
-
 /**
- * Kotak ruang bebas derek di atas bak (aturan 3): dari bibir bak setinggi
- * can tertinggi + RUANG_BEBAS_DEREK_M. null bila tidak ada kolom aktif.
+ * Kotak ruang bebas derek di atas bak (aturan 3): tapak bak × rentang dari
+ * ruangBebasDerekDibutuhkan (fungsi yang sama dengan periksaTeknik, jadi
+ * kotak 3D dan aturan tidak bisa berbeda). null bila tidak ada kolom aktif.
  */
 export function ruangBebasDerek(bak: BakElemen): { kotak: Kotak2D; zBawah: number; zAtas: number } | null {
-  const t = tinggiCanAktif(bak);
-  if (t === null || !(t > 0)) return null;
-  const bibir = bak.elevasiM + bak.tinggiM;
-  return { kotak: kotakElemen(bak), zBawah: bibir, zAtas: bibir + t + RUANG_BEBAS_DEREK_M };
+  const r = ruangBebasDerekDibutuhkan(bak);
+  return r ? { kotak: kotakElemen(bak), ...r } : null;
+}
+
+/** Kunci pasangan derek–bak untuk derekTerlaluRendah. */
+export function kunciDerekBak(derekId: string, bakId: string): string {
+  return `${derekId}:${bakId}`;
 }
 
 /**
- * ID derek yang terkena peringatan aturan 3 ("kait terlalu rendah") dari
- * periksaTeknik — sumber tunggal hijau/merah kotak ruang bebas.
+ * Pasangan `${derekId}:${bakId}` yang terkena aturan 3 (kode
+ * "derek-terlalu-rendah") dari periksaTeknik — sumber tunggal merah/hijau
+ * kotak ruang bebas, PER BAK (satu derek bisa melayani beberapa bak).
  */
-export function derekTerlaluRendahIds(peringatan: readonly GalatDenah[]): Set<string> {
+export function derekTerlaluRendah(peringatan: readonly GalatDenah[]): Set<string> {
   const s = new Set<string>();
-  for (const g of peringatan) if (g.elemenId && g.pesan.includes("kait terlalu rendah")) s.add(g.elemenId);
+  for (const g of peringatan) {
+    if (g.kode !== "derek-terlalu-rendah" || !g.elemenId) continue;
+    for (const bakId of g.elemenTerkaitIds ?? []) s.add(kunciDerekBak(g.elemenId, bakId));
+  }
   return s;
 }
 

@@ -5,7 +5,8 @@ import { keDunia, tataBakMeter } from "../produksi-denah-geometri";
 import { periksaTeknik } from "../produksi-denah-teknik";
 import {
   balokAntara,
-  derekTerlaluRendahIds,
+  derekTerlaluRendah,
+  kunciDerekBak,
   iceCanBak,
   keThree,
   kotakLokalKeDunia,
@@ -121,27 +122,33 @@ test("ruangBebasDerek: dari bibir bak setinggi can tertinggi aktif + 0,20 m", ()
   assert.equal(ruangBebasDerek({ ...b, kolom: b.kolom.map((k) => ({ ...k, nonaktif: true })) }), null);
 });
 
-test("derekTerlaluRendahIds: hanya derek dengan peringatan aturan 3 dari periksaTeknik", () => {
-  const b = bak();
-  const derek = (id: string, elevasiM: number): DerekElemen => ({
+test("derekTerlaluRendah: per pasangan derek–bak dari kode aturan 3 periksaTeknik", () => {
+  // Bak A dangkal (bibir +0,30), bak B lebih tinggi (bibir +1,30); satu derek melayani keduanya.
+  const a = bak({ id: "A" });
+  const b = buatBak(10, 24, { id: "B", w: 4, h: 2, elevasiM: 0.3, kolom: buatKolom(3, { varian: "kecil", jumlahIceCan: 4 }) });
+  const derek = (id: string, elevasiM: number, bakIds: string[]): DerekElemen => ({
     id,
     tipe: "derek",
     nama: id,
-    x: 9,
-    y: 21,
-    w: 6,
-    h: 0.3,
+    x: 11,
+    y: 19,
+    w: 0.3,
+    h: 8,
     rotasi: 0,
     elevasiM,
     tinggiM: 0.3,
     tinggiKaitM: 0.8,
-    titikAwal: { x: 9, y: 21 },
-    titikAkhir: { x: 15, y: 21 },
-    bakIds: [b.id],
+    titikAwal: { x: 11, y: 19 },
+    titikAkhir: { x: 11, y: 27 },
+    bakIds,
   });
-  const dok: DenahDokumen = { ...denahKosong(), elemen: [b, derek("rendah", 1.5), derek("tinggi", 5)] };
-  const ids = derekTerlaluRendahIds(periksaTeknik(dok));
-  assert.deepEqual([...ids], ["rendah"]);
+  // Kait = 2,8 − 0,8 = 2,0: A butuh 0,3+0,75+0,2 = 1,25 (lolos), B butuh 2,25 (gagal).
+  const dok: DenahDokumen = { ...denahKosong(), elemen: [a, b, derek("d1", 2.8, ["A", "B"]), derek("d2", 5, ["A", "B"])] };
+  const hasil = periksaTeknik(dok);
+  assert.ok(hasil.some((g) => g.kode === "derek-terlalu-rendah"));
+  assert.deepEqual([...derekTerlaluRendah(hasil)], [kunciDerekBak("d1", "B")]);
+  // pesan hanya tampilan: peringatan lain tanpa kode yang cocok diabaikan.
+  assert.equal(derekTerlaluRendah([{ elemenId: "d1", pesan: "kait terlalu rendah", tingkat: "peringatan", elemenTerkaitIds: ["A"] }]).size, 0);
 });
 
 test("sudutLayarUtara: proyeksi arah utara ke layar → derajat dari atas, searah jarum jam", () => {

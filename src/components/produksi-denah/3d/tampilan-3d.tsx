@@ -44,7 +44,10 @@ function cekWebGL(): boolean {
   if (webglTersedia === null) {
     try {
       const c = document.createElement("canvas");
-      webglTersedia = !!(c.getContext("webgl2") ?? c.getContext("webgl"));
+      const gl = c.getContext("webgl2") ?? c.getContext("webgl");
+      webglTersedia = !!gl;
+      // Lepas konteks uji agar tidak memakan jatah konteks WebGL browser.
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
     } catch {
       webglTersedia = false;
     }

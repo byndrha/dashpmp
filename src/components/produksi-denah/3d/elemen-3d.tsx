@@ -30,7 +30,7 @@ import { Html } from "@react-three/drei";
 import { kotakElemen, type BakElemen, type DenahElemen, type DerekElemen, type DindingElemen, type JalurElemen, type KategoriMesin, type PintuElemen, type TangkiElemen, type Varian } from "@/lib/produksi-denah";
 import { garisRel, segmenJalur, tataBakMeter } from "@/lib/produksi-denah-geometri";
 import { WARNA_AIR, WARNA_BETON, WARNA_MESIN, warnaJalur } from "@/components/produksi-denah/warna";
-import { balokAntara, diameterVisualM, iceCanBak, keThree, kotakThree, potongDinding, ruangBebasDerek, type Kotak2D, type Vek3 } from "./koordinat";
+import { balokAntara, diameterVisualM, iceCanBak, keThree, kunciDerekBak, kotakThree, potongDinding, ruangBebasDerek, type Kotak2D, type Vek3 } from "./koordinat";
 
 // ---------- Sumber daya (material + geometri dasar) ----------
 
@@ -219,12 +219,14 @@ function Bak3D({ bak, onKlikKolom }: { bak: BakElemen; onKlikKolom: (kolomId: st
 
 const LEBAR_REL = 0.3;
 
-function Derek3D({ derek, byId, terlaluRendah }: { derek: DerekElemen; byId: ReadonlyMap<string, DenahElemen>; terlaluRendah: boolean }) {
+function Derek3D({ derek, byId, terlaluRendah }: { derek: DerekElemen; byId: ReadonlyMap<string, DenahElemen>; terlaluRendah: ReadonlySet<string> }) {
   const { geo, materi } = useSumberDaya();
   const rel = garisRel(derek);
   const b = balokAntara(rel.a, rel.b);
   const zRel = derek.elevasiM;
-  const kaitZ = Math.min(zRel - 0.3, zRel - derek.tinggiKaitM);
+  // Persis nilai yang diperiksa periksaTeknik (aturan 3).
+  const kaitZ = zRel - derek.tinggiKaitM;
+  const atasTali = zRel - 0.25; // dasar troli
   const tinggiBalok = Math.max(derek.tinggiM, 0.05);
   const bebas = derek.bakIds.flatMap((id) => {
     const bak = byId.get(id);
@@ -239,11 +241,13 @@ function Derek3D({ derek, byId, terlaluRendah }: { derek: DerekElemen; byId: Rea
       )}
       {/* Troli di tengah rel, tali, dan blok kait pada elevasi rel − tinggi kait. */}
       <Kotak pusat={keThree(b.pusat.x, b.pusat.y, zRel - 0.125)} ukuran={[0.5, 0.25, 0.5]} materi={materi.troli} />
-      <Kotak pusat={keThree(b.pusat.x, b.pusat.y, (kaitZ + 0.15 + zRel - 0.25) / 2)} ukuran={[0.03, Math.max(zRel - 0.25 - (kaitZ + 0.15), 0.001), 0.03]} materi={materi.kait} />
+      {atasTali > kaitZ + 0.15 && (
+        <Kotak pusat={keThree(b.pusat.x, b.pusat.y, (kaitZ + 0.15 + atasTali) / 2)} ukuran={[0.03, atasTali - (kaitZ + 0.15), 0.03]} materi={materi.kait} />
+      )}
       <Kotak pusat={keThree(b.pusat.x, b.pusat.y, kaitZ + 0.075)} ukuran={[0.2, 0.15, 0.2]} materi={materi.kait} />
       {/* Kotak ruang bebas per bak yang dilayani: merah bila aturan 3 aktif. */}
       {bebas.map((r) => (
-        <KotakZ key={r.id} kotak={r.kotak} zBawah={r.zBawah} zAtas={r.zAtas} materi={terlaluRendah ? materi.bebasGagal : materi.bebasOk} tembus />
+        <KotakZ key={r.id} kotak={r.kotak} zBawah={r.zBawah} zAtas={r.zAtas} materi={terlaluRendah.has(kunciDerekBak(derek.id, r.id)) ? materi.bebasGagal : materi.bebasOk} tembus />
       ))}
     </group>
   );
@@ -313,7 +317,8 @@ export interface Elemen3DProps {
   e: DenahElemen;
   byId: ReadonlyMap<string, DenahElemen>;
   daftarPintu: readonly PintuElemen[];
-  derekRendah: boolean;
+  /** Pasangan derek–bak (kunciDerekBak) yang terkena aturan 3. */
+  derekRendah: ReadonlySet<string>;
   onKlik: (elemenId: string, kolomId: string | null, ev: ThreeEvent<MouseEvent>) => void;
   onHover: (elemenId: string | null) => void;
 }
