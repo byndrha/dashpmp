@@ -1,0 +1,4934 @@
+{
+  "tag": "[DASHPMP-BACKFILL] 2026-11-03 GIT-OKT [PROVISIONAL]",
+  "rencana": [
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110405",
+      "voucherNo": "MKE/SR/000019/2026-10/003/001",
+      "transDate": "2026-10-03T09:46:42.207Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0128",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110470",
+      "voucherNo": "MKE/SR/000083/2026-10/003/001",
+      "transDate": "2026-10-18T08:37:00.040Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01622",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110501",
+      "voucherNo": "MKE/SR/000114/2026-10/003/001",
+      "transDate": "2026-10-28T08:21:35.023Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01122",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110462",
+      "voucherNo": "MKE/SR/000075/2026-10/003/001",
+      "transDate": "2026-10-17T08:20:19.897Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01839",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110477",
+      "voucherNo": "MKE/SR/000090/2026-10/003/001",
+      "transDate": "2026-10-18T08:52:08.263Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01487",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110423",
+      "voucherNo": "MKE/SR/000037/2026-10/003/001",
+      "transDate": "2026-10-08T15:08:09.893Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01862",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110407",
+      "voucherNo": "MKE/SR/000021/2026-10/003/001",
+      "transDate": "2026-10-04T09:49:36.243Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01622",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2312.1082343114,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2312.1082343114,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2312.1082343114
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110451",
+      "voucherNo": "MKE/SR/000064/2026-10/003/001",
+      "transDate": "2026-10-13T09:41:56.040Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01484",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2642.4094106416,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2642.4094106416,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2642.4094106416
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110441",
+      "voucherNo": "MKE/SR/000054/2026-10/003/001",
+      "transDate": "2026-10-11T09:44:30.670Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01639",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3634.6227849825,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3634.6227849825,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3634.6227849825
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110439",
+      "voucherNo": "MKE/SR/000052/2026-10/003/001",
+      "transDate": "2026-10-11T09:42:29.877Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01832",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110388",
+      "voucherNo": "MKE/SR/000003/2026-10/003/001",
+      "transDate": "2026-10-01T08:41:37.420Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01745",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110429",
+      "voucherNo": "MKE/SR/000042/2026-10/003/001",
+      "transDate": "2026-10-09T08:11:48.837Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01322",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110468",
+      "voucherNo": "MKE/SR/000081/2026-10/003/001",
+      "transDate": "2026-10-18T08:35:43.323Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110389",
+      "voucherNo": "MKE/SR/000004/2026-10/003/001",
+      "transDate": "2026-10-02T08:42:19.510Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01382",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110481",
+      "voucherNo": "MKE/SR/000094/2026-10/003/001",
+      "transDate": "2026-10-18T08:56:33.363Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01840",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110494",
+      "voucherNo": "MKE/SR/000107/2026-10/003/001",
+      "transDate": "2026-10-24T09:28:01.187Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01683",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6937.6345482845,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6937.6345482845,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6937.6345482845
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110402",
+      "voucherNo": "MKE/SR/000017/2026-10/003/001",
+      "transDate": "2026-10-03T09:01:20.203Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01390",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 17178.280859871003,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 17178.280859871003,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 17178.280859871003
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110500",
+      "voucherNo": "MKE/SR/000113/2026-10/003/001",
+      "transDate": "2026-10-28T08:19:00.720Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01459",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110398",
+      "voucherNo": "MKE/SR/000013/2026-10/003/001",
+      "transDate": "2026-10-03T08:56:10.697Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01733",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110496",
+      "voucherNo": "MKE/SR/000109/2026-10/003/001",
+      "transDate": "2026-10-26T09:51:10.680Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01442",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110391",
+      "voucherNo": "MKE/SR/000006/2026-10/003/001",
+      "transDate": "2026-10-01T08:47:36.310Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01539",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2312.1082343114,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2312.1082343114,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2312.1082343114
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110465",
+      "voucherNo": "MKE/SR/000078/2026-10/003/001",
+      "transDate": "2026-10-18T08:33:42.483Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01284",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110436",
+      "voucherNo": "MKE/SR/000049/2026-10/003/001",
+      "transDate": "2026-10-11T09:40:08.490Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01772",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110408",
+      "voucherNo": "MKE/SR/000022/2026-10/003/001",
+      "transDate": "2026-10-05T09:50:36.710Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01743",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110472",
+      "voucherNo": "MKE/SR/000085/2026-10/003/001",
+      "transDate": "2026-10-18T08:39:02.063Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01454",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110467",
+      "voucherNo": "MKE/SR/000080/2026-10/003/001",
+      "transDate": "2026-10-18T08:35:04.563Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01784",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 23121.082343114,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 23121.082343114,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 23121.082343114
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110430",
+      "voucherNo": "MKE/SR/000043/2026-10/003/001",
+      "transDate": "2026-10-10T08:13:57.700Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01344",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3185.292150705,
+      "lines": [
+        {
+          "accountNo": "14013.1",
+          "debit": 3185.292150705,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3185.292150705
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110475",
+      "voucherNo": "MKE/SR/000088/2026-10/003/001",
+      "transDate": "2026-10-18T08:45:58.603Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01773",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110478",
+      "voucherNo": "MKE/SR/000091/2026-10/003/001",
+      "transDate": "2026-10-18T08:52:56.883Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01290",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110433",
+      "voucherNo": "MKE/SR/000046/2026-10/003/001",
+      "transDate": "2026-10-11T09:01:00.533Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01642",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110424",
+      "voucherNo": "MKE/SR/000038/2026-10/003/001",
+      "transDate": "2026-10-09T08:16:24.153Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01637",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110450",
+      "voucherNo": "MKE/SR/000063/2026-10/003/001",
+      "transDate": "2026-10-13T09:40:53.153Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01592",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110438",
+      "voucherNo": "MKE/SR/000051/2026-10/003/001",
+      "transDate": "2026-10-11T09:41:40.270Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01773",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110411",
+      "voucherNo": "MKE/SR/000025/2026-10/003/001",
+      "transDate": "2026-10-05T14:26:13.253Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01885",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 5945.4211739436005,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 5945.4211739436005,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 5945.4211739436005
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110412",
+      "voucherNo": "MKE/SR/000026/2026-10/003/001",
+      "transDate": "2026-10-05T14:27:21.897Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01884",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110442",
+      "voucherNo": "MKE/SR/000055/2026-10/003/001",
+      "transDate": "2026-10-12T09:55:31.577Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01454",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110390",
+      "voucherNo": "MKE/SR/000005/2026-10/003/001",
+      "transDate": "2026-10-01T08:46:51.273Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110495",
+      "voucherNo": "MKE/SR/000108/2026-10/003/001",
+      "transDate": "2026-10-26T09:50:06.387Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01867",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 9910.345135256299,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 9910.345135256299,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 9910.345135256299
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110414",
+      "voucherNo": "MKE/SR/000028/2026-10/003/001",
+      "transDate": "2026-10-06T08:51:20.173Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01609",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110427",
+      "voucherNo": "MKE/SR/000040/2026-10/003/001",
+      "transDate": "2026-10-09T08:07:24.937Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01290",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110437",
+      "voucherNo": "MKE/SR/000050/2026-10/003/001",
+      "transDate": "2026-10-11T09:40:50.680Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01772",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110482",
+      "voucherNo": "MKE/SR/000095/2026-10/003/001",
+      "transDate": "2026-10-21T10:19:37.113Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110428",
+      "voucherNo": "MKE/SR/000041/2026-10/003/001",
+      "transDate": "2026-10-09T08:10:57.217Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01857",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110476",
+      "voucherNo": "MKE/SR/000089/2026-10/003/001",
+      "transDate": "2026-10-18T08:51:31.023Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01772",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110435",
+      "voucherNo": "MKE/SR/000048/2026-10/003/001",
+      "transDate": "2026-10-12T09:38:26.527Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01649",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110498",
+      "voucherNo": "MKE/SR/000111/2026-10/003/001",
+      "transDate": "2026-10-27T09:03:54.570Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01897",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110466",
+      "voucherNo": "MKE/SR/000079/2026-10/003/001",
+      "transDate": "2026-10-18T08:34:17.900Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01658",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110452",
+      "voucherNo": "MKE/SR/000065/2026-10/003/001",
+      "transDate": "2026-10-14T09:46:23.920Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01752",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110499",
+      "voucherNo": "MKE/SR/000112/2026-10/003/001",
+      "transDate": "2026-10-28T15:22:43.773Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110460",
+      "voucherNo": "MKE/SR/000073/2026-10/003/001",
+      "transDate": "2026-10-16T08:19:29.987Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01422",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110392",
+      "voucherNo": "MKE/SR/000007/2026-10/003/001",
+      "transDate": "2026-10-02T15:01:39.533Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01869",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110394",
+      "voucherNo": "MKE/SR/000009/2026-10/003/001",
+      "transDate": "2026-10-03T08:52:30.777Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01720",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110497",
+      "voucherNo": "MKE/SR/000110/2026-10/003/001",
+      "transDate": "2026-10-26T08:12:25.997Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01839",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2972.7105869718002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2972.7105869718002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2972.7105869718002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110504",
+      "voucherNo": "MKE/SR/000117/2026-10/003/001",
+      "transDate": "2026-10-29T08:47:48.680Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01841",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110406",
+      "voucherNo": "MKE/SR/000020/2026-10/003/001",
+      "transDate": "2026-10-03T09:47:48.963Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01720",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110502",
+      "voucherNo": "MKE/SR/000115/2026-10/003/001",
+      "transDate": "2026-10-29T08:22:26.167Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01652",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110493",
+      "voucherNo": "MKE/SR/000106/2026-10/003/001",
+      "transDate": "2026-10-24T08:58:52.990Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01652",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2642.4094106416,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2642.4094106416,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2642.4094106416
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110484",
+      "voucherNo": "MKE/SR/000097/2026-10/003/001",
+      "transDate": "2026-10-21T15:59:48.963Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01125",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 7927.228231924801,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 7927.228231924801,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 7927.228231924801
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110400",
+      "voucherNo": "MKE/SR/000015/2026-10/003/001",
+      "transDate": "2026-10-03T08:59:54.150Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01841",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3963.6141159624003,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3963.6141159624003,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3963.6141159624003
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110404",
+      "voucherNo": "MKE/SR/000018/2026-10/003/001",
+      "transDate": "2026-10-03T09:45:49.587Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01642",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110506",
+      "voucherNo": "MKE/SR/000119/2026-10/003/001",
+      "transDate": "2026-10-29T08:50:28.117Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01881",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110413",
+      "voucherNo": "MKE/SR/000027/2026-10/003/001",
+      "transDate": "2026-10-05T11:30:24.210Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01573",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110489",
+      "voucherNo": "MKE/SR/000102/2026-10/003/001",
+      "transDate": "2026-10-22T08:38:42.680Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01646",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110446",
+      "voucherNo": "MKE/SR/000059/2026-10/003/001",
+      "transDate": "2026-10-12T08:16:00.757Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01170",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110486",
+      "voucherNo": "MKE/SR/000099/2026-10/003/001",
+      "transDate": "2026-10-22T15:39:54.913Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01778",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 4624.2164686228,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 4624.2164686228,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 4624.2164686228
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110454",
+      "voucherNo": "MKE/SR/000067/2026-10/003/001",
+      "transDate": "2026-10-14T08:10:13.843Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01565",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110419",
+      "voucherNo": "MKE/SR/000033/2026-10/003/001",
+      "transDate": "2026-10-07T09:08:41.110Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01562",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 8257.529408255,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 8257.529408255,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 8257.529408255
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110410",
+      "voucherNo": "MKE/SR/000024/2026-10/003/001",
+      "transDate": "2026-10-04T10:05:34.007Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01630",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110453",
+      "voucherNo": "MKE/SR/000066/2026-10/003/001",
+      "transDate": "2026-10-14T09:48:09.623Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01720",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110393",
+      "voucherNo": "MKE/SR/000008/2026-10/003/001",
+      "transDate": "2026-10-02T08:44:24.490Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01857",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110444",
+      "voucherNo": "MKE/SR/000057/2026-10/003/001",
+      "transDate": "2026-10-12T15:29:12.150Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01678",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110440",
+      "voucherNo": "MKE/SR/000053/2026-10/003/001",
+      "transDate": "2026-10-11T09:43:17.930Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01707",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110492",
+      "voucherNo": "MKE/SR/000105/2026-10/003/001",
+      "transDate": "2026-10-23T14:10:58.203Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01867",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6938.9443936348,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6938.9443936348,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6938.9443936348
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110480",
+      "voucherNo": "MKE/SR/000093/2026-10/003/001",
+      "transDate": "2026-10-18T08:55:19.593Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 16515.05881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 16515.05881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 16515.05881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110483",
+      "voucherNo": "MKE/SR/000096/2026-10/003/001",
+      "transDate": "2026-10-21T10:21:09.200Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01883",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110386",
+      "voucherNo": "MKE/SR/000001/2026-10/003/001",
+      "transDate": "2026-10-01T08:39:58.920Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01428",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110491",
+      "voucherNo": "MKE/SR/000104/2026-10/003/001",
+      "transDate": "2026-10-23T12:59:22.257Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01487",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110456",
+      "voucherNo": "MKE/SR/000069/2026-10/003/001",
+      "transDate": "2026-10-14T08:11:45.843Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01484",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110396",
+      "voucherNo": "MKE/SR/000011/2026-10/003/001",
+      "transDate": "2026-10-03T08:55:05.283Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01840",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110421",
+      "voucherNo": "MKE/SR/000035/2026-10/003/001",
+      "transDate": "2026-10-07T08:14:26.947Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01427",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110443",
+      "voucherNo": "MKE/SR/000056/2026-10/003/001",
+      "transDate": "2026-10-12T09:56:53.523Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110431",
+      "voucherNo": "MKE/SR/000044/2026-10/003/001",
+      "transDate": "2026-10-10T08:57:59.450Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01797",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110417",
+      "voucherNo": "MKE/SR/000031/2026-10/003/001",
+      "transDate": "2026-10-07T09:05:35.177Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0136",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110415",
+      "voucherNo": "MKE/SR/000029/2026-10/003/001",
+      "transDate": "2026-10-06T08:52:18.483Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01284",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110503",
+      "voucherNo": "MKE/SR/000116/2026-10/003/001",
+      "transDate": "2026-10-29T08:46:10.457Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01778",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110418",
+      "voucherNo": "MKE/SR/000032/2026-10/003/001",
+      "transDate": "2026-10-07T09:07:53.073Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01622",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2312.1082343114,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2312.1082343114,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2312.1082343114
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110449",
+      "voucherNo": "MKE/SR/000062/2026-10/003/001",
+      "transDate": "2026-10-13T08:38:26.043Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01853",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110409",
+      "voucherNo": "MKE/SR/000023/2026-10/003/001",
+      "transDate": "2026-10-04T09:51:19.567Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01758",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110458",
+      "voucherNo": "MKE/SR/000071/2026-10/003/001",
+      "transDate": "2026-10-15T12:41:42.360Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01391",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110507",
+      "voucherNo": "MKE/SR/000120/2026-10/003/001",
+      "transDate": "2026-10-31T15:37:06.860Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01391",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2312.1082343114,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2312.1082343114,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2312.1082343114
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110422",
+      "voucherNo": "MKE/SR/000036/2026-10/003/001",
+      "transDate": "2026-10-07T08:15:24.700Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01707",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110479",
+      "voucherNo": "MKE/SR/000092/2026-10/003/001",
+      "transDate": "2026-10-18T08:53:35.533Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01579",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110401",
+      "voucherNo": "MKE/SR/000016/2026-10/003/001",
+      "transDate": "2026-10-03T09:00:28.277Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01539",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2972.7105869718002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2972.7105869718002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2972.7105869718002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110420",
+      "voucherNo": "MKE/SR/000034/2026-10/003/001",
+      "transDate": "2026-10-07T08:13:27.703Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01734",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110416",
+      "voucherNo": "MKE/SR/000030/2026-10/003/001",
+      "transDate": "2026-10-06T08:54:12.620Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01707",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110469",
+      "voucherNo": "MKE/SR/000082/2026-10/003/001",
+      "transDate": "2026-10-18T08:36:21.123Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01422",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110434",
+      "voucherNo": "MKE/SR/000047/2026-10/003/001",
+      "transDate": "2026-10-11T09:01:39.723Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01132",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110432",
+      "voucherNo": "MKE/SR/000045/2026-10/003/001",
+      "transDate": "2026-10-10T08:59:54.130Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01487",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110471",
+      "voucherNo": "MKE/SR/000084/2026-10/003/001",
+      "transDate": "2026-10-18T08:38:23.090Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01457",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 9909.035289906,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 9909.035289906,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 9909.035289906
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110399",
+      "voucherNo": "MKE/SR/000014/2026-10/003/001",
+      "transDate": "2026-10-03T08:56:41.973Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01733",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110464",
+      "voucherNo": "MKE/SR/000077/2026-10/003/001",
+      "transDate": "2026-10-18T08:32:48.843Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01117",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110505",
+      "voucherNo": "MKE/SR/000118/2026-10/003/001",
+      "transDate": "2026-10-29T08:48:25.097Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 4954.517644953,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 4954.517644953,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 4954.517644953
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110455",
+      "voucherNo": "MKE/SR/000068/2026-10/003/001",
+      "transDate": "2026-10-14T08:11:07.517Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01558",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 4954.517644953,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 4954.517644953,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 4954.517644953
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110387",
+      "voucherNo": "MKE/SR/000002/2026-10/003/001",
+      "transDate": "2026-10-01T08:40:57.507Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0184",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 4954.517644953,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 4954.517644953,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 4954.517644953
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110459",
+      "voucherNo": "MKE/SR/000072/2026-10/003/001",
+      "transDate": "2026-10-16T12:43:12.897Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01649",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110397",
+      "voucherNo": "MKE/SR/000012/2026-10/003/001",
+      "transDate": "2026-10-03T08:55:35.553Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01132",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 5284.8188212832,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 5284.8188212832,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 5284.8188212832
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110463",
+      "voucherNo": "MKE/SR/000076/2026-10/003/001",
+      "transDate": "2026-10-17T08:22:51.847Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01391",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110487",
+      "voucherNo": "MKE/SR/000100/2026-10/003/001",
+      "transDate": "2026-10-22T08:34:52.810Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01408",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2972.7105869718002,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2972.7105869718002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2972.7105869718002
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110445",
+      "voucherNo": "MKE/SR/000058/2026-10/003/001",
+      "transDate": "2026-10-12T08:14:33.090Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01655",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110395",
+      "voucherNo": "MKE/SR/000010/2026-10/003/001",
+      "transDate": "2026-10-03T08:54:18.720Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01392",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 8257.529408255,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 8257.529408255,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 8257.529408255
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110473",
+      "voucherNo": "MKE/SR/000086/2026-10/003/001",
+      "transDate": "2026-10-18T08:43:32.740Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01573",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2312.1082343114,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 2312.1082343114,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2312.1082343114
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110474",
+      "voucherNo": "MKE/SR/000087/2026-10/003/001",
+      "transDate": "2026-10-18T08:44:29.313Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01690",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1326.444086722,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1326.444086722,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1326.444086722
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110457",
+      "voucherNo": "MKE/SR/000070/2026-10/003/001",
+      "transDate": "2026-10-14T08:12:32.417Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01861",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 8257.529408255,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 8257.529408255,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 8257.529408255
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110490",
+      "voucherNo": "MKE/SR/000103/2026-10/003/001",
+      "transDate": "2026-10-22T08:39:49.303Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01476",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110488",
+      "voucherNo": "MKE/SR/000101/2026-10/003/001",
+      "transDate": "2026-10-22T08:37:15.143Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01844",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 9909.035289906,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 9909.035289906,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 9909.035289906
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110448",
+      "voucherNo": "MKE/SR/000061/2026-10/003/001",
+      "transDate": "2026-10-13T08:37:15.493Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01207",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110447",
+      "voucherNo": "MKE/SR/000060/2026-10/003/001",
+      "transDate": "2026-10-12T08:19:54.573Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01639",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3633.3129396322,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 3633.3129396322,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3633.3129396322
+        }
+      ]
+    },
+    {
+      "kelas": "SR",
+      "type": "SALESRETURN",
+      "id": "0110485",
+      "voucherNo": "MKE/SR/000098/2026-10/003/001",
+      "transDate": "2026-10-21T16:01:45.330Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "14013",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01237781",
+      "voucherNo": "MKE/SI/000394/2026-10/003/001",
+      "transDate": "2026-10-02T02:11:10.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01869",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01237784",
+      "voucherNo": "MKE/SI/000397/2026-10/003/001",
+      "transDate": "2026-10-02T13:49:10.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01857",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 9248.4329372456,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 9248.4329372456,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 9248.4329372456
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238232",
+      "voucherNo": "MKE/SI/000845/2026-10/003/001",
+      "transDate": "2026-10-03T13:22:44.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0128",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 12221.143524217401,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 12221.143524217401,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 12221.143524217401
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238390",
+      "voucherNo": "MKE/SI/001003/2026-10/003/001",
+      "transDate": "2026-10-05T02:54:00.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01885",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2972.7105869718002,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2972.7105869718002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2972.7105869718002
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238631",
+      "voucherNo": "MKE/SI/001244/2026-10/003/001",
+      "transDate": "2026-10-06T06:33:16.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01284",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239924",
+      "voucherNo": "MKE/SI/002537/2026-10/003/001",
+      "transDate": "2026-10-13T03:48:42.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01207",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 5286.1286666335,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 5286.1286666335,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 5286.1286666335
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240322",
+      "voucherNo": "MKE/SI/002935/2026-10/003/001",
+      "transDate": "2026-10-15T12:34:55.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01391",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 7927.228231924801,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 7927.228231924801,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 7927.228231924801
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240326",
+      "voucherNo": "MKE/SI/002939/2026-10/003/001",
+      "transDate": "2026-10-16T16:35:22.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01649",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240466",
+      "voucherNo": "MKE/SI/003079/2026-10/003/001",
+      "transDate": "2026-10-16T03:16:12.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01422",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2972.7105869718002,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2972.7105869718002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2972.7105869718002
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240825",
+      "voucherNo": "MKE/SI/003438/2026-10/003/001",
+      "transDate": "2026-10-18T16:59:57.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6275.7223502738,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 6275.7223502738,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6275.7223502738
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241323",
+      "voucherNo": "MKE/SI/003936/2026-10/003/001",
+      "transDate": "2026-10-21T19:11:25.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 7596.9270555946005,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 7596.9270555946005,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 7596.9270555946005
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241762",
+      "voucherNo": "MKE/SI/004372/2026-10/003/001",
+      "transDate": "2026-10-25T03:33:35.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 83901.738169272,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 83901.738169272,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 83901.738169272
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241945",
+      "voucherNo": "MKE/SI/004555/2026-10/003/001",
+      "transDate": "2026-10-26T03:36:01.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 67386.679352762,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 67386.679352762,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 67386.679352762
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01237570",
+      "voucherNo": "MKE/SI/000183/2026-10/003/001",
+      "transDate": "2026-10-01T05:45:16.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 5615.1199976134,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 5615.1199976134,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 5615.1199976134
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238237",
+      "voucherNo": "MKE/SI/000850/2026-10/003/001",
+      "transDate": "2026-10-04T07:16:46.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01630",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238630",
+      "voucherNo": "MKE/SI/001243/2026-10/003/001",
+      "transDate": "2026-10-06T03:42:43.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01707",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238940",
+      "voucherNo": "MKE/SI/001553/2026-10/003/001",
+      "transDate": "2026-10-09T18:01:56.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01637",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239120",
+      "voucherNo": "MKE/SI/001733/2026-10/003/001",
+      "transDate": "2026-10-09T13:48:36.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01857",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2642.4094106416,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2642.4094106416,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2642.4094106416
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239921",
+      "voucherNo": "MKE/SI/002534/2026-10/003/001",
+      "transDate": "2026-10-13T05:03:24.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01853",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240465",
+      "voucherNo": "MKE/SI/003078/2026-10/003/001",
+      "transDate": "2026-10-16T02:42:09.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01823",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240826",
+      "voucherNo": "MKE/SI/003439/2026-10/003/001",
+      "transDate": "2026-10-17T08:08:42.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01839",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240853",
+      "voucherNo": "MKE/SI/003466/2026-10/003/001",
+      "transDate": "2026-10-18T12:34:03.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01639",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3634.6227849825,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3634.6227849825,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3634.6227849825
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241481",
+      "voucherNo": "MKE/SI/004094/2026-10/003/001",
+      "transDate": "2026-10-22T02:36:17.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01844",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 7269.245569965,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 7269.245569965,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 7269.245569965
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241528",
+      "voucherNo": "MKE/SI/004140/2026-10/003/001",
+      "transDate": "2026-10-23T05:14:53.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0124",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 9909.035289906,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 9909.035289906,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 9909.035289906
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241529",
+      "voucherNo": "MKE/SI/004141/2026-10/003/001",
+      "transDate": "2026-10-23T12:44:05.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0124",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241661",
+      "voucherNo": "MKE/SI/004273/2026-10/003/001",
+      "transDate": "2026-10-24T08:15:54.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01881",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1651.505881651,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 1651.505881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1651.505881651
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241995",
+      "voucherNo": "MKE/SI/004605/2026-10/003/001",
+      "transDate": "2026-10-26T04:06:28.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01867",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 7267.9357246147,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 7267.9357246147,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 7267.9357246147
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242226",
+      "voucherNo": "MKE/SI/004836/2026-10/003/001",
+      "transDate": "2026-10-28T02:09:31.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 50871.620536252,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 50871.620536252,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 50871.620536252
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242792",
+      "voucherNo": "MKE/SI/005402/2026-10/003/001",
+      "transDate": "2026-10-20T15:42:18.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01267",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 82575.29408255,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 82575.29408255,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 82575.29408255
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242138",
+      "voucherNo": "MKE/SI/004748/2026-10/003/001",
+      "transDate": "2026-10-26T16:47:01.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01548",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242139",
+      "voucherNo": "MKE/SI/004749/2026-10/003/001",
+      "transDate": "2026-10-26T03:36:06.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01839",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3633.3129396322,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3633.3129396322,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3633.3129396322
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242438",
+      "voucherNo": "MKE/SI/005048/2026-10/003/001",
+      "transDate": "2026-10-28T08:52:46.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 7927.228231924801,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 7927.228231924801,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 7927.228231924801
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242507",
+      "voucherNo": "MKE/SI/005117/2026-10/003/001",
+      "transDate": "2026-10-30T02:18:26.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 9909.035289906,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 9909.035289906,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 9909.035289906
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242548",
+      "voucherNo": "MKE/SI/005158/2026-10/003/001",
+      "transDate": "2026-10-30T03:22:38.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 50540.0095145715,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 50540.0095145715,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 50540.0095145715
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01243138",
+      "voucherNo": "MKE/SI/005566/2026-10/003/001",
+      "transDate": "2026-10-22T14:47:34.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01267",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 82575.29408255,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 82575.29408255,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 82575.29408255
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238196",
+      "voucherNo": "MKE/SI/000809/2026-10/003/001",
+      "transDate": "2026-10-05T02:51:11.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01869",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 4954.517644953,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 4954.517644953,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 4954.517644953
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238392",
+      "voucherNo": "MKE/SI/001005/2026-10/003/001",
+      "transDate": "2026-10-05T02:53:59.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01884",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2642.4094106416,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2642.4094106416,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2642.4094106416
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238762",
+      "voucherNo": "MKE/SI/001375/2026-10/003/001",
+      "transDate": "2026-10-07T12:28:15.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01707",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2972.7105869718002,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2972.7105869718002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2972.7105869718002
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239530",
+      "voucherNo": "MKE/SI/002143/2026-10/003/001",
+      "transDate": "2026-10-11T16:03:12.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01642",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 18827.1670508214,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 18827.1670508214,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 18827.1670508214
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239761",
+      "voucherNo": "MKE/SI/002374/2026-10/003/001",
+      "transDate": "2026-10-12T13:48:17.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01170",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239922",
+      "voucherNo": "MKE/SI/002535/2026-10/003/001",
+      "transDate": "2026-10-14T18:47:28.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01720",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240827",
+      "voucherNo": "MKE/SI/003440/2026-10/003/001",
+      "transDate": "2026-10-17T11:31:09.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0124",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 16515.05881651,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 16515.05881651,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 16515.05881651
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240835",
+      "voucherNo": "MKE/SI/003448/2026-10/003/001",
+      "transDate": "2026-10-17T13:28:07.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01391",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 4954.517644953,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 4954.517644953,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 4954.517644953
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240989",
+      "voucherNo": "MKE/SI/003602/2026-10/003/001",
+      "transDate": "2026-10-19T10:19:50.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01545",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 663.222043361,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 663.222043361,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 663.222043361
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241357",
+      "voucherNo": "MKE/SI/003970/2026-10/003/001",
+      "transDate": "2026-10-21T05:00:57.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01125",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 18496.8658744912,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 18496.8658744912,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 18496.8658744912
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241358",
+      "voucherNo": "MKE/SI/003971/2026-10/003/001",
+      "transDate": "2026-10-22T06:12:34.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01778",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1981.8070579812002,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 1981.8070579812002,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1981.8070579812002
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241480",
+      "voucherNo": "MKE/SI/004093/2026-10/003/001",
+      "transDate": "2026-10-22T13:14:21.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01408",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3633.3129396322,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3633.3129396322,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3633.3129396322
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241604",
+      "voucherNo": "MKE/SI/004216/2026-10/003/001",
+      "transDate": "2026-10-24T02:11:38.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 9909.035289906,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 9909.035289906,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 9909.035289906
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241983",
+      "voucherNo": "MKE/SI/004593/2026-10/003/001",
+      "transDate": "2026-10-24T06:23:53.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01683",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241994",
+      "voucherNo": "MKE/SI/004604/2026-10/003/001",
+      "transDate": "2026-10-25T12:29:40.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01442",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2312.1082343114,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2312.1082343114,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2312.1082343114
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242067",
+      "voucherNo": "MKE/SI/004677/2026-10/003/001",
+      "transDate": "2026-10-27T02:04:59.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 50871.620536252,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 50871.620536252,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 50871.620536252
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01243040",
+      "voucherNo": "MKE/SI/005565/2026-10/003/001",
+      "transDate": "2026-10-23T05:14:55.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01867",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 10239.3364662362,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 10239.3364662362,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 10239.3364662362
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01237571",
+      "voucherNo": "MKE/SI/000184/2026-10/003/001",
+      "transDate": "2026-10-01T04:14:26.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "0184",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 8257.529408255,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 8257.529408255,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 8257.529408255
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01237797",
+      "voucherNo": "MKE/SI/000410/2026-10/003/001",
+      "transDate": "2026-10-03T19:00:59.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01132",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 1321.2047053208,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 1321.2047053208,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 1321.2047053208
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238257",
+      "voucherNo": "MKE/SI/000870/2026-10/003/001",
+      "transDate": "2026-10-03T13:45:03.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01642",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 16184.7576401798,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 16184.7576401798,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 16184.7576401798
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238763",
+      "voucherNo": "MKE/SI/001376/2026-10/003/001",
+      "transDate": "2026-10-07T04:19:03.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01427",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2642.4094106416,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2642.4094106416,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2642.4094106416
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01238825",
+      "voucherNo": "MKE/SI/001438/2026-10/003/001",
+      "transDate": "2026-10-08T05:09:20.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01862",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 990.9035289906001,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 990.9035289906001,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 990.9035289906001
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239119",
+      "voucherNo": "MKE/SI/001732/2026-10/003/001",
+      "transDate": "2026-10-09T12:25:10.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01290",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3303.011763302,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3303.011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3303.011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239142",
+      "voucherNo": "MKE/SI/001755/2026-10/003/001",
+      "transDate": "2026-10-10T18:20:19.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01344",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6370.58430141,
+      "lines": [
+        {
+          "accountNo": "5004",
+          "debit": 6370.58430141,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6370.58430141
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239553",
+      "voucherNo": "MKE/SI/002166/2026-10/003/001",
+      "transDate": "2026-10-12T18:04:42.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01649",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 330.3011763302,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 330.3011763302,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 330.3011763302
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239554",
+      "voucherNo": "MKE/SI/002167/2026-10/003/001",
+      "transDate": "2026-10-12T17:14:18.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 5615.1199976134,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 5615.1199976134,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 5615.1199976134
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01239923",
+      "voucherNo": "MKE/SI/002536/2026-10/003/001",
+      "transDate": "2026-10-13T13:53:38.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01592",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6275.7223502738,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 6275.7223502738,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6275.7223502738
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240087",
+      "voucherNo": "MKE/SI/002700/2026-10/003/001",
+      "transDate": "2026-10-14T13:41:13.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01557",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 17178.280859871003,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 17178.280859871003,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 17178.280859871003
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240830",
+      "voucherNo": "MKE/SI/003443/2026-10/003/001",
+      "transDate": "2026-10-18T03:33:41.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 61112.2668478385,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 61112.2668478385,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 61112.2668478385
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01240836",
+      "voucherNo": "MKE/SI/003449/2026-10/003/001",
+      "transDate": "2026-10-17T12:52:53.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01639",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3634.6227849825,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3634.6227849825,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3634.6227849825
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241324",
+      "voucherNo": "MKE/SI/003937/2026-10/003/001",
+      "transDate": "2026-10-21T05:00:59.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01794",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 4954.517644953,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 4954.517644953,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 4954.517644953
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241479",
+      "voucherNo": "MKE/SI/004092/2026-10/003/001",
+      "transDate": "2026-10-22T13:14:21.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01408",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 3633.3129396322,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 3633.3129396322,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 3633.3129396322
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01241620",
+      "voucherNo": "MKE/SI/004232/2026-10/003/001",
+      "transDate": "2026-10-24T03:22:31.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 67718.29037444251,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 67718.29037444251,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 67718.29037444251
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242689",
+      "voucherNo": "MKE/SI/005299/2026-10/003/001",
+      "transDate": "2026-10-31T02:34:10.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 6606.023526604,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 6606.023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 6606.023526604
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242718",
+      "voucherNo": "MKE/SI/005328/2026-10/003/001",
+      "transDate": "2026-10-31T03:30:41.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01312",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 60780.65582615801,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 60780.65582615801,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 60780.65582615801
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01242793",
+      "voucherNo": "MKE/SI/005403/2026-10/003/001",
+      "transDate": "2026-10-21T03:48:35.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01267",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 66060.23526604,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 66060.23526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 66060.23526604
+        }
+      ]
+    },
+    {
+      "kelas": "SI",
+      "type": "SALESINVOICE",
+      "id": "01243158",
+      "voucherNo": "MKE/SI/005567/2026-10/003/001",
+      "transDate": "2026-10-31T07:16:47.000Z",
+      "branchId": "011",
+      "departmentId": "0110",
+      "businessPartnerId": "01391",
+      "currencyId": "",
+      "rate": 1,
+      "biaya": 2642.4094106416,
+      "lines": [
+        {
+          "accountNo": "5002",
+          "debit": 2642.4094106416,
+          "credit": 0
+        },
+        {
+          "accountNo": "1399",
+          "debit": 0,
+          "credit": 2642.4094106416
+        }
+      ]
+    }
+  ],
+  "dilewati": [
+    "SR MKE/SR/000074/2026-10/003/001: DO induk 01248349 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000001/2026-10/003/005: DO induk 01249472 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000002/2026-10/003/001: DO induk 01245210 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000247/2026-10/003/001: DO induk 01245460 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000396/2026-10/003/001: DO induk 01245391 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000671/2026-10/003/001: DO induk 01245877 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000869/2026-10/003/001: DO induk 01245632 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000893/2026-10/003/001: DO induk 01246096 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001074/2026-10/003/001: DO induk 01246274 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001266/2026-10/003/001: DO induk 01246464 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001555/2026-10/003/001: DO induk 01246634 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001633/2026-10/003/001: DO induk 01246813 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001634/2026-10/003/001: DO induk 01246812 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002016/2026-10/003/001: DO induk 01247198 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002228/2026-10/003/001: DO induk 01247416 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002417/2026-10/003/001: DO induk 01247605 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002434/2026-10/003/001: DO induk 01247595 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002667/2026-10/003/001: DO induk 01247798 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002869/2026-10/003/001: DO induk 01247881 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002929/2026-10/003/001: DO induk 01247883 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002953/2026-10/003/001: DO induk 01248155 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002965/2026-10/003/001: DO induk 01248119 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002966/2026-10/003/001: DO induk 01248120 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002968/2026-10/003/001: DO induk 01248122 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003035/2026-10/003/001: DO induk 01248129 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003036/2026-10/003/001: DO induk 01248130 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003080/2026-10/003/001: DO induk 01248116 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003082/2026-10/003/001: DO induk 01248132 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003271/2026-10/003/001: DO induk 01248348 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003442/2026-10/003/001: DO induk 01248300 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003445/2026-10/003/001: DO induk 01248299 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003462/2026-10/003/001: DO induk 01248445 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003467/2026-10/003/001: DO induk 01248513 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003646/2026-10/003/001: DO induk 01248815 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003935/2026-10/003/001: DO induk 01248917 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004070/2026-10/003/001: DO induk 01249141 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004129/2026-10/003/001: DO induk 01249278 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004136/2026-10/003/001: DO induk 01249148 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004336/2026-10/003/001: DO induk 01249508 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004337/2026-10/003/001: DO induk 01249470 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004621/2026-10/003/001: DO induk 01249509 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000408/2026-10/003/001: DO induk 01245456 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001002/2026-10/003/001: DO induk 01246072 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001245/2026-10/003/001: DO induk 01246099 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001378/2026-10/003/001: DO induk 01246402 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001450/2026-10/003/001: DO induk 01246646 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002004/2026-10/003/001: DO induk 01247195 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002787/2026-10/003/001: DO induk 01247962 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002868/2026-10/003/001: DO induk 01247882 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002936/2026-10/003/001: DO induk 01248140 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002969/2026-10/003/001: DO induk 01248123 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002971/2026-10/003/001: DO induk 01248135 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002972/2026-10/003/001: DO induk 01248136 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003033/2026-10/003/001: DO induk 01248127 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003037/2026-10/003/001: DO induk 01248131 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003084/2026-10/003/001: DO induk 01248137 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003085/2026-10/003/001: DO induk 01248139 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003441/2026-10/003/001: DO induk 01248297 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003446/2026-10/003/001: DO induk 01248302 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003464/2026-10/003/001: DO induk 01248458 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003489/2026-10/003/001: DO induk 01248530 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003929/2026-10/003/001: DO induk 01248913 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003933/2026-10/003/001: DO induk 01248916 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004071/2026-10/003/001: DO induk 01249142 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004073/2026-10/003/001: DO induk 01249144 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004074/2026-10/003/001: DO induk 01249145 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004076/2026-10/003/001: DO induk 01249146 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004079/2026-10/003/001: DO induk 01249108 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004335/2026-10/003/001: DO induk 01249471 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004343/2026-10/003/001: DO induk 01249477 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004344/2026-10/003/001: DO induk 01249478 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004446/2026-10/003/001: DO induk 01249608 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004620/2026-10/003/001: DO induk 01249779 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004640/2026-10/003/001: DO induk 01249781 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004643/2026-10/003/001: DO induk 01249784 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004649/2026-10/003/001: DO induk 01249790 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004652/2026-10/003/001: DO induk 01249797 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004655/2026-10/003/001: DO induk 01249795 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004657/2026-10/003/001: DO induk 01249799 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004638/2026-10/003/001: DO induk 01249796 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004641/2026-10/003/001: DO induk 01249782 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004646/2026-10/003/001: DO induk 01249787 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004647/2026-10/003/001: DO induk 01249788 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004648/2026-10/003/001: DO induk 01249789 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/005569/2026-10/003/001: DO induk 01250172 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/005570/2026-10/003/001: DO induk 01250375 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/005036/2026-09/003/001: DO induk 01245094 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/005405/2026-10/003/001: DO induk 01250095 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000067/2026-10/003/001: DO induk 01245276 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000286/2026-10/003/001: DO induk 01245390 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000407/2026-10/003/001: DO induk 01245455 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000409/2026-10/003/001: DO induk 01245457 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001727/2026-10/003/001: DO induk 01246909 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001731/2026-10/003/001: DO induk 01246748 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001934/2026-10/003/001: DO induk 01247125 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002014/2026-10/003/001: DO induk 01247196 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002033/2026-10/003/001: DO induk 01247225 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002173/2026-10/003/001: DO induk 01247193 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002245/2026-10/003/001: DO induk 01247433 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002407/2026-10/003/001: DO induk 01247335 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002432/2026-10/003/001: DO induk 01247619 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002699/2026-10/003/001: DO induk 01247746 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002870/2026-10/003/001: DO induk 01247879 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002871/2026-10/003/001: DO induk 01247878 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002872/2026-10/003/001: DO induk 01247985 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002891/2026-10/003/001: DO induk 01247966 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002893/2026-10/003/001: DO induk 01247884 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002937/2026-10/003/001: DO induk 01248138 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002970/2026-10/003/001: DO induk 01248125 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003034/2026-10/003/001: DO induk 01248128 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003086/2026-10/003/001: DO induk 01248141 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003444/2026-10/003/001: DO induk 01248298 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003465/2026-10/003/001: DO induk 01248514 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003772/2026-10/003/001: DO induk 01248947 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003930/2026-10/003/001: DO induk 01248912 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003999/2026-10/003/001: DO induk 01249176 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004072/2026-10/003/001: DO induk 01249143 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004075/2026-10/003/001: DO induk 01249140 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004091/2026-10/003/001: DO induk 01249147 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004137/2026-10/003/001: DO induk 01249294 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004275/2026-10/003/001: DO induk 01249295 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004323/2026-10/003/001: DO induk 01249495 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004338/2026-10/003/001: DO induk 01249473 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004341/2026-10/003/001: DO induk 01249475 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004345/2026-10/003/001: DO induk 01249479 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004346/2026-10/003/001: DO induk 01249480 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004639/2026-10/003/001: DO induk 01249780 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004645/2026-10/003/001: DO induk 01249786 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004653/2026-10/003/001: DO induk 01249793 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004654/2026-10/003/001: DO induk 01249794 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004876/2026-10/003/001: DO induk 01250032 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000285/2026-10/003/001: DO induk 01245389 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000481/2026-10/003/001: DO induk 01245687 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/000901/2026-10/003/001: DO induk 01246073 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001554/2026-10/003/001: DO induk 01246633 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001624/2026-10/003/001: DO induk 01246820 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/001806/2026-10/003/001: DO induk 01246997 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002002/2026-10/003/001: DO induk 01247199 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002003/2026-10/003/001: DO induk 01247194 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002015/2026-10/003/001: DO induk 01247197 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002172/2026-10/003/001: DO induk 01246978 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002244/2026-10/003/001: DO induk 01247432 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002406/2026-10/003/001: DO induk 01247549 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002433/2026-10/003/001: DO induk 01247594 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002595/2026-10/003/001: DO induk 01247778 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002666/2026-10/003/001: DO induk 01247799 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002668/2026-10/003/001: DO induk 01247797 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002934/2026-10/003/001: DO induk 01247880 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002938/2026-10/003/001: DO induk 01248134 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/002967/2026-10/003/001: DO induk 01248121 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003032/2026-10/003/001: DO induk 01248126 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003038/2026-10/003/001: DO induk 01248124 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003039/2026-10/003/001: DO induk 01248117 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003081/2026-10/003/001: DO induk 01248118 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003083/2026-10/003/001: DO induk 01248133 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003150/2026-10/003/001: DO induk 01248333 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003275/2026-10/003/001: DO induk 01248350 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003447/2026-10/003/001: DO induk 01248301 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003450/2026-10/003/001: biaya 0",
+    "SI MKE/SI/003463/2026-10/003/001: DO induk 01248446 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003521/2026-10/003/001: DO induk 01248691 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003932/2026-10/003/001: DO induk 01248914 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/003934/2026-10/003/001: DO induk 01248915 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004077/2026-10/003/001: DO induk 01249082 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004078/2026-10/003/001: DO induk 01249105 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004130/2026-10/003/001: DO induk 01249291 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004339/2026-10/003/001: DO induk 01249469 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004340/2026-10/003/001: DO induk 01249474 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004342/2026-10/003/001: DO induk 01249476 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004347/2026-10/003/001: DO induk 01249507 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004644/2026-10/003/001: DO induk 01249785 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004650/2026-10/003/001: DO induk 01249791 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004651/2026-10/003/001: DO induk 01249792 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004656/2026-10/003/001: DO induk 01249798 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/004750/2026-10/003/001: DO induk 01249893 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/005173/2026-10/003/001: DO induk 01250331 tidak aktif / tanpa jurnal DO",
+    "SI MKE/SI/005568/2026-10/003/001: DO induk 01250172 tidak aktif / tanpa jurnal DO"
+  ]
+}

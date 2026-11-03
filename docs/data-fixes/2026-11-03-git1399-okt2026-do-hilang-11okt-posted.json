@@ -1,0 +1,57 @@
+{
+  "rencana": [
+    {
+      "voucherNo": "MKE/DO/001925/2026-10/003/001",
+      "docType": "DELIVERYORDER",
+      "debit1399": 660.6023526604,
+      "lines": [
+        {
+          "accountNo": "1399",
+          "debit": 660.6023526604,
+          "credit": 0
+        },
+        {
+          "accountNo": "14013",
+          "debit": 0,
+          "credit": 660.6023526604
+        }
+      ]
+    },
+    {
+      "voucherNo": "MKE/DO/001930/2026-10/003/001",
+      "docType": "DELIVERYORDER",
+      "debit1399": 2321.2771517635,
+      "lines": [
+        {
+          "accountNo": "1399",
+          "debit": 2321.2771517635,
+          "credit": 0
+        },
+        {
+          "accountNo": "14013",
+          "debit": 0,
+          "credit": 2321.2771517635
+        }
+      ]
+    }
+  ],
+  "akunPencatat": 2,
+  "hasil": {
+    "tanggal": "2026-10-11",
+    "hasilPerDokumen": [
+      {
+        "voucherNo": "MKE/DO/001925/2026-10/003/001",
+        "docType": "DELIVERYORDER",
+        "status": "POSTED"
+      },
+      {
+        "voucherNo": "MKE/DO/001930/2026-10/003/001",
+        "docType": "DELIVERYORDER",
+        "status": "POSTED"
+      }
+    ],
+    "skipped": [],
+    "jumlahPosted": 2,
+    "jumlahGagal": 0
+  }
+}
