@@ -1,0 +1,24 @@
+{
+  "rencana": [
+    {
+      "tanggal": "2026-10-25",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004283/2026-10/003/001",
+      "debit1399": 15926.460753525002,
+      "pendapatan": 0
+    }
+  ],
+  "akunPencatat": 2,
+  "hasil": [
+    {
+      "tanggal": "2026-10-25",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004283/2026-10/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        }
+      ]
+    }
+  ]
+}

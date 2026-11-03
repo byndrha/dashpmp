@@ -1,0 +1,596 @@
+{
+  "rencana": [
+    {
+      "tanggal": "2026-09-12",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/001625/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-12",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/001639/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-13",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/001777/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-13",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/001794/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-14",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/001935/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-14",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/001951/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-15",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/002122/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-15",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/002142/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-16",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/002285/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-16",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/002304/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-17",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/002461/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-17",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/002481/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-18",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/002608/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-18",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/002632/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-19",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/002780/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-19",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/002809/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-20",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/002967/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-20",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/002998/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-21",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/003140/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-21",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/003170/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-22",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/003314/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-22",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/003365/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-23",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/003477/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-23",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/003530/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-24",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/003649/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-24",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/003704/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-25",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/003820/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-25",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/003876/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-26",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004000/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 15926.460753525002,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-26",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/004063/2026-09/003/001",
+      "pendapatan": 200000,
+      "debit1399": 0,
+      "kredit1399": 15926.460753525002
+    },
+    {
+      "tanggal": "2026-09-27",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004188/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-27",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/004252/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-28",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004399/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 31852.921507050003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-28",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/004464/2026-09/003/001",
+      "pendapatan": 400000,
+      "debit1399": 0,
+      "kredit1399": 31852.921507050003
+    },
+    {
+      "tanggal": "2026-09-29",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004590/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-29",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/004660/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    },
+    {
+      "tanggal": "2026-09-30",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004731/2026-09/003/001",
+      "pendapatan": 0,
+      "debit1399": 22297.045054935003,
+      "kredit1399": 0
+    },
+    {
+      "tanggal": "2026-09-30",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/004811/2026-09/003/001",
+      "pendapatan": 280000,
+      "debit1399": 0,
+      "kredit1399": 22297.045054935003
+    }
+  ],
+  "akunPencatat": 2,
+  "hasil": [
+    {
+      "tanggal": "2026-09-12",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/001625/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/001639/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-13",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/001777/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/001794/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-14",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/001935/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/001951/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-15",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/002122/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/002142/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-16",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/002285/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/002304/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-17",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/002461/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/002481/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-18",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/002608/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/002632/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-19",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/002780/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/002809/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-20",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/002967/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/002998/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-21",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/003140/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/003170/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-22",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/003314/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/003365/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-23",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/003477/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/003530/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-24",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/003649/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/003704/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-25",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/003820/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/003876/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-26",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004000/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/004063/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-27",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004188/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/004252/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-28",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004399/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/004464/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-29",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004590/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/004660/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-09-30",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004731/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/SI/004811/2026-09/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    }
+  ]
+}

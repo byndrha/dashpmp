@@ -1,0 +1,129 @@
+{
+  "keadaanSebelum": {
+    "barisJurnalDO": 0
+  },
+  "rencana": [
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004860/2026-09/003/001",
+      "documentId": "01245000",
+      "debit1399": 9909.035289906,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004861/2026-09/003/001",
+      "documentId": "01245001",
+      "debit1399": 3303.011763302,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004862/2026-09/003/001",
+      "documentId": "01245002",
+      "debit1399": 3633.3129396322,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004858/2026-09/003/001",
+      "documentId": "01244998",
+      "debit1399": 6606.023526604,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004857/2026-09/003/001",
+      "documentId": "01244997",
+      "debit1399": 1651.505881651,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004859/2026-09/003/001",
+      "documentId": "01244999",
+      "debit1399": 3303.011763302,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004876/2026-09/003/001",
+      "documentId": "01245016",
+      "debit1399": 1651.505881651,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-09-30",
+      "voucherNo": "MKE/DO/004877/2026-09/003/001",
+      "documentId": "01245017",
+      "debit1399": 660.6023526604,
+      "docType": "DELIVERYORDER"
+    },
+    {
+      "tanggal": "2026-10-01",
+      "voucherNo": "MKE/DO/004988/2026-09/003/001",
+      "documentId": "01245128",
+      "debit1399": 660.6023526604,
+      "docType": "DELIVERYORDER"
+    }
+  ],
+  "akunPencatat": 2,
+  "hasil": [
+    {
+      "tanggal": "2026-09-30",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004860/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/DO/004861/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/DO/004862/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/DO/004858/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/DO/004857/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/DO/004859/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/DO/004876/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        },
+        {
+          "voucherNo": "MKE/DO/004877/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-10-01",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/DO/004988/2026-09/003/001",
+          "docType": "DELIVERYORDER",
+          "status": "POSTED"
+        }
+      ]
+    }
+  ],
+  "idLama": []
+}

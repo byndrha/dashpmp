@@ -1,0 +1,46 @@
+{
+  "keadaanSebelum": {
+    "barisJurnalDO": 0
+  },
+  "rencana": [
+    {
+      "tanggal": "2026-09-30",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004768/2026-09/003/001",
+      "documentId": "01244908",
+      "debit1399": 6606.023526604
+    },
+    {
+      "tanggal": "2026-09-30",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004770/2026-09/003/001",
+      "documentId": "01244910",
+      "debit1399": 4954.517644953
+    },
+    {
+      "tanggal": "2026-09-30",
+      "docType": "DELIVERYORDER",
+      "voucherNo": "MKE/DO/004774/2026-09/003/001",
+      "documentId": "01244914",
+      "debit1399": 9909.035289906
+    }
+  ],
+  "akunPencatat": 2,
+  "hasil": [
+    {
+      "voucherNo": "MKE/DO/004768/2026-09/003/001",
+      "docType": "DELIVERYORDER",
+      "status": "POSTED"
+    },
+    {
+      "voucherNo": "MKE/DO/004770/2026-09/003/001",
+      "docType": "DELIVERYORDER",
+      "status": "POSTED"
+    },
+    {
+      "voucherNo": "MKE/DO/004774/2026-09/003/001",
+      "docType": "DELIVERYORDER",
+      "status": "POSTED"
+    }
+  ]
+}

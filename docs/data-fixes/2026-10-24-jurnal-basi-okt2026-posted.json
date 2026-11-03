@@ -1,0 +1,40 @@
+{
+  "rencana": [
+    {
+      "tanggal": "2026-10-19",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/003337/2026-10/003/001",
+      "pendapatan": 0
+    },
+    {
+      "tanggal": "2026-10-15",
+      "docType": "SALESINVOICE",
+      "voucherNo": "MKE/SI/002749/2026-10/003/001",
+      "pendapatan": 0
+    }
+  ],
+  "dipulihkan": [],
+  "akunPencatat": 2,
+  "hasil": [
+    {
+      "tanggal": "2026-10-19",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/SI/003337/2026-10/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    },
+    {
+      "tanggal": "2026-10-15",
+      "hasilPerDokumen": [
+        {
+          "voucherNo": "MKE/SI/002749/2026-10/003/001",
+          "docType": "SALESINVOICE",
+          "status": "POSTED"
+        }
+      ]
+    }
+  ]
+}

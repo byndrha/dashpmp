@@ -1,0 +1,62 @@
+[
+  {
+    "ID": "01249478",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/SI/004941/2026-09/003/001",
+    "TransDate": "2026-09-30T06:20:21.000Z",
+    "Type": "SALESINVOICE",
+    "ChartOfAccountID": "019",
+    "Debit": 70000,
+    "Credit": 0,
+    "Memo": "[DASHPMP-REALTIME]",
+    "BusinessPartnerID": "0170",
+    "CurrencyID": "",
+    "Rate": 1
+  },
+  {
+    "ID": "01249478",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/SI/004941/2026-09/003/001",
+    "TransDate": "2026-09-30T06:20:21.000Z",
+    "Type": "SALESINVOICE",
+    "ChartOfAccountID": "01129",
+    "Debit": 0,
+    "Credit": 3303.011763,
+    "Memo": "[DASHPMP-REALTIME]",
+    "BusinessPartnerID": "0170",
+    "CurrencyID": "",
+    "Rate": 1
+  },
+  {
+    "ID": "01249478",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/SI/004941/2026-09/003/001",
+    "TransDate": "2026-09-30T06:20:21.000Z",
+    "Type": "SALESINVOICE",
+    "ChartOfAccountID": "0155",
+    "Debit": 0,
+    "Credit": 70000,
+    "Memo": "[DASHPMP-REALTIME]",
+    "BusinessPartnerID": "0170",
+    "CurrencyID": "",
+    "Rate": 1
+  },
+  {
+    "ID": "01249478",
+    "BranchID": "011",
+    "DepartmentID": "0110",
+    "VoucherNo": "MKE/SI/004941/2026-09/003/001",
+    "TransDate": "2026-09-30T06:20:21.000Z",
+    "Type": "SALESINVOICE",
+    "ChartOfAccountID": "0159",
+    "Debit": 3303.011763,
+    "Credit": 0,
+    "Memo": "[DASHPMP-REALTIME]",
+    "BusinessPartnerID": "0170",
+    "CurrencyID": "",
+    "Rate": 1
+  }
+]
