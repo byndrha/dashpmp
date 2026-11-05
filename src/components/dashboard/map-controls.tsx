@@ -78,11 +78,11 @@ export function MapAttribution({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "pointer-events-none absolute z-1000 rounded bg-card/70 px-1.5 py-0.5 text-[9px] text-muted-foreground backdrop-blur-sm",
+        "pointer-events-none absolute z-1000 rounded bg-card/70 px-1.5 py-0.5 text-[7px] leading-tight whitespace-nowrap text-muted-foreground backdrop-blur-sm",
         className
       )}
     >
-      &copy; OSRM &middot; byndrha
+      &copy; OpenStreetMap contributors &middot; byndrha
     </div>
   );
 }
