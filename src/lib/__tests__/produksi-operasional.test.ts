@@ -25,7 +25,6 @@ import {
   tahapDari,
   tanggalBisnisNaive,
   tanggalBisnisPanen,
-  validasiPanen,
   type IsianAktif,
   type KeadaanRek,
   type MaintenanceAktif,
@@ -115,28 +114,17 @@ test("tanggal bisnis 13:59 vs 14:00", () => {
   assert.equal(tanggalBisnisNaive(new Date("2026-11-30T23:00:00Z")), "2026-12-01");
 });
 
-test("validasi panen produksi", () => {
-  assert.equal(validasiPanen("produksi", 36, { muatan: [armada("1", 20), armada("2", 14)], babonan: 2, pecah: 0 }), null);
-  const kurang = validasiPanen("produksi", 36, { muatan: [armada("1", 20), armada("2", 13)], babonan: 2, pecah: 0 });
-  assert.ok(kurang);
-  assert.match(kurang, /36/);
-  assert.match(kurang, /35/);
-  assert.notEqual(validasiPanen("produksi", 36, { muatan: [armada("1", 20), armada("1", 14)], babonan: 2, pecah: 0 }), null);
-  assert.notEqual(validasiPanen("produksi", 36, { muatan: [armada("1", 40), armada("2", -4)], babonan: 0, pecah: 0 }), null);
-  assert.notEqual(validasiPanen("produksi", 36, { muatan: [armada("1", 34), armada("2", 0)], babonan: 2, pecah: 0 }), null);
-  assert.notEqual(validasiPanen("produksi", 36, { muatan: [armada("1", 34)], babonan: 3, pecah: -1 }), null);
+test("validasi panen slot: bentuk muatan", () => {
+  const prod = { jenis: "produksi" as const, slot: Array.from({ length: 36 }, (_, i) => i + 1), slotPecah: [] };
+  const bab = { slotBabonan: [35, 36], slotPecah: [] };
+  assert.notEqual(validasiPanenSlot(prod, { muatan: [armada("1", 40), armada("2", -6)], ...bab }), null);
   const pembeli: MuatanInput = { jenis: "pembeli", kendaraanErpId: null, plat: "  ", agenId: null, agenNama: null, jumlah: 14 };
-  assert.notEqual(validasiPanen("produksi", 36, { muatan: [armada("1", 20), pembeli], babonan: 2, pecah: 0 }), null);
-  assert.equal(
-    validasiPanen("produksi", 36, { muatan: [armada("1", 20), { ...pembeli, plat: "W 1 X" }], babonan: 2, pecah: 0 }),
+  assert.notEqual(validasiPanenSlot(prod, { muatan: [armada("1", 20), pembeli], ...bab }), null);
+  assert.equal(validasiPanenSlot(prod, { muatan: [armada("1", 20), { ...pembeli, plat: "W 1 X" }], ...bab }), null);
+  assert.notEqual(
+    validasiPanenSlot(prod, { muatan: [{ ...pembeli, plat: "W 1 X", jumlah: 20 }, { ...pembeli, plat: "w  1 x" }], ...bab }),
     null,
   );
-});
-
-test("validasi panen babonan", () => {
-  assert.equal(validasiPanen("babonan", 2, { muatan: [armada("1", 1)], babonan: 0, pecah: 0 }), null);
-  assert.notEqual(validasiPanen("babonan", 2, { muatan: [armada("1", 3)], babonan: 0, pecah: 0 }), null);
-  assert.notEqual(validasiPanen("babonan", 2, { muatan: [armada("1", 1)], babonan: 1, pecah: 0 }), null);
 });
 
 test("keadaan rek", () => {

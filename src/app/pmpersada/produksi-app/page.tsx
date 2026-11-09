@@ -24,7 +24,15 @@ export default async function PmpersadaProduksiAppPage() {
       admin={bolehKelolaProduksi(session.user)}
       awalKeadaan={
         keadaan.success
-          ? { data: { data: keadaan.data.data, keadaan: keadaan.data.keadaan }, galat: null }
+          ? {
+              data: {
+                data: keadaan.data.data,
+                keadaan: keadaan.data.keadaan,
+                ringkasBak: keadaan.data.ringkasBak,
+                tugas: keadaan.data.tugas,
+              },
+              galat: null,
+            }
           : { data: null, galat: keadaan.error }
       }
       awalArmada={kendaraan.success ? kendaraan.data.armada : []}

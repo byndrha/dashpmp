@@ -10,15 +10,24 @@ import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import {
   getKeadaanAction,
   getRiwayatSayaAction,
+  isiAirAction,
   setKendaraanAktifAction,
 } from "@/app/produksi-operasional-actions";
 import type { ActionResult } from "@/lib/action-result";
 import type { BakElemen, KodeProduksi } from "@/lib/produksi-denah";
-import { shiftDari, type KeadaanRek, type KendaraanPilihan } from "@/lib/produksi-operasional";
+import {
+  shiftDari,
+  type KeadaanRek,
+  type KendaraanPilihan,
+  type RingkasanBak,
+  type Tugas,
+} from "@/lib/produksi-operasional";
 import type { KendaraanArmada } from "@/lib/queries/produksi-do-erp";
 import type { DataPabrik, KodeGalatProduksi } from "@/lib/queries/produksi-operasional";
-import { GridRek } from "./grid-rek";
-import { LembarAksiRek } from "./lembar-aksi-rek";
+import { LegendaCan } from "../grid-can";
+import { DaftarRek } from "./daftar-rek";
+import { DaftarTugas } from "./daftar-tugas";
+import { LembarAksiRek, type TampilanAwal } from "./lembar-aksi-rek";
 import { PemilihKendaraan } from "./pemilih-kendaraan";
 import { RiwayatSaya, type DataRiwayat } from "./riwayat-saya";
 
@@ -26,16 +35,19 @@ export type HasilAksi<T> = ActionResult<T> | { success: false; error: string; ko
 
 /**
  * Menjalankan satu aksi tulis: tombol aksi dikunci selama permintaan berjalan,
- * hasil ditampilkan sebagai toast, lalu keadaan disegarkan. Galat BELUM_SIAP
+ * hasil ditampilkan sebagai toast, lalu keadaan disegarkan (juga saat gagal —
+ * KEADAAN_BERUBAH/KAPASITAS berarti data di layar basi). Galat BELUM_SIAP
  * tidak di-toast — formulir panen menampilkan dialog konfirmasinya sendiri.
  */
 export type Jalankan = <T>(fn: () => Promise<HasilAksi<T>>, pesanSukses: string) => Promise<HasilAksi<T>>;
 
 type TabKey = "rek" | "riwayat";
 
-interface DataKeadaan {
+export interface DataKeadaan {
   data: DataPabrik;
   keadaan: KeadaanRek[];
+  ringkasBak: RingkasanBak[];
+  tugas: Tugas[];
 }
 
 const INTERVAL_SEGAR_MS = 30_000;
@@ -72,7 +84,7 @@ export function ProduksiApp({
   const [tab, setTab] = useState<TabKey>("rek");
   const [dikunjungi, setDikunjungi] = useState<Set<TabKey>>(() => new Set(["rek"]));
   const [bakAktifId, setBakAktifId] = useState<string>("");
-  const [rekTerpilihId, setRekTerpilihId] = useState<string | null>(null);
+  const [rekTerpilih, setRekTerpilih] = useState<{ kolomId: string; awal: TampilanAwal } | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const sibukRef = useRef(false);
 
@@ -86,7 +98,7 @@ export function ProduksiApp({
       const r = await getKeadaanAction(kode);
       if (nomor !== nomorMuat.current) return;
       if (r.success) {
-        setKeadaan({ data: r.data.data, keadaan: r.data.keadaan });
+        setKeadaan({ data: r.data.data, keadaan: r.data.keadaan, ringkasBak: r.data.ringkasBak, tugas: r.data.tugas });
         setGalatKeadaan(null);
       } else {
         setGalatKeadaan(r.error);
@@ -176,6 +188,14 @@ export function ProduksiApp({
     [kode, kendaraanAktif],
   );
 
+  // Isi Air dari daftar tugas = SATU ketukan: semua slot kosong tak rusak (slot null).
+  const isiAirSatuKetuk = useCallback(
+    (rek: KeadaanRek) => {
+      void jalankan(() => isiAirAction(kode, rek.kolomId, null), `Rek ${rek.nomor} diisi air ${rek.slotKosong.length} can.`);
+    },
+    [jalankan, kode],
+  );
+
   function gantiTab(t: TabKey) {
     setTab(t);
     setDikunjungi((s) => (s.has(t) ? s : new Set(s).add(t)));
@@ -187,15 +207,23 @@ export function ProduksiApp({
     [keadaan],
   );
   const petaKeadaan = useMemo(() => new Map((keadaan?.keadaan ?? []).map((k) => [k.kolomId, k])), [keadaan]);
-  const bakTampil = daftarBak.find((b) => b.id === bakAktifId)?.id ?? daftarBak[0]?.id ?? "";
-  const rekTerpilih = rekTerpilihId ? petaKeadaan.get(rekTerpilihId) ?? null : null;
-  const namaBakTerpilih = rekTerpilih ? daftarBak.find((b) => b.id === rekTerpilih.bakId)?.nama.trim() || "Bak" : "";
+  const bakAktif = daftarBak.find((b) => b.id === bakAktifId) ?? daftarBak[0] ?? null;
+  const bakTampil = bakAktif?.id ?? "";
+  const rekLembar = rekTerpilih ? petaKeadaan.get(rekTerpilih.kolomId) ?? null : null;
+  const namaBakTerpilih = rekLembar ? daftarBak.find((b) => b.id === rekLembar.bakId)?.nama.trim() || "Bak" : "";
+  const ringkasan = keadaan?.ringkasBak.find((r) => r.bakId === bakTampil) ?? null;
+  const tugasBak = useMemo(() => (keadaan?.tugas ?? []).filter((t) => t.bakId === bakTampil), [keadaan, bakTampil]);
+  const panenPerBak = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of keadaan?.tugas ?? []) if (t.jenis === "panen") m.set(t.bakId, (m.get(t.bakId) ?? 0) + 1);
+    return m;
+  }, [keadaan]);
   const sekarang = keadaan?.data.sekarang ?? awalKeadaan.data?.data.sekarang ?? "";
   const shift = sekarang ? shiftDari(new Date(sekarang)) : 1;
 
   return (
     <div className="flex h-dvh flex-col bg-background">
-      <header className="z-20 flex flex-col gap-2 border-b bg-background px-3 py-2">
+      <header className="z-20 flex flex-col gap-1.5 border-b bg-background px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate text-sm leading-tight font-semibold">{namaOperator}</p>
@@ -216,8 +244,8 @@ export function ProduksiApp({
             <SignOutButton />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Kendaraan aktif</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-xs text-muted-foreground">Kendaraan</span>
           <PemilihKendaraan
             kode={kode}
             armada={awalArmada}
@@ -241,14 +269,24 @@ export function ProduksiApp({
             {keadaan && daftarBak.length === 0 && (
               <p className="m-3 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{PESAN_DENAH_KOSONG}</p>
             )}
-            {daftarBak.length > 0 && (
-              <GridRek
-                daftarBak={daftarBak}
-                bakAktifId={bakTampil}
-                onPilihBak={setBakAktifId}
-                keadaan={petaKeadaan}
-                onPilihRek={setRekTerpilihId}
-              />
+            {bakAktif && (
+              <div className="flex flex-col pb-4">
+                <TabBak daftarBak={daftarBak} bakAktifId={bakAktif.id} onPilih={setBakAktifId} panenPerBak={panenPerBak} />
+                <ChipRingkasan jumlahRek={bakAktif.kolom.length} ringkasan={ringkasan} />
+                <DaftarTugas
+                  key={bakAktif.id}
+                  tugas={tugasBak}
+                  keadaan={petaKeadaan}
+                  sekarang={sekarang}
+                  sibuk={sibuk}
+                  onPanen={(kolomId) => setRekTerpilih({ kolomId, awal: "panen" })}
+                  onIsiAir={isiAirSatuKetuk}
+                  onBuka={(kolomId) => setRekTerpilih({ kolomId, awal: "menu" })}
+                />
+                <h2 className="px-3 pt-4 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Semua rek</h2>
+                <DaftarRek bak={bakAktif} keadaan={petaKeadaan} onPilihRek={(kolomId) => setRekTerpilih({ kolomId, awal: "menu" })} />
+                <LegendaCan className="px-3 pt-3" />
+              </div>
             )}
           </div>
         )}
@@ -290,7 +328,8 @@ export function ProduksiApp({
 
       <LembarAksiRek
         kode={kode}
-        rek={rekTerpilih}
+        rek={rekLembar}
+        tampilanAwal={rekTerpilih?.awal ?? "menu"}
         namaBak={namaBakTerpilih}
         armada={awalArmada}
         armadaGalat={armadaGalat}
@@ -299,8 +338,104 @@ export function ProduksiApp({
         sibuk={sibuk}
         jalankan={jalankan}
         onKendaraanTerakhir={(k) => void gantiKendaraanAktif(k)}
-        onTutup={() => setRekTerpilihId(null)}
+        onTutup={() => setRekTerpilih(null)}
       />
+    </div>
+  );
+}
+
+// Tab bak: lebar sama (grid), tidak pernah terpotong; lencana = rek siap panen.
+function TabBak({
+  daftarBak,
+  bakAktifId,
+  onPilih,
+  panenPerBak,
+}: {
+  daftarBak: BakElemen[];
+  bakAktifId: string;
+  onPilih: (id: string) => void;
+  panenPerBak: Map<string, number>;
+}) {
+  return (
+    <div
+      className="sticky top-0 z-10 grid gap-1 border-b bg-background px-2 pt-2.5 pb-2"
+      style={{ gridTemplateColumns: `repeat(${daftarBak.length}, minmax(0, 1fr))` }}
+    >
+      {daftarBak.map((b) => {
+        const aktif = b.id === bakAktifId;
+        const panen = panenPerBak.get(b.id) ?? 0;
+        return (
+          <button
+            key={b.id}
+            type="button"
+            onClick={() => onPilih(b.id)}
+            aria-label={`${b.nama.trim() || "Bak"}${panen > 0 ? `, ${panen} rek siap panen` : ""}`}
+            className={cn(
+              "relative flex h-10 min-w-0 items-center justify-center rounded-lg border px-1 text-sm font-semibold",
+              aktif ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground",
+            )}
+          >
+            <span className="truncate">{b.nama.trim() || "Bak"}</span>
+            {panen > 0 && (
+              <span className="absolute -top-1.5 -right-1 min-w-4 rounded-full bg-green-600 px-1 text-[10px] leading-4 font-bold text-white tabular-nums">
+                {panen}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Chip jumlah rek per kategori bak aktif (ringkasBak di server).
+function ChipRingkasan({ jumlahRek, ringkasan }: { jumlahRek: number; ringkasan: RingkasanBak | null }) {
+  const r = ringkasan ?? { siap: 0, kosong: 0, babonan: 0, rusak: 0 };
+  const chip = [
+    {
+      label: "Siap",
+      n: r.siap,
+      tanda: <span className="size-2.5 shrink-0 rounded-full bg-green-600" />,
+      kelas: "border-green-600/60 bg-green-50 text-green-800 dark:bg-green-950/60 dark:text-green-200",
+    },
+    {
+      label: "Kosong",
+      n: r.kosong,
+      tanda: <span className="size-2.5 shrink-0 rounded-full border border-dashed border-current" />,
+      kelas: "border-dashed border-zinc-400 text-foreground dark:border-zinc-500",
+    },
+    {
+      label: "Babonan",
+      n: r.babonan,
+      tanda: <span className="shrink-0 text-[10px] leading-none">◆</span>,
+      kelas: "border-orange-500/60 bg-orange-50 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200",
+    },
+    {
+      label: "Rusak",
+      n: r.rusak,
+      tanda: <span className="shrink-0 text-[10px] leading-none">✕</span>,
+      kelas: "border-zinc-400 bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
+    },
+  ];
+  return (
+    <div className="flex flex-col gap-1.5 px-3 pt-2.5">
+      <p className="text-xs text-muted-foreground">{jumlahRek} rek</p>
+      <div className="grid grid-cols-4 gap-1.5">
+        {chip.map((c) => (
+          <span
+            key={c.label}
+            className={cn(
+              "flex min-w-0 items-center justify-center gap-1 rounded-full border px-1.5 py-1 text-xs font-semibold",
+              c.kelas,
+              c.n === 0 && "opacity-45",
+            )}
+          >
+            {c.tanda}
+            <span className="truncate">{c.label}</span>
+            <b className="tabular-nums">{c.n}</b>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

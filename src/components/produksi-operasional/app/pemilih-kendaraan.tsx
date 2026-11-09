@@ -17,7 +17,7 @@ export function labelKendaraan(k: KendaraanPilihan | null): string {
   return k.plat || k.kendaraanErpId || "?";
 }
 
-/** Kunci keunikan kendaraan dalam satu panen (selaras validasiPanen). */
+/** Kunci keunikan kendaraan dalam satu panen (selaras validasiPanenSlot). */
 export function kunciKendaraan(k: KendaraanPilihan): string {
   return k.jenis === "armada" ? `armada:${k.kendaraanErpId}` : `pembeli:${k.plat.trim().toUpperCase().replace(/\s+/g, " ")}`;
 }

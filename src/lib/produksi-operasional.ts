@@ -117,15 +117,6 @@ export interface MuatanInput extends KendaraanPilihan {
   jumlah: number;
 }
 
-export interface PanenInput {
-  isianId: string;
-  muatan: MuatanInput[];
-  babonan: number;
-  pecah: number;
-  isiUlang: boolean;
-  konfirmasiBelumSiap: boolean;
-}
-
 const JAM_MS = 3_600_000;
 const WIB_OFFSET_MS = 7 * JAM_MS;
 
@@ -388,36 +379,6 @@ export function tugasSekarang(keadaan: KeadaanRek[], kosongSejak: Record<string,
   return [...panen.sort(tertuaDulu), ...isiAir.sort(tertuaDulu), ...babonanLama.sort(tertuaDulu)];
 }
 
-// ── Validasi panen ─────────────────────────────────────────────────────────
-
-function bulatTakNegatif(n: number): boolean {
-  return Number.isInteger(n) && n >= 0;
-}
-
-/** null = sah; selain itu pesan untuk operator. */
-export function validasiPanen(
-  jenis: JenisIsian,
-  sisa: number,
-  input: Pick<PanenInput, "muatan" | "babonan" | "pecah">,
-): string | null {
-  const { muatan, babonan, pecah } = input;
-  if (!bulatTakNegatif(babonan) || !bulatTakNegatif(pecah)) return "Jumlah Babonan dan pecah harus bilangan bulat ≥ 0.";
-  const galatMuatan = cekDaftarMuatan(muatan);
-  if (galatMuatan) return galatMuatan;
-
-  const dimuat = muatan.reduce((s, m) => s + m.jumlah, 0);
-  if (jenis === "babonan") {
-    if (babonan !== 0 || pecah !== 0) return "Can Babonan tidak bisa dipindah lagi ke Babonan atau pecah.";
-    if (dimuat <= 0) return "Belum ada can Babonan yang dimuat.";
-    if (dimuat > sisa) return `Babonan di rek ini tinggal ${sisa} can (diminta ${dimuat}).`;
-    return null;
-  }
-
-  const total = dimuat + babonan + pecah;
-  if (total !== sisa) return `Jumlah dimuat + Babonan + pecah harus ${sisa} can (sekarang ${total}).`;
-  return null;
-}
-
 // ── Validasi panen per slot ────────────────────────────────────────────────
 
 export interface PanenSlotInput {
@@ -459,7 +420,7 @@ export function slotDimuatDari(isian: Pick<IsianAktif, "jenis" | "slot">, input:
  * Validasi panen berbasis slot. Produksi: slotBabonan & slotPecah ⊆ slot,
  * saling lepas, Σ muatan = |slot| − |slotBabonan| − |slotPecah|. Babonan:
  * slotDimuat ⊆ slot \ slotPecah (es pecah tidak dijual), Σ muatan =
- * |slotDimuat|. Aturan bentuk muatan sama dengan validasiPanen. null = sah.
+ * |slotDimuat|. Bentuk muatan: lihat cekDaftarMuatan. null = sah.
  */
 export function validasiPanenSlot(
   isian: Pick<IsianAktif, "jenis" | "slot" | "slotPecah">,
