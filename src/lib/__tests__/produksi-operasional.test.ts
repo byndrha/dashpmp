@@ -14,7 +14,13 @@ import {
   keadaanPabrik,
   keadaanRek,
   peringatanDari,
+  ringkasBak,
   ringkasStok,
+  slotDimuatDari,
+  SUSUNAN_CAN,
+  tugasSekarang,
+  validasiPanenSlot,
+  validasiPilihSlot,
   shiftDari,
   tahapDari,
   tanggalBisnisNaive,
@@ -24,6 +30,7 @@ import {
   type KeadaanRek,
   type MaintenanceAktif,
   type MuatanInput,
+  type SlotRusak,
 } from "../produksi-operasional";
 
 const JAM = 3_600_000;
@@ -34,8 +41,16 @@ function bakUji(n = 3, jumlahIceCan = 36): BakElemen {
   return buatBak(0, 0, { nama: "Bak 2", kolom: buatKolom(n, { varian: "kecil", jumlahIceCan }) });
 }
 
+const rentang = (a: number, b: number) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i);
+
+// Slot bawaan meniru aturan backfill: produksi dari slot terendah, Babonan dari slot tertinggi.
 function isian(bak: BakElemen, kolomIdx: number, opsi: Partial<IsianAktif> = {}): IsianAktif {
+  const jenis = opsi.jenis ?? "produksi";
+  const sisa = opsi.sisa ?? 36;
+  const kap = bak.kolom[kolomIdx].jumlahIceCan;
   return {
+    slot: jenis === "babonan" ? rentang(kap - sisa + 1, kap) : rentang(1, sisa),
+    slotPecah: [],
     id: crypto.randomUUID(),
     kolomId: bak.kolom[kolomIdx].id,
     bakId: bak.id,
@@ -158,8 +173,8 @@ test("keadaan rek", () => {
   assert.equal(keadaanRek(bak, { ...kolom, nonaktif: true }, [produksi], mt(kolom.id, 1), SEKARANG).utama, "nonaktif");
   assert.equal(keadaanRek(bak, kolom, [babonan], mt(kolom.id, 1), SEKARANG).utama, "maintenance");
 
-  const muda = isian(bak, 0, { sisa: 10, mulaiAt: lalu(2) });
-  const tua = isian(bak, 0, { sisa: 10, mulaiAt: lalu(18) });
+  const muda = isian(bak, 0, { sisa: 10, mulaiAt: lalu(2), slot: rentang(11, 20) });
+  const tua = isian(bak, 0, { sisa: 10, mulaiAt: lalu(18), slot: rentang(1, 10) });
   const dua = keadaanRek(bak, kolom, [muda, tua], null, SEKARANG);
   assert.equal(dua.pct, 75);
   assert.equal(dua.tahap, "siap");
@@ -314,7 +329,7 @@ test("ringkas stok per isian: 34 jadi + 2 baru diisi air", () => {
   const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
   const daftar = [
     isian(bak, 0, { sisa: 34, jumlahAwal: 34, mulaiAt: lalu(30) }), // jadi
-    isian(bak, 0, { sisa: 2, jumlahAwal: 2, mulaiAt: SEKARANG.toISOString() }), // air
+    isian(bak, 0, { sisa: 2, jumlahAwal: 2, mulaiAt: SEKARANG.toISOString(), slot: [35, 36] }), // air
   ];
   const keadaan = keadaanPabrik(denah, daftar, [], SEKARANG);
   assert.equal(keadaan[0].tahap, "jadi"); // tahap rek tetap dari isian tertua
@@ -397,4 +412,157 @@ test("label batal panen: Tandai Babonan memakai aturan server", () => {
   assert.equal(batalAdalahTandaiBabonan({ dimuat: 0, keBabonan: 3, pecah: 0 }), true);
   assert.equal(batalAdalahTandaiBabonan({ dimuat: 4, keBabonan: 3, pecah: 0 }), false);
   assert.equal(batalAdalahTandaiBabonan(null), false);
+});
+
+// ── Slot can ───────────────────────────────────────────────────────────────
+
+function rusakUji(kolomId: string, slot: number): SlotRusak {
+  return { id: crypto.randomUUID(), kolomId, slot, mulaiAt: lalu(3), catatan: "bocor" };
+}
+
+test("susunan can", () => {
+  assert.deepEqual(SUSUNAN_CAN.kecil, { kolom: 12, baris: 3 });
+  assert.deepEqual(SUSUNAN_CAN.besar, { kolom: 9, baris: 2 });
+});
+
+test("keadaan can BK", () => {
+  const bak = bakUji(1, 36);
+  const kolom = bak.kolom[0];
+  const produksi = isian(bak, 0, { sisa: 34, jumlahAwal: 36, slot: rentang(1, 34), mulaiAt: lalu(12), durasiBekuJam: 24 });
+  const babonan = isian(bak, 0, {
+    jenis: "babonan", jumlahAwal: 2, sisa: 2, pecah: 1, slot: [35, 36], slotPecah: [36], mulaiAt: lalu(30), durasiBekuJam: null,
+  });
+  const k = keadaanRek(bak, kolom, [produksi, babonan], null, SEKARANG);
+  assert.equal(k.can.length, 36);
+  assert.deepEqual(k.can[0], { slot: 1, jenis: "produksi", isianId: produksi.id, pct: 50, tahap: "kristal" });
+  assert.equal(k.can[33].jenis, "produksi");
+  assert.deepEqual(k.can[34], { slot: 35, jenis: "babonan", isianId: babonan.id, pct: null, tahap: null });
+  assert.equal(k.can[35].jenis, "pecah");
+  assert.equal(k.can[35].isianId, babonan.id);
+  assert.deepEqual(k.slotKosong, []);
+  assert.equal(k.canKosong, 0);
+  assert.equal(k.rusak, 0);
+  assert.deepEqual(k.can.map((c) => c.slot), rentang(1, 36));
+});
+
+test("keadaan can BB dan rusak", () => {
+  const bak = buatBak(0, 0, { nama: "Bak 3", kolom: buatKolom(1, { varian: "besar", jumlahIceCan: 18 }) });
+  const kolom = bak.kolom[0];
+  const k = keadaanRek(bak, kolom, [], null, SEKARANG, [rusakUji(kolom.id, 5), rusakUji("kolom-lain", 6)]);
+  assert.equal(k.can.length, 18);
+  assert.deepEqual(k.can[4], { slot: 5, jenis: "rusak", isianId: null, pct: null, tahap: null });
+  assert.equal(k.can[5].jenis, "kosong");
+  assert.equal(k.slotKosong.length, 17);
+  assert.ok(!k.slotKosong.includes(5));
+  assert.equal(k.canKosong, 17);
+  assert.equal(k.rusak, 1);
+  assert.equal(k.utama, "kosong");
+
+  // keadaanPabrik meneruskan slot rusak per kolom
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const p = keadaanPabrik(denah, [], [], SEKARANG, [rusakUji(kolom.id, 1)]);
+  assert.equal(p[0].rusak, 1);
+  assert.equal(p[0].can[0].jenis, "rusak");
+  assert.equal(keadaanPabrik(denah, [], [], SEKARANG)[0].rusak, 0);
+});
+
+test("validasi panen slot produksi", () => {
+  const prod = { jenis: "produksi" as const, slot: rentang(1, 36), slotPecah: [] };
+  const muatan = [armada("1", 20), armada("2", 14)];
+  assert.equal(validasiPanenSlot(prod, { muatan, slotBabonan: [35, 36], slotPecah: [] }), null);
+  assert.equal(validasiPanenSlot(prod, { muatan, slotBabonan: [35], slotPecah: [36] }), null);
+  assert.notEqual(validasiPanenSlot(prod, { muatan, slotBabonan: [37], slotPecah: [] }), null);
+  assert.notEqual(validasiPanenSlot(prod, { muatan: [armada("1", 20), armada("2", 15)], slotBabonan: [35], slotPecah: [35] }), null);
+  assert.notEqual(validasiPanenSlot(prod, { muatan, slotBabonan: [35, 35], slotPecah: [] }), null);
+  assert.notEqual(validasiPanenSlot(prod, { muatan, slotBabonan: [35.5, 36], slotPecah: [] }), null);
+  const kurang = validasiPanenSlot(prod, { muatan: [armada("1", 20), armada("2", 13)], slotBabonan: [35, 36], slotPecah: [] });
+  assert.ok(kurang);
+  assert.match(kurang, /34/);
+  assert.match(kurang, /33/);
+  // aturan muatan lama tetap berlaku
+  assert.match(validasiPanenSlot(prod, { muatan: [armada("1", 20), armada("1", 14)], slotBabonan: [35, 36], slotPecah: [] }) ?? "", /dua kali/);
+  assert.notEqual(validasiPanenSlot(prod, { muatan: [armada("1", 34), armada("2", 0)], slotBabonan: [35, 36], slotPecah: [] }), null);
+  const pembeli: MuatanInput = { jenis: "pembeli", kendaraanErpId: null, plat: " ", agenId: null, agenNama: null, jumlah: 14 };
+  assert.match(validasiPanenSlot(prod, { muatan: [armada("1", 20), pembeli], slotBabonan: [35, 36], slotPecah: [] }) ?? "", /Plat/);
+  const tanpaId: MuatanInput = { ...armada("1", 34), kendaraanErpId: null };
+  assert.match(validasiPanenSlot(prod, { muatan: [tanpaId], slotBabonan: [35, 36], slotPecah: [] }) ?? "", /armada/);
+});
+
+test("validasi panen slot babonan", () => {
+  const bab = { jenis: "babonan" as const, slot: [35, 36], slotPecah: [36] };
+  assert.equal(validasiPanenSlot(bab, { muatan: [armada("1", 1)], slotBabonan: [], slotPecah: [], slotDimuat: [35] }), null);
+  assert.notEqual(validasiPanenSlot(bab, { muatan: [armada("1", 1)], slotBabonan: [], slotPecah: [], slotDimuat: [36] }), null);
+  assert.notEqual(validasiPanenSlot(bab, { muatan: [armada("1", 2)], slotBabonan: [], slotPecah: [], slotDimuat: [35] }), null);
+  assert.notEqual(validasiPanenSlot(bab, { muatan: [armada("1", 1)], slotBabonan: [], slotPecah: [], slotDimuat: [34] }), null);
+  assert.notEqual(validasiPanenSlot(bab, { muatan: [], slotBabonan: [], slotPecah: [], slotDimuat: [] }), null);
+  assert.notEqual(validasiPanenSlot(bab, { muatan: [armada("1", 1)], slotBabonan: [], slotPecah: [] }), null);
+  assert.notEqual(validasiPanenSlot(bab, { muatan: [armada("1", 1)], slotBabonan: [35], slotPecah: [], slotDimuat: [35] }), null);
+});
+
+test("slotDimuatDari", () => {
+  assert.deepEqual(
+    slotDimuatDari({ jenis: "produksi", slot: rentang(1, 36) }, { muatan: [], slotBabonan: [35, 36], slotPecah: [] }),
+    rentang(1, 34),
+  );
+  assert.deepEqual(
+    slotDimuatDari({ jenis: "produksi", slot: rentang(1, 36) }, { muatan: [], slotBabonan: [35], slotPecah: [1] }),
+    [...rentang(2, 34), 36],
+  );
+  assert.deepEqual(
+    slotDimuatDari({ jenis: "babonan", slot: [33, 34, 35] }, { muatan: [], slotBabonan: [], slotPecah: [], slotDimuat: [35, 33] }),
+    [33, 35],
+  );
+});
+
+test("validasi pilih slot", () => {
+  assert.equal(validasiPilihSlot([1, 2], [1, 2, 3]), null);
+  assert.notEqual(validasiPilihSlot([], [1, 2, 3]), null);
+  assert.notEqual(validasiPilihSlot([1, 1], [1, 2, 3]), null);
+  assert.notEqual(validasiPilihSlot([4], [1, 2, 3]), null);
+  assert.notEqual(validasiPilihSlot([1.5], [1, 2, 3]), null);
+});
+
+test("ringkas bak dan tugas sekarang", () => {
+  const bak = bakUji(3);
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const daftar = [
+    isian(bak, 0, { mulaiAt: lalu(21.6), durasiBekuJam: 24 }), // 90%
+    isian(bak, 2, { jenis: "babonan", sisa: 2, jumlahAwal: 2, mulaiAt: lalu(50), durasiBekuJam: null }),
+  ];
+  const keadaan = keadaanPabrik(denah, daftar, [], SEKARANG);
+  assert.equal(keadaan[0].pct, 90);
+
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 1, kosong: 1, babonan: 1, rusak: 0 }]);
+
+  const tugas = tugasSekarang(keadaan, { [bak.kolom[1].id]: lalu(7) }, SEKARANG);
+  assert.deepEqual(tugas.map((t) => t.jenis), ["panen", "isi-air", "babonan-lama"]);
+  assert.deepEqual(tugas[0], { jenis: "panen", kolomId: bak.kolom[0].id, bakId: bak.id, nomor: 1, pct: 90, sejak: lalu(21.6) });
+  assert.equal(tugas[1].kolomId, bak.kolom[1].id);
+  assert.equal(tugas[1].sejak, lalu(7));
+  assert.equal(tugas[2].kolomId, bak.kolom[2].id);
+  assert.equal(tugas[2].sejak, lalu(50));
+
+  // Babonan belum lama dan produksi belum siap → tidak ada tugas untuk rek itu
+  const muda = keadaanPabrik(
+    denah,
+    [isian(bak, 0, { mulaiAt: lalu(6) }), isian(bak, 2, { jenis: "babonan", sisa: 2, mulaiAt: lalu(10) })],
+    [],
+    SEKARANG,
+  );
+  assert.deepEqual(tugasSekarang(muda, {}, SEKARANG).map((t) => t.jenis), ["isi-air"]);
+});
+
+test("tugas sekarang: urutan FIFO panen dan kosong terlama", () => {
+  const bak = bakUji(4);
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const keadaan = keadaanPabrik(
+    denah,
+    [isian(bak, 0, { mulaiAt: lalu(20) }), isian(bak, 1, { mulaiAt: lalu(30) })],
+    [],
+    SEKARANG,
+    [rusakUji(bak.kolom[3].id, 1)],
+  );
+  const tugas = tugasSekarang(keadaan, { [bak.kolom[2].id]: lalu(2), [bak.kolom[3].id]: lalu(9) }, SEKARANG);
+  assert.deepEqual(tugas.map((t) => `${t.jenis}:${t.nomor}`), ["panen:2", "panen:1", "isi-air:4", "isi-air:3"]);
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 2, kosong: 2, babonan: 0, rusak: 1 }]);
 });

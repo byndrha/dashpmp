@@ -38,6 +38,35 @@ export interface IsianAktif {
   mulaiAt: string;
   durasiBekuJam: number | null;
   diisiOlehNama: string;
+  /** Posisi can yang ditempati (1..jumlahIceCan); panjang = sisa. */
+  slot: number[];
+  /** Can pecah yang tetap di can (⊆ slot); selalu [] untuk produksi. */
+  slotPecah: number[];
+}
+
+// Susunan tampilan can per rek (hanya konstanta tampilan): BK 12 × 3, BB 9 × 2.
+export const SUSUNAN_CAN: Record<Varian, { kolom: number; baris: number }> = {
+  kecil: { kolom: 12, baris: 3 },
+  besar: { kolom: 9, baris: 2 },
+};
+
+/** Can rusak aktif (belum "Sudah diperbaiki"). Slot rusak dilewati saat Isi Air. */
+export interface SlotRusak {
+  id: string;
+  kolomId: string;
+  slot: number;
+  mulaiAt: string;
+  catatan: string;
+}
+
+export type JenisCan = "kosong" | "produksi" | "babonan" | "pecah" | "rusak";
+
+export interface KeadaanCan {
+  slot: number;
+  jenis: JenisCan;
+  isianId: string | null;
+  pct: number | null;
+  tahap: Tahap | null;
 }
 
 export interface MaintenanceAktif {
@@ -61,8 +90,15 @@ export interface KeadaanRek {
   tahap: Tahap | null;
   usiaMenit: number | null;
   estimasiMatang: string | null;
+  /** = slotKosong.length */
   canKosong: number;
   babonan: number;
+  /** Satu entri per slot 1..kapasitas. */
+  can: KeadaanCan[];
+  /** Slot kosong yang tidak rusak (target Isi Air). */
+  slotKosong: number[];
+  /** Jumlah slot rusak (tidak ditempati isian). */
+  rusak: number;
   /** Urut FIFO (mulaiAt tertua dulu); durasiBekuJam null sudah diisi dari bak. */
   isianProduksi: IsianAktif[];
   isianBabonan: IsianAktif | null;
@@ -144,6 +180,7 @@ export function keadaanRek(
   isian: IsianAktif[],
   mt: MaintenanceAktif | null,
   sekarang: Date,
+  rusak: SlotRusak[] = [],
 ): KeadaanRek {
   const milikRek = isian.filter((i) => i.kolomId === kolom.id && i.sisa > 0);
   const isianProduksi = milikRek
@@ -152,7 +189,8 @@ export function keadaanRek(
     .sort((a, b) => Date.parse(a.mulaiAt) - Date.parse(b.mulaiAt));
   const daftarBabonan = milikRek.filter((i) => i.jenis === "babonan");
   const babonan = daftarBabonan.reduce((s, i) => s + i.sisa, 0);
-  const terisi = milikRek.reduce((s, i) => s + i.sisa, 0);
+  const can = susunCan(kolom, isianProduksi, daftarBabonan, rusak, sekarang);
+  const slotKosong = can.filter((c) => c.jenis === "kosong").map((c) => c.slot);
   const maintenance = mt && mt.kolomId === kolom.id ? mt : null;
 
   let pct: number | null = null;
@@ -184,16 +222,69 @@ export function keadaanRek(
     tahap: pct === null ? null : tahapDari(pct),
     usiaMenit,
     estimasiMatang,
-    canKosong: Math.max(0, kolom.jumlahIceCan - terisi),
+    canKosong: slotKosong.length,
     babonan,
+    can,
+    slotKosong,
+    rusak: can.filter((c) => c.jenis === "rusak").length,
     isianProduksi,
     isianBabonan: daftarBabonan[0] ?? null,
     maintenance,
   };
 }
 
+// Bangun keadaan per slot: isian produksi (FIFO, yang tertua menang bila data
+// beririsan), lalu Babonan/pecah, lalu rusak, sisanya kosong. Slot di luar
+// 1..kapasitas diabaikan.
+function susunCan(
+  kolom: DenahKolom,
+  isianProduksi: IsianAktif[],
+  daftarBabonan: IsianAktif[],
+  rusak: SlotRusak[],
+  sekarang: Date,
+): KeadaanCan[] {
+  const kapasitas = kolom.jumlahIceCan;
+  const can: KeadaanCan[] = Array.from({ length: kapasitas }, (_, i) => ({
+    slot: i + 1,
+    jenis: "kosong",
+    isianId: null,
+    pct: null,
+    tahap: null,
+  }));
+  const isi = (slot: number, c: Omit<KeadaanCan, "slot">) => {
+    if (!Number.isInteger(slot) || slot < 1 || slot > kapasitas) return;
+    if (can[slot - 1].jenis !== "kosong") return;
+    can[slot - 1] = { slot, ...c };
+  };
+
+  for (const i of isianProduksi) {
+    const pct = hitungKematangan(new Date(i.mulaiAt), i.durasiBekuJam ?? 0, sekarang);
+    const tahap = tahapDari(pct);
+    for (const s of i.slot) isi(s, { jenis: "produksi", isianId: i.id, pct, tahap });
+  }
+  for (const i of daftarBabonan) {
+    const pecah = new Set(i.slotPecah);
+    for (const s of i.slot) isi(s, { jenis: pecah.has(s) ? "pecah" : "babonan", isianId: i.id, pct: null, tahap: null });
+  }
+  for (const r of rusak) {
+    if (r.kolomId !== kolom.id) continue;
+    isi(r.slot, { jenis: "rusak", isianId: null, pct: null, tahap: null });
+  }
+  return can;
+}
+
 function daftarBak(denah: DenahDokumen): BakElemen[] {
   return denah.elemen.filter((e): e is BakElemen => e.tipe === "bak");
+}
+
+function kelompokkan<T extends { kolomId: string }>(daftar: T[]): Map<string, T[]> {
+  const peta = new Map<string, T[]>();
+  for (const x of daftar) {
+    const l = peta.get(x.kolomId);
+    if (l) l.push(x);
+    else peta.set(x.kolomId, [x]);
+  }
+  return peta;
 }
 
 export function keadaanPabrik(
@@ -201,19 +292,92 @@ export function keadaanPabrik(
   isian: IsianAktif[],
   mt: MaintenanceAktif[],
   sekarang: Date,
+  rusak: SlotRusak[] = [],
 ): KeadaanRek[] {
-  const isianPerKolom = new Map<string, IsianAktif[]>();
-  for (const i of isian) {
-    const l = isianPerKolom.get(i.kolomId);
-    if (l) l.push(i);
-    else isianPerKolom.set(i.kolomId, [i]);
-  }
+  const isianPerKolom = kelompokkan(isian);
+  const rusakPerKolom = kelompokkan(rusak);
   const mtPerKolom = new Map(mt.map((m) => [m.kolomId, m]));
   return daftarBak(denah).flatMap((bak) =>
     bak.kolom.map((kolom) =>
-      keadaanRek(bak, kolom, isianPerKolom.get(kolom.id) ?? [], mtPerKolom.get(kolom.id) ?? null, sekarang),
+      keadaanRek(
+        bak,
+        kolom,
+        isianPerKolom.get(kolom.id) ?? [],
+        mtPerKolom.get(kolom.id) ?? null,
+        sekarang,
+        rusakPerKolom.get(kolom.id) ?? [],
+      ),
     ),
   );
+}
+
+// ── Ringkasan bak & tugas sekarang ─────────────────────────────────────────
+
+export interface RingkasanBak {
+  bakId: string;
+  siap: number;
+  kosong: number;
+  babonan: number;
+  rusak: number;
+}
+
+function adaProduksiSiap(k: KeadaanRek): boolean {
+  return k.pct !== null && k.pct >= AMBANG.panenBelumSiapPersen;
+}
+
+/** Jumlah REK per kategori per bak (rek nonaktif tidak dihitung), urut bak sesuai `keadaan`. */
+export function ringkasBak(keadaan: KeadaanRek[]): RingkasanBak[] {
+  const peta = new Map<string, RingkasanBak>();
+  for (const k of keadaan) {
+    let r = peta.get(k.bakId);
+    if (!r) {
+      r = { bakId: k.bakId, siap: 0, kosong: 0, babonan: 0, rusak: 0 };
+      peta.set(k.bakId, r);
+    }
+    if (k.utama === "nonaktif") continue;
+    if (adaProduksiSiap(k)) r.siap++;
+    if (k.utama === "kosong") r.kosong++;
+    if (k.isianBabonan) r.babonan++;
+    if (k.rusak > 0) r.rusak++;
+  }
+  return [...peta.values()];
+}
+
+export type JenisTugas = "panen" | "isi-air" | "babonan-lama";
+
+export interface Tugas {
+  jenis: JenisTugas;
+  kolomId: string;
+  bakId: string;
+  nomor: number;
+  pct: number | null;
+  sejak: string;
+}
+
+/**
+ * Daftar "apa yang harus dikerjakan sekarang" (rek nonaktif & maintenance
+ * dilewati): panen (isian produksi tertua ≥ ambang siap, FIFO tertua dulu) →
+ * isi air (rek kosong dengan slot kosong tak rusak, paling lama kosong dulu)
+ * → Babonan lama (> AMBANG.babonanJam, tertua dulu).
+ */
+export function tugasSekarang(keadaan: KeadaanRek[], kosongSejak: Record<string, string>, sekarang: Date): Tugas[] {
+  const panen: Tugas[] = [];
+  const isiAir: Tugas[] = [];
+  const babonanLama: Tugas[] = [];
+  for (const k of keadaan) {
+    if (k.utama === "nonaktif" || k.utama === "maintenance") continue;
+    const dasar = { kolomId: k.kolomId, bakId: k.bakId, nomor: k.nomor };
+    const tertua = k.isianProduksi[0];
+    if (tertua && adaProduksiSiap(k)) panen.push({ jenis: "panen", ...dasar, pct: k.pct, sejak: tertua.mulaiAt });
+    if (k.utama === "kosong" && k.slotKosong.length > 0) {
+      isiAir.push({ jenis: "isi-air", ...dasar, pct: null, sejak: kosongSejak[k.kolomId] ?? sekarang.toISOString() });
+    }
+    if (k.isianBabonan && lebihDariJam(k.isianBabonan.mulaiAt, AMBANG.babonanJam, sekarang)) {
+      babonanLama.push({ jenis: "babonan-lama", ...dasar, pct: null, sejak: k.isianBabonan.mulaiAt });
+    }
+  }
+  const tertuaDulu = (a: Tugas, b: Tugas) => Date.parse(a.sejak) - Date.parse(b.sejak);
+  return [...panen.sort(tertuaDulu), ...isiAir.sort(tertuaDulu), ...babonanLama.sort(tertuaDulu)];
 }
 
 // ── Validasi panen ─────────────────────────────────────────────────────────
@@ -243,6 +407,80 @@ export function validasiPanen(
 
   const total = dimuat + babonan + pecah;
   if (total !== sisa) return `Jumlah dimuat + Babonan + pecah harus ${sisa} can (sekarang ${total}).`;
+  return null;
+}
+
+// ── Validasi panen per slot ────────────────────────────────────────────────
+
+export interface PanenSlotInput {
+  muatan: MuatanInput[];
+  /** Isian produksi: slot yang dipindah ke Babonan. */
+  slotBabonan: number[];
+  /** Isian produksi: slot pecah (ikut ke Babonan sebagai pecah). */
+  slotPecah: number[];
+  /** Isian Babonan: slot yang dimuat ke kendaraan. */
+  slotDimuat?: number[];
+}
+
+// Daftar slot sah: integer, unik, ⊆ boleh. `nama` untuk pesan. null = sah.
+function cekSubsetSlot(pilihan: number[], boleh: Set<number>, nama: string): string | null {
+  const terpakai = new Set<number>();
+  for (const s of pilihan) {
+    if (!Number.isInteger(s)) return `Nomor slot ${nama} harus bilangan bulat.`;
+    if (terpakai.has(s)) return `Slot ${s} dipilih dua kali sebagai ${nama}.`;
+    if (!boleh.has(s)) return `Slot ${s} tidak bisa dipilih sebagai ${nama}.`;
+    terpakai.add(s);
+  }
+  return null;
+}
+
+/** Pilihan slot sah: tidak kosong, integer, unik, ⊆ boleh. null = sah. */
+export function validasiPilihSlot(pilihan: number[], boleh: number[]): string | null {
+  if (pilihan.length === 0) return "Pilih minimal satu can.";
+  return cekSubsetSlot(pilihan, new Set(boleh), "pilihan");
+}
+
+/** Slot yang dimuat ke kendaraan (urut naik). */
+export function slotDimuatDari(isian: Pick<IsianAktif, "jenis" | "slot">, input: PanenSlotInput): number[] {
+  if (isian.jenis === "babonan") return [...(input.slotDimuat ?? [])].sort((a, b) => a - b);
+  const keluar = new Set([...input.slotBabonan, ...input.slotPecah]);
+  return isian.slot.filter((s) => !keluar.has(s)).sort((a, b) => a - b);
+}
+
+/**
+ * Validasi panen berbasis slot. Produksi: slotBabonan & slotPecah ⊆ slot,
+ * saling lepas, Σ muatan = |slot| − |slotBabonan| − |slotPecah|. Babonan:
+ * slotDimuat ⊆ slot \ slotPecah (es pecah tidak dijual), Σ muatan =
+ * |slotDimuat|. Aturan bentuk muatan sama dengan validasiPanen. null = sah.
+ */
+export function validasiPanenSlot(
+  isian: Pick<IsianAktif, "jenis" | "slot" | "slotPecah">,
+  input: PanenSlotInput,
+): string | null {
+  const { muatan, slotBabonan, slotPecah } = input;
+  const galatMuatan = cekDaftarMuatan(muatan);
+  if (galatMuatan) return galatMuatan;
+  const dimuat = muatan.reduce((s, m) => s + m.jumlah, 0);
+  const milik = new Set(isian.slot);
+
+  if (isian.jenis === "babonan") {
+    if (slotBabonan.length > 0 || slotPecah.length > 0) return "Can Babonan tidak bisa dipindah lagi ke Babonan atau pecah.";
+    const slotDimuat = input.slotDimuat ?? [];
+    if (slotDimuat.length === 0) return "Belum ada can Babonan yang dimuat.";
+    const pecah = new Set(isian.slotPecah);
+    for (const s of slotDimuat) if (pecah.has(s)) return `Slot ${s} berisi es pecah dan tidak bisa dimuat.`;
+    const galat = cekSubsetSlot(slotDimuat, milik, "dimuat");
+    if (galat) return galat;
+    if (dimuat !== slotDimuat.length) return `Jumlah muatan harus ${slotDimuat.length} can (sekarang ${dimuat}).`;
+    return null;
+  }
+
+  const galatBab = cekSubsetSlot(slotBabonan, milik, "Babonan") ?? cekSubsetSlot(slotPecah, milik, "pecah");
+  if (galatBab) return galatBab;
+  const setBabonan = new Set(slotBabonan);
+  for (const s of slotPecah) if (setBabonan.has(s)) return `Slot ${s} tidak bisa sekaligus Babonan dan pecah.`;
+  const harus = isian.slot.length - slotBabonan.length - slotPecah.length;
+  if (dimuat !== harus) return `Jumlah dimuat harus ${harus} can (sekarang ${dimuat}).`;
   return null;
 }
 
