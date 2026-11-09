@@ -12,7 +12,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { getPgPool } from "../src/lib/pg";
 import { buatBak, buatKolom, denahKosong, type DenahDokumen } from "../src/lib/produksi-denah";
-import { tanggalBisnisPanen, type MuatanInput } from "../src/lib/produksi-operasional";
+import { keadaanPabrik, PESAN_SLOT_BELUM_SIAP, tanggalBisnisPanen, type MuatanInput } from "../src/lib/produksi-operasional";
 import { GalatSimpanDenah, getDenahUntukKode, getKolomIsiIdsUntukKode, getKolomTerkunciUntukKode, simpanDenahUntukKode } from "../src/lib/queries/produksi-denah";
 import {
   batalkanPanen,
@@ -56,6 +56,8 @@ let kolom3 = "";
 let kolom4 = "";
 let kolom5 = "";
 let kolom6 = "";
+let kolom7 = "";
+let bakId = "";
 let panenBabonanId = "";
 let panenPertamaId = "";
 
@@ -150,10 +152,11 @@ async function harapGalat(p: Promise<unknown>, kode: KodeGalatProduksi | KodeGal
 
 before(async () => {
   await bersihkan();
-  const kolom = buatKolom(6, { varian: "kecil", jumlahIceCan: 36 });
+  const kolom = buatKolom(7, { varian: "kecil", jumlahIceCan: 36 });
   kolom[2] = { ...kolom[2], nonaktif: true };
-  [kolom1, kolom2, kolom3, kolom4, kolom5, kolom6] = kolom.map((k) => k.id);
+  [kolom1, kolom2, kolom3, kolom4, kolom5, kolom6, kolom7] = kolom.map((k) => k.id);
   const bak = buatBak(1, 1, { nama: "BAK UJI", kolom, durasiBekuJam: { kecil: 24, besar: 32 } });
+  bakId = bak.id;
   const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
   await pg().query(
     `INSERT INTO produksi_denah (perusahaan_kode, versi, data, updated_by, updated_at) VALUES ($1, 1, $2::jsonb, 'uji', now())`,
@@ -704,6 +707,86 @@ test("batal panen mengembalikan slot", async () => {
   assert.deepEqual(babSelesai.slot, []);
   assert.deepEqual(babSelesai.slot_pecah, []);
   assert.equal(babSelesai.pecah, 0);
+});
+
+test("slot belum siap: isian aktif tanpa slot menolak aksi slot sampai dikoreksi", async () => {
+  // Meniru baris sebelum backfill slot can / tulisan kontainer lama: sisa 36, slot '{}'.
+  const { rows } = await pg().query<{ id: string }>(
+    `INSERT INTO produksi_kolom_isi
+       (perusahaan_kode, kolom_id, mulai_at, jenis, bak_id, varian, jumlah_awal, sisa, pecah, durasi_beku_jam, diisi_oleh_akun_id, slot, slot_pecah)
+     VALUES ($1, $2, now() - interval '25 hours', 'produksi', $3, 'kecil', 36, 36, 0, 24, $4, '{}', '{}')
+     RETURNING id::text AS id`,
+    [KODE, kolom7, bakId, operator.akunId],
+  );
+  const isianId = rows[0].id;
+  const harapBelumSiap = (p: Promise<unknown>) =>
+    assert.rejects(p, (err: unknown) => {
+      assert.ok(err instanceof GalatAksiProduksi, `bukan GalatAksiProduksi: ${String(err)}`);
+      assert.equal(err.kodeGalat, "KEADAAN_BERUBAH");
+      assert.equal(err.message, PESAN_SLOT_BELUM_SIAP);
+      return true;
+    });
+  const logAwal = await jumlahLog();
+
+  // Tanpa penjaga: Isi Air menimpa rek penuh, panen menutup isian dengan Σ=0.
+  await harapBelumSiap(isiAir(KODE, kolom7, null, operator));
+  await harapBelumSiap(isiAir(KODE, kolom7, [1], operator));
+  await harapBelumSiap(
+    panen(
+      KODE,
+      { isianId, muatan: [muat(armadaA, 36)], slotBabonan: [], slotPecah: [], isiUlang: false, konfirmasiBelumSiap: true },
+      operator,
+    ),
+  );
+  await harapBelumSiap(tandaiRusak(KODE, kolom7, [1], "bocor", operator));
+  await harapBelumSiap(tandaiBabonan(KODE, isianId, [1], operator));
+  const [tetap] = await isianKolom(kolom7);
+  assert.equal(tetap.id, isianId);
+  assert.equal(tetap.sisa, 36);
+  assert.deepEqual(tetap.slot, []);
+  assert.equal(await jumlahLog(), logAwal);
+
+  // Keadaan murni menandai rek ini; tidak ada tugas isi air/panen untuknya.
+  const data = await getDataPabrik(KODE);
+  const rek = keadaanPabrik(data.denah!, data.isian, data.maintenance, new Date(data.sekarang), data.rusak).find((k) => k.kolomId === kolom7)!;
+  assert.equal(rek.slotBelumSiap, true);
+  assert.deepEqual(rek.slotKosong, []);
+
+  // Jalur perbaikan admin tetap boleh: koreksi slot → rek kembali normal (penuh).
+  await koreksiIsian(KODE, isianId, { slot: rentang(1, 36) }, "catat slot sebelum backfill", admin);
+  const [diperbaiki] = await isianKolom(kolom7);
+  assert.deepEqual(diperbaiki.slot, rentang(1, 36));
+  assert.equal(diperbaiki.sisa, 36);
+  assert.equal(diperbaiki.jumlah_awal, 36);
+  await harapGalat(isiAir(KODE, kolom7, null, operator), "KAPASITAS");
+
+  // Tutup isian uji agar rek kosong untuk uji berikutnya.
+  await koreksiIsian(KODE, isianId, { slot: [] }, "bersihkan uji", admin);
+  assert.equal((await isianKolom(kolom7)).length, 0);
+});
+
+test("koreksi isian: slotDiharapkan basi ditolak (dialog terbuka saat rek berubah)", async () => {
+  const { isianId } = await isiAir(KODE, kolom7, null, operator);
+  // Operator mengubah slot isian saat dialog admin masih terbuka.
+  await tandaiBabonan(KODE, isianId, [36], operator);
+  const dasarBasi = rentang(1, 36);
+
+  // Tanpa penjaga koreksi ini lolos (hanya mengecilkan) dan mengubah data diam-diam.
+  await harapGalat(koreksiIsian(KODE, isianId, { slot: rentang(1, 34), slotDiharapkan: dasarBasi }, "salah hitung", admin), "KEADAAN_BERUBAH");
+  await harapGalat(koreksiIsian(KODE, isianId, { slot: rentang(1, 34), slotDiharapkan: [1, 1] }, "salah hitung", admin), "VALIDASI");
+  let prod = (await isianKolom(kolom7)).find((r) => r.id === isianId)!;
+  assert.deepEqual(prod.slot, rentang(1, 35));
+
+  // slotDiharapkan sama dengan slot terkini (urutan bebas) → diterima.
+  await koreksiIsian(KODE, isianId, { slot: rentang(1, 34), slotDiharapkan: [...rentang(1, 35)].reverse() }, "salah hitung", admin);
+  prod = (await isianKolom(kolom7)).find((r) => r.id === isianId)!;
+  assert.deepEqual(prod.slot, rentang(1, 34));
+  assert.equal(prod.sisa, 34);
+
+  // Bersihkan: tutup produksi + buang Babonan.
+  await koreksiIsian(KODE, isianId, { slot: [], slotDiharapkan: rentang(1, 34) }, "bersihkan uji", admin);
+  await buangBabonan(KODE, kolom7, [36], "bersihkan uji", operator);
+  assert.equal((await isianKolom(kolom7)).length, 0);
 });
 
 test("invarian slot", async () => {

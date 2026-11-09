@@ -28,7 +28,7 @@
 // transaksi yang sama, jadi setiap akun_id di tabel produksi_* pasti punya
 // baris log. Ini berlaku untuk semua sumber akun (akun, akun_direktori).
 import type { PoolClient } from "pg";
-import { getPgPool } from "@/lib/pg";
+import { getPgPool, pantauClient } from "@/lib/pg";
 import { AppError } from "@/lib/action-result";
 import { getWibTimeHHmm } from "@/lib/business-date";
 import type { BakElemen, DenahDokumen, DenahKolom, Varian } from "@/lib/produksi-denah";
@@ -36,6 +36,7 @@ import { migrasiDenah } from "@/lib/produksi-denah";
 import {
   AMBANG,
   hitungKematangan,
+  PESAN_SLOT_BELUM_SIAP,
   ROLLOVER_PANEN_JAM,
   shiftDari,
   slotDimuatDari,
@@ -214,6 +215,9 @@ function terjemahkanGalatPg(err: unknown): unknown {
 
 async function transaksi<T>(fn: (c: PoolClient, sekarang: Date) => Promise<T>): Promise<T> {
   const client = await getPgPool().connect();
+  // Pendengar 'error' + buang client yang diputus backend (lihat pantauClient).
+  const lepas = pantauClient(client, "produksi-operasional");
+  let rollbackGagal: Error | undefined;
   try {
     await client.query("BEGIN");
     // now() Postgres = awal transaksi; dipakai untuk semua cap waktu aksi ini.
@@ -228,10 +232,12 @@ async function transaksi<T>(fn: (c: PoolClient, sekarang: Date) => Promise<T>): 
     await client.query("COMMIT");
     return hasil;
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client.query("ROLLBACK").catch((e: unknown) => {
+      rollbackGagal = e instanceof Error ? e : new Error(String(e));
+    });
     throw terjemahkanGalatPg(err);
   } finally {
-    client.release();
+    lepas(rollbackGagal);
   }
 }
 
@@ -300,7 +306,25 @@ type BarisIsian = {
 const KOLOM_ISIAN = `id::text AS id, kolom_id, bak_id, jenis, varian, jumlah_awal, sisa, pecah, mulai_at, durasi_beku_jam,
        slot, slot_pecah`;
 
-async function kunciIsian(c: PoolClient, kode: string, kolomId: string): Promise<BarisIsian[]> {
+/** Baris isian aktif yang slotnya belum dicatat (mis. sebelum backfill slot can). */
+function slotBelumSiap(i: Pick<BarisIsian, "jenis" | "sisa" | "pecah" | "slot" | "slot_pecah">): boolean {
+  return i.slot.length !== i.sisa || (i.jenis === "babonan" && i.slot_pecah.length !== i.pecah);
+}
+
+// Kunci isian aktif rek. Bawaan KETAT: bila ada isian aktif yang slotnya
+// belum dicatat (slot '{}' padahal sisa > 0 — antara deploy dan backfill,
+// atau ditulis kontainer lama saat pergantian), aksi ditolak; tanpa ini can
+// tersebut dianggap kosong (Isi Air menimpa rek penuh, panen menutup isian
+// dengan Σ=0). `longgar` = aksi yang tidak menghitung slot isian
+// (selesai maintenance, perbaiki can rusak) dan koreksi admin (jalur
+// perbaikan data).
+async function kunciIsian(c: PoolClient, kode: string, kolomId: string, longgar = false): Promise<BarisIsian[]> {
+  const rows = await kunciIsianMentah(c, kode, kolomId);
+  if (!longgar && rows.some(slotBelumSiap)) throw galat("KEADAAN_BERUBAH", PESAN_SLOT_BELUM_SIAP);
+  return rows;
+}
+
+async function kunciIsianMentah(c: PoolClient, kode: string, kolomId: string): Promise<BarisIsian[]> {
   const { rows } = await c.query<BarisIsian>(
     `SELECT ${KOLOM_ISIAN}
        FROM produksi_kolom_isi
@@ -621,7 +645,12 @@ async function insertPanen(
 
 // slot null = semua slot kosong yang tidak rusak (satu ketukan); daftar
 // eksplisit wajib ⊆ slot kosong non-rusak.
-export async function isiAir(kode: string, kolomId: string, slot: number[] | null, p: Pelaku): Promise<{ isianId: string }> {
+export async function isiAir(
+  kode: string,
+  kolomId: string,
+  slot: number[] | null,
+  p: Pelaku,
+): Promise<{ isianId: string; jumlah: number }> {
   cekPelaku(p);
   teksWajib(kolomId, "Rek");
   const pilihan = slot === null || slot === undefined ? null : normalisasiSlot(slot, "isi air", false);
@@ -668,7 +697,7 @@ export async function isiAir(kode: string, kolomId: string, slot: number[] | nul
         durasiBekuJam: ctx.bak.durasiBekuJam[ctx.kolom.varian],
       },
     });
-    return { isianId };
+    return { isianId, jumlah: isi.length };
   });
 }
 
@@ -969,7 +998,7 @@ export async function perbaikiRusak(kode: string, kolomId: string, slot: number[
   const pilihan = normalisasiSlot(slot, "diperbaiki", false);
   await transaksi(async (c, sekarang) => {
     const ctx = await kunciKolomDasar(c, kode, kolomId, true);
-    await kunciIsian(c, kode, kolomId);
+    await kunciIsian(c, kode, kolomId, true);
     const rusak = await kunciRusak(c, kode, kolomId);
     const perSlot = new Map(rusak.map((r) => [r.slot, r]));
     const bukan = pilihan.filter((s) => !perSlot.has(s));
@@ -1027,7 +1056,7 @@ export async function selesaiMaintenance(kode: string, kolomId: string, p: Pelak
   await transaksi(async (c, sekarang) => {
     // Longgar: rek yang dinonaktifkan selama maintenance tetap bisa ditutup.
     const ctx = await kunciKolomDasar(c, kode, kolomId, true);
-    await kunciIsian(c, kode, kolomId);
+    await kunciIsian(c, kode, kolomId, true);
     const mt = await maintenanceTerbuka(c, kode, kolomId);
     if (!mt) throw await galatBerubah(c, kode, kolomId, "Rek ini tidak sedang maintenance.");
     await c.query(
@@ -1052,10 +1081,19 @@ export async function selesaiMaintenance(kode: string, kolomId: string, p: Pelak
 // tidak ditempati isian aktif lain dan tidak rusak (KEADAAN_BERUBAH). Slot
 // pecah Babonan yang tidak lagi ada di slot ikut dibuang. Slot kosong = isian
 // selesai (sama seperti koreksi sisa 0 dulu).
+//
+// `slotDiharapkan` = himpunan slot isian yang dilihat klien saat mulai
+// mengedit. Bila diberikan dan berbeda dari slot terkini (mis. operator
+// memanen saat dialog terbuka) → KEADAAN_BERUBAH, supaya can yang sudah
+// dipanen tidak dikembalikan diam-diam.
+//
+// Koreksi boleh berjalan di rek yang slotnya belum siap (jalur perbaikan
+// data), tetapi mengganti slot ditolak bila isian aktif LAIN di rek itu
+// belum punya slot (cek bentrok tidak bisa dipercaya).
 export async function koreksiIsian(
   kode: string,
   isianId: string,
-  ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] },
+  ubah: { mulaiAt?: string; varian?: Varian; slot?: number[]; slotDiharapkan?: number[] },
   alasan: string,
   p: Pelaku,
 ): Promise<void> {
@@ -1066,13 +1104,18 @@ export async function koreksiIsian(
   const mulaiBaru = u.mulaiAt === undefined ? null : cekTanggalIso(u.mulaiAt, "Waktu isi air");
   if (u.varian !== undefined && u.varian !== "kecil" && u.varian !== "besar") throw galat("VALIDASI", "Varian tidak sah.");
   const slotBaru = u.slot === undefined ? null : normalisasiSlot(u.slot, "isian", true);
+  const slotDiharapkan = u.slotDiharapkan === undefined ? null : normalisasiSlot(u.slotDiharapkan, "diharapkan", true);
 
   await transaksi(async (c, sekarang) => {
     const kolomId = await kolomDariIsian(c, kode, id);
     const ctx = await kunciKolom(c, kode, kolomId);
-    const aktif = await kunciIsian(c, kode, kolomId);
+    const aktif = await kunciIsian(c, kode, kolomId, true);
     const lama = aktif.find((i) => i.id === id);
     if (!lama) throw await galatBerubah(c, kode, kolomId, "Isian ini sudah tidak aktif.");
+    if (slotDiharapkan && daftarSlot(slotDiharapkan) !== daftarSlot(urutUnik(lama.slot))) {
+      throw await galatBerubah(c, kode, kolomId, "Slot isian ini berubah sejak dialog dibuka.");
+    }
+    if (slotBaru && aktif.some((i) => i.id !== lama.id && slotBelumSiap(i))) throw galat("KEADAAN_BERUBAH", PESAN_SLOT_BELUM_SIAP);
     const rusak = await kunciRusak(c, kode, kolomId);
     if (mulaiBaru && mulaiBaru.getTime() > sekarang.getTime()) throw galat("VALIDASI", "Waktu isi air tidak boleh di masa depan.");
 

@@ -590,3 +590,44 @@ test("tugas sekarang: urutan FIFO panen dan kosong terlama", () => {
   assert.deepEqual(tugas.map((t) => `${t.jenis}:${t.nomor}`), ["panen:2", "panen:1", "isi-air:4", "isi-air:3"]);
   assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 2, kosong: 2, babonan: 0, rusak: 1 }]);
 });
+
+test("slot belum siap: rek dengan isian aktif tanpa slot tidak masuk tugas dan diberi peringatan", () => {
+  const bak = bakUji(4);
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const keadaan = keadaanPabrik(
+    denah,
+    [
+      // rek 1: produksi siap panen tapi slot belum dicatat (sebelum backfill)
+      isian(bak, 0, { sisa: 36, slot: [], mulaiAt: lalu(23) }),
+      // rek 2: Babonan dengan pecah 1 tapi slotPecah kosong
+      isian(bak, 1, { jenis: "babonan", sisa: 2, pecah: 1, jumlahAwal: 2, mulaiAt: lalu(50), durasiBekuJam: null }),
+      // rek 3: normal, siap panen (pembanding)
+      isian(bak, 2, { sisa: 34, mulaiAt: lalu(23) }),
+    ],
+    [],
+    SEKARANG,
+  );
+  assert.deepEqual(
+    keadaan.map((k) => k.slotBelumSiap),
+    [true, true, false, false],
+  );
+  // Grid tidak bisa dipercaya → tidak ada target Isi Air.
+  assert.deepEqual(keadaan[0].slotKosong, []);
+  assert.equal(keadaan[0].canKosong, 0);
+  assert.deepEqual(keadaan[1].slotKosong, []);
+  assert.deepEqual(keadaan[2].slotKosong, [35, 36]);
+
+  const tugas = tugasSekarang(keadaan, {}, SEKARANG);
+  assert.ok(!tugas.some((t) => (t.jenis === "panen" || t.jenis === "isi-air") && (t.nomor === 1 || t.nomor === 2)));
+  assert.deepEqual(
+    tugas.filter((t) => t.jenis !== "babonan-lama").map((t) => `${t.jenis}:${t.nomor}`),
+    ["panen:3", "isi-air:3", "isi-air:4"],
+  );
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 1, kosong: 2, babonan: 1, rusak: 0 }]);
+
+  const p = peringatanDari({ keadaan, kosongSejak: {}, panenBelumSiap: [], selisih: [], sekarang: SEKARANG, label: (id) => id });
+  assert.deepEqual(
+    p.filter((x) => x.kode === "SLOT_BELUM_SIAP").map((x) => x.kolomId),
+    [bak.kolom[0].id, bak.kolom[1].id],
+  );
+});

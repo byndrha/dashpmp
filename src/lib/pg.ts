@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 
 // "Directory" Postgres DB — a small central store for Akun (accounts) and
 // Perusahaan (companies) that bridges the per-company MSSQL databases (see
@@ -34,7 +34,34 @@ declare global {
 // clear the cached pool on a failed query the way the mssql singleton does.
 export function getPgPool(): Pool {
   if (!global._pgPool) {
-    global._pgPool = new Pool(config);
+    const pool = new Pool(config);
+    // Client idle yang diputus backend (restart, admin terminate, jaringan)
+    // memancarkan 'error' lewat pool; tanpa pendengar Node crash. pg sudah
+    // membuang client tersebut dari pool dengan sendirinya.
+    pool.on("error", (e) => console.error("[pg pool]", e));
+    global._pgPool = pool;
   }
   return global._pgPool;
+}
+
+/**
+ * Pasang pendengar 'error' pada client yang sedang di-checkout (transaksi).
+ * Client yang diputus backend di tengah transaksi (mis. habis
+ * idle_in_transaction_session_timeout) memancarkan 'error' — tanpa pendengar
+ * Node crash. Kembalikan fungsi `lepas(rusak?)` untuk dipanggil di `finally`
+ * menggantikan `client.release()`: pendengar dilepas, dan client yang pernah
+ * error — atau yang ditandai `rusak` oleh pemanggil (mis. ROLLBACK gagal) —
+ * dibuang (release(err)) alih-alih dipakai ulang.
+ */
+export function pantauClient(client: PoolClient, label: string): (rusak?: Error) => void {
+  let galat: Error | undefined;
+  const saatGalat = (e: Error) => {
+    galat = e;
+    console.error(`[pg client ${label}]`, e);
+  };
+  client.on("error", saatGalat);
+  return (rusak?: Error) => {
+    client.off("error", saatGalat);
+    client.release(galat ?? rusak);
+  };
 }

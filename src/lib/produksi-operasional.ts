@@ -99,6 +99,13 @@ export interface KeadaanRek {
   slotKosong: number[];
   /** Jumlah slot rusak (tidak ditempati isian). */
   rusak: number;
+  /**
+   * Ada isian aktif yang slotnya belum dicatat (|slot| ≠ sisa, atau Babonan
+   * |slotPecah| ≠ pecah — mis. sebelum backfill slot can). Grid can rek ini
+   * tidak bisa dipercaya: slotKosong dikosongkan, rek tidak masuk tugas
+   * isi air/panen, dan server menolak aksi slot di rek ini.
+   */
+  slotBelumSiap: boolean;
   /** Urut FIFO (mulaiAt tertua dulu); durasiBekuJam null sudah diisi dari bak. */
   isianProduksi: IsianAktif[];
   isianBabonan: IsianAktif | null;
@@ -116,6 +123,9 @@ export interface KendaraanPilihan {
 export interface MuatanInput extends KendaraanPilihan {
   jumlah: number;
 }
+
+/** Pesan bila rek punya isian aktif yang slotnya belum dicatat (lihat KeadaanRek.slotBelumSiap). */
+export const PESAN_SLOT_BELUM_SIAP = "Data slot rek belum siap — hubungi admin (jalankan backfill slot).";
 
 const JAM_MS = 3_600_000;
 const WIB_OFFSET_MS = 7 * JAM_MS;
@@ -181,7 +191,10 @@ export function keadaanRek(
   const daftarBabonan = milikRek.filter((i) => i.jenis === "babonan");
   const babonan = daftarBabonan.reduce((s, i) => s + i.sisa, 0);
   const can = susunCan(kolom, isianProduksi, daftarBabonan, rusak, sekarang);
-  const slotKosong = can.filter((c) => c.jenis === "kosong").map((c) => c.slot);
+  const slotBelumSiap = milikRek.some(
+    (i) => i.slot.length !== i.sisa || (i.jenis === "babonan" && i.slotPecah.length !== i.pecah),
+  );
+  const slotKosong = slotBelumSiap ? [] : can.filter((c) => c.jenis === "kosong").map((c) => c.slot);
   const maintenance = mt && mt.kolomId === kolom.id ? mt : null;
 
   let pct: number | null = null;
@@ -218,6 +231,7 @@ export function keadaanRek(
     can,
     slotKosong,
     rusak: can.filter((c) => c.jenis === "rusak").length,
+    slotBelumSiap,
     isianProduksi,
     isianBabonan: daftarBabonan[0] ?? null,
     maintenance,
@@ -331,7 +345,7 @@ export function ringkasBak(keadaan: KeadaanRek[]): RingkasanBak[] {
       peta.set(k.bakId, r);
     }
     if (k.utama === "nonaktif") continue;
-    const bisaDikerjakan = k.utama !== "maintenance";
+    const bisaDikerjakan = k.utama !== "maintenance" && !k.slotBelumSiap;
     if (bisaDikerjakan && adaProduksiSiap(k)) r.siap++;
     if (bisaDikerjakan && k.slotKosong.length > 0) r.kosong++;
     if (k.isianBabonan) r.babonan++;
@@ -367,8 +381,9 @@ export function tugasSekarang(keadaan: KeadaanRek[], kosongSejak: Record<string,
     if (k.utama === "nonaktif" || k.utama === "maintenance") continue;
     const dasar = { kolomId: k.kolomId, bakId: k.bakId, nomor: k.nomor };
     const tertua = k.isianProduksi[0];
-    if (tertua && adaProduksiSiap(k)) panen.push({ jenis: "panen", ...dasar, pct: k.pct, sejak: tertua.mulaiAt });
-    if (k.slotKosong.length > 0) {
+    // Slot belum dicatat: aksi slot ditolak server; tampil sebagai peringatan.
+    if (!k.slotBelumSiap && tertua && adaProduksiSiap(k)) panen.push({ jenis: "panen", ...dasar, pct: k.pct, sejak: tertua.mulaiAt });
+    if (!k.slotBelumSiap && k.slotKosong.length > 0) {
       isiAir.push({ jenis: "isi-air", ...dasar, pct: null, sejak: kosongSejak[k.kolomId] ?? sekarang.toISOString() });
     }
     if (k.isianBabonan && lebihDariJam(k.isianBabonan.mulaiAt, AMBANG.babonanJam, sekarang)) {
@@ -733,7 +748,8 @@ export type KodePeringatan =
   | "MAINTENANCE_LAMA"
   | "KOSONG_LAMA"
   | "PANEN_BELUM_SIAP"
-  | "SELISIH_MUATAN";
+  | "SELISIH_MUATAN"
+  | "SLOT_BELUM_SIAP";
 
 export interface Peringatan {
   kode: KodePeringatan;
@@ -772,6 +788,14 @@ export function peringatanDari(a: {
   const hasil: Peringatan[] = [];
 
   for (const k of keadaan) {
+    if (k.slotBelumSiap) {
+      hasil.push({
+        kode: "SLOT_BELUM_SIAP",
+        kolomId: k.kolomId,
+        pesan: `${label(k.kolomId)}: ${PESAN_SLOT_BELUM_SIAP}`,
+        sejak: sekarang.toISOString(),
+      });
+    }
     for (const i of k.isianProduksi) {
       const durasi = i.durasiBekuJam;
       if (durasi === null || i.sisa <= 0) continue;

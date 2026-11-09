@@ -81,6 +81,18 @@ export function DialogKoreksi({
   // Slot yang boleh dipilih: slot isian ini ∪ slot kosong tak rusak rek.
   const boleh = useMemo(() => new Set([...isian.slot, ...rek.slotKosong]), [isian.slot, rek.slotKosong]);
   const [pilihanMentah, setPilihan] = useState<Set<number>>(() => new Set(isian.slot));
+  // Slot isian bisa berubah selama dialog terbuka (operator memanen, rek
+  // dimuat ulang): pilihan lama tidak boleh dikirim — bisa mengembalikan can
+  // yang sudah dipanen. Atur ulang pilihan ke slot terkini + beri tahu admin.
+  // Server juga menolak bila slotDiharapkan ≠ slot terkini (jaring kedua).
+  const sidikSlot = [...isian.slot].sort((a, b) => a - b).join(".");
+  const [sidikDasar, setSidikDasar] = useState(sidikSlot);
+  const [infoBerubah, setInfoBerubah] = useState(false);
+  if (sidikSlot !== sidikDasar) {
+    setSidikDasar(sidikSlot);
+    setPilihan(new Set(isian.slot));
+    setInfoBerubah(true);
+  }
   const pilihan = new Set([...pilihanMentah].filter((s) => boleh.has(s)));
   const slotBaru = [...pilihan].sort((a, b) => a - b);
   const slotBerubah = !samaSlot(slotBaru, isian.slot);
@@ -91,14 +103,18 @@ export function DialogKoreksi({
   const [maks] = useState(() => keLokalWib(new Date().toISOString()));
 
   async function simpan() {
-    const ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] } = {};
+    const ubah: { mulaiAt?: string; varian?: Varian; slot?: number[]; slotDiharapkan?: number[] } = {};
     if (mulai !== awalMulai) {
       const iso = dariLokalWib(mulai);
       if (!iso) return setGalat("Waktu isi air tidak sah.");
       ubah.mulaiAt = iso;
     }
     if (varian !== isian.varian) ubah.varian = varian;
-    if (slotBerubah) ubah.slot = slotBaru;
+    if (slotBerubah) {
+      ubah.slot = slotBaru;
+      // Slot yang menjadi dasar edit ini (server menolak bila sudah berubah).
+      ubah.slotDiharapkan = [...isian.slot].sort((a, b) => a - b);
+    }
     if (Object.keys(ubah).length === 0) return setGalat("Tidak ada yang diubah.");
     // Alasan kosong tetap dikirim: server yang menolak (pesannya ditampilkan apa adanya).
     setSibuk(true);
@@ -171,6 +187,11 @@ export function DialogKoreksi({
             <Label htmlFor="koreksi-alasan">Alasan (wajib)</Label>
             <Textarea id="koreksi-alasan" value={alasan} onChange={(e) => setAlasan(e.target.value)} rows={2} maxLength={1000} />
           </div>
+          {infoBerubah && (
+            <p role="status" className="rounded-lg bg-amber-100 p-2 text-sm text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
+              Isian berubah, pilihan diatur ulang.
+            </p>
+          )}
           {galat && <p className="rounded-lg bg-destructive/10 p-2 text-sm text-destructive">{galat}</p>}
         </div>
         <DialogFooter>

@@ -5,13 +5,17 @@
 // langsung di baris: Panen membuka formulir panen, Isi Air = SATU ketukan
 // (semua slot kosong tak rusak, tanpa layar konfirmasi), Babonan → lembar rek.
 // ≥ AMBANG_KELOMPOK tugas isi air → satu baris kelompok "n rek kosong — Isi
-// semua" di posisi tugas isi air pertama; baris per rek di bawah "Tampilkan semua".
+// semua" (dengan dialog konfirmasi) di posisi tugas isi air pertama; baris
+// per rek dibuka lewat "Lihat n rek kosong" (selalu lengkap, tidak ikut
+// dipotong BATAS_AWAL). Rek yang slotnya belum dicatat (slotBelumSiap) tidak
+// masuk tugas — tampil sebagai baris peringatan di atas.
 
 import { useState } from "react";
-import { ChevronRight, CircleCheck, Droplets } from "lucide-react";
+import { AlertTriangle, ChevronRight, CircleCheck, Droplets } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { KeadaanRek, Tugas } from "@/lib/produksi-operasional";
+import { PESAN_SLOT_BELUM_SIAP, type KeadaanRek, type Tugas } from "@/lib/produksi-operasional";
 import { formatUsiaRingkas, singkatVarian, WARNA_TAHAP } from "../warna-tahap";
 
 const BATAS_AWAL = 8;
@@ -21,6 +25,7 @@ type Baris = { jenis: "tugas"; tugas: Tugas } | { jenis: "kelompok-isi" };
 
 export function DaftarTugas({
   tugas,
+  rekSlotBelumSiap = [],
   keadaan,
   sekarang,
   sibuk,
@@ -30,6 +35,8 @@ export function DaftarTugas({
   onBuka,
 }: {
   tugas: Tugas[];
+  /** Rek bak ini yang slot can-nya belum dicatat (ditampilkan sebagai peringatan). */
+  rekSlotBelumSiap?: KeadaanRek[];
   keadaan: Map<string, KeadaanRek>;
   sekarang: string;
   sibuk: boolean;
@@ -41,6 +48,7 @@ export function DaftarTugas({
 }) {
   const [semua, setSemua] = useState(false);
   const [rinciIsi, setRinciIsi] = useState(false);
+  const [konfirmasi, setKonfirmasi] = useState<{ rek: KeadaanRek[]; can: number } | null>(null);
   const now = sekarang ? Date.parse(sekarang) : null;
 
   const rekIsi = tugas
@@ -48,17 +56,21 @@ export function DaftarTugas({
     .map((t) => keadaan.get(t.kolomId))
     .filter((k): k is KeadaanRek => k !== undefined && k.slotKosong.length > 0);
   const kelompok = rekIsi.length >= AMBANG_KELOMPOK;
-  const baris: Baris[] = [];
-  let kelompokMasuk = false;
+  // Baris utama (kelompok dihitung satu baris) dipotong BATAS_AWAL; rincian
+  // kelompok disisipkan utuh sesudah baris kelompok bila dibuka.
+  const barisUtama: Baris[] = [];
+  const rincian: Baris[] = [];
   for (const t of tugas) {
     if (kelompok && t.jenis === "isi-air") {
-      if (!kelompokMasuk) baris.push({ jenis: "kelompok-isi" });
-      kelompokMasuk = true;
-      if (!rinciIsi) continue;
+      if (rincian.length === 0) barisUtama.push({ jenis: "kelompok-isi" });
+      rincian.push({ jenis: "tugas", tugas: t });
+      continue;
     }
-    baris.push({ jenis: "tugas", tugas: t });
+    barisUtama.push({ jenis: "tugas", tugas: t });
   }
-  const tampil = semua ? baris : baris.slice(0, BATAS_AWAL);
+  const tampil = (semua ? barisUtama : barisUtama.slice(0, BATAS_AWAL)).flatMap((b) =>
+    b.jenis === "kelompok-isi" && rinciIsi ? [b, ...rincian] : [b],
+  );
   const canKosong = rekIsi.reduce((s, k) => s + k.slotKosong.length, 0);
 
   return (
@@ -66,6 +78,24 @@ export function DaftarTugas({
       <h2 className="px-3 pt-3 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
         Tugas sekarang {tugas.length > 0 && <span className="tabular-nums">({tugas.length})</span>}
       </h2>
+      {rekSlotBelumSiap.length > 0 && (
+        <ul className="mx-3 mb-1.5 flex flex-col gap-1">
+          {rekSlotBelumSiap.map((k) => (
+            <li key={k.kolomId}>
+              <button
+                type="button"
+                onClick={() => onBuka(k.kolomId)}
+                className="flex w-full items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-left text-xs text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  <b>Rek {k.nomor}</b>: {PESAN_SLOT_BELUM_SIAP}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {tugas.length === 0 ? (
         <p className="mx-3 flex items-center gap-2 rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
           <CircleCheck className="size-4 text-green-600" /> Tidak ada tugas di bak ini.
@@ -86,7 +116,7 @@ export function DaftarTugas({
                       variant="outline"
                       className="h-9 shrink-0 border-red-400 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950"
                       disabled={sibuk}
-                      onClick={() => onIsiAirSemua(rekIsi)}
+                      onClick={() => setKonfirmasi({ rek: rekIsi, can: canKosong })}
                     >
                       <Droplets className="size-4" /> Isi semua
                     </Button>
@@ -97,7 +127,7 @@ export function DaftarTugas({
                     aria-expanded={rinciIsi}
                     className="self-start px-3 pb-1.5 text-xs font-medium text-primary"
                   >
-                    {rinciIsi ? "Sembunyikan rincian" : `Tampilkan semua (${rekIsi.length})`}
+                    {rinciIsi ? "Sembunyikan rincian" : `Lihat ${rekIsi.length} rek kosong`}
                   </button>
                 </li>
               );
@@ -139,7 +169,7 @@ export function DaftarTugas({
           })}
         </ul>
       )}
-      {baris.length > BATAS_AWAL && (
+      {barisUtama.length > BATAS_AWAL && (
         <button
           type="button"
           onClick={() => setSemua((s) => !s)}
@@ -148,6 +178,31 @@ export function DaftarTugas({
           {semua ? "Ringkas" : `Tampilkan semua tugas (${tugas.length})`}
         </button>
       )}
+      <Dialog open={konfirmasi !== null} onOpenChange={(o) => !o && setKonfirmasi(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Isi {konfirmasi?.rek.length ?? 0} rek (total {konfirmasi?.can ?? 0} can)?
+            </DialogTitle>
+            <DialogDescription>Semua can kosong yang tidak rusak di rek-rek ini diisi air sekarang.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setKonfirmasi(null)}>
+              Batal
+            </Button>
+            <Button
+              disabled={sibuk}
+              onClick={() => {
+                const k = konfirmasi;
+                setKonfirmasi(null);
+                if (k) onIsiAirSemua(k.rek);
+              }}
+            >
+              <Droplets className="size-4" /> Isi semua
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

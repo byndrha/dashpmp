@@ -7,7 +7,7 @@
 // bertipe KodeProduksi; fungsi *UntukKode menerima string bebas hanya agar
 // skrip uji sekali-pakai bisa memakai kode uji (mis. 'zz-uji') tanpa
 // menyentuh baris pabrik sungguhan.
-import { getPgPool } from "@/lib/pg";
+import { getPgPool, pantauClient } from "@/lib/pg";
 import { AppError } from "@/lib/action-result";
 import {
   kolomTerkunciBerubah,
@@ -144,6 +144,8 @@ export async function simpanDenahUntukKode(
   }
 
   const client = await getPgPool().connect();
+  const lepas = pantauClient(client, "produksi-denah");
+  let rollbackGagal: Error | undefined;
   try {
     await client.query("BEGIN");
     const lama = await client.query<{ versi: number; data: unknown }>(
@@ -195,10 +197,12 @@ export async function simpanDenahUntukKode(
     await client.query("COMMIT");
     return { versi };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client.query("ROLLBACK").catch((e: unknown) => {
+      rollbackGagal = e instanceof Error ? e : new Error(String(e));
+    });
     throw err;
   } finally {
-    client.release();
+    lepas(rollbackGagal);
   }
 }
 

@@ -233,16 +233,20 @@ function cekPanenInput(v: unknown): PanenInputSlot {
   return input;
 }
 
-function cekUbahIsian(v: unknown): { mulaiAt?: string; varian?: Varian; slot?: number[] } {
+type UbahIsian = { mulaiAt?: string; varian?: Varian; slot?: number[]; slotDiharapkan?: number[] };
+
+function cekUbahIsian(v: unknown): UbahIsian {
   if (!v || typeof v !== "object") throw new AppError("Data koreksi tidak sah.");
   const o = v as Record<string, unknown>;
-  const ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] } = {};
+  const ubah: UbahIsian = {};
   if (o.mulaiAt !== undefined) ubah.mulaiAt = teksWajib(o.mulaiAt, "Waktu isi air", 100);
   if (o.varian !== undefined) {
     if (o.varian !== "kecil" && o.varian !== "besar") throw new AppError("Varian tidak sah.");
     ubah.varian = o.varian;
   }
   if (o.slot !== undefined) ubah.slot = cekSlot(o.slot, "isian");
+  // Slot isian yang dilihat klien saat mulai mengedit (penjaga dialog basi).
+  if (o.slotDiharapkan !== undefined) ubah.slotDiharapkan = cekSlot(o.slotDiharapkan, "diharapkan");
   return ubah;
 }
 
@@ -467,7 +471,11 @@ export async function getPanenTerakhirAction(kode: KodeProduksi, kolomId: string
 // ── Tulis (operator & admin) ───────────────────────────────────────────────
 
 /** slot null = isi semua slot kosong rek itu. */
-export async function isiAirAction(kode: KodeProduksi, kolomId: string, slot: number[] | null): Promise<HasilAksi<{ isianId: string }>> {
+export async function isiAirAction(
+  kode: KodeProduksi,
+  kolomId: string,
+  slot: number[] | null,
+): Promise<HasilAksi<{ isianId: string; jumlah: number }>> {
   return jalankan(async () => {
     const g = await gerbang(kode, "aksi");
     const pilihan = slot === null || slot === undefined ? null : cekSlot(slot, "isi air");
@@ -545,7 +553,7 @@ export async function setKendaraanAktifAction(kode: KodeProduksi, k: KendaraanPi
 export async function koreksiIsianAction(
   kode: KodeProduksi,
   isianId: string,
-  ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] },
+  ubah: UbahIsian,
   alasan: string,
 ): Promise<HasilAksi<void>> {
   return jalankan(async () => {

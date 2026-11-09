@@ -196,8 +196,9 @@ export function ProduksiApp({
     [jalankan, kode],
   );
 
-  // "Isi semua" dari baris kelompok tugas: Isi Air per rek BERURUTAN di bawah
-  // satu kunci permintaan, berhenti pada galat pertama, satu toast ringkasan.
+  // "Isi semua" dari baris kelompok tugas (sesudah dialog konfirmasi di
+  // DaftarTugas): Isi Air per rek BERURUTAN di bawah satu kunci permintaan,
+  // berhenti pada galat pertama, satu toast ringkasan (jumlah dari hasil server).
   const isiAirBanyak = useCallback(
     async (daftar: KeadaanRek[]) => {
       if (daftar.length === 0) return;
@@ -212,7 +213,7 @@ export function ProduksiApp({
         let can = 0;
         let galat: string | null = null;
         for (const rek of daftar) {
-          let r: HasilAksi<{ isianId: string }>;
+          let r: HasilAksi<{ isianId: string; jumlah: number }>;
           try {
             r = await isiAirAction(kode, rek.kolomId, null);
           } catch {
@@ -223,7 +224,8 @@ export function ProduksiApp({
             break;
           }
           berhasil++;
-          can += rek.slotKosong.length;
+          // Jumlah can dari server (bisa beda dari layar bila rek berubah sejak dimuat).
+          can += r.data.jumlah;
         }
         if (galat) toast.error(`${berhasil} dari ${daftar.length} rek diisi air, lalu berhenti. ${galat}`);
         else toast.success(`${berhasil} rek diisi air (${can} can).`);
@@ -253,6 +255,10 @@ export function ProduksiApp({
   const namaBakTerpilih = rekLembar ? daftarBak.find((b) => b.id === rekLembar.bakId)?.nama.trim() || "Bak" : "";
   const ringkasan = keadaan?.ringkasBak.find((r) => r.bakId === bakTampil) ?? null;
   const tugasBak = useMemo(() => (keadaan?.tugas ?? []).filter((t) => t.bakId === bakTampil), [keadaan, bakTampil]);
+  const rekSlotBelumSiap = useMemo(
+    () => (keadaan?.keadaan ?? []).filter((k) => k.bakId === bakTampil && k.slotBelumSiap && k.utama !== "nonaktif"),
+    [keadaan, bakTampil],
+  );
   const panenPerBak = useMemo(() => {
     const m = new Map<string, number>();
     for (const t of keadaan?.tugas ?? []) if (t.jenis === "panen") m.set(t.bakId, (m.get(t.bakId) ?? 0) + 1);
@@ -316,6 +322,7 @@ export function ProduksiApp({
                 <DaftarTugas
                   key={bakAktif.id}
                   tugas={tugasBak}
+                  rekSlotBelumSiap={rekSlotBelumSiap}
                   keadaan={petaKeadaan}
                   sekarang={sekarang}
                   sibuk={sibuk}

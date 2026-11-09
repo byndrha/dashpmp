@@ -26,9 +26,14 @@ const INFO: Record<KodePeringatan, { judul: string; ikon: LucideIcon; kelas: str
     ikon: AlertTriangle,
     kelas: "text-yellow-600 dark:text-yellow-400",
   },
+  SLOT_BELUM_SIAP: {
+    judul: "Data slot can belum siap (jalankan backfill slot)",
+    ikon: AlertTriangle,
+    kelas: "text-red-600 dark:text-red-400",
+  },
   SELISIH_MUATAN: { judul: "Selisih muatan ↔ DO (hari bisnis terakhir yang sudah closing)", ikon: Truck, kelas: "text-red-600 dark:text-red-400" },
 };
-const URUTAN: KodePeringatan[] = ["TERLAMBAT_PANEN", "SELISIH_MUATAN", "BABONAN_LAMA", "MAINTENANCE_LAMA", "PANEN_BELUM_SIAP", "KOSONG_LAMA"];
+const URUTAN: KodePeringatan[] = ["SLOT_BELUM_SIAP", "TERLAMBAT_PANEN", "SELISIH_MUATAN", "BABONAN_LAMA", "MAINTENANCE_LAMA", "PANEN_BELUM_SIAP", "KOSONG_LAMA"];
 
 export function DaftarPeringatan({
   peringatan,

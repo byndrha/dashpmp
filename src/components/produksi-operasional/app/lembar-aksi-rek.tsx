@@ -18,6 +18,7 @@ import {
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import {
   hitungKematangan,
+  PESAN_SLOT_BELUM_SIAP,
   tahapDari,
   validasiPilihSlot,
   type IsianAktif,
@@ -102,7 +103,7 @@ export function IsiLembar({
   tampilanAwal = "menu",
 }: Omit<PropsLembar, "rek"> & { rek: KeadaanRek; bolehAksi?: boolean }) {
   const [tampilan, setTampilan] = useState<Tampilan>(() =>
-    bolehAksi && tampilanAwal === "panen" && rek.isianProduksi[0]
+    bolehAksi && tampilanAwal === "panen" && !rek.slotBelumSiap && rek.isianProduksi[0]
       ? { jenis: "panen", isianId: rek.isianProduksi[0].id }
       : { jenis: "menu" },
   );
@@ -151,6 +152,12 @@ export function IsiLembar({
           </SheetDescription>
         </div>
       </SheetHeader>
+
+      {rek.slotBelumSiap && (
+        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
+          {PESAN_SLOT_BELUM_SIAP} Grid can rek ini belum bisa dipercaya; aksi Isi Air / panen ditolak sampai slot dicatat.
+        </p>
+      )}
 
       {tampilan.jenis === "menu" && (
         <Menu
