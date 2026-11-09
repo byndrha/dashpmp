@@ -347,6 +347,19 @@ export function keadaanPabrik(
   });
 }
 
+// ── Filter varian layar HP ─────────────────────────────────────────────────
+
+export type FilterVarian = "semua" | Varian;
+
+/** Nilai filter tersimpan yang sah untuk bak ini; selain itu kembali ke "semua". */
+export function filterVarianSah(tersimpan: string | null, tersedia: Varian[]): FilterVarian {
+  return tersimpan === "kecil" || tersimpan === "besar" ? (tersedia.includes(tersimpan) ? tersimpan : "semua") : "semua";
+}
+
+export function cocokFilterVarian(filter: FilterVarian, varian: Varian): boolean {
+  return filter === "semua" || filter === varian;
+}
+
 // ── Ringkasan bak & tugas sekarang ─────────────────────────────────────────
 
 export interface RingkasanBak {

@@ -18,6 +18,7 @@ import {
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import {
   hitungKematangan,
+  kodeRek,
   PESAN_SLOT_BELUM_SIAP,
   tahapDari,
   validasiPilihSlot,
@@ -113,7 +114,7 @@ export function IsiLembar({
 
   const judul =
     tampilan.jenis === "menu"
-      ? `${namaBak} · Rek ${rek.nomor}`
+      ? `${namaBak} · Rek ${rek.nomor} (${kodeRek(rek.kodeBak, rek.nomor)})`
       : tampilan.jenis === "panen"
         ? isianPanen?.jenis === "babonan"
           ? "Lepas Babonan — dimuat"
@@ -147,7 +148,8 @@ export function IsiLembar({
           <SheetTitle className="text-base">{judul}</SheetTitle>
           <SheetDescription className="text-xs">
             {tampilan.jenis !== "menu" && `Rek ${rek.nomor} · `}
-            {singkatVarian(rek.varian)} · {rek.kapasitas} can · kosong {rek.canKosong}
+            {singkatVarian(rek.varian)} · {rek.orientasiCan === "tegak" ? "tegak ▯" : "mendatar ▭"} · {rek.kapasitas} can · kosong{" "}
+            {rek.canKosong}
             {rek.rusak > 0 && ` · rusak ${rek.rusak}`}
           </SheetDescription>
         </div>

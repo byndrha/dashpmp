@@ -10,6 +10,7 @@ import { panenAction } from "@/app/produksi-operasional-actions";
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import {
   hitungKematangan,
+  kodeRek,
   slotDimuatDari,
   validasiPanenSlot,
   type IsianAktif,
@@ -190,7 +191,7 @@ export function FormPanen({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-muted-foreground">
-        {namaBak} · Rek {rek.nomor} · {singkatVarian(isian.varian)} · isian {jamWib(isian.mulaiAt)}
+        {namaBak} · Rek {rek.nomor} ({kodeRek(rek.kodeBak, rek.nomor)}) · {singkatVarian(isian.varian)} · isian {jamWib(isian.mulaiAt)}
         {pctIsian !== null && ` (${pctIsian}%)`} · <span className="font-semibold text-foreground">{isian.slot.length} can</span>
         {babonanMode && " Babonan"}
       </p>

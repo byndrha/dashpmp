@@ -7,7 +7,7 @@
 import { Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BakElemen } from "@/lib/produksi-denah";
-import type { KeadaanRek } from "@/lib/produksi-operasional";
+import { cocokFilterVarian, type FilterVarian, type KeadaanRek } from "@/lib/produksi-operasional";
 import { StripCan } from "../strip-can";
 import { formatUsiaRingkas, singkatVarian, WARNA_TAHAP } from "../warna-tahap";
 
@@ -20,20 +20,25 @@ export function urutKolom(bak: BakElemen): BakElemen["kolom"] {
 export function DaftarRek({
   bak,
   keadaan,
+  filter = "semua",
   onPilihRek,
 }: {
   bak: BakElemen;
   keadaan: Map<string, KeadaanRek>;
+  filter?: FilterVarian;
   onPilihRek: (kolomId: string) => void;
 }) {
+  // Skala strip: rek terbesar bak = lebar penuh, rek lebih kecil (BB) lebih pendek.
+  let kapasitasMaks = 1;
+  for (const k of bak.kolom) kapasitasMaks = Math.max(kapasitasMaks, keadaan.get(k.id)?.kapasitas ?? 0);
   return (
     <ul className="divide-y border-y">
       {urutKolom(bak).map((k) => {
         const r = keadaan.get(k.id);
-        if (!r) return null;
+        if (!r || !cocokFilterVarian(filter, r.varian)) return null;
         return (
           <li key={k.id}>
-            <BarisRek rek={r} onKetuk={() => onPilihRek(k.id)} />
+            <BarisRek rek={r} skala={r.kapasitas / kapasitasMaks} onKetuk={() => onPilihRek(k.id)} />
           </li>
         );
       })}
@@ -41,7 +46,7 @@ export function DaftarRek({
   );
 }
 
-function BarisRek({ rek, onKetuk }: { rek: KeadaanRek; onKetuk: () => void }) {
+function BarisRek({ rek, skala, onKetuk }: { rek: KeadaanRek; skala: number; onKetuk: () => void }) {
   const nonaktif = rek.utama === "nonaktif";
   return (
     <button
@@ -53,8 +58,15 @@ function BarisRek({ rek, onKetuk }: { rek: KeadaanRek; onKetuk: () => void }) {
       )}
     >
       <span className="w-7 shrink-0 text-right text-base leading-none font-bold tabular-nums">{rek.nomor}</span>
-      <span className="w-5 shrink-0 text-[10px] font-semibold text-muted-foreground">{singkatVarian(rek.varian)}</span>
-      <StripCan can={rek.can} className="flex-1" />
+      <span className="flex w-9 shrink-0 items-center gap-0.5 text-[10px] font-semibold text-muted-foreground">
+        {singkatVarian(rek.varian)}
+        <span aria-label={rek.orientasiCan === "tegak" ? "can tegak" : "can mendatar"} className="text-xs leading-none">
+          {rek.orientasiCan === "tegak" ? "▯" : "▭"}
+        </span>
+      </span>
+      <span className="flex min-w-0 flex-1">
+        <StripCan can={rek.can} skala={skala} />
+      </span>
       <span className="flex w-[4.5rem] shrink-0 flex-col items-end leading-tight">
         <Status rek={rek} />
       </span>

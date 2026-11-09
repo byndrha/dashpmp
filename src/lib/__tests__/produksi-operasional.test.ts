@@ -20,6 +20,8 @@ import {
   kodePosisi,
   kodePosisiPendek,
   kodeRek,
+  filterVarianSah,
+  cocokFilterVarian,
   patahBaris,
   tugasSekarang,
   validasiPanenSlot,
@@ -673,4 +675,19 @@ test("slot belum siap: rek dengan isian aktif tanpa slot tidak masuk tugas dan d
     p.filter((x) => x.kode === "SLOT_BELUM_SIAP").map((x) => x.kolomId),
     [bak.kolom[0].id, bak.kolom[1].id],
   );
+});
+
+test("filterVarianSah: nilai tersimpan hanya berlaku bila varian ada di bak", () => {
+  assert.equal(filterVarianSah("kecil", ["kecil", "besar"]), "kecil");
+  assert.equal(filterVarianSah("besar", ["kecil", "besar"]), "besar");
+  assert.equal(filterVarianSah("besar", ["kecil"]), "semua");
+  assert.equal(filterVarianSah("semua", ["kecil", "besar"]), "semua");
+  assert.equal(filterVarianSah("rusak", ["kecil", "besar"]), "semua");
+  assert.equal(filterVarianSah(null, ["kecil", "besar"]), "semua");
+});
+
+test("cocokFilterVarian: semua meloloskan semuanya", () => {
+  assert.equal(cocokFilterVarian("semua", "kecil"), true);
+  assert.equal(cocokFilterVarian("kecil", "kecil"), true);
+  assert.equal(cocokFilterVarian("kecil", "besar"), false);
 });

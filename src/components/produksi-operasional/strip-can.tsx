@@ -1,4 +1,6 @@
 // Strip can satu baris (satu sel per slot) untuk daftar rek yang rapat.
+// skala (0–1) = lebar relatif terhadap barisnya (rek lebih pendek → strip lebih pendek);
+// dengan skala, pasang tanpa flex-1.
 // Ringan: hanya <span> berwarna, tanpa interaksi dan tanpa simbol.
 
 import { memo } from "react";
@@ -6,9 +8,13 @@ import { cn } from "@/lib/utils";
 import type { KeadaanCan } from "@/lib/produksi-operasional";
 import { warnaCan } from "./warna-tahap";
 
-export const StripCan = memo(function StripCan({ can, className }: { can: KeadaanCan[]; className?: string }) {
+export const StripCan = memo(function StripCan({ can, className, skala }: { can: KeadaanCan[]; className?: string; skala?: number }) {
   return (
-    <span className={cn("flex h-4 min-w-0 gap-px", className)} aria-hidden>
+    <span
+      className={cn("flex h-4 min-w-0 gap-px", className)}
+      style={skala !== undefined ? { width: `${Math.max(0, Math.min(1, skala)) * 100}%` } : undefined}
+      aria-hidden
+    >
       {can.map((c) => (
         <span key={c.slot} className={cn("min-w-0 flex-1 rounded-[1px] border", warnaCan(c).sel)} />
       ))}
