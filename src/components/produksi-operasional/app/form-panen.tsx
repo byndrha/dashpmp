@@ -200,14 +200,14 @@ export function FormPanen({
           <GridCan
             mode="pilih"
             can={rek.can}
-            varian={rek.varian}
+            rek={rek}
             boleh={bolehMuatBabonan}
             pilihan={pilihMuat}
             onUbah={ubahPilihMuat}
             disabled={sibuk}
           />
         ) : (
-          <GridCan mode="panen" can={rek.can} varian={rek.varian} boleh={milik} pilihan={tanda} onUbah={ubahTanda} disabled={sibuk} />
+          <GridCan mode="panen" can={rek.can} rek={rek} boleh={milik} pilihan={tanda} onUbah={ubahTanda} disabled={sibuk} />
         )}
         <p className="text-[11px] text-muted-foreground">
           {babonanMode

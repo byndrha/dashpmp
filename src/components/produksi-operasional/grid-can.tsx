@@ -1,6 +1,7 @@
 "use client";
 
-// Grid can satu rek sesuai susunan fisik (SUSUNAN_CAN: BK 12 × 3, BB 9 × 2).
+// Can satu rek digambar sebagai baris-baris horizontal (patahBaris: 18 can per baris,
+// label rentang "1–18", baris lanjutan diberi ↳).
 // Dipakai lembar rek aplikasi HP (mode "lihat"), formulir panen (mode
 // "panen": ketuk bersiklus biasa → Babonan ◆ → Pecah ✕ → biasa) dan
 // formulir Tandai/Buang Babonan, Tandai rusak, Perbaiki, Isi Air sebagian,
@@ -11,15 +12,21 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Varian } from "@/lib/produksi-denah";
-import { SUSUNAN_CAN, type KeadaanCan, type Tahap } from "@/lib/produksi-operasional";
+import {
+  kodePosisi,
+  PATAH_BARIS_CAN,
+  patahBaris,
+  type KeadaanCan,
+  type KeadaanRek,
+  type Tahap,
+} from "@/lib/produksi-operasional";
 import { WARNA_CAN, warnaCan } from "./warna-tahap";
 
 export type TandaPanen = "babonan" | "pecah";
 
 interface PropsDasar {
   can: KeadaanCan[];
-  varian: Varian;
+  rek: Pick<KeadaanRek, "kodeBak" | "nomor" | "orientasiCan">;
   className?: string;
 }
 
@@ -41,19 +48,33 @@ export type PropsGridCan =
       disabled?: boolean;
     });
 
-const SIKLUS: Record<"biasa" | TandaPanen, "biasa" | TandaPanen> = { biasa: "babonan", babonan: "pecah", pecah: "biasa" };
-const LABEL_PANEN: Record<"biasa" | TandaPanen, string> = { biasa: "dimuat", babonan: "Babonan", pecah: "Pecah" };
+const SIKLUS: Record<"biasa" | TandaPanen, "biasa" | TandaPanen> = {
+  biasa: "babonan",
+  babonan: "pecah",
+  pecah: "biasa",
+};
+const LABEL_PANEN: Record<"biasa" | TandaPanen, string> = {
+  biasa: "dimuat",
+  babonan: "Babonan",
+  pecah: "Pecah",
+};
 
-function keteranganCan(c: KeadaanCan): string {
+function keteranganCan(c: KeadaanCan, rek: PropsDasar["rek"]): string {
   const w = warnaCan(c);
-  return `Can ${c.slot} · ${w.label}${c.pct !== null ? ` ${c.pct}%` : ""}`;
+  return `${kodePosisi(rek.kodeBak, rek.nomor, c.slot)} · ${w.label}${
+    c.pct !== null ? ` ${c.pct}%` : ""
+  }`;
 }
 
 export function GridCan(props: PropsGridCan) {
-  const { can, varian, className } = props;
-  const kolom = SUSUNAN_CAN[varian].kolom;
+  const { can, rek, className } = props;
+  const baris = patahBaris(can.length);
+  const tinggiSel = rek.orientasiCan === "tegak" ? "h-9" : "h-7";
   const [info, setInfo] = useState<number | null>(null);
-  const canInfo = props.mode === "lihat" && info !== null ? (can.find((c) => c.slot === info) ?? null) : null;
+  const canInfo =
+    props.mode === "lihat" && info !== null
+      ? can.find((c) => c.slot === info) ?? null
+      : null;
 
   function ketuk(slot: number) {
     if (props.mode === "pilih") {
@@ -72,71 +93,97 @@ export function GridCan(props: PropsGridCan) {
 
   const grid = (
     <div
-      className={cn("grid gap-1", props.mode !== "lihat" && className)}
-      style={{ gridTemplateColumns: `repeat(${kolom}, minmax(0, 1fr))` }}
+      className={cn("flex flex-col gap-1", props.mode !== "lihat" && className)}
       role="group"
       aria-label={`Susunan ${can.length} can`}
     >
-      {can.map((c) => {
-        if (props.mode === "lihat") {
-          const w = warnaCan(c);
-          const ket = keteranganCan(c);
-          return (
-            <button
-              key={c.slot}
-              type="button"
-              title={ket}
-              aria-label={ket}
-              aria-pressed={info === c.slot}
-              onClick={() => setInfo((i) => (i === c.slot ? null : c.slot))}
-              className={cn(
-                "flex aspect-square items-center justify-center rounded-[4px] border text-[11px] leading-none font-bold outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                w.sel,
-                w.teks,
-                info === c.slot && "ring-2 ring-foreground ring-offset-1 ring-offset-background",
-              )}
-            >
-              {w.simbol}
-            </button>
-          );
-        }
-
-        const aktif = props.boleh.has(c.slot);
-        const dis = !aktif || props.disabled;
-        let w = warnaCan(c);
-        let terpilih = false;
-        let label = `Slot ${c.slot}: ${w.label}`;
-        let ditekan: boolean | undefined;
-        if (props.mode === "panen" && aktif) {
-          const t = props.pilihan.get(c.slot);
-          if (t) w = WARNA_CAN[t];
-          label = `Slot ${c.slot}: ${LABEL_PANEN[t ?? "biasa"]}`;
-          ditekan = t !== undefined;
-        } else if (props.mode === "pilih" && aktif) {
-          terpilih = props.pilihan.has(c.slot);
-          label = `Slot ${c.slot}: ${w.label}${terpilih ? ", dipilih" : ""}`;
-          ditekan = terpilih;
-        }
-        return (
-          <button
-            key={c.slot}
-            type="button"
-            disabled={dis}
-            onClick={() => ketuk(c.slot)}
-            aria-pressed={ditekan}
-            aria-label={label}
-            className={cn(
-              "relative flex aspect-square min-h-6 items-center justify-center rounded-[4px] border text-xs leading-none font-bold transition-transform active:scale-90",
-              w.sel,
-              w.teks,
-              !aktif && "opacity-25",
-              terpilih && "ring-2 ring-foreground ring-offset-1 ring-offset-background",
-            )}
+      {baris.map(({ dari, sampai }, idx) => (
+        <div key={dari} className="flex items-center gap-1.5">
+          <span className="w-11 shrink-0 text-[10px] leading-none text-muted-foreground tabular-nums">
+            {idx > 0 && <span aria-hidden>↳ </span>}
+            {dari}–{sampai}
+          </span>
+          <div
+            className="grid min-w-0 flex-1 gap-1"
+            style={{
+              gridTemplateColumns: `repeat(${PATAH_BARIS_CAN}, minmax(0, 1fr))`,
+            }}
           >
-            {terpilih ? <Check className="size-3.5 drop-shadow" strokeWidth={3.5} /> : w.simbol}
-          </button>
-        );
-      })}
+            {can.slice(dari - 1, sampai).map((c) => {
+              if (props.mode === "lihat") {
+                const w = warnaCan(c);
+                const ket = keteranganCan(c, rek);
+                return (
+                  <button
+                    key={c.slot}
+                    type="button"
+                    title={ket}
+                    aria-label={ket}
+                    aria-pressed={info === c.slot}
+                    onClick={() =>
+                      setInfo((i) => (i === c.slot ? null : c.slot))
+                    }
+                    className={cn(
+                      tinggiSel,
+                      "flex items-center justify-center rounded-[4px] border text-[11px] leading-none font-bold outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      w.sel,
+                      w.teks,
+                      info === c.slot &&
+                        "ring-2 ring-foreground ring-offset-1 ring-offset-background"
+                    )}
+                  >
+                    {w.simbol}
+                  </button>
+                );
+              }
+
+              const aktif = props.boleh.has(c.slot);
+              const dis = !aktif || props.disabled;
+              let w = warnaCan(c);
+              let terpilih = false;
+              let label = `Slot ${c.slot}: ${w.label}`;
+              let ditekan: boolean | undefined;
+              if (props.mode === "panen" && aktif) {
+                const t = props.pilihan.get(c.slot);
+                if (t) w = WARNA_CAN[t];
+                label = `Slot ${c.slot}: ${LABEL_PANEN[t ?? "biasa"]}`;
+                ditekan = t !== undefined;
+              } else if (props.mode === "pilih" && aktif) {
+                terpilih = props.pilihan.has(c.slot);
+                label = `Slot ${c.slot}: ${w.label}${
+                  terpilih ? ", dipilih" : ""
+                }`;
+                ditekan = terpilih;
+              }
+              return (
+                <button
+                  key={c.slot}
+                  type="button"
+                  disabled={dis}
+                  onClick={() => ketuk(c.slot)}
+                  aria-pressed={ditekan}
+                  aria-label={label}
+                  className={cn(
+                    tinggiSel,
+                    "relative flex items-center justify-center rounded-[4px] border text-xs leading-none font-bold transition-transform active:scale-90",
+                    w.sel,
+                    w.teks,
+                    !aktif && "opacity-25",
+                    terpilih &&
+                      "ring-2 ring-foreground ring-offset-1 ring-offset-background"
+                  )}
+                >
+                  {terpilih ? (
+                    <Check className="size-3.5 drop-shadow" strokeWidth={3.5} />
+                  ) : (
+                    w.simbol
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 
@@ -144,8 +191,13 @@ export function GridCan(props: PropsGridCan) {
   return (
     <div className={cn("flex flex-col gap-1", className)}>
       {grid}
-      <p className="min-h-4 text-[11px] leading-4 text-muted-foreground tabular-nums" aria-live="polite">
-        {canInfo ? keteranganCan(canInfo) : "Ketuk can untuk melihat keterangannya."}
+      <p
+        className="min-h-4 text-[11px] leading-4 text-muted-foreground tabular-nums"
+        aria-live="polite"
+      >
+        {canInfo
+          ? keteranganCan(canInfo, rek)
+          : "Ketuk can untuk melihat keterangannya."}
       </p>
     </div>
   );
@@ -155,14 +207,31 @@ const URUTAN_TAHAP: Tahap[] = ["air", "mulai", "kristal", "siap", "jadi"];
 
 /** Legenda warna can (tahap + Babonan/pecah/rusak/kosong). */
 export function LegendaCan({ className }: { className?: string }) {
-  const kunci = [...URUTAN_TAHAP, "babonan", "pecah", "rusak", "kosong"] as const;
+  const kunci = [
+    ...URUTAN_TAHAP,
+    "babonan",
+    "pecah",
+    "rusak",
+    "kosong",
+  ] as const;
   return (
-    <div className={cn("flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground", className)}>
+    <div
+      className={cn(
+        "flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground",
+        className
+      )}
+    >
       {kunci.map((k) => {
         const w = WARNA_CAN[k];
         return (
           <span key={k} className="flex items-center gap-1">
-            <span className={cn("inline-flex size-3.5 items-center justify-center rounded-[3px] border text-[8px] font-bold", w.sel, w.teks)}>
+            <span
+              className={cn(
+                "inline-flex size-3.5 items-center justify-center rounded-[3px] border text-[8px] font-bold",
+                w.sel,
+                w.teks
+              )}
+            >
               {w.simbol}
             </span>
             {w.label}

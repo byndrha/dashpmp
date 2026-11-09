@@ -153,7 +153,7 @@ export function DialogKoreksi({
           <div className="grid gap-1.5">
             <span className="text-sm font-medium">Can isian ini</span>
             <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-2.5">
-              <GridCan mode="pilih" can={rek.can} varian={rek.varian} boleh={boleh} pilihan={pilihan} onUbah={setPilihan} disabled={sibuk} />
+              <GridCan mode="pilih" can={rek.can} rek={rek} boleh={boleh} pilihan={pilihan} onUbah={setPilihan} disabled={sibuk} />
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-muted-foreground tabular-nums">
                   Dipilih <b className="text-foreground">{slotBaru.length}</b> can (sekarang {isian.slot.length})

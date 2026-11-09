@@ -253,7 +253,15 @@ export function ProduksiApp({
   const bakTampil = bakAktif?.id ?? "";
   const rekLembar = rekTerpilih ? petaKeadaan.get(rekTerpilih.kolomId) ?? null : null;
   const namaBakTerpilih = rekLembar ? daftarBak.find((b) => b.id === rekLembar.bakId)?.nama.trim() || "Bak" : "";
-  const ringkasan = keadaan?.ringkasBak.find((r) => r.bakId === bakTampil) ?? null;
+  // Task 5 akan memecah per varian (BK/BB); sementara jumlahkan semua varian bak aktif.
+  const ringkasan = useMemo(() => {
+    const daftar = (keadaan?.ringkasBak ?? []).filter((r) => r.bakId === bakTampil);
+    if (daftar.length === 0) return null;
+    return daftar.reduce(
+      (a, r) => ({ siap: a.siap + r.siap, kosong: a.kosong + r.kosong, babonan: a.babonan + r.babonan, rusak: a.rusak + r.rusak }),
+      { siap: 0, kosong: 0, babonan: 0, rusak: 0 },
+    );
+  }, [keadaan, bakTampil]);
   const tugasBak = useMemo(() => (keadaan?.tugas ?? []).filter((t) => t.bakId === bakTampil), [keadaan, bakTampil]);
   const rekSlotBelumSiap = useMemo(
     () => (keadaan?.keadaan ?? []).filter((k) => k.bakId === bakTampil && k.slotBelumSiap && k.utama !== "nonaktif"),
@@ -438,7 +446,7 @@ function TabBak({
 }
 
 // Chip jumlah rek per kategori bak aktif (ringkasBak di server).
-function ChipRingkasan({ jumlahRek, ringkasan }: { jumlahRek: number; ringkasan: RingkasanBak | null }) {
+function ChipRingkasan({ jumlahRek, ringkasan }: { jumlahRek: number; ringkasan: Pick<RingkasanBak, "siap" | "kosong" | "babonan" | "rusak"> | null }) {
   const r = ringkasan ?? { siap: 0, kosong: 0, babonan: 0, rusak: 0 };
   const chip = [
     {

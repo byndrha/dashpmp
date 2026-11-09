@@ -326,7 +326,7 @@ function Menu({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 rounded-xl border bg-muted/30 p-2.5">
-        <GridCan mode="lihat" can={rek.can} varian={rek.varian} />
+        <GridCan mode="lihat" can={rek.can} rek={rek} />
         <LegendaCan />
       </div>
 
@@ -492,7 +492,7 @@ function FormPilihSlot({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-2.5">
-        <GridCan mode="pilih" can={rek.can} varian={rek.varian} boleh={boleh} pilihan={new Set(efektif)} onUbah={setPilihan} disabled={sibuk} />
+        <GridCan mode="pilih" can={rek.can} rek={rek} boleh={boleh} pilihan={new Set(efektif)} onUbah={setPilihan} disabled={sibuk} />
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="text-muted-foreground tabular-nums">
             Dipilih <b className="text-foreground">{efektif.length}</b> can
