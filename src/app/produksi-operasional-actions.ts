@@ -8,9 +8,10 @@
 // src/lib/produksi-operasional.ts / src/lib/queries/produksi-operasional.ts.
 //
 // Setiap action lewat gerbang(kode, tingkat): sesi → kode ∈ KODE_SAH → akses
-// perusahaan (pola simpanDenahAction) → bolehAksiProduksi ("aksi") atau
-// bolehKelolaProduksi ("kelola", action admin). Aturan peran ditegakkan di
-// sini, bukan hanya di UI (dicek src/lib/__tests__/produksi-operasional-akses.test.ts).
+// perusahaan (pola simpanDenahAction) → tanpa cek peran ("lihat": akun
+// dashboard pabrik itu boleh melihat Peta/Ringkasan/FIFO/Peringatan, spec §9),
+// bolehAksiProduksi ("aksi") atau bolehKelolaProduksi ("kelola", action
+// admin). Aturan peran ditegakkan di sini, bukan hanya di UI (dicek src/lib/__tests__/produksi-operasional-akses.test.ts).
 // Input klien tidak dipercaya: bentuknya diperiksa dan dibangun ulang di sini
 // sebelum diteruskan; aturan bisnis (kapasitas, minimal 1 can, dll.) tetap di
 // lapisan transaksi.
@@ -82,7 +83,7 @@ type HasilAksi<T> = ActionResult<T> | { success: false; error: string; kodeGalat
 
 // ── Gerbang & pembungkus ───────────────────────────────────────────────────
 
-async function gerbang(kode: unknown, tingkat: "aksi" | "kelola"): Promise<{ kode: KodeProduksi; pelaku: Pelaku; admin: boolean }> {
+async function gerbang(kode: unknown, tingkat: "lihat" | "aksi" | "kelola"): Promise<{ kode: KodeProduksi; pelaku: Pelaku; admin: boolean }> {
   const session = await auth();
   if (!session?.user) throw new AppError("Sesi berakhir. Silakan masuk kembali.");
   const user = session.user;
@@ -92,7 +93,7 @@ async function gerbang(kode: unknown, tingkat: "aksi" | "kelola"): Promise<{ kod
     throw new AppError("Anda tidak punya akses ke perusahaan ini.");
   }
   const admin = bolehKelolaProduksi(user);
-  if (tingkat === "kelola" ? !admin : !bolehAksiProduksi(user)) {
+  if (tingkat !== "lihat" && (tingkat === "kelola" ? !admin : !bolehAksiProduksi(user))) {
     throw new AppError(
       tingkat === "kelola" ? "Hanya admin produksi yang boleh melakukan ini." : "Anda tidak punya izin operasional produksi.",
     );
@@ -259,7 +260,9 @@ export async function getKeadaanAction(
   kode: KodeProduksi,
 ): Promise<HasilAksi<{ data: DataPabrik; keadaan: KeadaanRek[]; peringatan: Peringatan[]; ringkasan: RingkasanStok }>> {
   return jalankan(async () => {
-    const g = await gerbang(kode, "aksi");
+    // Baca saja: semua akun dashboard pabrik ini (spec §9). Selisih muatan
+    // (data DO) tetap hanya untuk admin, di bawah.
+    const g = await gerbang(kode, "lihat");
     const data = await getDataPabrik(g.kode);
     const sekarang = new Date(data.sekarang);
     const denah = data.denah ?? denahKosong();

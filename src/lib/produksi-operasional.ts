@@ -306,6 +306,26 @@ export function ringkasStok(denah: DenahDokumen, keadaan: KeadaanRek[]): Ringkas
   return r;
 }
 
+/**
+ * Estimasi can yang "jadi" dalam `jam` ke depan (perencanaan muatan, spec §8):
+ * Σ sisa isian produksi dengan mulaiAt + durasi beku ≤ sekarang + jam.
+ * Termasuk can yang sudah jadi (`sudahJadi`) — keduanya siap dimuat.
+ */
+export function estimasiCanJadi(keadaan: KeadaanRek[], sekarang: Date, jam: number): { total: number; sudahJadi: number } {
+  const batas = sekarang.getTime() + jam * JAM_MS;
+  let total = 0;
+  let sudahJadi = 0;
+  for (const k of keadaan) {
+    for (const i of k.isianProduksi) {
+      if (i.sisa <= 0) continue;
+      const matang = Date.parse(i.mulaiAt) + (i.durasiBekuJam ?? 0) * JAM_MS;
+      if (matang <= batas) total += i.sisa;
+      if (matang <= sekarang.getTime()) sudahJadi += i.sisa;
+    }
+  }
+  return { total, sudahJadi };
+}
+
 // ── Pencocokan panen ↔ DO ──────────────────────────────────────────────────
 
 export interface MuatanKendaraan {

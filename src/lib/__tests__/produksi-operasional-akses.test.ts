@@ -58,13 +58,15 @@ test("peranProduksi: operator vs admin", () => {
 });
 
 // Aturan peran ditegakkan di server action, bukan hanya di UI: action admin
-// wajib lewat gerbang "kelola", sisanya minimal gerbang "aksi".
+// wajib lewat gerbang "kelola", aksi tulis & data operator lewat "aksi", dan
+// hanya bacaan keadaan (Peta/Ringkasan/FIFO/Peringatan) yang boleh "lihat".
 test("server action operasional memakai gerbang yang benar", () => {
   const isi = readFileSync(join(process.cwd(), "src/app/produksi-operasional-actions.ts"), "utf8");
   assert.match(isi, /^\s*["']use server["'];/);
   const potong = isi.split(/(?=^export async function )/m).slice(1);
   const badan = new Map(potong.map((b) => [/^export async function (\w+)/.exec(b)![1], b]));
   const admin = ["koreksiIsianAction", "batalkanPanenAction", "getPencocokanAction", "getLogAction"];
+  const lihat = ["getKeadaanAction"];
   const semua = [
     "getKeadaanAction",
     "isiAirAction",
@@ -82,7 +84,9 @@ test("server action operasional memakai gerbang yang benar", () => {
   assert.deepEqual([...badan.keys()].sort(), [...semua].sort());
   for (const nama of semua) {
     const b = badan.get(nama)!;
-    const tingkat = admin.includes(nama) ? "kelola" : "aksi";
+    const tingkat = admin.includes(nama) ? "kelola" : lihat.includes(nama) ? "lihat" : "aksi";
     assert.match(b, new RegExp(`gerbang\\(kode, "${tingkat}"\\)`), `${nama} harus memakai gerbang "${tingkat}"`);
+    // Gerbang "lihat" (tanpa cek peran) tidak boleh menyebar tanpa disengaja.
+    if (!lihat.includes(nama)) assert.doesNotMatch(b, /gerbang\(kode, "lihat"\)/, `${nama} tidak boleh memakai gerbang "lihat"`);
   }
 });

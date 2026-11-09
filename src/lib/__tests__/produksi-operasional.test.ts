@@ -5,6 +5,7 @@ import {
   AMBANG,
   ROLLOVER_PANEN_JAM,
   cocokkanMuatan,
+  estimasiCanJadi,
   hitungKematangan,
   keadaanPabrik,
   keadaanRek,
@@ -199,6 +200,21 @@ test("ringkas stok", () => {
   assert.equal(r.maintenance, 36);
   assert.equal(r.sehat, 36 * 4 - 36);
   assert.deepEqual(r.perBak, [{ bakId: bak.id, nama: "Bak 2", kapasitas: 36 * 4, terisi: 30 + 34 + 2 + 36 }]);
+});
+
+test("estimasi can jadi 6/12 jam", () => {
+  const bak = bakUji(4);
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const daftar = [
+    isian(bak, 0, { sisa: 30, mulaiAt: lalu(30) }), // sudah jadi
+    isian(bak, 1, { sisa: 20, mulaiAt: lalu(20) }), // jadi dalam 4 jam
+    isian(bak, 2, { sisa: 10, mulaiAt: lalu(13) }), // jadi dalam 11 jam
+    isian(bak, 3, { sisa: 5, mulaiAt: lalu(1) }), // 23 jam lagi
+    isian(bak, 3, { jenis: "babonan", sisa: 2, jumlahAwal: 2, mulaiAt: lalu(40) }), // Babonan tidak dihitung
+  ];
+  const keadaan = keadaanPabrik(denah, daftar, [], SEKARANG);
+  assert.deepEqual(estimasiCanJadi(keadaan, SEKARANG, 6), { total: 50, sudahJadi: 30 });
+  assert.deepEqual(estimasiCanJadi(keadaan, SEKARANG, 12), { total: 60, sudahJadi: 30 });
 });
 
 test("cocokkan muatan", () => {

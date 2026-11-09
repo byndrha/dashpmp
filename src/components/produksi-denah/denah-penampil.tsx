@@ -3,10 +3,15 @@
 // Penampil denah (read-only): DenahKanvas mode "lihat" (atau Mode 3D Replika)
 // + panel detail bak. Klik bak/kolom (2D maupun 3D) membuka panel samping
 // berisi daftar kolom, mesin, durasi beku, dan kolom per panen.
+//
+// Opsional (layar admin produksi operasional): `statusKolom` mewarnai tiap
+// kolom di 2D sesuai keadaannya, dan `onKlikKolom` mengambil alih klik kolom
+// (2D & 3D) — panel bak tidak dibuka, pemanggil menampilkan detailnya sendiri.
+// Tanpa kedua prop, perilakunya sama seperti sebelumnya.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DenahKanvas } from "@/components/produksi-denah/denah-kanvas";
+import { DenahKanvas, type StatusKolom } from "@/components/produksi-denah/denah-kanvas";
 import { useLapisanTampil } from "@/components/produksi-denah/lapisan";
 import { MenuLapisan } from "@/components/produksi-denah/menu-lapisan";
 import { Tampilan3D, Toggle2D3D } from "@/components/produksi-denah/3d/tampilan-3d";
@@ -20,7 +25,21 @@ import { lapisanElemen, type BakElemen, type DenahDokumen, type Lapisan, type Me
 const angka = new Intl.NumberFormat("id-ID");
 const NAMA_VARIAN = { kecil: "Kecil", besar: "Besar" } as const;
 
-export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
+export function DenahPenampil({
+  dokumen,
+  statusKolom,
+  onKlikKolom,
+  kolomTerpilihId,
+  legenda,
+}: {
+  dokumen: DenahDokumen;
+  statusKolom?: Readonly<Record<string, StatusKolom>>;
+  onKlikKolom?: (kolomId: string) => void;
+  /** Kolom yang sedang dibuka pemanggil (ditandai) — dipakai bersama onKlikKolom. */
+  kolomTerpilihId?: string | null;
+  /** Pengganti legenda bawaan (mis. legenda tahap es). */
+  legenda?: React.ReactNode;
+}) {
   const [bakId, setBakId] = useState<string | null>(null);
   const [kolomId, setKolomId] = useState<string | null>(null);
   const [lapisanTampil, aturLapisan] = useLapisanTampil();
@@ -37,7 +56,8 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
     [dokumen.elemen, bakId]
   );
   const terpilihIds = useMemo(() => new Set(bakId ? [bakId] : []), [bakId]);
-  const kolomTerpilihIds = useMemo(() => new Set(kolomId ? [kolomId] : []), [kolomId]);
+  const kolomTandai = onKlikKolom ? (kolomTerpilihId ?? null) : kolomId;
+  const kolomTerpilihIds = useMemo(() => new Set(kolomTandai ? [kolomTandai] : []), [kolomTandai]);
 
   const ubahLapisan = (l: Lapisan, tampil: boolean) => {
     aturLapisan(l, tampil);
@@ -51,7 +71,7 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Legenda />
+        {legenda ?? <Legenda />}
         <div className="ml-auto flex items-center gap-2">
           <Toggle2D3D mode3D={mode3D} onUbah={setMode3D} />
           <MenuLapisan tampil={lapisanTampil} onUbah={ubahLapisan} elemen={dokumen.elemen} label />
@@ -66,6 +86,10 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
           onUbahLapisan={ubahLapisan}
           className="h-[65vh] min-h-[360px] rounded-lg border"
           onPilih={(id, kid) => {
+            if (onKlikKolom && kid) {
+              onKlikKolom(kid);
+              return;
+            }
             const e = id ? dokumen.elemen.find((x) => x.id === id) : null;
             setBakId(e?.tipe === "bak" ? e.id : null);
             setKolomId(e?.tipe === "bak" ? (kid ?? null) : null);
@@ -85,7 +109,12 @@ export function DenahPenampil({ dokumen }: { dokumen: DenahDokumen }) {
           setBakId(e?.tipe === "bak" ? e.id : null);
           setKolomId(null);
         }}
+        statusKolom={statusKolom}
         onPilihKolom={(bid, kid) => {
+          if (onKlikKolom) {
+            onKlikKolom(kid);
+            return;
+          }
           setBakId(bid);
           setKolomId(kid);
         }}

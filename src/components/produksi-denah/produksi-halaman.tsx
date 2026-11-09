@@ -2,17 +2,23 @@
 // dan /pmpakis/produksi. Pemanggil (page) WAJIB sudah menjalankan gerbang
 // requirePmpersada()/requirePmpakis(); kode perusahaan berasal dari konstanta
 // rute, bukan input client.
+//
+// Denah terisi → layar admin/monitoring operasional bertab (spec operasional
+// §8): Peta (penampil denah + overlay status, ringkasan denah lama tetap di
+// sini) · Ringkasan · FIFO · Peringatan · (admin) Pencocokan · Log audit.
+// Denah kosong → pesan "Denah produksi belum diatur" (perilaku tahap 1).
 
 import Link from "next/link";
 import { LayoutGrid, PencilRuler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DenahPenampil } from "@/components/produksi-denah/denah-penampil";
 import { getDenah } from "@/lib/queries/produksi-denah";
 import { PesanDenahRusak } from "@/components/produksi-denah/pesan-denah-rusak";
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import { getUserById } from "@/lib/queries/akun";
-import { bolehEditDenah } from "@/lib/permissions";
+import { bolehAksiProduksi, bolehEditDenah, bolehKelolaProduksi } from "@/lib/permissions";
+import { getKeadaanAction } from "@/app/produksi-operasional-actions";
+import { TabOperasional } from "@/components/produksi-operasional/admin/tab-operasional";
 import { ringkasDenah, type DenahDokumen } from "@/lib/produksi-denah";
 import { kapasitasSiklusKg } from "@/components/produksi-denah/builder-state";
 import type { Session } from "next-auth";
@@ -47,7 +53,7 @@ export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: Ko
   const bolehEdit = bolehEditDenah(user);
   const hrefEdit = `/${kode}/produksi/denah`;
   const ada = !!denah && denah.data.elemen.length > 0;
-  const oleh = ada ? await namaPengubah(denah.updatedBy) : null;
+  const [oleh, keadaan] = ada ? await Promise.all([namaPengubah(denah.updatedBy), getKeadaanAction(kode)]) : [null, null];
 
   return (
     <div className="flex flex-col gap-4">
@@ -84,13 +90,20 @@ export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: Ko
           )}
         </Card>
       ) : (
-        <>
-          <Ringkasan r={ringkasDenah(denah.data)} kapasitasTon={kapasitasSiklusTon(denah.data)} />
-          <DenahPenampil dokumen={denah.data} />
-          <p className="text-xs text-muted-foreground">
-            Diperbarui {formatWib.format(new Date(denah.updatedAt))} WIB oleh {oleh} · versi {denah.versi}. Klik bak untuk melihat detail kolom.
-          </p>
-        </>
+        <TabOperasional
+          kode={kode}
+          dokumen={denah.data}
+          admin={bolehKelolaProduksi(user)}
+          bolehAksi={bolehAksiProduksi(user)}
+          awal={keadaan?.success ? { data: keadaan.data, galat: null } : { data: null, galat: keadaan?.error ?? null }}
+          petaAtas={<Ringkasan r={ringkasDenah(denah.data)} kapasitasTon={kapasitasSiklusTon(denah.data)} />}
+          petaBawah={
+            <p className="text-xs text-muted-foreground">
+              Denah diperbarui {formatWib.format(new Date(denah.updatedAt))} WIB oleh {oleh} · versi {denah.versi}. Klik kolom untuk
+              melihat isian rek; klik bak untuk detail kolom.
+            </p>
+          }
+        />
       )}
     </div>
   );

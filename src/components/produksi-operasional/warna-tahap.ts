@@ -67,6 +67,29 @@ export function warnaRek(utama: KeadaanUtama, tahap: Tahap | null): WarnaKeadaan
   return WARNA_KEADAAN[utama];
 }
 
+// Warna isi SVG (overlay status di peta denah admin). Kelas bg-* di atas
+// tidak berlaku untuk `fill`, jadi peta memakai nilai CSS langsung; dipilih
+// nada tengah yang terbaca di tema terang maupun gelap (overlay semi-transparan).
+const ISI_TAHAP: Record<Tahap, string> = {
+  air: "#7dd3fc", // sky-300
+  mulai: "#22d3ee", // cyan-400
+  kristal: "#818cf8", // indigo-400
+  siap: "#34d399", // emerald-400
+  jadi: "#16a34a", // green-600
+};
+const ISI_KEADAAN: Record<Exclude<KeadaanUtama, "berisi">, string> = {
+  babonan: "#f59e0b", // amber-500
+  maintenance: "#f97316", // orange-500
+  nonaktif: "var(--muted-foreground)",
+  kosong: "var(--muted)",
+};
+
+/** Warna isi SVG rek di peta: pasangan warnaRek(). */
+export function isiPetaRek(utama: KeadaanUtama, tahap: Tahap | null): string {
+  if (utama === "berisi") return ISI_TAHAP[tahap ?? "air"];
+  return ISI_KEADAAN[utama];
+}
+
 /** Rentang persen per tahap, untuk legenda. */
 export const RENTANG_TAHAP: Record<Tahap, string> = {
   air: "0%",

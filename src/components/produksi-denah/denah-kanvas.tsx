@@ -159,6 +159,18 @@ export interface DenahKanvasProps {
    * tersembunyi tidak digambar — jadi juga tidak bisa diklik. Bawaan: semua.
    */
   lapisanTampil?: ReadonlySet<Lapisan>;
+  /**
+   * Overlay status per kolom (ID DenahKolom → warna isi CSS + label tooltip),
+   * mis. tahap es di layar admin produksi. Tanpa prop ini tampilan tidak berubah.
+   * Gunakan objek yang stabil (useMemo).
+   */
+  statusKolom?: Readonly<Record<string, StatusKolom>>;
+}
+
+export interface StatusKolom {
+  /** Nilai CSS untuk `fill` (hex atau var(--…)), bukan kelas Tailwind. */
+  warna: string;
+  label: string;
 }
 
 // ---------- Konstanta ----------
@@ -237,6 +249,7 @@ export function DenahKanvas({
   kolomSorotIds = KOSONG,
   onTampilanBerubah,
   lapisanTampil,
+  statusKolom,
 }: DenahKanvasProps) {
   const idDasar = useId().replace(/[^a-zA-Z0-9]/g, "");
   const wadahRef = useRef<HTMLDivElement>(null);
@@ -626,6 +639,7 @@ export function DenahKanvas({
               idPola={idDasar}
               mode={mode}
               tertanam={e.tipe === "jalur" ? maskTertanam(e, dokumen) : undefined}
+              statusKolom={e.tipe === "bak" ? statusKolom : undefined}
             />
           </g>
         );
@@ -647,6 +661,7 @@ export function DenahKanvas({
       kanvas.ukuranGrid,
       idDasar,
       mode,
+      statusKolom,
     ]
   );
 
@@ -857,6 +872,8 @@ interface ElemenViewProps {
   mode: ModeKanvas;
   /** Jalur: "1"/"0" per segmen (tertanam di beton) — string agar memo tetap stabil. */
   tertanam?: string;
+  /** Bak: overlay status per kolom (lihat DenahKanvasProps.statusKolom). */
+  statusKolom?: Readonly<Record<string, StatusKolom>>;
 }
 
 // Ukuran teks nama (meter): ±11 px di layar, dibatasi agar tidak raksasa/hilang.
@@ -1079,7 +1096,7 @@ function sisiIceCanTerkecil(tata: TataBak): number {
   return min;
 }
 
-function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: BakElemen } & ElemenViewProps) {
+function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKolom }: { bak: BakElemen } & ElemenViewProps) {
   const tata = useMemo(() => tataBakMeter(bak), [bak]);
   // Tebal mentah, SAMA dengan tataBakMeter (2D & 3D harus sepakat).
   const tebal = bak.tebalDindingM;
@@ -1154,11 +1171,36 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola }: { bak: 
             width={Math.max(r.w, 0.0001)}
             height={Math.max(r.h, 0.0001)}
             fill="transparent"
-          />
+          >
+            {statusKolom?.[k.kolomId] && <title>{statusKolom[k.kolomId].label}</title>}
+          </rect>
         );
       })}
       {iceCan?.kecil && <path d={iceCan.kecil} className={KELAS_ICE_CAN.kecil} pointerEvents="none" />}
       {iceCan?.besar && <path d={iceCan.besar} className={KELAS_ICE_CAN.besar} pointerEvents="none" />}
+      {/* Overlay status (di atas ice can supaya tetap terlihat saat zoom dekat). */}
+      {statusKolom &&
+        tata.kolom.map((k) => {
+          const st = statusKolom[k.kolomId];
+          if (!st) return null;
+          const r = tata.keXY(k.a0, tebal, k.lebar, ruangB);
+          const pilih = kolomTerpilih.has(k.kolomId);
+          return (
+            <rect
+              key={k.kolomId}
+              pointerEvents="none"
+              x={r.x}
+              y={r.y}
+              width={Math.max(r.w, 0.0001)}
+              height={Math.max(r.h, 0.0001)}
+              style={{ fill: st.warna }}
+              fillOpacity={0.8}
+              className={pilih ? "stroke-primary" : "stroke-none"}
+              strokeWidth={pilih ? 2.5 : 0}
+              vectorEffect={NS}
+            />
+          );
+        })}
       {lebih.map((r, i) => (
         <rect
           key={i}

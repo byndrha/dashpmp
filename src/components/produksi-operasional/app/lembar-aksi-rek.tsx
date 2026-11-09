@@ -58,7 +58,11 @@ export function LembarAksiRek(props: PropsLembar) {
   );
 }
 
-function IsiLembar({
+/**
+ * Isi lembar aksi (tanpa pembungkus Sheet) — dipakai ulang DetailRek di layar
+ * admin. `bolehAksi = false` = baca saja: daftar isian tampil, tombol aksi tidak.
+ */
+export function IsiLembar({
   kode,
   rek,
   namaBak,
@@ -70,7 +74,8 @@ function IsiLembar({
   jalankan,
   onKendaraanTerakhir,
   onTutup,
-}: PropsLembar & { rek: KeadaanRek }) {
+  bolehAksi = true,
+}: Omit<PropsLembar, "rek"> & { rek: KeadaanRek; bolehAksi?: boolean }) {
   const [tampilan, setTampilan] = useState<Tampilan>({ jenis: "menu" });
   const semuaIsian: IsianAktif[] = [...rek.isianProduksi, ...(rek.isianBabonan ? [rek.isianBabonan] : [])];
   const isianPanen = tampilan.jenis === "panen" ? semuaIsian.find((i) => i.id === tampilan.isianId) ?? null : null;
@@ -115,6 +120,7 @@ function IsiLembar({
           sekarang={sekarang}
           sibuk={sibuk}
           tertua={tertua}
+          bolehAksi={bolehAksi}
           pilih={setTampilan}
           selesaiMaintenance={async () => {
             const r = await jalankan(() => selesaiMaintenanceAction(kode, rek.kolomId), "Maintenance selesai.");
@@ -123,7 +129,7 @@ function IsiLembar({
         />
       )}
 
-      {tampilan.jenis === "panen" &&
+      {bolehAksi && tampilan.jenis === "panen" &&
         (isianPanen ? (
           <FormPanen
             key={isianPanen.id}
@@ -209,6 +215,7 @@ function Menu({
   sekarang,
   sibuk,
   tertua,
+  bolehAksi,
   pilih,
   selesaiMaintenance,
 }: {
@@ -216,6 +223,7 @@ function Menu({
   sekarang: string;
   sibuk: boolean;
   tertua: IsianAktif | null;
+  bolehAksi: boolean;
   pilih: (t: Tampilan) => void;
   selesaiMaintenance: () => void;
 }) {
@@ -261,7 +269,7 @@ function Menu({
             <p className="mt-1 text-xs text-muted-foreground">
               Usia {formatUsia(usia)} · matang ±{tanggalJamWib(matang)} · diisi {i.diisiOlehNama}
             </p>
-            {idx > 0 && (
+            {bolehAksi && idx > 0 && (
               <button
                 type="button"
                 disabled={sibuk}
@@ -285,53 +293,55 @@ function Menu({
         </div>
       )}
 
-      <div className="flex flex-col gap-2 pt-1">
-        {tertua && (
-          <Button className="h-12 text-base" disabled={sibuk} onClick={() => pilih({ jenis: "panen", isianId: tertua.id })}>
-            Panen & Isi Air
-          </Button>
-        )}
-        {mt && (
-          <Button className="h-12 text-base" disabled={sibuk} onClick={selesaiMaintenance}>
-            Selesai Maintenance
-          </Button>
-        )}
-        {bolehIsi && (
-          <Button
-            variant={tertua ? "outline" : "default"}
-            className="h-12 text-base"
-            disabled={sibuk}
-            onClick={() => pilih({ jenis: "isi-air" })}
-          >
-            <Droplets className="size-5" /> Isi Air {rek.canKosong} can
-          </Button>
-        )}
-        {tertua && (
-          <Button variant="outline" className="h-11" disabled={sibuk} onClick={() => pilih({ jenis: "tandai" })}>
-            <Snowflake className="size-4" /> Tandai Babonan
-          </Button>
-        )}
-        {rek.isianBabonan && (
-          <div className="grid grid-cols-2 gap-2">
+      {bolehAksi && (
+        <div className="flex flex-col gap-2 pt-1">
+          {tertua && (
+            <Button className="h-12 text-base" disabled={sibuk} onClick={() => pilih({ jenis: "panen", isianId: tertua.id })}>
+              Panen & Isi Air
+            </Button>
+          )}
+          {mt && (
+            <Button className="h-12 text-base" disabled={sibuk} onClick={selesaiMaintenance}>
+              Selesai Maintenance
+            </Button>
+          )}
+          {bolehIsi && (
             <Button
-              variant="outline"
-              className="h-11"
+              variant={tertua ? "outline" : "default"}
+              className="h-12 text-base"
               disabled={sibuk}
-              onClick={() => rek.isianBabonan && pilih({ jenis: "panen", isianId: rek.isianBabonan.id })}
+              onClick={() => pilih({ jenis: "isi-air" })}
             >
-              Lepas: dimuat
+              <Droplets className="size-5" /> Isi Air {rek.canKosong} can
             </Button>
-            <Button variant="outline" className="h-11" disabled={sibuk} onClick={() => pilih({ jenis: "buang" })}>
-              <Trash2 className="size-4" /> Lepas: dibuang
+          )}
+          {tertua && (
+            <Button variant="outline" className="h-11" disabled={sibuk} onClick={() => pilih({ jenis: "tandai" })}>
+              <Snowflake className="size-4" /> Tandai Babonan
             </Button>
-          </div>
-        )}
-        {bolehMulaiMt && (
-          <Button variant="ghost" className="h-10 text-muted-foreground" disabled={sibuk} onClick={() => pilih({ jenis: "mulai-mt" })}>
-            <Wrench className="size-4" /> Mulai Maintenance
-          </Button>
-        )}
-      </div>
+          )}
+          {rek.isianBabonan && (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                className="h-11"
+                disabled={sibuk}
+                onClick={() => rek.isianBabonan && pilih({ jenis: "panen", isianId: rek.isianBabonan.id })}
+              >
+                Lepas: dimuat
+              </Button>
+              <Button variant="outline" className="h-11" disabled={sibuk} onClick={() => pilih({ jenis: "buang" })}>
+                <Trash2 className="size-4" /> Lepas: dibuang
+              </Button>
+            </div>
+          )}
+          {bolehMulaiMt && (
+            <Button variant="ghost" className="h-10 text-muted-foreground" disabled={sibuk} onClick={() => pilih({ jenis: "mulai-mt" })}>
+              <Wrench className="size-4" /> Mulai Maintenance
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
