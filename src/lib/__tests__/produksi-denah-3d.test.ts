@@ -194,3 +194,12 @@ test("hitungInstansIceCan: jumlah ice can semua kolom bak (termasuk nonaktif), t
   assert.equal(hitungInstansIceCan([a, b]), iceCanBak(a).kecil.length + iceCanBak(b).besar.length);
   assert.equal(BATAS_INSTANS_ICE_CAN, 200_000);
 });
+
+test("iceCanBak: kolom tegak menukar ukuran tapak dibanding mendatar", () => {
+  const m = iceCanBak(bak()).kecil[0];
+  const b = bak();
+  b.kolom[0] = { ...b.kolom[0], orientasiCan: "tegak" };
+  const t = iceCanBak(b).kecil[0];
+  assert.ok(dekat(m.ukuran[0], t.ukuran[2]) && dekat(m.ukuran[2], t.ukuran[0]));
+  assert.ok(!dekat(m.ukuran[0], t.ukuran[0]));
+});
