@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { canView, type ModuleKey } from "@/lib/permissions";
+import { bolehAksiProduksi, canView, type ModuleKey } from "@/lib/permissions";
+import type { KodeProduksi } from "@/lib/produksi-denah";
 import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS, ACCOUNTING_ROLE_IDS } from "@/lib/roles";
 import { isPmpDeployment, isPmpScope } from "@/lib/tenant";
 
@@ -116,6 +117,18 @@ export async function requirePmpakis() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!isPmpDeployment() || (session.user.accountScope !== "pmpakis" && !canAccessGrup(session.user))) redirect("/akses-ditolak");
+  return session;
+}
+
+// Gerbang layar operasional Produksi Es Balok (/{kode}/produksi-app dan tab
+// operasional /{kode}/produksi): sesi pabrik itu + operator (is_produksi)
+// atau admin produksi (bolehAksiProduksi). Kode di luar dua pabrik ditolak.
+export async function requireProduksiPabrik(kode: KodeProduksi) {
+  let session;
+  if (kode === "pmpersada") session = await requirePmpersada();
+  else if (kode === "pmpakis") session = await requirePmpakis();
+  else redirect("/akses-ditolak");
+  if (!bolehAksiProduksi(session.user)) redirect("/akses-ditolak");
   return session;
 }
 

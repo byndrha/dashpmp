@@ -74,6 +74,32 @@ export function bolehEditDenah(user: {
   return user.isSuperAdmin || user.accountScope === "direktur" || !!user.permissions?.produksi?.canEdit;
 }
 
+type UserProduksi = {
+  isProduksi?: boolean;
+  isSuperAdmin: boolean;
+  accountScope?: string | null;
+  permissions?: PermissionMap;
+};
+
+// Admin produksi Es Balok (operasional): aturan yang sama persis dengan
+// bolehEditDenah. Hanya admin yang boleh Koreksi, Batalkan panen, membuka
+// Pencocokan DO dan Log audit (spec operasional §9).
+export function bolehKelolaProduksi(user: Omit<UserProduksi, "isProduksi">): boolean {
+  return bolehEditDenah(user);
+}
+
+// Boleh melakukan aksi operasional harian (isi air, panen, Babonan,
+// maintenance): akun operator (is_produksi) atau admin produksi.
+export function bolehAksiProduksi(user: UserProduksi): boolean {
+  return user.isProduksi === true || bolehKelolaProduksi(user);
+}
+
+// Peran yang dicatat di produksi_log. Operator yang juga admin produksi
+// (supervisor lapangan) tercatat sebagai admin.
+export function peranProduksi(user: UserProduksi): "admin" | "operator" {
+  return bolehKelolaProduksi(user) ? "admin" : "operator";
+}
+
 // permissions can be undefined for a session whose JWT was issued before
 // this field existed (a user still logged in from before this deploy) —
 // treat that the same as "no access" (redirected to /akses-ditolak, where
