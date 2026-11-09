@@ -248,8 +248,14 @@ async function kunciKolomDasar(c: PoolClient, kode: string, kolomId: string, lon
   if (!longgar && (!ketemu || ketemu.kolom.nonaktif)) {
     throw galat("KOLOM_TIDAK_SAH", ketemu ? "Rek ini nonaktif di denah." : "Rek tidak ditemukan di denah pabrik.");
   }
-  await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`produksi-operasional:${kode}:${kolomId}`]);
+  await kunciAdvisoryKolom(c, kode, kolomId);
   return ketemu;
+}
+
+// Kunci advisory per (kode, kolom), berlaku sampai akhir transaksi. Diekspor
+// agar skrip (mis. scripts/backfill-slot-can.ts) memakai hash yang identik.
+export async function kunciAdvisoryKolom(c: PoolClient, kode: string, kolomId: string): Promise<void> {
+  await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`produksi-operasional:${kode}:${kolomId}`]);
 }
 
 async function kunciKolom(c: PoolClient, kode: string, kolomId: string): Promise<KonteksKolom> {

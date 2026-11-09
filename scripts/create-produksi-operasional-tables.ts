@@ -6,7 +6,9 @@
 //   - produksi_kolom_isi: diperluas (ALTER ... ADD COLUMN IF NOT EXISTS).
 //     Satu baris = satu isian (produksi | babonan).
 //   - produksi_maintenance, produksi_panen, produksi_muatan,
-//     produksi_babonan_keluar, produksi_kendaraan_aktif, produksi_log: baru.
+//     produksi_babonan_keluar, produksi_kendaraan_aktif, produksi_log,
+//     produksi_slot_rusak: baru. Kolom slot int[] (slot can) di
+//     produksi_kolom_isi dan produksi_panen.
 //
 // Hanya ADD COLUMN / CREATE ... IF NOT EXISTS / ADD CONSTRAINT bila belum ada.
 // Tidak pernah DROP tabel/kolom atau DELETE data. Satu-satunya DROP CONSTRAINT:
@@ -104,6 +106,12 @@ async function main() {
       ON produksi_kolom_isi (perusahaan_kode, kolom_id)
       WHERE selesai_at IS NULL AND jenis = 'babonan'
   `);
+  // Slot can (docs/superpowers/specs/2026-11-09-produksi-es-balok-slot-can-design.md §1):
+  // posisi can yang ditempati isian (invarian cardinality(slot) = sisa) dan,
+  // untuk Babonan, can pecah yang tetap di can (slot_pecah ⊆ slot). Baris lama
+  // mendapat '{}' lalu diisi scripts/backfill-slot-can.ts.
+  await pg.query(`ALTER TABLE produksi_kolom_isi ADD COLUMN IF NOT EXISTS slot integer[] NOT NULL DEFAULT '{}'`);
+  await pg.query(`ALTER TABLE produksi_kolom_isi ADD COLUMN IF NOT EXISTS slot_pecah integer[] NOT NULL DEFAULT '{}'`);
   console.log("produksi_kolom_isi siap.");
 
   // ---------------------------------------------------------------------------
@@ -157,7 +165,35 @@ async function main() {
       ON produksi_panen (perusahaan_kode, tanggal_bisnis)
   `);
   await pg.query(`CREATE INDEX IF NOT EXISTS produksi_panen_isian_idx ON produksi_panen (isian_id)`);
+  // Slot can untuk audit panen (spec slot can §1).
+  await pg.query(`ALTER TABLE produksi_panen ADD COLUMN IF NOT EXISTS slot_dimuat integer[] NOT NULL DEFAULT '{}'`);
+  await pg.query(`ALTER TABLE produksi_panen ADD COLUMN IF NOT EXISTS slot_babonan integer[] NOT NULL DEFAULT '{}'`);
+  await pg.query(`ALTER TABLE produksi_panen ADD COLUMN IF NOT EXISTS slot_pecah integer[] NOT NULL DEFAULT '{}'`);
   console.log("produksi_panen siap.");
+
+  // ---------------------------------------------------------------------------
+  // produksi_slot_rusak (spec slot can §1): can rusak per slot rek; aktif
+  // selama selesai_at NULL, unik aktif per (kode, kolom, slot).
+  // ---------------------------------------------------------------------------
+  await pg.query(`
+    CREATE TABLE IF NOT EXISTS produksi_slot_rusak (
+      id bigserial PRIMARY KEY,
+      perusahaan_kode text NOT NULL,
+      kolom_id text NOT NULL,
+      slot integer NOT NULL,
+      mulai_at timestamptz NOT NULL DEFAULT now(),
+      selesai_at timestamptz NULL,
+      catatan text NULL,
+      dibuka_oleh_akun_id text NOT NULL,
+      ditutup_oleh_akun_id text NULL
+    )
+  `);
+  await addConstraintIfMissing(pg, "produksi_slot_rusak", "produksi_slot_rusak_slot_chk", `CHECK (slot >= 1)`);
+  await pg.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS produksi_slot_rusak_aktif_uq
+      ON produksi_slot_rusak (perusahaan_kode, kolom_id, slot) WHERE selesai_at IS NULL
+  `);
+  console.log("produksi_slot_rusak siap.");
 
   // ---------------------------------------------------------------------------
   // produksi_muatan
