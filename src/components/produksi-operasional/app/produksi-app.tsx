@@ -196,6 +196,46 @@ export function ProduksiApp({
     [jalankan, kode],
   );
 
+  // "Isi semua" dari baris kelompok tugas: Isi Air per rek BERURUTAN di bawah
+  // satu kunci permintaan, berhenti pada galat pertama, satu toast ringkasan.
+  const isiAirBanyak = useCallback(
+    async (daftar: KeadaanRek[]) => {
+      if (daftar.length === 0) return;
+      if (sibukRef.current) {
+        toast.error("Masih memproses aksi sebelumnya.");
+        return;
+      }
+      sibukRef.current = true;
+      setSibuk(true);
+      try {
+        let berhasil = 0;
+        let can = 0;
+        let galat: string | null = null;
+        for (const rek of daftar) {
+          let r: HasilAksi<{ isianId: string }>;
+          try {
+            r = await isiAirAction(kode, rek.kolomId, null);
+          } catch {
+            r = { success: false, error: "Koneksi gagal. Coba lagi." };
+          }
+          if (!r.success) {
+            galat = `Rek ${rek.nomor}: ${r.error}`;
+            break;
+          }
+          berhasil++;
+          can += rek.slotKosong.length;
+        }
+        if (galat) toast.error(`${berhasil} dari ${daftar.length} rek diisi air, lalu berhenti. ${galat}`);
+        else toast.success(`${berhasil} rek diisi air (${can} can).`);
+        await Promise.allSettled([muatKeadaan(), muatRiwayat()]);
+      } finally {
+        sibukRef.current = false;
+        setSibuk(false);
+      }
+    },
+    [kode, muatKeadaan, muatRiwayat],
+  );
+
   function gantiTab(t: TabKey) {
     setTab(t);
     setDikunjungi((s) => (s.has(t) ? s : new Set(s).add(t)));
@@ -281,6 +321,7 @@ export function ProduksiApp({
                   sibuk={sibuk}
                   onPanen={(kolomId) => setRekTerpilih({ kolomId, awal: "panen" })}
                   onIsiAir={isiAirSatuKetuk}
+                  onIsiAirSemua={(daftar) => void isiAirBanyak(daftar)}
                   onBuka={(kolomId) => setRekTerpilih({ kolomId, awal: "menu" })}
                 />
                 <h2 className="px-3 pt-4 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Semua rek</h2>
@@ -369,6 +410,7 @@ function TabBak({
             key={b.id}
             type="button"
             onClick={() => onPilih(b.id)}
+            aria-current={aktif ? "true" : undefined}
             aria-label={`${b.nama.trim() || "Bak"}${panen > 0 ? `, ${panen} rek siap panen` : ""}`}
             className={cn(
               "relative flex h-10 min-w-0 items-center justify-center rounded-lg border px-1 text-sm font-semibold",
@@ -420,7 +462,8 @@ function ChipRingkasan({ jumlahRek, ringkasan }: { jumlahRek: number; ringkasan:
   return (
     <div className="flex flex-col gap-1.5 px-3 pt-2.5">
       <p className="text-xs text-muted-foreground">{jumlahRek} rek</p>
-      <div className="grid grid-cols-4 gap-1.5">
+      {/* 2 × 2 di layar HP (≥ 375 px label tidak terpotong), 4 kolom di layar lebar. */}
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {chip.map((c) => (
           <span
             key={c.label}

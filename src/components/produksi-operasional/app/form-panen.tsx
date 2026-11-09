@@ -45,7 +45,10 @@ function aman(n: number): number {
 // produksi: grid can mode panen (ketuk biasa → Babonan ◆ → Pecah ✕ → biasa),
 // sisanya dimuat. Isian Babonan ("Lepas Babonan — dimuat"): grid pilih can
 // yang dimuat (can pecah tidak bisa dimuat), tanpa isi ulang. Baris muatan
-// pertama otomatis = jumlah can dimuat dikurangi baris lain.
+// pertama otomatis = jumlah can dimuat dikurangi baris lain (diturunkan tiap
+// render: ikut ketukan grid, perubahan/penghapusan baris lain, dan slot isian
+// yang berubah sesudah muat ulang) sampai operator mengetik jumlahnya sendiri.
+// Semua can ◆/✕ (dimuat 0) = panen tanpa kendaraan (muatan kosong).
 export function FormPanen({
   kode,
   rek,
@@ -81,10 +84,12 @@ export function FormPanen({
   const milik = useMemo(() => new Set(isian.slot), [isian.slot]);
 
   const [tanda, setTanda] = useState<Map<number, TandaPanen>>(() => new Map());
-  const [pilihMuat, setPilihMuat] = useState<Set<number>>(() => new Set(bolehMuatBabonan));
-  const [baris, setBaris] = useState<BarisMuatan[]>(() => [
-    { kunci: 0, kendaraan: kendaraanAktif, jumlah: String(babonanMode ? bolehMuatBabonan.size : isian.slot.length) },
-  ]);
+  // Babonan: simpan can yang DILEPAS (bukan yang dipilih), supaya can Babonan
+  // baru sesudah muat ulang otomatis ikut dimuat.
+  const [lepasMuat, setLepasMuat] = useState<Set<number>>(() => new Set());
+  const pilihMuat = useMemo(() => new Set([...bolehMuatBabonan].filter((s) => !lepasMuat.has(s))), [bolehMuatBabonan, lepasMuat]);
+  const [barisMentah, setBaris] = useState<BarisMuatan[]>(() => [{ kunci: 0, kendaraan: kendaraanAktif, jumlah: "" }]);
+  const [pertamaOtomatis, setPertamaOtomatis] = useState(true);
   const [kunciBerikut, setKunciBerikut] = useState(1);
   const [konfirmasi, setKonfirmasi] = useState<{ pct: number; isiUlang: boolean } | null>(null);
 
@@ -93,45 +98,53 @@ export function FormPanen({
   const slotPecah = babonanMode ? [] : [...tanda].filter(([s, t]) => t === "pecah" && milik.has(s)).map(([s]) => s);
   const slotDimuatPilih = babonanMode ? [...pilihMuat].filter((s) => bolehMuatBabonan.has(s)) : undefined;
 
-  const muatan: MuatanInput[] = baris
-    .filter((b): b is BarisMuatan & { kendaraan: KendaraanPilihan } => b.kendaraan !== null)
-    .map((b) => ({ ...b.kendaraan, jumlah: angka(b.jumlah) }));
+  const harusDimuat = slotDimuatDari(isian, { muatan: [], slotBabonan, slotPecah, slotDimuat: slotDimuatPilih }).length;
+  // Produksi dengan semua can ◆/✕: tidak ada yang dimuat → tanpa kendaraan.
+  const tanpaMuatan = !babonanMode && harusDimuat === 0;
+  const lainPertama = barisMentah.slice(1).reduce((s, b) => s + aman(angka(b.jumlah)), 0);
+  const baris = barisMentah.map((b, i) =>
+    i === 0 && pertamaOtomatis ? { ...b, jumlah: String(Math.max(0, harusDimuat - lainPertama)) } : b,
+  );
+
+  const muatan: MuatanInput[] = tanpaMuatan
+    ? []
+    : baris
+        .filter((b): b is BarisMuatan & { kendaraan: KendaraanPilihan } => b.kendaraan !== null)
+        .map((b) => ({ ...b.kendaraan, jumlah: angka(b.jumlah) }));
   const inputSlot: PanenSlotInput = { muatan, slotBabonan, slotPecah, slotDimuat: slotDimuatPilih };
-  const harusDimuat = slotDimuatDari(isian, inputSlot).length;
-  const dimuat = baris.reduce((s, b) => s + aman(angka(b.jumlah)), 0);
-  const adaTanpaKendaraan = baris.some((b) => b.kendaraan === null);
+  const dimuat = tanpaMuatan ? 0 : baris.reduce((s, b) => s + aman(angka(b.jumlah)), 0);
+  const adaTanpaKendaraan = !tanpaMuatan && baris.some((b) => b.kendaraan === null);
   const galat = adaTanpaKendaraan
     ? "Pilih kendaraan untuk setiap baris muatan."
-    : baris.length === 0
+    : !tanpaMuatan && baris.length === 0
       ? "Tambahkan minimal satu kendaraan."
       : validasiPanenSlot(isian, inputSlot);
   const sah = galat === null;
 
   const pctIsian = babonanMode ? null : hitungKematangan(new Date(isian.mulaiAt), isian.durasiBekuJam ?? 0, new Date(sekarang));
 
-  // Baris pertama mengikuti jumlah can dimuat (dikurangi baris lain).
-  function sesuaikanBarisPertama(target: number) {
-    setBaris((l) => {
-      if (l.length === 0) return l;
-      const lain = l.slice(1).reduce((s, b) => s + aman(angka(b.jumlah)), 0);
-      const [pertama, ...sisa] = l;
-      return [{ ...pertama, jumlah: String(Math.max(0, target - lain)) }, ...sisa];
-    });
-  }
-
+  // Ketukan grid mengembalikan baris pertama ke mode otomatis.
   function ubahTanda(baru: Map<number, TandaPanen>) {
     setTanda(baru);
-    const keluar = [...baru].filter(([s]) => milik.has(s)).length;
-    sesuaikanBarisPertama(isian.slot.length - keluar);
+    setPertamaOtomatis(true);
   }
 
   function ubahPilihMuat(baru: Set<number>) {
-    setPilihMuat(baru);
-    sesuaikanBarisPertama([...baru].filter((s) => bolehMuatBabonan.has(s)).length);
+    setLepasMuat(new Set([...bolehMuatBabonan].filter((s) => !baru.has(s))));
+    setPertamaOtomatis(true);
   }
 
   function ubahBaris(kunci: number, ubah: Partial<BarisMuatan>) {
+    // Operator mengetik jumlah baris pertama → berhenti otomatis (nilai yang
+    // tampil dibekukan sebagai titik awal ketikan).
+    if (ubah.jumlah !== undefined && barisMentah[0]?.kunci === kunci) setPertamaOtomatis(false);
     setBaris((l) => l.map((b) => (b.kunci === kunci ? { ...b, ...ubah } : b)));
+  }
+
+  function hapusBaris(kunci: number) {
+    // Baris pertama dihapus: jumlah baris berikutnya (yang diketik) tidak ditimpa.
+    if (barisMentah[0]?.kunci === kunci) setPertamaOtomatis(false);
+    setBaris((l) => l.filter((x) => x.kunci !== kunci));
   }
 
   function tambahBaris() {
@@ -153,9 +166,11 @@ export function FormPanen({
     };
     const pesan = babonanMode
       ? `Babonan ${dimuat} can dimuat.`
-      : isiUlang
-        ? `Panen ${dimuat} can, diisi air lagi ${dimuat} can.`
-        : `Panen ${dimuat} can tanpa isi ulang.`;
+      : tanpaMuatan
+        ? `Panen dicatat: ◆ ${slotBabonan.length} Babonan · ✕ ${slotPecah.length} pecah, tanpa muatan.`
+        : isiUlang
+          ? `Panen ${dimuat} can, diisi air lagi ${dimuat} can.`
+          : `Panen ${dimuat} can tanpa isi ulang.`;
     const r = await jalankan(() => panenAction(kode, input), pesan);
     if (r.success) {
       const terakhir = muatan[muatan.length - 1];
@@ -215,65 +230,81 @@ export function FormPanen({
               · <span className="text-orange-700 dark:text-orange-300">◆</span> <b>{slotBabonan.length}</b> · ✕ <b>{slotPecah.length}</b>
             </>
           )}
-          {" "}· kendaraan <b>{dimuat}</b>/{harusDimuat}
+          {!tanpaMuatan && (
+            <>
+              {" "}
+              · kendaraan <b>{dimuat}</b>/{harusDimuat}
+            </>
+          )}
         </span>
         {sah ? <Check className="size-5 shrink-0 text-green-600" /> : <X className="size-5 shrink-0 text-destructive" />}
       </div>
 
-      <div className="flex flex-col gap-2">
-        {baris.map((b, i) => (
-          <div key={b.kunci} className="flex items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <PemilihKendaraan
-                kode={kode}
-                armada={armada}
-                armadaGalat={armadaGalat}
-                nilai={b.kendaraan}
-                onPilih={(k) => ubahBaris(b.kunci, { kendaraan: k })}
+      {tanpaMuatan ? (
+        <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+          Semua can ditandai Babonan ◆ / Pecah ✕ — tidak ada yang dimuat, kendaraan tidak perlu dipilih.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {baris.map((b, i) => (
+            <div key={b.kunci} className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <PemilihKendaraan
+                  kode={kode}
+                  armada={armada}
+                  armadaGalat={armadaGalat}
+                  nilai={b.kendaraan}
+                  onPilih={(k) => ubahBaris(b.kunci, { kendaraan: k })}
+                  disabled={sibuk}
+                  tampilan="baris"
+                  judul={`Kendaraan muatan ${i + 1}`}
+                />
+              </div>
+              <Input
+                value={b.jumlah}
+                onChange={(e) => ubahBaris(b.kunci, { jumlah: e.target.value })}
+                inputMode="numeric"
+                aria-label={`Jumlah can muatan ${i + 1}`}
+                className="h-10 w-16 text-center text-base font-semibold"
                 disabled={sibuk}
-                tampilan="baris"
-                judul={`Kendaraan muatan ${i + 1}`}
               />
+              {baris.length > 1 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Hapus baris muatan"
+                  disabled={sibuk}
+                  onClick={() => hapusBaris(b.kunci)}
+                >
+                  <X className="size-4" />
+                </Button>
+              ) : (
+                <span className="w-8" />
+              )}
             </div>
-            <Input
-              value={b.jumlah}
-              onChange={(e) => ubahBaris(b.kunci, { jumlah: e.target.value })}
-              inputMode="numeric"
-              aria-label={`Jumlah can muatan ${i + 1}`}
-              className="h-10 w-16 text-center text-base font-semibold"
-              disabled={sibuk}
-            />
-            {baris.length > 1 ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Hapus baris muatan"
-                disabled={sibuk}
-                onClick={() => setBaris((l) => l.filter((x) => x.kunci !== b.kunci))}
-              >
-                <X className="size-4" />
-              </Button>
-            ) : (
-              <span className="w-8" />
-            )}
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={tambahBaris}
-          disabled={sibuk}
-          className="flex items-center gap-1 self-start text-sm font-medium text-primary disabled:opacity-50"
-        >
-          <Plus className="size-4" /> Bagi ke kendaraan lain
-        </button>
-      </div>
+          ))}
+          <button
+            type="button"
+            onClick={tambahBaris}
+            disabled={sibuk}
+            className="flex items-center gap-1 self-start text-sm font-medium text-primary disabled:opacity-50"
+          >
+            <Plus className="size-4" /> Bagi ke kendaraan lain
+          </button>
+        </div>
+      )}
 
       {galat && <p className="text-xs text-destructive">{galat}</p>}
 
       {babonanMode ? (
         <Button type="button" className="h-12 text-base" disabled={!sah || sibuk} onClick={() => kirim(false, false)}>
           Muat {dimuat} can Babonan
+        </Button>
+      ) : tanpaMuatan ? (
+        // Tidak ada can dimuat → tidak ada yang diisi ulang; satu tombol saja.
+        <Button type="button" className="h-12 w-full text-base" disabled={!sah || sibuk} onClick={() => kirim(false, false)}>
+          Simpan (semua Babonan/Pecah)
         </Button>
       ) : (
         <div className="flex flex-col items-center gap-2">

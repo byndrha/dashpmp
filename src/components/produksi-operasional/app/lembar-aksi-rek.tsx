@@ -243,6 +243,10 @@ export function IsiLembar({
         />
       )}
 
+      {bolehAksi && tampilan.jenis === "buang" && !rek.isianBabonan && (
+        <p className="text-sm text-muted-foreground">Babonan rek ini sudah tidak ada (baru saja diubah). Kembali ke menu.</p>
+      )}
+
       {bolehAksi && tampilan.jenis === "rusak" && (
         <FormPilihSlot
           rek={rek}

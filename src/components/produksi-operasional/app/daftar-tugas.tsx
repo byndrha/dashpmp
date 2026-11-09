@@ -4,6 +4,8 @@
 // panen (FIFO tertua), isi air (paling lama kosong), Babonan lama. Tombol aksi
 // langsung di baris: Panen membuka formulir panen, Isi Air = SATU ketukan
 // (semua slot kosong tak rusak, tanpa layar konfirmasi), Babonan → lembar rek.
+// ≥ AMBANG_KELOMPOK tugas isi air → satu baris kelompok "n rek kosong — Isi
+// semua" di posisi tugas isi air pertama; baris per rek di bawah "Tampilkan semua".
 
 import { useState } from "react";
 import { ChevronRight, CircleCheck, Droplets } from "lucide-react";
@@ -13,6 +15,9 @@ import type { KeadaanRek, Tugas } from "@/lib/produksi-operasional";
 import { formatUsiaRingkas, singkatVarian, WARNA_TAHAP } from "../warna-tahap";
 
 const BATAS_AWAL = 8;
+const AMBANG_KELOMPOK = 5;
+
+type Baris = { jenis: "tugas"; tugas: Tugas } | { jenis: "kelompok-isi" };
 
 export function DaftarTugas({
   tugas,
@@ -21,6 +26,7 @@ export function DaftarTugas({
   sibuk,
   onPanen,
   onIsiAir,
+  onIsiAirSemua,
   onBuka,
 }: {
   tugas: Tugas[];
@@ -29,11 +35,31 @@ export function DaftarTugas({
   sibuk: boolean;
   onPanen: (kolomId: string) => void;
   onIsiAir: (rek: KeadaanRek) => void;
+  /** Isi Air semua rek kelompok, berurutan (pemanggil memegang kunci permintaan). */
+  onIsiAirSemua: (rek: KeadaanRek[]) => void;
   onBuka: (kolomId: string) => void;
 }) {
   const [semua, setSemua] = useState(false);
-  const tampil = semua ? tugas : tugas.slice(0, BATAS_AWAL);
+  const [rinciIsi, setRinciIsi] = useState(false);
   const now = sekarang ? Date.parse(sekarang) : null;
+
+  const rekIsi = tugas
+    .filter((t) => t.jenis === "isi-air")
+    .map((t) => keadaan.get(t.kolomId))
+    .filter((k): k is KeadaanRek => k !== undefined && k.slotKosong.length > 0);
+  const kelompok = rekIsi.length >= AMBANG_KELOMPOK;
+  const baris: Baris[] = [];
+  let kelompokMasuk = false;
+  for (const t of tugas) {
+    if (kelompok && t.jenis === "isi-air") {
+      if (!kelompokMasuk) baris.push({ jenis: "kelompok-isi" });
+      kelompokMasuk = true;
+      if (!rinciIsi) continue;
+    }
+    baris.push({ jenis: "tugas", tugas: t });
+  }
+  const tampil = semua ? baris : baris.slice(0, BATAS_AWAL);
+  const canKosong = rekIsi.reduce((s, k) => s + k.slotKosong.length, 0);
 
   return (
     <section className="flex flex-col">
@@ -46,7 +72,37 @@ export function DaftarTugas({
         </p>
       ) : (
         <ul className="divide-y border-y">
-          {tampil.map((t) => {
+          {tampil.map((b) => {
+            if (b.jenis === "kelompok-isi") {
+              return (
+                <li key="kelompok-isi" className="flex flex-col bg-red-50/50 dark:bg-red-950/20">
+                  <div className="flex min-h-12 items-center gap-2 px-3 py-1.5">
+                    <span className="min-w-0 flex-1 text-sm">
+                      <b className="tabular-nums">{rekIsi.length}</b> rek kosong
+                      <span className="text-xs text-muted-foreground tabular-nums"> · {canKosong} can</span>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 shrink-0 border-red-400 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950"
+                      disabled={sibuk}
+                      onClick={() => onIsiAirSemua(rekIsi)}
+                    >
+                      <Droplets className="size-4" /> Isi semua
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRinciIsi((r) => !r)}
+                    aria-expanded={rinciIsi}
+                    className="self-start px-3 pb-1.5 text-xs font-medium text-primary"
+                  >
+                    {rinciIsi ? "Sembunyikan rincian" : `Tampilkan semua (${rekIsi.length})`}
+                  </button>
+                </li>
+              );
+            }
+            const t = b.tugas;
             const rek = keadaan.get(t.kolomId);
             if (!rek) return null;
             const usia = now === null ? 0 : Math.max(0, Math.floor((now - Date.parse(t.sejak)) / 60_000));
@@ -83,13 +139,13 @@ export function DaftarTugas({
           })}
         </ul>
       )}
-      {tugas.length > BATAS_AWAL && (
+      {baris.length > BATAS_AWAL && (
         <button
           type="button"
           onClick={() => setSemua((s) => !s)}
           className="self-center py-2 text-xs font-medium text-primary"
         >
-          {semua ? "Ringkas" : `Tampilkan semua (${tugas.length})`}
+          {semua ? "Ringkas" : `Tampilkan semua tugas (${tugas.length})`}
         </button>
       )}
     </section>

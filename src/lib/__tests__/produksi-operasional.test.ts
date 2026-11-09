@@ -463,6 +463,10 @@ test("validasi panen slot produksi", () => {
   assert.notEqual(validasiPanenSlot(prod, { muatan: [armada("1", 20), armada("2", 15)], slotBabonan: [35], slotPecah: [35] }), null);
   assert.notEqual(validasiPanenSlot(prod, { muatan, slotBabonan: [35, 35], slotPecah: [] }), null);
   assert.notEqual(validasiPanenSlot(prod, { muatan, slotBabonan: [35.5, 36], slotPecah: [] }), null);
+  // semua can ◆/✕ → dimuat 0, tanpa kendaraan (muatan kosong) sah
+  const kecil = { jenis: "produksi" as const, slot: [1, 2, 3], slotPecah: [] };
+  assert.equal(validasiPanenSlot(kecil, { muatan: [], slotBabonan: [1, 2], slotPecah: [3] }), null);
+  assert.notEqual(validasiPanenSlot(kecil, { muatan: [], slotBabonan: [1, 2], slotPecah: [] }), null);
   const kurang = validasiPanenSlot(prod, { muatan: [armada("1", 20), armada("2", 13)], slotBabonan: [35, 36], slotPecah: [] });
   assert.ok(kurang);
   assert.match(kurang, /34/);
