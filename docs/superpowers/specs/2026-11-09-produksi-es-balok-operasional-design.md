@@ -47,7 +47,7 @@ Yang diambil dari IceControl adalah **struktur dan aturan kerjanya**, bukan data
 - **1 ice can = 1 balok = 1 angka di "Realisasi" pemesanan ERP**, berlaku untuk Kecil maupun Besar.
 - Pencocokan dilakukan **per muatan (per kendaraan)**, bukan hanya total per hari.
 - **Isi satu rek bisa terbagi ke dua kendaraan** atau lebih.
-- **Panen boleh sebagian lalu dilanjut nanti.** Bahkan 1–2 can dalam satu rek sengaja tidak dipanen untuk menjaga suhu bak, yaitu **Babonan per can**, bukan per rek.
+- **Standarnya satu rek dikosongkan sekaligus, lalu langsung diisi air lagi setelah muat selesai.** Pengecualiannya: ada ice can yang **sengaja tidak dipanen** (biasanya 1–2 can) untuk menjaga suhu bak, yaitu **Babonan per can**, bukan per rek. (Jawaban awal "bisa sebagian lalu dilanjut nanti" diluruskan pengguna: yang dimaksud adalah can Babonan ini.)
 - **Es pecah biasanya tidak dimuat atau dijual.** Es pecah tetap di ice can dan kemungkinan menjadi Babonan.
 - **Waktu muat tidak tentu.** Tanggal bisnis memakai **closing 13:59 WIB; pukul 14:00 sudah dihitung hari berikutnya**. Aturan ini sama dengan `ROLLOVER_HOUR` di `business-date.ts`. Kalau ternyata ada salah cocok, aturannya dikonfigurasi ulang nanti.
 - **Tata letak awal dari IceControl sudah benar**, termasuk Bak 4–5 rek nomor 41 ke atas = BB 18 can.
@@ -100,7 +100,7 @@ Yang diambil dari IceControl adalah **struktur dan aturan kerjanya**, bukan data
 
 ### 1. Model rek: kelompok can (isian)
 
-"Rek" di lapangan = `DenahKolom` di denah, dengan `id` stabil. Karena panen boleh sebagian dan Babonan dihitung per can, **satu rek bisa memuat beberapa kelompok can sekaligus**. Contohnya: 2 can Babonan dari siklus lama dan 34 can yang baru diisi air. Setiap kelompok disebut **isian**.
+"Rek" di lapangan = `DenahKolom` di denah, dengan `id` stabil. Karena Babonan dihitung per can, **satu rek bisa memuat beberapa kelompok can sekaligus**. Contohnya: 2 can Babonan dari siklus lama dan 34 can yang baru diisi air. Setiap kelompok disebut **isian**.
 
 Satu isian = sekumpulan can dalam satu rek yang diisi air bersamaan:
 - `mulai_at` (waktu isi air), `varian`, `durasi_beku_jam` (snapshot)
@@ -119,7 +119,6 @@ Can yang ditinggal saat panen tidak dibiarkan menggantung di isian lama. Can itu
 |---|---|
 | **Kosong** | Tidak ada isian aktif dan tidak maintenance |
 | **Berisi es (x%)** | Ada isian `produksi` aktif. Persentase dan tahap diambil dari isian `produksi` **tertua** yang masih bersisa (FIFO) |
-| **Sebagian** | Isian `produksi` aktif dengan `sisa < jumlah_awal` (panen sebagian). Tampil sebagai badge "sisa n" |
 | **Babonan n** | Ada isian `babonan` aktif. Tampil sebagai badge di samping keadaan utama. Kalau hanya ada Babonan, keadaan utamanya "Babonan" |
 | **Maintenance** | Ada catatan maintenance terbuka |
 | **Nonaktif** | `DenahKolom.nonaktif = true` |
@@ -135,8 +134,8 @@ Kematangan isian `produksi`: `pct = clamp(round((now − mulai_at) / durasi_beku
 | Aksi | Siapa | Efek |
 |---|---|---|
 | **Isi Air** | Operator, Admin | Membuat isian `produksi` baru (`mulai_at = now()` server) sebanyak can kosong. Jumlahnya bawaan = `jumlahIceCan − Σ sisa` dan hanya boleh dikurangi (mis. ada can rusak) |
-| **Panen** | Operator, Admin | Mengambil can dari isian `produksi` (bawaan yang tertua) atau dari Babonan. Isinya: baris muatan per kendaraan, ditambah **"Tinggal sebagai Babonan"** n can dan **"Pecah (tetap di can)"** n can. Keduanya dipindah ke isian Babonan. Panen boleh sebagian; sisanya tetap di isian |
-| **Isi Air setelah panen** | (tombol di formulir panen) | Kalau panen membuat rek punya can kosong, formulir menawarkan **"Panen & Isi Air"**. Panen dan Isi Air untuk can yang kosong dijalankan dalam satu transaksi. Bawaannya aktif karena ini kasus paling umum di IceControl. Operator bisa memilih "Panen saja" saat masih menunggu truk berikutnya |
+| **Panen & Isi Air** | Operator, Admin | Aksi standar. **Mengosongkan seluruh isian `produksi`** dalam satu kejadian: baris muatan per kendaraan, ditambah **"Tinggal sebagai Babonan"** n can dan **"Pecah (tetap di can)"** n can. Keduanya dipindah ke isian Babonan rek. Di transaksi yang sama, can yang kosong langsung diisi air (isian `produksi` baru, jumlah = can yang dimuat). Syarat: `Σ muatan + babonan + pecah = sisa` |
+| **Panen tanpa isi ulang** | Operator, Admin | Sama seperti di atas, tapi can kosong tidak diisi. Dipakai kalau rek akan maintenance atau bak dihentikan (Claude: pengecualian, bukan alur normal) |
 | **Tandai Babonan** | Operator, Admin | Memindah n can dari isian `produksi` ke Babonan tanpa panen, untuk kasus "rek ini dijadikan penjaga suhu" |
 | **Lepas Babonan** | Operator, Admin | Mengeluarkan can Babonan: **dimuat** (lewat Panen, ikut pencocokan) atau **dibuang/dilebur** (tidak dimuat; dicatat, tidak ikut pencocokan) |
 | **Mulai / Selesai Maintenance** | Operator, Admin | Mulai hanya kalau rek tidak punya isian `produksi` aktif. Babonan boleh tetap ada (Claude). Selama maintenance, Isi Air ditolak |
@@ -156,22 +155,22 @@ Setiap aksi yang mengubah isian **juga mengunci baris `produksi_denah` perusahaa
 - Pilihan kendaraan:
   - daftar `PMP_DaftarKendaraan` (IsDeleted=0) dari ERP pabrik itu, dengan pencarian plat
   - opsi **"Kendaraan pembeli"**, dengan isian plat (wajib) dan nama agen (opsional, pilih dari `PMP_Agen` atau teks bebas)
-- Formulir Panen:
+- Formulir Panen & Isi Air:
 
 ```
-Rek 14 · BK · isian 08:10 (96%) · sisa 36       Kendaraan aktif: S 9805 UH ▾
+Rek 14 · BK · isian 08:10 (96%) · 36 can        Kendaraan aktif: S 9805 UH ▾
   S 9805 UH ................ [20]
   S 9870 UH ................ [14]   (+ Bagi ke kendaraan lain)
   Tinggal sebagai Babonan .. [ 2]
   Pecah (tetap di can) ..... [ 0]
   ─────────────────────────────────
-  Dipanen 34 · ke Babonan 2 · sisa di isian 0
-            [ Panen & Isi Air 34 can ]   [ Panen saja ]
+  Dimuat 34 · Babonan 2 · total 36 ✓
+            [ Panen & Isi Air 34 can ]      (Panen tanpa isi ulang)
 ```
 
   - Baris muatan pertama otomatis = kendaraan aktif, dengan jumlah = sisa isian dikurangi bawaan Babonan (0).
   - Kendaraan pada baris muatan terakhir otomatis menjadi kendaraan aktif baru.
-- Aturan validasi (server): `Σ muatan + babonan + pecah ≤ sisa isian`, setiap angka ≥ 0, setidaknya satu angka > 0, dan kendaraan unik dalam satu panen. Selisih terhadap sisa tetap tinggal di isian (panen sebagian).
+- Aturan validasi (server): `Σ muatan + babonan + pecah = sisa isian`, setiap angka ≥ 0, dan kendaraan unik dalam satu panen. Tombol baru aktif setelah total cocok.
 - Varian muatan = varian isian.
 
 ### 4. Pencocokan panen ↔ DO
@@ -193,7 +192,6 @@ Rek 14 · BK · isian 08:10 (96%) · sisa 36       Kendaraan aktif: S 9805 UH �
 
 Dihitung langsung saat halaman dibuka, tanpa job terjadwal:
 - **Terlambat panen:** isian `produksi` dengan usia > jam beku + 12 jam yang masih bersisa (aturan IceControl).
-- **Sisa panen sebagian menggantung:** isian `produksi` yang sudah dipanen sebagian dan sisanya belum diambil > 6 jam (Claude, konstanta).
 - **Babonan terlalu lama:** `babonan_sejak` > 48 jam (fakta pengguna: "maks ~2 hari").
 - **Maintenance lama:** maintenance terbuka > 72 jam (Claude, konstanta).
 - **Kolom kosong lama:** Kosong > 6 jam di bak yang aktif (Claude, konstanta). Ini tanda kapasitas terbuang.
@@ -212,14 +210,14 @@ Mengikuti pola aplikasi lapangan yang ada (Satpam/Driver/Produksi MKEsindo): lay
 
 - **Atas:** nama operator, shift, dan pemilih **kendaraan aktif** (selalu terlihat).
 - **Tab bak:** Bak 1 … Bak N, sesuai urutan denah.
-- **Grid rek:** kartu berisi nomor, varian (BK/BB), warna tahap, %, dan usia isian tertua, ditambah badge "sisa n" (panen sebagian) dan "Babonan n". Maintenance diberi ikon. Urutan dan arah nomor mengikuti `arahNomor` bak.
+- **Grid rek:** kartu berisi nomor, varian (BK/BB), warna tahap, %, dan usia isian tertua, ditambah badge "Babonan n". Maintenance diberi ikon. Urutan dan arah nomor mengikuti `arahNomor` bak.
 - **Ketuk rek:** muncul lembar aksi yang sesuai keadaan:
   - Kosong / ada can kosong → Isi Air (sejumlah can kosong), Mulai Maintenance (kalau tidak ada isian produksi)
-  - Berisi → Panen, Tandai Babonan
+  - Berisi → Panen & Isi Air, Tandai Babonan
   - Ada Babonan → Lepas Babonan (dimuat / dibuang)
   - Maintenance → Selesai Maintenance
   - Lembar menampilkan setiap isian aktif (waktu isi, %, sisa, operator pengisi) dan estimasi matang.
-- **Formulir panen:** seperti bagian 3. Tombol utama besar "Panen & Isi Air", dengan "Panen saja" di sebelahnya.
+- **Formulir panen:** seperti bagian 3. Tombol utama besar "Panen & Isi Air". "Panen tanpa isi ulang" berupa tautan kecil.
 - **Tab "Riwayat saya":** aksi operator di shift ini, ditambah total muatan per kendaraan hari ini.
 - Data disegarkan setiap 30 detik dan setelah setiap aksi.
 
@@ -273,7 +271,7 @@ produksi_kolom_isi            -- sudah ada; diperluas (ALTER ADD COLUMN). Satu b
   pecah int NOT NULL DEFAULT 0    -- babonan: berapa dari sisa yang pecah
   diisi_oleh_akun_id int NOT NULL, ditutup_oleh_akun_id int NULL
   UNIQUE (perusahaan_kode, kolom_id) WHERE selesai_at IS NULL AND jenis = 'babonan'   -- satu babonan aktif per rek
-  -- isian produksi aktif per rek boleh > 1 (panen sebagian + isi air can kosong)
+  -- isian produksi aktif per rek boleh > 1 (mis. can bekas Babonan yang dilepas lalu diisi air, mulai_at berbeda)
 
 produksi_maintenance
   id, perusahaan_kode, kolom_id, mulai_at, selesai_at NULL, catatan,
@@ -313,7 +311,7 @@ produksi_log                    -- hanya INSERT
 
 - `src/lib/produksi-operasional.ts` (aman untuk klien, fungsi murni + uji `node:test`):
   - `hitungKematangan`, `tahapDari`, `shiftDari`
-  - `validasiPanen` (Σ muatan + babonan + pecah ≤ sisa, kendaraan unik), `canKosong(kolom, isianAktif)`, `keadaanRek(isianAktif, maintenance, sekarang)`
+  - `validasiPanen` (Σ muatan + babonan + pecah = sisa, kendaraan unik), `canKosong(kolom, isianAktif)`, `keadaanRek(isianAktif, maintenance, sekarang)`
   - `tanggalBisnisPanen(t)` (rollover `ROLLOVER_PANEN_JAM`)
   - `peringatanDari(isian, maintenance, panen, sekarang)`
   - `cocokkanMuatan(panenPerKendaraan, doPerKendaraan)`
