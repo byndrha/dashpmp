@@ -1,7 +1,8 @@
 "use client";
 
-// Detail satu rek di layar admin (/{kode}/produksi, spec §8): daftar isian
-// aktif + aksi operasional. Memakai ulang isi lembar aksi aplikasi HP
+// Detail satu rek di layar admin (/{kode}/produksi, spec §8): grid can
+// (mode lihat — juga untuk penonton tanpa hak aksi), daftar isian aktif +
+// aksi operasional. Memakai ulang isi lembar aksi aplikasi HP
 // (IsiLembar + FormPanen) supaya aturan aksi tidak diduplikasi. Khusus
 // `admin`: bagian Koreksi (ubah isian aktif, batalkan panen ≤ 7 hari, ubah
 // kendaraan muatan panen ≤ 7 hari).
@@ -178,7 +179,7 @@ function KoreksiAdmin({
 
   // Muat ulang daftar panen kalau isian rek berubah (mis. panen baru dari
   // formulir di atas atau dari HP operator) atau sesudah pembatalan.
-  const sidik = isian.map((i) => `${i.id}:${i.sisa}`).join(",");
+  const sidik = isian.map((i) => `${i.id}:${i.slot.join(".")}`).join(",");
   useEffect(() => {
     let batalMuat = false;
     getPanenTerakhirAction(kode, keadaan.kolomId).then(
@@ -261,7 +262,18 @@ function KoreksiAdmin({
         ))}
       </div>
 
-      {koreksi && <DialogKoreksi key={koreksi.id} kode={kode} isian={koreksi} lokasi={lokasi} onTutup={() => setKoreksi(null)} onBerhasil={selesai} />}
+      {koreksi && (
+        <DialogKoreksi
+          key={koreksi.id}
+          kode={kode}
+          rek={keadaan}
+          // Pakai data isian terkini kalau rek dimuat ulang selama dialog terbuka.
+          isian={isian.find((i) => i.id === koreksi.id) ?? koreksi}
+          lokasi={lokasi}
+          onTutup={() => setKoreksi(null)}
+          onBerhasil={selesai}
+        />
+      )}
       {ubahKendaraan && (
         <DialogUbahKendaraan
           key={ubahKendaraan.id}

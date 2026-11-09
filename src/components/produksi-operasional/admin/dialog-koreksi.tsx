@@ -1,12 +1,12 @@
 "use client";
 
-// Dialog Koreksi admin (spec §2 baris Koreksi): ubah mulaiAt / varian / sisa
-// satu isian aktif, batalkan panen ≤ 7 hari, atau ubah kendaraan muatan
+// Dialog Koreksi admin (spec §2 baris Koreksi): ubah mulaiAt / varian /
+// himpunan slot (grid pilih, spec slot can §5) satu isian aktif, batalkan panen ≤ 7 hari, atau ubah kendaraan muatan
 // panen ≤ 7 hari (jumlah dimuat tetap). Alasan wajib. Pesan galat
 // server ditampilkan apa adanya (validasi sesungguhnya di server: waktu masa
 // depan, kapasitas, isian sudah tidak aktif, dll.).
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,11 +15,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { batalkanPanenAction, koreksiIsianAction, koreksiMuatanAction } from "@/app/produksi-operasional-actions";
 import type { KodeProduksi, Varian } from "@/lib/produksi-denah";
-import { validasiKoreksiMuatan, type IsianAktif, type KendaraanPilihan, type MuatanInput } from "@/lib/produksi-operasional";
+import {
+  validasiKoreksiMuatan,
+  type IsianAktif,
+  type KeadaanRek,
+  type KendaraanPilihan,
+  type MuatanInput,
+} from "@/lib/produksi-operasional";
 import type { PanenTerakhir } from "@/lib/queries/produksi-operasional";
 import type { KendaraanArmada } from "@/lib/queries/produksi-do-erp";
 import { singkatVarian, tanggalJamWib } from "../warna-tahap";
 import { PemilihKendaraan } from "../app/pemilih-kendaraan";
+import { GridCan } from "../grid-can";
 
 const WIB_OFFSET_MS = 7 * 3_600_000;
 const KELAS_SELECT =
@@ -46,14 +53,23 @@ async function panggil(fn: () => Promise<{ success: boolean; error?: string }>):
   }
 }
 
+function samaSlot(a: readonly number[], b: readonly number[]): boolean {
+  if (a.length !== b.length) return false;
+  const x = [...a].sort((m, n) => m - n);
+  const y = [...b].sort((m, n) => m - n);
+  return x.every((v, i) => v === y[i]);
+}
+
 export function DialogKoreksi({
   kode,
+  rek,
   isian,
   lokasi,
   onTutup,
   onBerhasil,
 }: {
   kode: KodeProduksi;
+  rek: KeadaanRek;
   isian: IsianAktif;
   lokasi: string;
   onTutup: () => void;
@@ -62,25 +78,27 @@ export function DialogKoreksi({
   const awalMulai = keLokalWib(isian.mulaiAt);
   const [mulai, setMulai] = useState(awalMulai);
   const [varian, setVarian] = useState<Varian>(isian.varian);
-  const [sisa, setSisa] = useState(String(isian.sisa));
+  // Slot yang boleh dipilih: slot isian ini ∪ slot kosong tak rusak rek.
+  const boleh = useMemo(() => new Set([...isian.slot, ...rek.slotKosong]), [isian.slot, rek.slotKosong]);
+  const [pilihanMentah, setPilihan] = useState<Set<number>>(() => new Set(isian.slot));
+  const pilihan = new Set([...pilihanMentah].filter((s) => boleh.has(s)));
+  const slotBaru = [...pilihan].sort((a, b) => a - b);
+  const slotBerubah = !samaSlot(slotBaru, isian.slot);
+  const selisih = slotBaru.length - isian.slot.length;
   const [alasan, setAlasan] = useState("");
   const [galat, setGalat] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [maks] = useState(() => keLokalWib(new Date().toISOString()));
 
   async function simpan() {
-    const ubah: { mulaiAt?: string; varian?: Varian; sisa?: number } = {};
+    const ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] } = {};
     if (mulai !== awalMulai) {
       const iso = dariLokalWib(mulai);
       if (!iso) return setGalat("Waktu isi air tidak sah.");
       ubah.mulaiAt = iso;
     }
     if (varian !== isian.varian) ubah.varian = varian;
-    if (sisa.trim() !== String(isian.sisa)) {
-      const n = Number(sisa);
-      if (!Number.isSafeInteger(n) || n < 0) return setGalat("Sisa can harus bilangan bulat ≥ 0.");
-      ubah.sisa = n;
-    }
+    if (slotBerubah) ubah.slot = slotBaru;
     if (Object.keys(ubah).length === 0) return setGalat("Tidak ada yang diubah.");
     // Alasan kosong tetap dikirim: server yang menolak (pesannya ditampilkan apa adanya).
     setSibuk(true);
@@ -106,24 +124,48 @@ export function DialogKoreksi({
             <Label htmlFor="koreksi-mulai">{babonan ? "Babonan sejak (WIB)" : "Waktu isi air (WIB)"}</Label>
             <Input id="koreksi-mulai" type="datetime-local" value={mulai} max={maks} onChange={(e) => setMulai(e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="koreksi-varian">Varian</Label>
-              <select id="koreksi-varian" className={KELAS_SELECT} value={varian} onChange={(e) => setVarian(e.target.value as Varian)}>
-                <option value="kecil">BK (kecil)</option>
-                <option value="besar">BB (besar)</option>
-              </select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="koreksi-sisa">Sisa can</Label>
-              <Input id="koreksi-sisa" type="number" inputMode="numeric" min={0} step={1} value={sisa} onChange={(e) => setSisa(e.target.value)} />
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="koreksi-varian">Varian</Label>
+            <select id="koreksi-varian" className={KELAS_SELECT} value={varian} onChange={(e) => setVarian(e.target.value as Varian)}>
+              <option value="kecil">BK (kecil)</option>
+              <option value="besar">BB (besar)</option>
+            </select>
           </div>
           {!babonan && varian !== isian.varian && (
             <p className="text-xs text-muted-foreground">Ganti varian juga mengganti durasi beku ke nilai bak untuk varian itu.</p>
           )}
-          {sisa.trim() !== String(isian.sisa) && (
-            <p className="text-xs text-muted-foreground">Mengubah sisa ikut menggeser jumlah awal dengan selisih yang sama (salah hitung can).</p>
+          <div className="grid gap-1.5">
+            <span className="text-sm font-medium">Can isian ini</span>
+            <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-2.5">
+              <GridCan mode="pilih" can={rek.can} varian={rek.varian} boleh={boleh} pilihan={pilihan} onUbah={setPilihan} disabled={sibuk} />
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-muted-foreground tabular-nums">
+                  Dipilih <b className="text-foreground">{slotBaru.length}</b> can (sekarang {isian.slot.length})
+                </span>
+                {slotBerubah && (
+                  <button
+                    type="button"
+                    disabled={sibuk}
+                    onClick={() => setPilihan(new Set(isian.slot))}
+                    className="font-medium text-primary disabled:opacity-50"
+                  >
+                    Kembalikan
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Ketuk can untuk menambah/melepas. Hanya can isian ini dan can kosong yang tidak rusak yang bisa dipilih.
+            </p>
+          </div>
+          {slotBerubah && (
+            <p className="text-xs text-muted-foreground">
+              {slotBaru.length === 0
+                ? "Tidak ada can dipilih: isian ini akan selesai."
+                : selisih !== 0
+                  ? `Jumlah can ${selisih > 0 ? "+" : ""}${selisih}; jumlah awal ikut digeser dengan selisih yang sama (salah hitung can).`
+                  : "Jumlah can tetap; hanya posisi can yang dipindah."}
+            </p>
           )}
           <div className="grid gap-1.5">
             <Label htmlFor="koreksi-alasan">Alasan (wajib)</Label>
