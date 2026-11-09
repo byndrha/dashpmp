@@ -26,17 +26,20 @@ import {
   cocokkanHarian,
   keadaanPabrik,
   peringatanDari,
+  ringkasBak,
   ringkasStok,
   tanggalBisnisPanen,
+  tugasSekarang,
   type BarisCocok,
   type DoKendaraan,
   type KeadaanRek,
   type KendaraanPilihan,
   type MuatanInput,
-  type PanenInput,
   type PencocokanPembeli,
   type Peringatan,
+  type RingkasanBak,
   type RingkasanStok,
+  type Tugas,
 } from "@/lib/produksi-operasional";
 import {
   batalkanPanen,
@@ -53,13 +56,16 @@ import {
   koreksiMuatan,
   mulaiMaintenance,
   panen,
+  perbaikiRusak,
   selesaiMaintenance,
   setKendaraanAktif,
   tandaiBabonan,
+  tandaiRusak,
   type BarisLog,
   type DataPabrik,
   type KodeGalatProduksi,
   type MuatanHarian,
+  type PanenInputSlot,
   type PanenTerakhir,
   type Pelaku,
 } from "@/lib/queries/produksi-operasional";
@@ -69,11 +75,14 @@ const KODE_SAH: readonly string[] = ["pmpersada", "pmpakis"];
 const BATAS_TEKS = 1000;
 const BATAS_CARI_AGEN = 60; // pola LIKE ber-escape harus muat di VarChar(200)
 const BATAS_MUATAN = 50; // kendaraan per satu panen
+const BATAS_SLOT = 200; // nomor slot can 1..200, panjang daftar <= 200
 const AKSI_LOG: readonly string[] = [
   "isi_air",
   "panen",
   "tandai_babonan",
   "buang_babonan",
+  "tandai_rusak",
+  "perbaiki_rusak",
   "mulai_maintenance",
   "selesai_maintenance",
   "koreksi_isian",
@@ -191,29 +200,49 @@ function cekMuatan(v: unknown): MuatanInput[] {
   }));
 }
 
-function cekPanenInput(v: unknown): PanenInput {
+/**
+ * Bentuk daftar slot: array integer 1..BATAS_SLOT, unik, panjang <= BATAS_SLOT.
+ * Hanya bentuk; apakah slot itu boleh dipakai (subset slot isian/kosong, dll.)
+ * diperiksa di lapisan transaksi.
+ */
+function cekSlot(v: unknown, nama: string): number[] {
+  if (!Array.isArray(v) || v.length > BATAS_SLOT) throw new AppError(`Daftar slot ${nama} tidak sah.`);
+  const terlihat = new Set<number>();
+  for (const n of v as unknown[]) {
+    if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 1 || n > BATAS_SLOT) {
+      throw new AppError(`Nomor slot ${nama} harus bilangan bulat 1–${BATAS_SLOT}.`);
+    }
+    if (terlihat.has(n)) throw new AppError(`Nomor slot ${nama} tidak boleh ganda.`);
+    terlihat.add(n);
+  }
+  return [...terlihat];
+}
+
+function cekPanenInput(v: unknown): PanenInputSlot {
   if (!v || typeof v !== "object") throw new AppError("Data panen tidak sah.");
   const o = v as Record<string, unknown>;
-  return {
+  const input: PanenInputSlot = {
     isianId: teksWajib(o.isianId, "Isian"),
     muatan: cekMuatan(o.muatan),
-    babonan: bulat(o.babonan, "Jumlah Babonan"),
-    pecah: bulat(o.pecah, "Jumlah pecah"),
+    slotBabonan: cekSlot(o.slotBabonan ?? [], "Babonan"),
+    slotPecah: cekSlot(o.slotPecah ?? [], "pecah"),
     isiUlang: cekBool(o.isiUlang, "Pilihan isi ulang"),
     konfirmasiBelumSiap: cekBool(o.konfirmasiBelumSiap, "Konfirmasi belum siap"),
   };
+  if (o.slotDimuat !== undefined && o.slotDimuat !== null) input.slotDimuat = cekSlot(o.slotDimuat, "dimuat");
+  return input;
 }
 
-function cekUbahIsian(v: unknown): { mulaiAt?: string; varian?: Varian; sisa?: number } {
+function cekUbahIsian(v: unknown): { mulaiAt?: string; varian?: Varian; slot?: number[] } {
   if (!v || typeof v !== "object") throw new AppError("Data koreksi tidak sah.");
   const o = v as Record<string, unknown>;
-  const ubah: { mulaiAt?: string; varian?: Varian; sisa?: number } = {};
+  const ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] } = {};
   if (o.mulaiAt !== undefined) ubah.mulaiAt = teksWajib(o.mulaiAt, "Waktu isi air", 100);
   if (o.varian !== undefined) {
     if (o.varian !== "kecil" && o.varian !== "besar") throw new AppError("Varian tidak sah.");
     ubah.varian = o.varian;
   }
-  if (o.sisa !== undefined) ubah.sisa = bulat(o.sisa, "Sisa can");
+  if (o.slot !== undefined) ubah.slot = cekSlot(o.slot, "isian");
   return ubah;
 }
 
@@ -309,6 +338,10 @@ export async function getKeadaanAction(kode: KodeProduksi): Promise<
     keadaan: KeadaanRek[];
     peringatan: Peringatan[];
     ringkasan: RingkasanStok;
+    /** Ringkasan per bak (siap/kosong/Babonan/rusak). */
+    ringkasBak: RingkasanBak[];
+    /** "Apa yang harus dikerjakan sekarang" (panen, isi air, Babonan lama). */
+    tugas: Tugas[];
     /** true: pemeriksaan DO (selisih muatan) gagal/lewat batas waktu — selisih tidak dihitung. */
     selisihGagal: boolean;
   }>
@@ -320,7 +353,7 @@ export async function getKeadaanAction(kode: KodeProduksi): Promise<
     const data = await getDataPabrik(g.kode);
     const sekarang = new Date(data.sekarang);
     const denah = data.denah ?? denahKosong();
-    const keadaan = keadaanPabrik(denah, data.isian, data.maintenance, sekarang);
+    const keadaan = keadaanPabrik(denah, data.isian, data.maintenance, sekarang, data.rusak);
     // Data DO bersifat pengawasan (spec §9): selisih muatan hanya untuk admin.
     const selisih = g.admin
       ? await selisihClosingTerakhir(g.kode, geserTanggal(tanggalBisnisPanen(sekarang), -1))
@@ -334,7 +367,15 @@ export async function getKeadaanAction(kode: KodeProduksi): Promise<
       sekarang,
       label: pembuatLabel(denah),
     });
-    return { data, keadaan, peringatan, ringkasan: ringkasStok(denah, keadaan, sekarang), selisihGagal: selisih.gagal };
+    return {
+      data,
+      keadaan,
+      peringatan,
+      ringkasan: ringkasStok(denah, keadaan, sekarang),
+      ringkasBak: ringkasBak(keadaan),
+      tugas: tugasSekarang(keadaan, data.kosongSejak, sekarang),
+      selisihGagal: selisih.gagal,
+    };
   });
 }
 
@@ -425,16 +466,18 @@ export async function getPanenTerakhirAction(kode: KodeProduksi, kolomId: string
 
 // ── Tulis (operator & admin) ───────────────────────────────────────────────
 
-export async function isiAirAction(kode: KodeProduksi, kolomId: string, jumlah: number | null): Promise<HasilAksi<{ isianId: string }>> {
+/** slot null = isi semua slot kosong rek itu. */
+export async function isiAirAction(kode: KodeProduksi, kolomId: string, slot: number[] | null): Promise<HasilAksi<{ isianId: string }>> {
   return jalankan(async () => {
     const g = await gerbang(kode, "aksi");
-    const r = await isiAir(g.kode, teksWajib(kolomId, "Rek"), jumlah === null ? null : bulat(jumlah, "Jumlah can"), g.pelaku);
+    const pilihan = slot === null || slot === undefined ? null : cekSlot(slot, "isi air");
+    const r = await isiAir(g.kode, teksWajib(kolomId, "Rek"), pilihan, g.pelaku);
     segarkan(g.kode);
     return r;
   });
 }
 
-export async function panenAction(kode: KodeProduksi, input: PanenInput): Promise<HasilAksi<{ panenId: string; isianBaruId: string | null }>> {
+export async function panenAction(kode: KodeProduksi, input: PanenInputSlot): Promise<HasilAksi<{ panenId: string; isianBaruId: string | null }>> {
   return jalankan(async () => {
     const g = await gerbang(kode, "aksi");
     const r = await panen(g.kode, cekPanenInput(input), g.pelaku);
@@ -443,18 +486,34 @@ export async function panenAction(kode: KodeProduksi, input: PanenInput): Promis
   });
 }
 
-export async function tandaiBabonanAction(kode: KodeProduksi, isianId: string, jumlah: number): Promise<HasilAksi<void>> {
+export async function tandaiBabonanAction(kode: KodeProduksi, isianId: string, slot: number[]): Promise<HasilAksi<void>> {
   return jalankan(async () => {
     const g = await gerbang(kode, "aksi");
-    await tandaiBabonan(g.kode, teksWajib(isianId, "Isian"), bulat(jumlah, "Jumlah can Babonan"), g.pelaku);
+    await tandaiBabonan(g.kode, teksWajib(isianId, "Isian"), cekSlot(slot, "Babonan"), g.pelaku);
     segarkan(g.kode);
   });
 }
 
-export async function buangBabonanAction(kode: KodeProduksi, kolomId: string, jumlah: number, alasan: string): Promise<HasilAksi<void>> {
+export async function buangBabonanAction(kode: KodeProduksi, kolomId: string, slot: number[], alasan: string): Promise<HasilAksi<void>> {
   return jalankan(async () => {
     const g = await gerbang(kode, "aksi");
-    await buangBabonan(g.kode, teksWajib(kolomId, "Rek"), bulat(jumlah, "Jumlah can dibuang"), teks(alasan ?? "", "Alasan"), g.pelaku);
+    await buangBabonan(g.kode, teksWajib(kolomId, "Rek"), cekSlot(slot, "dibuang"), teks(alasan ?? "", "Alasan"), g.pelaku);
+    segarkan(g.kode);
+  });
+}
+
+export async function tandaiRusakAction(kode: KodeProduksi, kolomId: string, slot: number[], catatan: string): Promise<HasilAksi<void>> {
+  return jalankan(async () => {
+    const g = await gerbang(kode, "aksi");
+    await tandaiRusak(g.kode, teksWajib(kolomId, "Rek"), cekSlot(slot, "rusak"), teks(catatan ?? "", "Catatan"), g.pelaku);
+    segarkan(g.kode);
+  });
+}
+
+export async function perbaikiRusakAction(kode: KodeProduksi, kolomId: string, slot: number[]): Promise<HasilAksi<void>> {
+  return jalankan(async () => {
+    const g = await gerbang(kode, "aksi");
+    await perbaikiRusak(g.kode, teksWajib(kolomId, "Rek"), cekSlot(slot, "diperbaiki"), g.pelaku);
     segarkan(g.kode);
   });
 }
@@ -486,7 +545,7 @@ export async function setKendaraanAktifAction(kode: KodeProduksi, k: KendaraanPi
 export async function koreksiIsianAction(
   kode: KodeProduksi,
   isianId: string,
-  ubah: { mulaiAt?: string; varian?: Varian; sisa?: number },
+  ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] },
   alasan: string,
 ): Promise<HasilAksi<void>> {
   return jalankan(async () => {

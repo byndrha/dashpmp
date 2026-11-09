@@ -73,6 +73,8 @@ test("server action operasional memakai gerbang yang benar", () => {
     "panenAction",
     "tandaiBabonanAction",
     "buangBabonanAction",
+    "tandaiRusakAction",
+    "perbaikiRusakAction",
     "mulaiMaintenanceAction",
     "selesaiMaintenanceAction",
     "getPilihanKendaraanAction",
