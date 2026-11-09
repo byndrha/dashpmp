@@ -10,7 +10,7 @@
 // Pencocokan & Log audit hanya dirender untuk `admin` (dan server action-nya
 // sendiri memakai gerbang "kelola").
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -35,6 +35,8 @@ export interface DataKeadaanAdmin {
   keadaan: KeadaanRek[];
   peringatan: Peringatan[];
   ringkasan: RingkasanStok;
+  /** Pemeriksaan DO (selisih muatan) gagal/lewat batas waktu di server. */
+  selisihGagal: boolean;
 }
 
 type TabKey = "peta" | "ringkasan" | "fifo" | "peringatan" | "pencocokan" | "log";
@@ -70,11 +72,16 @@ export function TabOperasional({
   const [memuat, setMemuat] = useState(false);
   const [tab, setTab] = useState<TabKey>("peta");
   const [rekId, setRekId] = useState<string | null>(null);
+  // Penjaga urutan: polling 30 detik dan muat ulang sesudah aksi bisa saling
+  // mendahului; hanya respons permintaan TERBARU yang boleh menimpa layar.
+  const nomorMuat = useRef(0);
 
   const muat = useCallback(async () => {
+    const nomor = ++nomorMuat.current;
     setMemuat(true);
     try {
       const r = await getKeadaanAction(kode);
+      if (nomor !== nomorMuat.current) return;
       if (r.success) {
         setHasil(r.data);
         setGalat(null);
@@ -82,9 +89,9 @@ export function TabOperasional({
         setGalat(r.error);
       }
     } catch {
-      setGalat(PESAN_GAGAL_MUAT);
+      if (nomor === nomorMuat.current) setGalat(PESAN_GAGAL_MUAT);
     } finally {
-      setMemuat(false);
+      if (nomor === nomorMuat.current) setMemuat(false);
     }
   }, [kode]);
 
@@ -160,6 +167,9 @@ export function TabOperasional({
           </TabsTrigger>
           <TabsTrigger value="peringatan" className="shrink-0">
             Peringatan
+            {jumlahPeringatan === 0 && admin && hasil?.selisihGagal && (
+              <span className="rounded-full bg-amber-500 px-1.5 text-[11px] leading-4 font-semibold text-white">!</span>
+            )}
             {jumlahPeringatan > 0 && (
               <span className="rounded-full bg-destructive px-1.5 text-[11px] leading-4 font-semibold text-white tabular-nums">
                 {jumlahPeringatan}
@@ -200,7 +210,11 @@ export function TabOperasional({
           )}
         </TabsContent>
         <TabsContent value="peringatan">
-          {hasil ? <DaftarPeringatan peringatan={hasil.peringatan} onPilihRek={setRekId} /> : <BelumTermuat />}
+          {hasil ? (
+            <DaftarPeringatan peringatan={hasil.peringatan} selisihGagal={admin && hasil.selisihGagal} onPilihRek={setRekId} />
+          ) : (
+            <BelumTermuat />
+          )}
         </TabsContent>
         {admin && (
           <>

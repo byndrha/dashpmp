@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { kelompokkanDo, type BarisDo } from "../queries/produksi-do-erp";
+import { BATAS_WAKTU_ERP_MS, batasWaktu, GalatBatasWaktuErp, kelompokkanDo, type BarisDo } from "../queries/produksi-do-erp";
 
 function baris(noDo: string, tanggalIso: string, kecil: number, besar: number, kendaraanErpId = "K1", plat = "S 9805 UH"): BarisDo {
   return { noDo, tanggal: new Date(tanggalIso), kendaraanErpId, plat, kecil, besar };
@@ -41,4 +41,25 @@ test("satu DO dengan beberapa pemesanan tidak menggandakan noDo", () => {
   const hasil = kelompokkanDo(rows, "2026-11-09");
   assert.equal(hasil[0].kecil, 140);
   assert.deepEqual(hasil[0].noDo, ["DO/1"]);
+});
+
+test("batasWaktu: menolak setelah ms dan memanggil saatHabis", async () => {
+  let dibatalkan = 0;
+  const lambat = new Promise<string>((r) => setTimeout(() => r("telat"), 200));
+  await assert.rejects(batasWaktu(lambat, 20, "uji", () => dibatalkan++), (err: unknown) => {
+    assert.ok(err instanceof GalatBatasWaktuErp);
+    assert.match((err as Error).message, /uji/);
+    return true;
+  });
+  assert.equal(dibatalkan, 1);
+  await lambat;
+});
+
+test("batasWaktu: hasil cepat diteruskan apa adanya", async () => {
+  let dibatalkan = 0;
+  assert.equal(await batasWaktu(Promise.resolve(7), 50, "uji", () => dibatalkan++), 7);
+  await assert.rejects(batasWaktu(Promise.reject(new Error("putus")), 50, "uji"), /putus/);
+  await new Promise((r) => setTimeout(r, 70));
+  assert.equal(dibatalkan, 0);
+  assert.ok(BATAS_WAKTU_ERP_MS <= 5_000);
 });

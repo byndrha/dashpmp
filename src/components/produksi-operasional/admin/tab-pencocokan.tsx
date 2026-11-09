@@ -5,7 +5,9 @@
 // action-nya memakai gerbang "kelola"). Membandingkan es yang dipanen per
 // kendaraan armada dengan DO ERP pada tanggal bisnis yang sama (closing
 // 13:59 WIB, ROLLOVER_PANEN_JAM). Muatan "kendaraan pembeli" ditampilkan
-// terpisah, tanpa dicocokkan per baris.
+// terpisah: totalnya (K/B) dicocokkan dengan total DO berkendaraan ERP
+// "Ambil Sendiri" (keputusan controller), yang karena itu tidak muncul di
+// tabel per kendaraan armada.
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
@@ -15,7 +17,14 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { cn } from "@/lib/utils";
 import { getPencocokanAction } from "@/app/produksi-operasional-actions";
 import type { KodeProduksi } from "@/lib/produksi-denah";
-import { ROLLOVER_PANEN_JAM, tanggalBisnisPanen, type BarisCocok, type StatusCocok } from "@/lib/produksi-operasional";
+import {
+  NAMA_AMBIL_SENDIRI,
+  ROLLOVER_PANEN_JAM,
+  tanggalBisnisPanen,
+  type BarisCocok,
+  type PencocokanPembeli,
+  type StatusCocok,
+} from "@/lib/produksi-operasional";
 import type { MuatanHarian } from "@/lib/queries/produksi-operasional";
 
 const angka = new Intl.NumberFormat("id-ID");
@@ -71,6 +80,7 @@ function Selisih({ n }: { n: number }) {
 
 interface Hasil {
   baris: BarisCocok[];
+  pembeli: PencocokanPembeli;
   muatan: MuatanHarian;
   sementara: boolean;
 }
@@ -132,20 +142,13 @@ export function TabPencocokan({ kode }: { kode: KodeProduksi }) {
     }
     return t;
   }, [hasil]);
-  const totalPembeli = useMemo(() => {
-    const t = { kecil: 0, besar: 0 };
-    for (const p of hasil?.muatan.pembeli ?? []) {
-      t.kecil += p.kecil;
-      t.besar += p.besar;
-    }
-    return t;
-  }, [hasil]);
+  const pb = hasil?.pembeli ?? null;
 
   const gantiTanggal = (t: string) => {
     if (/^\d{4}-\d{2}-\d{2}$/.test(t)) setTanggal(t > hariIni ? hariIni : t);
   };
   const ringkasan = hasil?.muatan.ringkasan;
-  const totalDo = total.doKecil + total.doBesar;
+  const totalDo = total.doKecil + total.doBesar + (pb ? pb.doKecil + pb.doBesar : 0);
   const basi = hasilTanggal !== tanggal;
 
   return (
@@ -300,25 +303,67 @@ export function TabPencocokan({ kode }: { kode: KodeProduksi }) {
                 </TableRow>
               ))}
             </TableBody>
-            {(hasil?.muatan.pembeli.length ?? 0) > 0 && (
-              <TableFooter>
+          </Table>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Pencocokan</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Panen pembeli K/B</TableHead>
+                <TableHead className="text-right">DO {NAMA_AMBIL_SENDIRI} K/B</TableHead>
+                <TableHead className="text-right">Selisih K/B</TableHead>
+                <TableHead>No DO</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!pb ? (
                 <TableRow>
-                  <TableCell colSpan={2} className="font-semibold">
-                    Total kendaraan pembeli
+                  <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
+                    {sedangMuat ? "Memuat…" : "Belum ada data."}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{angka.format(totalPembeli.kecil)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{angka.format(totalPembeli.besar)}</TableCell>
                 </TableRow>
-              </TableFooter>
-            )}
+              ) : (
+                <TableRow className={pb.selisihKecil > 0 || pb.selisihBesar > 0 ? LATAR_BARIS["panen-lebih"] : undefined}>
+                  <TableCell className="font-medium whitespace-nowrap">Kendaraan pembeli</TableCell>
+                  <TableCell>
+                    <span className={cn("inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold whitespace-nowrap", STATUS[statusPembeli(pb)].kelas)}>
+                      {STATUS[statusPembeli(pb)].label}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap tabular-nums">
+                    {angka.format(pb.panenKecil)} / {angka.format(pb.panenBesar)}
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap tabular-nums">
+                    {angka.format(pb.doKecil)} / {angka.format(pb.doBesar)}
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap tabular-nums">
+                    <Selisih n={pb.selisihKecil} /> / <Selisih n={pb.selisihBesar} />
+                  </TableCell>
+                  <TableCell className="max-w-64 text-xs">{pb.noDo.length ? pb.noDo.join(", ") : "—"}</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
           </Table>
         </div>
         <p className="text-xs text-muted-foreground">
-          Total kendaraan pembeli bisa jadi sepadan dengan DO berkendaraan &quot;Ambil Sendiri&quot; di tabel atas.
+          DO berkendaraan &quot;{NAMA_AMBIL_SENDIRI}&quot; di ERP adalah pasangan muatan kendaraan pembeli: totalnya dicocokkan di sini, tidak
+          per kendaraan di tabel armada.
         </p>
       </section>
     </div>
   );
+}
+
+function statusPembeli(pb: PencocokanPembeli): StatusCocok {
+  const adaPanen = pb.panenKecil + pb.panenBesar > 0;
+  const adaDo = pb.doKecil + pb.doBesar > 0 || pb.noDo.length > 0;
+  if (pb.cocok) return "cocok";
+  if (!adaDo) return "hanya-panen";
+  if (!adaPanen) return "hanya-do";
+  return pb.selisihKecil > 0 || pb.selisihBesar > 0 ? "panen-lebih" : "do-lebih";
 }
 
 function Kartu({ label, nilai }: { label: string; nilai: number }) {

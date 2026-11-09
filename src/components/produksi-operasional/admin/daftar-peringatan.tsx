@@ -30,18 +30,44 @@ const INFO: Record<KodePeringatan, { judul: string; ikon: LucideIcon; kelas: str
 };
 const URUTAN: KodePeringatan[] = ["TERLAMBAT_PANEN", "SELISIH_MUATAN", "BABONAN_LAMA", "MAINTENANCE_LAMA", "PANEN_BELUM_SIAP", "KOSONG_LAMA"];
 
-export function DaftarPeringatan({ peringatan, onPilihRek }: { peringatan: Peringatan[]; onPilihRek: (kolomId: string) => void }) {
+export function DaftarPeringatan({
+  peringatan,
+  selisihGagal = false,
+  onPilihRek,
+}: {
+  peringatan: Peringatan[];
+  /** Server gagal/terlambat membaca DO ERP: selisih muatan tidak dihitung (bukan berarti cocok). */
+  selisihGagal?: boolean;
+  onPilihRek: (kolomId: string) => void;
+}) {
+  const galatDo = selisihGagal && (
+    <p
+      role="alert"
+      className="flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-100"
+    >
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      <span>
+        <b>Pemeriksaan DO gagal — selisih tidak dapat dihitung.</b> ERP tidak terjangkau atau terlalu lambat; peringatan selisih muatan
+        hari bisnis terakhir belum diperiksa. Dicoba lagi otomatis dalam ±1 menit.
+      </span>
+    </p>
+  );
+
   if (peringatan.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        <CheckCircle2 className="size-6 text-green-600 dark:text-green-400" />
-        Tidak ada peringatan saat ini.
+      <div className="flex flex-col gap-4">
+        {galatDo}
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <CheckCircle2 className="size-6 text-green-600 dark:text-green-400" />
+          {selisihGagal ? "Tidak ada peringatan lain saat ini." : "Tidak ada peringatan saat ini."}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {galatDo}
       {URUTAN.map((kode) => {
         const daftar = peringatan.filter((p) => p.kode === kode).sort((a, b) => Date.parse(a.sejak) - Date.parse(b.sejak));
         if (daftar.length === 0) return null;

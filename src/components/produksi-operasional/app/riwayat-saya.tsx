@@ -18,6 +18,7 @@ const LABEL_AKSI: Record<string, string> = {
   mulai_maintenance: "Mulai Maintenance",
   selesai_maintenance: "Selesai Maintenance",
   koreksi_isian: "Koreksi isian",
+  koreksi_muatan: "Koreksi kendaraan",
   batal_panen: "Batal panen",
 };
 

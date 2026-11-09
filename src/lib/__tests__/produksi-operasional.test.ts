@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { buatBak, buatKolom, denahKosong, type BakElemen, type DenahDokumen } from "../produksi-denah";
 import {
   AMBANG,
+  adalahAmbilSendiri,
+  batalAdalahTandaiBabonan,
+  cocokkanHarian,
+  validasiKoreksiMuatan,
   ROLLOVER_PANEN_JAM,
   cocokkanMuatan,
   estimasiCanJadi,
@@ -192,7 +196,7 @@ test("ringkas stok", () => {
     isian(bak, 2, { sisa: 36, mulaiAt: lalu(30) }), // jadi → matang
   ];
   const keadaan = keadaanPabrik(denah, daftar, [mt(bak.kolom[3].id, 1)], SEKARANG);
-  const r = ringkasStok(denah, keadaan);
+  const r = ringkasStok(denah, keadaan, SEKARANG);
   assert.equal(r.air, 30);
   assert.equal(r.proses, 34);
   assert.equal(r.matang, 36);
@@ -303,4 +307,94 @@ test("peringatan", () => {
     label: () => "x",
   });
   assert.equal(tidak.filter((p) => p.kode === "KOSONG_LAMA").length, 0);
+});
+
+test("ringkas stok per isian: 34 jadi + 2 baru diisi air", () => {
+  const bak = bakUji(1);
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const daftar = [
+    isian(bak, 0, { sisa: 34, jumlahAwal: 34, mulaiAt: lalu(30) }), // jadi
+    isian(bak, 0, { sisa: 2, jumlahAwal: 2, mulaiAt: SEKARANG.toISOString() }), // air
+  ];
+  const keadaan = keadaanPabrik(denah, daftar, [], SEKARANG);
+  assert.equal(keadaan[0].tahap, "jadi"); // tahap rek tetap dari isian tertua
+  const r = ringkasStok(denah, keadaan, SEKARANG);
+  assert.equal(r.matang, 34);
+  assert.equal(r.air, 2);
+  assert.equal(r.proses, 0);
+});
+
+test("validasi koreksi muatan", () => {
+  assert.equal(validasiKoreksiMuatan(34, [armada("1", 20), armada("2", 14)]), null);
+  assert.match(validasiKoreksiMuatan(34, [armada("1", 20), armada("2", 13)]) ?? "", /34 can/);
+  assert.match(validasiKoreksiMuatan(34, [armada("1", 20), armada("1", 14)]) ?? "", /dua kali/);
+  assert.match(validasiKoreksiMuatan(34, [armada("1", 34), armada("2", 0)]) ?? "", /lebih dari 0/);
+  assert.match(validasiKoreksiMuatan(34, []) ?? "", /minimal satu/);
+  assert.match(validasiKoreksiMuatan(0, []) ?? "", /tidak memuat/);
+  const pembeli: MuatanInput = { jenis: "pembeli", kendaraanErpId: null, plat: " ", agenId: null, agenNama: null, jumlah: 34 };
+  assert.match(validasiKoreksiMuatan(34, [pembeli]) ?? "", /Plat/);
+});
+
+test("adalahAmbilSendiri", () => {
+  assert.equal(adalahAmbilSendiri("Ambil Sendiri"), true);
+  assert.equal(adalahAmbilSendiri("  ambil   SENDIRI "), true);
+  assert.equal(adalahAmbilSendiri("S 9805 UH"), false);
+  assert.equal(adalahAmbilSendiri(null), false);
+  assert.equal(adalahAmbilSendiri("Ambil Sendiri 2"), false);
+});
+
+test("cocokkan harian: DO Ambil Sendiri dicocokkan dengan kendaraan pembeli", () => {
+  const p = (id: string, plat: string, kecil: number, besar: number) => ({ kendaraanErpId: id, plat, kecil, besar, jumlahPanen: 1, operator: [] });
+  const d = (id: string, plat: string, kecil: number, besar: number) => ({ kendaraanErpId: id, plat, kecil, besar, noDo: [`DO-${id}`] });
+  const { baris, pembeli } = cocokkanHarian(
+    [p("1", "S 1", 10, 0)],
+    [{ kecil: 5, besar: 2 }, { kecil: 3, besar: 0 }],
+    [d("1", "S 1", 10, 0), d("AS", "Ambil Sendiri", 8, 1)],
+  );
+  assert.deepEqual(baris.map((b) => b.kendaraanErpId), ["1"]);
+  assert.equal(baris[0].status, "cocok");
+  assert.equal(pembeli.panenKecil, 8);
+  assert.equal(pembeli.panenBesar, 2);
+  assert.equal(pembeli.doKecil, 8);
+  assert.equal(pembeli.doBesar, 1);
+  assert.equal(pembeli.selisihKecil, 0);
+  assert.equal(pembeli.selisihBesar, 1);
+  assert.equal(pembeli.cocok, false);
+  assert.deepEqual(pembeli.noDo, ["DO-AS"]);
+
+  // Peringatan: satu SELISIH_MUATAN untuk kendaraan pembeli, bukan untuk "Ambil Sendiri" sebagai armada.
+  const hasil = peringatanDari({
+    keadaan: [],
+    kosongSejak: {},
+    panenBelumSiap: [],
+    selisih: baris,
+    selisihPembeli: pembeli,
+    sekarang: SEKARANG,
+    label: () => "x",
+  });
+  const selisih = hasil.filter((x) => x.kode === "SELISIH_MUATAN");
+  assert.equal(selisih.length, 1);
+  assert.match(selisih[0].pesan, /Kendaraan pembeli/);
+
+  // Cocok → tanpa peringatan; tanpa pembeli & tanpa DO Ambil Sendiri juga cocok.
+  const kosong = cocokkanHarian([], [], [d("1", "S 1", 4, 0)]);
+  assert.equal(kosong.pembeli.cocok, true);
+  assert.equal(kosong.baris[0].status, "hanya-do");
+  assert.equal(
+    peringatanDari({ keadaan: [], kosongSejak: {}, panenBelumSiap: [], selisih: [], selisihPembeli: kosong.pembeli, sekarang: SEKARANG, label: () => "x" }).length,
+    0,
+  );
+});
+
+test("label batal panen: Tandai Babonan memakai aturan server", () => {
+  // Log baru (persen + jenisIsian dicatat).
+  assert.equal(batalAdalahTandaiBabonan({ dimuat: 0, keBabonan: 3, pecah: 0, persen: null, jenisIsian: "produksi" }), true);
+  // Panen sungguhan seluruhnya ke Babonan/pecah (persen terisi) bukan Tandai Babonan.
+  assert.equal(batalAdalahTandaiBabonan({ dimuat: 0, keBabonan: 30, pecah: 6, persen: 100, jenisIsian: "produksi" }), false);
+  assert.equal(batalAdalahTandaiBabonan({ dimuat: 0, keBabonan: 0, pecah: 0, persen: null, jenisIsian: "babonan" }), false);
+  assert.equal(batalAdalahTandaiBabonan({ dimuat: 5, keBabonan: 0, pecah: 0, persen: null, jenisIsian: "babonan" }), false);
+  // Log lama: heuristik lama.
+  assert.equal(batalAdalahTandaiBabonan({ dimuat: 0, keBabonan: 3, pecah: 0 }), true);
+  assert.equal(batalAdalahTandaiBabonan({ dimuat: 4, keBabonan: 3, pecah: 0 }), false);
+  assert.equal(batalAdalahTandaiBabonan(null), false);
 });

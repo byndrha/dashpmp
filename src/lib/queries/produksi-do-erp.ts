@@ -48,7 +48,13 @@ export function kelompokkanDo(rows: BarisDo[], tanggalBisnis: string): DoKendara
     if (tanggalBisnisNaive(r.tanggal) !== tanggalBisnis) continue;
     let d = per.get(r.kendaraanErpId);
     if (!d) {
-      d = { kendaraanErpId: r.kendaraanErpId, plat: r.plat, kecil: 0, besar: 0, noDo: [] };
+      d = {
+        kendaraanErpId: r.kendaraanErpId,
+        plat: r.plat,
+        kecil: 0,
+        besar: 0,
+        noDo: [],
+      };
       per.set(r.kendaraanErpId, d);
     }
     d.kecil += r.kecil;
@@ -62,37 +68,98 @@ function poolUntuk(kode: KodeProduksi) {
   return getCompanyPool(kode, SUMBER_DO[kode].label);
 }
 
+// ── Batas waktu ────────────────────────────────────────────────────────────
+//
+// Halaman HP, polling admin, dan aksi tidak boleh tergantung pada ERP yang
+// lambat/mati: setiap baca ERP di modul ini dibatasi BATAS_WAKTU_ERP_MS
+// (termasuk menunggu koneksi pool). Saat batas habis, request mssql yang
+// sedang berjalan dibatalkan (request.cancel) supaya tidak menghabiskan pool.
+
+export const BATAS_WAKTU_ERP_MS = 5_000;
+
+export class GalatBatasWaktuErp extends Error {
+  constructor(label: string, ms: number) {
+    super(`ERP tidak menjawab dalam ${Math.round(ms / 1000)} detik (${label}).`);
+    this.name = "GalatBatasWaktuErp";
+  }
+}
+
+/** Murni: tolak dengan GalatBatasWaktuErp bila `p` belum selesai dalam `ms`; `saatHabis` dipanggil sekali saat itu. */
+export function batasWaktu<T>(p: Promise<T>, ms: number, label: string, saatHabis?: () => void): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const habis = new Promise<never>((_, reject) => {
+    t = setTimeout(() => {
+      try {
+        saatHabis?.();
+      } finally {
+        reject(new GalatBatasWaktuErp(label, ms));
+      }
+    }, ms);
+  });
+  return Promise.race([p, habis]).finally(() => clearTimeout(t));
+}
+
+// Jalankan satu baca ERP dengan batas waktu; `catat` mendaftarkan request
+// supaya bisa dibatalkan saat batas habis.
+function bacaErp<T>(label: string, fn: (catat: (r: sql.Request) => sql.Request) => Promise<T>): Promise<T> {
+  const daftar: sql.Request[] = [];
+  return batasWaktu(
+    fn((r) => {
+      daftar.push(r);
+      return r;
+    }),
+    BATAS_WAKTU_ERP_MS,
+    label,
+    () => {
+      for (const r of daftar) {
+        try {
+          r.cancel();
+        } catch {
+          // abaikan: request mungkin sudah selesai
+        }
+      }
+    },
+  );
+}
+
 export async function getKendaraanArmada(kode: KodeProduksi): Promise<KendaraanArmada[]> {
-  const pool = await poolUntuk(kode);
-  const result = await pool.request().query(`
+  return bacaErp("armada", async (catat) => {
+    const pool = await poolUntuk(kode);
+    const result = await catat(pool.request()).query(`
     SELECT k.DaftarKendaraanID, k.Nama AS Plat, s.Nama AS Sopir
     FROM PMP_DaftarKendaraan k
     LEFT JOIN PMP_Sopir s ON s.SopirID = k.SopirID AND ISNULL(s.IsDeleted, 0) = 0
     WHERE ISNULL(k.IsDeleted, 0) = 0
     ORDER BY k.Nama
   `);
-  return (result.recordset as { DaftarKendaraanID: string; Plat: string; Sopir: string | null }[]).map((r) => ({
-    kendaraanErpId: r.DaftarKendaraanID,
-    plat: r.Plat,
-    sopir: r.Sopir,
-  }));
+    return (
+      result.recordset as {
+        DaftarKendaraanID: string;
+        Plat: string;
+        Sopir: string | null;
+      }[]
+    ).map((r) => ({
+      kendaraanErpId: r.DaftarKendaraanID,
+      plat: r.Plat,
+      sopir: r.Sopir,
+    }));
+  });
 }
 
 export async function cariAgen(kode: KodeProduksi, q: string): Promise<{ agenId: string; nama: string }[]> {
   const kata = q.trim();
   if (!kata) return [];
   const pola = `%${kata.replace(/[[%_]/g, "[$&]")}%`;
-  const pool = await poolUntuk(kode);
-  const result = await pool
-    .request()
-    .input("pola", sql.VarChar(200), pola)
-    .query(`
+  return bacaErp("agen", async (catat) => {
+    const pool = await poolUntuk(kode);
+    const result = await catat(pool.request()).input("pola", sql.VarChar(200), pola).query(`
       SELECT TOP 20 AgenID, Nama
       FROM PMP_Agen
       WHERE ISNULL(IsDeleted, 0) = 0 AND (Nama LIKE @pola OR Code LIKE @pola)
       ORDER BY Nama
     `);
-  return (result.recordset as { AgenID: string; Nama: string }[]).map((r) => ({ agenId: r.AgenID, nama: r.Nama }));
+    return (result.recordset as { AgenID: string; Nama: string }[]).map((r) => ({ agenId: r.AgenID, nama: r.Nama }));
+  });
 }
 
 function geserHari(tanggal: string, hari: number): Date {
@@ -102,14 +169,14 @@ function geserHari(tanggal: string, hari: number): Date {
 
 export async function getDoPerKendaraan(kode: KodeProduksi, tanggalBisnis: string): Promise<DoKendaraan[]> {
   const { branchId } = SUMBER_DO[kode];
-  const pool = await poolUntuk(kode);
-  // Rentang naive lebar [H-1 00:00, H+1 00:00); pemotongan tepat (rollover) di kelompokkanDo.
-  const request = pool
-    .request()
-    .input("mulai", sql.DateTime, geserHari(tanggalBisnis, -1))
-    .input("akhir", sql.DateTime, geserHari(tanggalBisnis, 1));
-  if (branchId !== null) request.input("branchId", sql.VarChar(16), branchId);
-  const result = await request.query(`
+  return bacaErp("DO per kendaraan", async (catat) => {
+    const pool = await poolUntuk(kode);
+    // Rentang naive lebar [H-1 00:00, H+1 00:00); pemotongan tepat (rollover) di kelompokkanDo.
+    const request = catat(pool.request())
+      .input("mulai", sql.DateTime, geserHari(tanggalBisnis, -1))
+      .input("akhir", sql.DateTime, geserHari(tanggalBisnis, 1));
+    if (branchId !== null) request.input("branchId", sql.VarChar(16), branchId);
+    const result = await request.query(`
     SELECT j.NoDokumen, j.Tanggal, k.DaftarKendaraanID, k.Nama AS Plat,
            ISNULL(p.BalokKecilRealisasi, 0) AS Kecil, ISNULL(p.BalokBesarRealisasi, 0) AS Besar
     FROM PMP_Penjadwalan j
@@ -121,22 +188,23 @@ export async function getDoPerKendaraan(kode: KodeProduksi, tanggalBisnis: strin
       AND j.Tanggal >= @mulai AND j.Tanggal < @akhir
       ${branchId !== null ? "AND j.BranchID = @branchId" : ""}
   `);
-  const rows: BarisDo[] = (
-    result.recordset as {
-      NoDokumen: string;
-      Tanggal: Date;
-      DaftarKendaraanID: string;
-      Plat: string;
-      Kecil: number;
-      Besar: number;
-    }[]
-  ).map((r) => ({
-    noDo: r.NoDokumen,
-    tanggal: r.Tanggal,
-    kendaraanErpId: r.DaftarKendaraanID,
-    plat: r.Plat,
-    kecil: Number(r.Kecil),
-    besar: Number(r.Besar),
-  }));
-  return kelompokkanDo(rows, tanggalBisnis);
+    const rows: BarisDo[] = (
+      result.recordset as {
+        NoDokumen: string;
+        Tanggal: Date;
+        DaftarKendaraanID: string;
+        Plat: string;
+        Kecil: number;
+        Besar: number;
+      }[]
+    ).map((r) => ({
+      noDo: r.NoDokumen,
+      tanggal: r.Tanggal,
+      kendaraanErpId: r.DaftarKendaraanID,
+      plat: r.Plat,
+      kecil: Number(r.Kecil),
+      besar: Number(r.Besar),
+    }));
+    return kelompokkanDo(rows, tanggalBisnis);
+  });
 }

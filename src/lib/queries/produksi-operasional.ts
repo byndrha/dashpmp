@@ -11,7 +11,11 @@
 //   BEGIN → kunci baris produksi_denah (FOR SHARE) + validasi kolom →
 //   kunci advisory per (kode, kolom) → kunci isian aktif rek (FOR UPDATE) →
 //   hitung ulang di server → tulis → INSERT produksi_log → COMMIT.
-//   Error apa pun → ROLLBACK. Tidak ada DELETE di modul ini.
+//   Error apa pun → ROLLBACK. Satu-satunya DELETE di modul ini ada di
+//   koreksiMuatan: baris anak produksi_muatan milik SATU panen diganti utuh
+//   (DELETE + INSERT) di transaksi yang juga mencatat daftar muatan lama di
+//   produksi_log.sebelum — jejaknya tidak hilang. Panen, isian, dan log tidak
+//   pernah dihapus.
 //
 // Kunci advisory per kolom dipakai selain FOR UPDATE karena rek kosong tidak
 // punya baris untuk dikunci: tanpa itu dua Isi Air bersamaan di rek kosong
@@ -33,6 +37,7 @@ import {
   ROLLOVER_PANEN_JAM,
   shiftDari,
   tanggalBisnisPanen,
+  validasiKoreksiMuatan,
   validasiPanen,
   type IsianAktif,
   type JenisIsian,
@@ -92,7 +97,8 @@ export interface PanenTerakhir {
   /** Isian asal masih aktif (pembatalan bisa mengembalikan can). */
   isianAktif: boolean;
   operatorNama: string;
-  kendaraan: { plat: string; jumlah: number }[];
+  /** Muatan per kendaraan (urut input) — dipakai juga untuk mengisi dialog "Ubah kendaraan". */
+  kendaraan: MuatanInput[];
 }
 
 export interface BarisLog {
@@ -125,6 +131,7 @@ const LABEL_AKSI: Record<string, string> = {
   mulai_maintenance: "mulai maintenance",
   selesai_maintenance: "selesai maintenance",
   koreksi_isian: "koreksi isian",
+  koreksi_muatan: "koreksi kendaraan",
   batal_panen: "batal panen",
 };
 
@@ -800,9 +807,13 @@ export async function batalkanPanen(kode: string, panenId: string, alasan: strin
       pecah: number;
       panen_at: Date;
       dibatalkan_at: Date | null;
+      persen_saat_panen: number | null;
+      jenis_isian: JenisIsian;
     }>(
-      `SELECT isian_id::text AS isian_id, dimuat, ke_babonan, pecah, panen_at, dibatalkan_at
-         FROM produksi_panen WHERE id = $1 FOR UPDATE`,
+      `SELECT p.isian_id::text AS isian_id, p.dimuat, p.ke_babonan, p.pecah, p.panen_at, p.dibatalkan_at,
+              p.persen_saat_panen, ki.jenis AS jenis_isian
+         FROM produksi_panen p JOIN produksi_kolom_isi ki ON ki.id = p.isian_id
+        WHERE p.id = $1 FOR UPDATE OF p`,
       [id],
     );
     const pn = rows[0];
@@ -841,6 +852,10 @@ export async function batalkanPanen(kode: string, panenId: string, alasan: strin
         dimuat: pn.dimuat,
         keBabonan: pn.ke_babonan,
         pecah: pn.pecah,
+        // persen + jenisIsian: label "Tandai Babonan" di log memakai aturan
+        // yang sama dengan server (dimuat 0, persen NULL, isian produksi).
+        persen: pn.persen_saat_panen,
+        jenisIsian: pn.jenis_isian,
         panenAt: pn.panen_at.toISOString(),
         isian: asal ? snapshotIsian(asal) : null,
       },
@@ -854,8 +869,86 @@ export async function batalkanPanen(kode: string, panenId: string, alasan: strin
   });
 }
 
+// Koreksi admin "Ubah kendaraan": ganti daftar muatan sebuah panen yang
+// belum dibatalkan dan ≤ 7 hari (mis. dicatat ke kendaraan yang salah).
+// dimuat tidak berubah (Σ muatan baru wajib = dimuat), jadi isian, Babonan,
+// dan invarian jumlah tidak tersentuh. Baris produksi_muatan lama panen itu
+// dihapus lalu diganti di transaksi yang sama; daftar lama utuh tersimpan di
+// produksi_log.sebelum. Panen sendiri tidak pernah dihapus.
+export async function koreksiMuatan(kode: string, panenId: string, muatanBaru: MuatanInput[], alasan: string, p: Pelaku): Promise<void> {
+  const alasanBersih = cekAdmin(p, alasan);
+  const id = cekId(panenId, "Panen");
+  const muatan = normalisasiMuatan(muatanBaru);
+  await transaksi(async (c, sekarang) => {
+    const awal = await c.query<{ kolom_id: string }>(
+      `SELECT kolom_id FROM produksi_panen WHERE id = $1 AND perusahaan_kode = $2`,
+      [id, kode],
+    );
+    if (!awal.rows[0]) throw galat("TIDAK_DITEMUKAN", "Panen tidak ditemukan.");
+    const kolomId = awal.rows[0].kolom_id;
+    // Longgar: rek yang sudah dinonaktifkan/dihapus dari denah tetap bisa dikoreksi.
+    const ctx = await kunciKolomDasar(c, kode, kolomId, true);
+    const { rows } = await c.query<{ dimuat: number; panen_at: Date; dibatalkan_at: Date | null; tanggal_bisnis: string }>(
+      `SELECT dimuat, panen_at, dibatalkan_at, tanggal_bisnis::text AS tanggal_bisnis
+         FROM produksi_panen WHERE id = $1 AND perusahaan_kode = $2 FOR UPDATE`,
+      [id, kode],
+    );
+    const pn = rows[0];
+    if (pn.dibatalkan_at) throw await galatBerubah(c, kode, kolomId, "Panen ini sudah dibatalkan.");
+    if (sekarang.getTime() - pn.panen_at.getTime() > BATAS_HARI_BATAL * 24 * JAM_MS) {
+      throw galat("VALIDASI", `Panen lebih dari ${BATAS_HARI_BATAL} hari tidak bisa dikoreksi.`);
+    }
+    const galatMuatan = validasiKoreksiMuatan(pn.dimuat, muatan);
+    if (galatMuatan) throw galat("VALIDASI", galatMuatan);
+
+    const lama = await c.query<{
+      jenis: "armada" | "pembeli";
+      kendaraan_erp_id: string | null;
+      plat: string;
+      agen_id: string | null;
+      agen_nama: string | null;
+      jumlah: number;
+    }>(
+      `SELECT jenis, kendaraan_erp_id, plat, agen_id, agen_nama, jumlah
+         FROM produksi_muatan WHERE panen_id = $1 ORDER BY id FOR UPDATE`,
+      [id],
+    );
+    await c.query(`DELETE FROM produksi_muatan WHERE panen_id = $1`, [id]);
+    for (const m of muatan) {
+      await c.query(
+        `INSERT INTO produksi_muatan (panen_id, jenis, kendaraan_erp_id, plat, agen_id, agen_nama, jumlah)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, m.jenis, m.kendaraanErpId, m.plat, m.agenId, m.agenNama, m.jumlah],
+      );
+    }
+    await tulisLog(c, kode, p, sekarang, {
+      aksi: "koreksi_muatan",
+      kolomId,
+      ctx,
+      rujukanId: id,
+      sebelum: {
+        panenId: id,
+        dimuat: pn.dimuat,
+        tanggalBisnis: pn.tanggal_bisnis,
+        muatan: lama.rows.map((m) => ({
+          jenis: m.jenis,
+          kendaraanErpId: m.kendaraan_erp_id,
+          plat: m.plat,
+          agenId: m.agen_id,
+          agenNama: m.agen_nama,
+          jumlah: m.jumlah,
+        })),
+      },
+      sesudah: { panenId: id, dimuat: pn.dimuat, tanggalBisnis: pn.tanggal_bisnis, muatan },
+      alasan: alasanBersih,
+    });
+  });
+}
+
 // ── Kendaraan aktif operator ───────────────────────────────────────────────
 
+// Kunci (akun_id, perusahaan_kode): satu akun (mis. Direktur/Super Admin) bisa
+// punya kendaraan aktif berbeda di tiap pabrik.
 // Catatan: tabel tidak punya kolom agen_id, jadi agenId selalu null saat dibaca.
 export async function getKendaraanAktif(akunId: string, kode: string): Promise<KendaraanPilihan | null> {
   const { rows } = await getPgPool().query<{
@@ -882,8 +975,8 @@ export async function setKendaraanAktif(akunId: string, kode: string, k: Kendara
   await getPgPool().query(
     `INSERT INTO produksi_kendaraan_aktif (akun_id, perusahaan_kode, jenis, kendaraan_erp_id, plat, agen_nama, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, now())
-     ON CONFLICT (akun_id) DO UPDATE
-       SET perusahaan_kode = EXCLUDED.perusahaan_kode, jenis = EXCLUDED.jenis,
+     ON CONFLICT (akun_id, perusahaan_kode) DO UPDATE
+       SET jenis = EXCLUDED.jenis,
            kendaraan_erp_id = EXCLUDED.kendaraan_erp_id, plat = EXCLUDED.plat,
            agen_nama = EXCLUDED.agen_nama, updated_at = now()`,
     [akun, kode, k.jenis, erpId, plat, teksOpsional(k.agenNama)],
@@ -1174,13 +1267,14 @@ export async function getPanenTerakhir(kode: string, kolomId: string): Promise<P
     tandai: boolean;
     isian_aktif: boolean;
     operator_akun_id: string;
-    kendaraan: { plat: string; jumlah: number }[] | null;
+    kendaraan: MuatanInput[] | null;
   }>(
     `SELECT p.id::text AS id, p.panen_at, p.varian, p.dimuat, p.ke_babonan, p.pecah,
             (p.dimuat = 0 AND p.persen_saat_panen IS NULL AND ki.jenis = 'produksi') AS tandai,
             (ki.selesai_at IS NULL) AS isian_aktif,
             p.operator_akun_id,
-            (SELECT json_agg(json_build_object('plat', m.plat, 'jumlah', m.jumlah) ORDER BY m.id)
+            (SELECT json_agg(json_build_object('jenis', m.jenis, 'kendaraanErpId', m.kendaraan_erp_id, 'plat', m.plat,
+                                               'agenId', m.agen_id, 'agenNama', m.agen_nama, 'jumlah', m.jumlah) ORDER BY m.id)
                FROM produksi_muatan m WHERE m.panen_id = p.id) AS kendaraan
        FROM produksi_panen p
        JOIN produksi_kolom_isi ki ON ki.id = p.isian_id

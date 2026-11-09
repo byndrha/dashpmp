@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { cariAgenAction } from "@/app/produksi-operasional-actions";
 import type { KodeProduksi } from "@/lib/produksi-denah";
-import type { KendaraanPilihan } from "@/lib/produksi-operasional";
+import { adalahAmbilSendiri, type KendaraanPilihan } from "@/lib/produksi-operasional";
 import type { KendaraanArmada } from "@/lib/queries/produksi-do-erp";
 
 export function labelKendaraan(k: KendaraanPilihan | null): string {
@@ -109,13 +109,16 @@ function IsiPemilih({
   const [mode, setMode] = useState<"armada" | "pembeli">(nilai?.jenis === "pembeli" ? "pembeli" : "armada");
   const [cari, setCari] = useState("");
 
+  // Kendaraan ERP "Ambil Sendiri" = pasangan DO untuk kendaraan pembeli; tidak
+  // dipilih sebagai armada (pencocokan memperlakukannya sebagai sisi pembeli).
+  const armadaPabrik = useMemo(() => armada.filter((a) => !adalahAmbilSendiri(a.plat)), [armada]);
   const daftar = useMemo(() => {
     const q = cari.trim().toUpperCase().replace(/\s+/g, "");
     const cocok = q
-      ? armada.filter((a) => a.plat.toUpperCase().replace(/\s+/g, "").includes(q) || (a.sopir ?? "").toUpperCase().includes(q))
-      : armada;
+      ? armadaPabrik.filter((a) => a.plat.toUpperCase().replace(/\s+/g, "").includes(q) || (a.sopir ?? "").toUpperCase().includes(q))
+      : armadaPabrik;
     return cocok.slice(0, BATAS_TAMPIL);
-  }, [armada, cari]);
+  }, [armadaPabrik, cari]);
 
   return (
     <>
@@ -154,7 +157,7 @@ function IsiPemilih({
           <div className="max-h-[50dvh] overflow-y-auto rounded-lg border">
             {daftar.length === 0 ? (
               <p className="p-3 text-center text-sm text-muted-foreground">
-                {armada.length === 0 ? (armadaGalat ?? "Daftar armada tidak tersedia.") : "Tidak ada yang cocok."}
+                {armadaPabrik.length === 0 ? (armadaGalat ?? "Daftar armada tidak tersedia.") : "Tidak ada yang cocok."}
               </p>
             ) : (
               daftar.map((a) => {
@@ -176,6 +179,13 @@ function IsiPemilih({
               })
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Untuk pengambilan pembeli, pilih{" "}
+            <button type="button" className="font-medium text-primary underline underline-offset-2" onClick={() => setMode("pembeli")}>
+              Kendaraan pembeli
+            </button>
+            .
+          </p>
         </div>
       ) : (
         <FormPembeli kode={kode} awal={nilai?.jenis === "pembeli" ? nilai : null} onPilih={onPilih} />

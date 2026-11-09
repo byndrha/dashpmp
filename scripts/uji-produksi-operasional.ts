@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { getPgPool } from "../src/lib/pg";
 import { buatBak, buatKolom, denahKosong, type DenahDokumen } from "../src/lib/produksi-denah";
 import { tanggalBisnisPanen, type MuatanInput } from "../src/lib/produksi-operasional";
-import { getKolomIsiIdsUntukKode } from "../src/lib/queries/produksi-denah";
+import { GalatSimpanDenah, getDenahUntukKode, getKolomIsiIdsUntukKode, getKolomTerkunciUntukKode, simpanDenahUntukKode } from "../src/lib/queries/produksi-denah";
 import {
   batalkanPanen,
   buangBabonan,
@@ -24,6 +24,7 @@ import {
   getRiwayatOperator,
   isiAir,
   koreksiIsian,
+  koreksiMuatan,
   mulaiMaintenance,
   panen,
   selesaiMaintenance,
@@ -45,6 +46,7 @@ let kolom1 = "";
 let kolom2 = "";
 let kolom3 = "";
 let panenBabonanId = "";
+let panenPertamaId = "";
 
 const pg = () => getPgPool();
 
@@ -139,6 +141,7 @@ test("isi air lalu panen dengan babonan dan isi ulang", async () => {
     operator,
   );
   assert.ok(hasil.isianBaruId);
+  panenPertamaId = hasil.panenId;
 
   const semua = await isianKolom(kolom1, false);
   const lama = semua.find((r) => r.id === isianId)!;
@@ -237,6 +240,24 @@ test("maintenance", async () => {
   assert.equal(isianBaruId, null);
   await mulaiMaintenance(KODE, kolom2, "ganti seal", operator);
   await harapGalat(isiAir(KODE, kolom2, null, operator), "VALIDASI");
+
+  // Maintenance terbuka mengunci kolom denah seperti isian aktif (kolom2 kini tanpa isian).
+  assert.equal((await getKolomIsiIdsUntukKode(KODE)).has(kolom2), false);
+  assert.ok((await getKolomTerkunciUntukKode(KODE)).has(kolom2));
+  const tersimpan = await getDenahUntukKode(KODE);
+  assert.ok(tersimpan && !tersimpan.rusak);
+  const ubahan: DenahDokumen = structuredClone(tersimpan.data);
+  for (const e of ubahan.elemen) {
+    if (e.tipe !== "bak") continue;
+    e.kolom = e.kolom.map((k) => (k.id === kolom2 ? { ...k, jumlahIceCan: 30 } : k));
+  }
+  await assert.rejects(simpanDenahUntukKode(KODE, ubahan, tersimpan.versi, "uji"), (err: unknown) => {
+    assert.ok(err instanceof GalatSimpanDenah, String(err));
+    assert.equal(err.kodeGalat, "KOLOM_TERKUNCI");
+    return true;
+  });
+  assert.equal((await getDenahUntukKode(KODE))?.versi, tersimpan.versi);
+
   const data = await getDataPabrik(KODE);
   assert.ok(data.maintenance.some((m) => m.kolomId === kolom2 && m.dibukaOlehNama === "Uji" && m.catatan === "ganti seal"));
   assert.equal(data.kosongSejak[kolom2], undefined);
@@ -306,8 +327,76 @@ test("kendaraan aktif per akun", async () => {
   assert.equal(k?.plat, "L 9 UJ");
   assert.equal(k?.agenNama, "Agen Uji");
   assert.equal(await getKendaraanAktif(operator.akunId, "kode-lain-uji"), null);
+  // Upsert per (akun_id, perusahaan_kode): set ulang menimpa baris yang sama.
+  await setKendaraanAktif(operator.akunId, KODE, { jenis: "armada", kendaraanErpId: "uji-armada-a", plat: "S 1111 UJ", agenId: null, agenNama: null });
+  const k2 = await getKendaraanAktif(operator.akunId, KODE);
+  assert.equal(k2?.jenis, "armada");
+  assert.equal(k2?.kendaraanErpId, "uji-armada-a");
+  const { rows: nKa } = await pg().query<{ n: string }>(
+    `SELECT count(*) AS n FROM produksi_kendaraan_aktif WHERE akun_id = $1 AND perusahaan_kode = $2`,
+    [operator.akunId, KODE],
+  );
+  assert.equal(Number(nKa[0].n), 1);
   const riwayat = await getRiwayatOperator(KODE, operator.akunId, new Date(Date.now() - 3_600_000).toISOString());
   assert.ok(riwayat.length > 0 && riwayat.every((r) => r.akunNama === "Uji"));
+});
+
+test("koreksi kendaraan muatan (admin)", async () => {
+  const baru = [muat(armadaB, 34)];
+  await harapGalat(koreksiMuatan(KODE, panenPertamaId, baru, "salah kendaraan", operator), "VALIDASI");
+  await harapGalat(koreksiMuatan(KODE, panenPertamaId, baru, " ", admin), "VALIDASI");
+  // Σ muatan harus = dimuat (34), kendaraan unik, jumlah > 0.
+  await harapGalat(koreksiMuatan(KODE, panenPertamaId, [muat(armadaB, 33)], "salah kendaraan", admin), "VALIDASI");
+  await harapGalat(koreksiMuatan(KODE, panenPertamaId, [muat(armadaB, 20), muat(armadaB, 14)], "salah kendaraan", admin), "VALIDASI");
+  await harapGalat(koreksiMuatan(KODE, panenPertamaId, [muat(armadaB, 34), muat(armadaA, 0)], "salah kendaraan", admin), "VALIDASI");
+  // Scope perusahaan: panen pabrik lain tidak ditemukan.
+  await harapGalat(koreksiMuatan("kode-lain-uji", panenPertamaId, baru, "salah kendaraan", admin), "TIDAK_DITEMUKAN");
+  // Panen yang sudah dibatalkan tidak bisa dikoreksi.
+  await harapGalat(koreksiMuatan(KODE, panenBabonanId, [muat(armadaB, 1)], "salah kendaraan", admin), "KEADAAN_BERUBAH");
+
+  const sebelum = await getMuatanHarian(KODE, tanggalBisnisPanen(new Date()));
+  const aSebelum = sebelum.armada.find((m) => m.kendaraanErpId === armadaA.kendaraanErpId)!.kecil;
+  const bSebelum = sebelum.armada.find((m) => m.kendaraanErpId === armadaB.kendaraanErpId)!.kecil;
+  const { rows: panenSebelum } = await pg().query(`SELECT dimuat, ke_babonan, pecah, isian_id FROM produksi_panen WHERE id = $1`, [panenPertamaId]);
+
+  await koreksiMuatan(KODE, panenPertamaId, baru, "salah kendaraan", admin);
+
+  const { rows: muatanBaru } = await pg().query<{ kendaraan_erp_id: string; jumlah: number }>(
+    `SELECT kendaraan_erp_id, jumlah FROM produksi_muatan WHERE panen_id = $1 ORDER BY id`,
+    [panenPertamaId],
+  );
+  assert.deepEqual(muatanBaru, [{ kendaraan_erp_id: armadaB.kendaraanErpId, jumlah: 34 }]);
+  const { rows: panenSesudah } = await pg().query(`SELECT dimuat, ke_babonan, pecah, isian_id FROM produksi_panen WHERE id = $1`, [panenPertamaId]);
+  assert.deepEqual(panenSesudah, panenSebelum, "panen (dimuat, babonan, isian) tidak berubah");
+
+  const sesudah = await getMuatanHarian(KODE, tanggalBisnisPanen(new Date()));
+  assert.equal(sesudah.armada.find((m) => m.kendaraanErpId === armadaA.kendaraanErpId)!.kecil, aSebelum - 20);
+  assert.equal(sesudah.armada.find((m) => m.kendaraanErpId === armadaB.kendaraanErpId)!.kecil, bSebelum + 20);
+  assert.equal(sesudah.ringkasan.dimuat, sebelum.ringkasan.dimuat);
+
+  const [logK] = await getLog(
+    KODE,
+    { dari: new Date(Date.now() - 600_000).toISOString(), sampai: new Date(Date.now() + 60_000).toISOString(), aksi: "koreksi_muatan" },
+    5,
+  );
+  assert.equal(logK.alasan, "salah kendaraan");
+  assert.equal(logK.peran, "admin");
+  assert.equal(logK.bakNama, "BAK UJI");
+  const sbl = logK.sebelum as { dimuat: number; muatan: { kendaraanErpId: string; jumlah: number }[] };
+  const ssd = logK.sesudah as { dimuat: number; muatan: { kendaraanErpId: string; jumlah: number }[] };
+  assert.equal(sbl.dimuat, 34);
+  assert.deepEqual(sbl.muatan.map((m) => [m.kendaraanErpId, m.jumlah]), [[armadaA.kendaraanErpId, 20], [armadaB.kendaraanErpId, 14]]);
+  assert.deepEqual(ssd.muatan.map((m) => [m.kendaraanErpId, m.jumlah]), [[armadaB.kendaraanErpId, 34]]);
+
+  // Log batal_panen kini mencatat persen + jenisIsian (label Tandai Babonan di layar log).
+  const [logBatal] = await getLog(
+    KODE,
+    { dari: new Date(Date.now() - 600_000).toISOString(), sampai: new Date(Date.now() + 60_000).toISOString(), aksi: "batal_panen" },
+    5,
+  );
+  const sb = logBatal.sebelum as Record<string, unknown>;
+  assert.ok("persen" in sb);
+  assert.equal(sb.jenisIsian, "babonan");
 });
 
 test("invarian jumlah", async () => {

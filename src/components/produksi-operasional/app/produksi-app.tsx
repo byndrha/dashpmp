@@ -78,9 +78,13 @@ export function ProduksiApp({
 
   // Kedua pemuat tidak pernah melempar: kegagalan jaringan (wifi putus)
   // ditampilkan sebagai galat, data lama tetap tampil.
+  // Penjaga urutan: respons polling lama tidak boleh menimpa respons sesudah aksi.
+  const nomorMuat = useRef(0);
   const muatKeadaan = useCallback(async () => {
+    const nomor = ++nomorMuat.current;
     try {
       const r = await getKeadaanAction(kode);
+      if (nomor !== nomorMuat.current) return;
       if (r.success) {
         setKeadaan({ data: r.data.data, keadaan: r.data.keadaan });
         setGalatKeadaan(null);
@@ -88,7 +92,7 @@ export function ProduksiApp({
         setGalatKeadaan(r.error);
       }
     } catch {
-      setGalatKeadaan(PESAN_GAGAL_MUAT);
+      if (nomor === nomorMuat.current) setGalatKeadaan(PESAN_GAGAL_MUAT);
     }
   }, [kode]);
 

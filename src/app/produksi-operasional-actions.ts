@@ -15,7 +15,6 @@
 // Input klien tidak dipercaya: bentuknya diperiksa dan dibangun ulang di sini
 // sebelum diteruskan; aturan bisnis (kapasitas, minimal 1 can, dll.) tetap di
 // lapisan transaksi.
-import { cache } from "react";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
@@ -24,7 +23,7 @@ import { canAccessGrup } from "@/lib/require-access";
 import { isPmpDeployment } from "@/lib/tenant";
 import { denahKosong, type BakElemen, type DenahDokumen, type KodeProduksi, type Varian } from "@/lib/produksi-denah";
 import {
-  cocokkanMuatan,
+  cocokkanHarian,
   keadaanPabrik,
   peringatanDari,
   ringkasStok,
@@ -35,6 +34,7 @@ import {
   type KendaraanPilihan,
   type MuatanInput,
   type PanenInput,
+  type PencocokanPembeli,
   type Peringatan,
   type RingkasanStok,
 } from "@/lib/produksi-operasional";
@@ -50,6 +50,7 @@ import {
   getRiwayatOperator,
   isiAir,
   koreksiIsian,
+  koreksiMuatan,
   mulaiMaintenance,
   panen,
   selesaiMaintenance,
@@ -76,6 +77,7 @@ const AKSI_LOG: readonly string[] = [
   "mulai_maintenance",
   "selesai_maintenance",
   "koreksi_isian",
+  "koreksi_muatan",
   "batal_panen",
 ];
 const JAM_MS = 3_600_000;
@@ -121,9 +123,14 @@ async function jalankan<T>(fn: () => Promise<T>): Promise<HasilAksi<T>> {
   return { success: false, error: g.message, kodeGalat: g.kodeGalat };
 }
 
+// Hanya layar admin. `/{kode}/produksi-app` sengaja TIDAK di-revalidate:
+// revalidatePath di server function merender ulang halaman yang sedang
+// dilihat di respons aksi yang sama (node_modules/next/dist/docs/01-app/
+// 03-api-reference/04-functions/revalidatePath.md), dan page HP membaca daftar
+// armada ERP — setiap aksi operator jadi menunggu ERP. Aplikasi HP memuat
+// ulang keadaannya sendiri sesudah setiap aksi (produksi-app.tsx `jalankan`).
 function segarkan(kode: KodeProduksi): void {
   revalidatePath(`/${kode}/produksi`);
-  revalidatePath(`/${kode}/produksi-app`);
 }
 
 // ── Validasi bentuk input ──────────────────────────────────────────────────
@@ -176,17 +183,20 @@ function cekKendaraan(v: unknown): KendaraanPilihan {
   };
 }
 
-function cekPanenInput(v: unknown): PanenInput {
-  if (!v || typeof v !== "object") throw new AppError("Data panen tidak sah.");
-  const o = v as Record<string, unknown>;
-  if (!Array.isArray(o.muatan) || o.muatan.length > BATAS_MUATAN) throw new AppError("Daftar muatan tidak sah.");
-  const muatan: MuatanInput[] = o.muatan.map((m: unknown) => ({
+function cekMuatan(v: unknown): MuatanInput[] {
+  if (!Array.isArray(v) || v.length > BATAS_MUATAN) throw new AppError("Daftar muatan tidak sah.");
+  return v.map((m: unknown) => ({
     ...cekKendaraan(m),
     jumlah: bulat((m as Record<string, unknown>).jumlah, "Jumlah muatan"),
   }));
+}
+
+function cekPanenInput(v: unknown): PanenInput {
+  if (!v || typeof v !== "object") throw new AppError("Data panen tidak sah.");
+  const o = v as Record<string, unknown>;
   return {
     isianId: teksWajib(o.isianId, "Isian"),
-    muatan,
+    muatan: cekMuatan(o.muatan),
     babonan: bulat(o.babonan, "Jumlah Babonan"),
     pecah: bulat(o.pecah, "Jumlah pecah"),
     isiUlang: cekBool(o.isiUlang, "Pilihan isi ulang"),
@@ -229,22 +239,57 @@ function doBersih(dos: DoKendaraan[]): DoKendaraan[] {
   return dos.map((d) => ({ ...d, plat: d.plat ?? "" }));
 }
 
-async function hitungPencocokan(kode: KodeProduksi, tanggalBisnis: string): Promise<{ baris: BarisCocok[]; muatan: MuatanHarian }> {
+async function hitungPencocokan(
+  kode: KodeProduksi,
+  tanggalBisnis: string,
+): Promise<{ baris: BarisCocok[]; pembeli: PencocokanPembeli; muatan: MuatanHarian }> {
+  // getDoPerKendaraan sudah dibatasi BATAS_WAKTU_ERP_MS (produksi-do-erp.ts).
   const [muatan, dos] = await Promise.all([getMuatanHarian(kode, tanggalBisnis), getDoPerKendaraan(kode, tanggalBisnis)]);
-  return { baris: cocokkanMuatan(muatan.armada, doBersih(dos)), muatan };
+  const { baris, pembeli } = cocokkanHarian(muatan.armada, muatan.pembeli, doBersih(dos));
+  return { baris, pembeli, muatan };
 }
 
 // Selisih muatan untuk peringatan: hari bisnis terakhir yang SUDAH closing.
-// Di-cache per request saja (React cache), tanpa job terjadwal. ERP yang
-// tidak terjangkau tidak boleh mematikan peta: peringatan selisih dilewati.
-const selisihClosingTerakhir = cache(async (kode: KodeProduksi, tanggalBisnis: string): Promise<BarisCocok[]> => {
-  try {
-    return (await hitungPencocokan(kode, tanggalBisnis)).baris;
-  } catch (err) {
-    console.error("[produksi-operasional] gagal menghitung selisih muatan", err);
-    return [];
-  }
-});
+// Hari itu hampir tidak berubah lagi, jadi hasilnya di-cache di memori modul
+// per (kode, tanggalBisnis) selama TTL_SELISIH_MS — polling admin 30 detik
+// tidak membaca ERP setiap kali. Kegagalan (ERP mati / lewat batas waktu)
+// di-cache lebih singkat dan dilaporkan sebagai `gagal`, supaya layar
+// menampilkan "Pemeriksaan DO gagal" alih-alih diam-diam tanpa peringatan.
+// Koreksi admin (batal panen, ubah kendaraan) mengosongkan cache pabrik itu.
+const TTL_SELISIH_MS = 5 * 60_000;
+const TTL_SELISIH_GAGAL_MS = 60_000;
+
+interface HasilSelisih {
+  baris: BarisCocok[];
+  pembeli: PencocokanPembeli | null;
+  gagal: boolean;
+}
+
+const cacheSelisih = new Map<string, { janji: Promise<HasilSelisih>; kedaluwarsa: number }>();
+
+function selisihClosingTerakhir(kode: KodeProduksi, tanggalBisnis: string): Promise<HasilSelisih> {
+  const kunci = `${kode}|${tanggalBisnis}`;
+  const kini = Date.now();
+  const ada = cacheSelisih.get(kunci);
+  if (ada && ada.kedaluwarsa > kini) return ada.janji;
+  for (const [k, v] of cacheSelisih) if (v.kedaluwarsa <= kini) cacheSelisih.delete(k);
+
+  const entri = { janji: Promise.resolve<HasilSelisih>({ baris: [], pembeli: null, gagal: true }), kedaluwarsa: kini + TTL_SELISIH_MS };
+  entri.janji = hitungPencocokan(kode, tanggalBisnis).then(
+    ({ baris, pembeli }) => ({ baris, pembeli, gagal: false }),
+    (err: unknown) => {
+      console.error("[produksi-operasional] gagal menghitung selisih muatan", err);
+      entri.kedaluwarsa = Date.now() + TTL_SELISIH_GAGAL_MS;
+      return { baris: [], pembeli: null, gagal: true };
+    },
+  );
+  cacheSelisih.set(kunci, entri);
+  return entri.janji;
+}
+
+function lupakanSelisih(kode: KodeProduksi): void {
+  for (const k of cacheSelisih.keys()) if (k.startsWith(`${kode}|`)) cacheSelisih.delete(k);
+}
 
 function pembuatLabel(denah: DenahDokumen): (kolomId: string) => string {
   const peta = new Map<string, string>();
@@ -258,9 +303,16 @@ function pembuatLabel(denah: DenahDokumen): (kolomId: string) => string {
 
 // ── Baca ───────────────────────────────────────────────────────────────────
 
-export async function getKeadaanAction(
-  kode: KodeProduksi,
-): Promise<HasilAksi<{ data: DataPabrik; keadaan: KeadaanRek[]; peringatan: Peringatan[]; ringkasan: RingkasanStok }>> {
+export async function getKeadaanAction(kode: KodeProduksi): Promise<
+  HasilAksi<{
+    data: DataPabrik;
+    keadaan: KeadaanRek[];
+    peringatan: Peringatan[];
+    ringkasan: RingkasanStok;
+    /** true: pemeriksaan DO (selisih muatan) gagal/lewat batas waktu — selisih tidak dihitung. */
+    selisihGagal: boolean;
+  }>
+> {
   return jalankan(async () => {
     // Baca saja: semua akun dashboard pabrik ini (spec §9). Selisih muatan
     // (data DO) tetap hanya untuk admin, di bawah.
@@ -270,16 +322,19 @@ export async function getKeadaanAction(
     const denah = data.denah ?? denahKosong();
     const keadaan = keadaanPabrik(denah, data.isian, data.maintenance, sekarang);
     // Data DO bersifat pengawasan (spec §9): selisih muatan hanya untuk admin.
-    const selisih = g.admin ? await selisihClosingTerakhir(g.kode, geserTanggal(tanggalBisnisPanen(sekarang), -1)) : [];
+    const selisih = g.admin
+      ? await selisihClosingTerakhir(g.kode, geserTanggal(tanggalBisnisPanen(sekarang), -1))
+      : { baris: [], pembeli: null, gagal: false };
     const peringatan = peringatanDari({
       keadaan,
       kosongSejak: data.kosongSejak,
       panenBelumSiap: data.panenBelumSiap,
-      selisih,
+      selisih: selisih.baris,
+      selisihPembeli: selisih.pembeli,
       sekarang,
       label: pembuatLabel(denah),
     });
-    return { data, keadaan, peringatan, ringkasan: ringkasStok(denah, keadaan) };
+    return { data, keadaan, peringatan, ringkasan: ringkasStok(denah, keadaan, sekarang), selisihGagal: selisih.gagal };
   });
 }
 
@@ -328,12 +383,12 @@ export async function getRiwayatSayaAction(kode: KodeProduksi): Promise<HasilAks
 export async function getPencocokanAction(
   kode: KodeProduksi,
   tanggalBisnis: string,
-): Promise<HasilAksi<{ baris: BarisCocok[]; muatan: MuatanHarian; sementara: boolean }>> {
+): Promise<HasilAksi<{ baris: BarisCocok[]; pembeli: PencocokanPembeli; muatan: MuatanHarian; sementara: boolean }>> {
   return jalankan(async () => {
     const g = await gerbang(kode, "kelola");
     const tanggal = cekTanggalBisnis(tanggalBisnis);
-    const { baris, muatan } = await hitungPencocokan(g.kode, tanggal);
-    return { baris, muatan, sementara: tanggal >= tanggalBisnisPanen(new Date()) };
+    const { baris, pembeli, muatan } = await hitungPencocokan(g.kode, tanggal);
+    return { baris, pembeli, muatan, sementara: tanggal >= tanggalBisnisPanen(new Date()) };
   });
 }
 
@@ -445,6 +500,16 @@ export async function batalkanPanenAction(kode: KodeProduksi, panenId: string, a
   return jalankan(async () => {
     const g = await gerbang(kode, "kelola");
     await batalkanPanen(g.kode, teksWajib(panenId, "Panen"), teksWajib(alasan, "Alasan pembatalan"), g.pelaku);
+    lupakanSelisih(g.kode);
+    segarkan(g.kode);
+  });
+}
+
+export async function koreksiMuatanAction(kode: KodeProduksi, panenId: string, muatan: MuatanInput[], alasan: string): Promise<HasilAksi<void>> {
+  return jalankan(async () => {
+    const g = await gerbang(kode, "kelola");
+    await koreksiMuatan(g.kode, teksWajib(panenId, "Panen"), cekMuatan(muatan), teksWajib(alasan, "Alasan koreksi"), g.pelaku);
+    lupakanSelisih(g.kode);
     segarkan(g.kode);
   });
 }

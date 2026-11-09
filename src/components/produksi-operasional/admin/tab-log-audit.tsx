@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { getLogAction } from "@/app/produksi-operasional-actions";
 import { exportRowsToXlsx, type XlsxColumn } from "@/lib/export-xlsx";
 import type { KodeProduksi } from "@/lib/produksi-denah";
+import { batalAdalahTandaiBabonan } from "@/lib/produksi-operasional";
 import type { BarisLog } from "@/lib/queries/produksi-operasional";
 import { jamWib, singkatVarian, tanggalJamWib } from "../warna-tahap";
 
@@ -31,6 +32,7 @@ const LABEL_AKSI: Record<string, string> = {
   mulai_maintenance: "Mulai Maintenance",
   selesai_maintenance: "Selesai Maintenance",
   koreksi_isian: "Koreksi isian",
+  koreksi_muatan: "Koreksi kendaraan",
   batal_panen: "Batal panen",
 };
 
@@ -105,12 +107,21 @@ export function ringkasPerubahan(l: BarisLog): string {
       if (bagian.length === 0) bagian.push("tanpa perubahan nilai");
       break;
     }
+    case "koreksi_muatan": {
+      const daftar = (v: unknown) =>
+        (Array.isArray(v) ? v.map(objek) : []).map((m) => `${teks(m.plat) ?? "?"} ${bil(m.jumlah) ?? "?"}`).join(", ") || "—";
+      bagian.push(`kendaraan ${daftar(a.muatan)} → ${daftar(s.muatan)}`);
+      const tb = teks(a.tanggalBisnis);
+      if (tb) bagian.push(`tanggal bisnis ${tb}`);
+      break;
+    }
     case "batal_panen": {
       const dimuat = bil(a.dimuat) ?? 0;
       const keBab = (bil(a.keBabonan) ?? 0) + (bil(a.pecah) ?? 0);
       const panenAt = teks(a.panenAt);
+      // Aturan sama dengan server (lihat batalAdalahTandaiBabonan).
       bagian.push(
-        `${dimuat === 0 && keBab > 0 ? `Tandai Babonan ${keBab} can` : `panen ${dimuat} dimuat${keBab > 0 ? ` + ${keBab} Babonan` : ""}`}${panenAt ? ` (${tanggalJamWib(panenAt)})` : ""}`,
+        `${batalAdalahTandaiBabonan(a) ? `Tandai Babonan ${keBab} can` : `panen ${dimuat} dimuat${keBab > 0 ? ` + ${keBab} Babonan` : ""}`}${panenAt ? ` (${tanggalJamWib(panenAt)})` : ""}`,
       );
       if (s.dikembalikan === true) {
         const isian = objek(a.isian);
@@ -347,7 +358,7 @@ export function TabLogAudit({ kode, daftarBak }: { kode: KodeProduksi; daftarBak
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{lokasi}</TableCell>
                 <TableCell className="whitespace-nowrap">
-                  <span className={cn((l.aksi === "koreksi_isian" || l.aksi === "batal_panen") && "font-semibold text-amber-700 dark:text-amber-400")}>
+                  <span className={cn((l.aksi === "koreksi_isian" || l.aksi === "koreksi_muatan" || l.aksi === "batal_panen") && "font-semibold text-amber-700 dark:text-amber-400")}>
                     {LABEL_AKSI[l.aksi] ?? l.aksi}
                   </span>
                 </TableCell>

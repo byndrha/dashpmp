@@ -9,7 +9,9 @@
 //     produksi_babonan_keluar, produksi_kendaraan_aktif, produksi_log: baru.
 //
 // Hanya ADD COLUMN / CREATE ... IF NOT EXISTS / ADD CONSTRAINT bila belum ada.
-// Tidak pernah DROP/DELETE. Kolom NOT NULL baru diberi DEFAULT sementara
+// Tidak pernah DROP tabel/kolom atau DELETE data. Satu-satunya DROP CONSTRAINT:
+// PK produksi_kendaraan_aktif (akun_id) diganti (akun_id, perusahaan_kode),
+// hanya bila PK lama masih akun_id saja (lihat bagian tabel itu). Kolom NOT NULL baru diberi DEFAULT sementara
 // (lalu DEFAULT dicabut) -- karena itu skrip berhenti bila produksi_kolom_isi
 // sudah berisi baris sebelum kolom tersebut ada.
 //
@@ -211,6 +213,43 @@ async function main() {
       CONSTRAINT produksi_kendaraan_aktif_jenis_chk CHECK (jenis IN ('armada','pembeli'))
     )
   `);
+  // PK (akun_id) → (akun_id, perusahaan_kode): satu akun lintas pabrik
+  // (Direktur/Super Admin) punya kendaraan aktif per pabrik. Hanya dijalankan
+  // bila PK sekarang masih akun_id saja; baris lama tetap kompatibel (akun_id
+  // unik ⇒ pasangan (akun_id, perusahaan_kode) juga unik). Satu transaksi.
+  const pk = await pg.query<{ conname: string; kolom: string[] }>(`
+    SELECT c.conname, array_agg(a.attname::text ORDER BY k.ord) AS kolom
+      FROM pg_constraint c
+      JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+     WHERE c.conrelid = 'public.produksi_kendaraan_aktif'::regclass AND c.contype = 'p'
+     GROUP BY c.conname
+  `);
+  const pkSekarang = pk.rows[0];
+  if (pkSekarang && pkSekarang.kolom.length === 1 && pkSekarang.kolom[0] === "akun_id") {
+    const klien = await pg.connect();
+    try {
+      await klien.query("BEGIN");
+      await klien.query(`ALTER TABLE produksi_kendaraan_aktif DROP CONSTRAINT ${pkSekarang.conname}`);
+      await klien.query(
+        `ALTER TABLE produksi_kendaraan_aktif ADD CONSTRAINT produksi_kendaraan_aktif_pkey PRIMARY KEY (akun_id, perusahaan_kode)`,
+      );
+      await klien.query("COMMIT");
+      console.log(`  PK ${pkSekarang.conname} (akun_id) diganti produksi_kendaraan_aktif_pkey (akun_id, perusahaan_kode).`);
+    } catch (err) {
+      await klien.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      klien.release();
+    }
+  } else if (!pkSekarang) {
+    await pg.query(
+      `ALTER TABLE produksi_kendaraan_aktif ADD CONSTRAINT produksi_kendaraan_aktif_pkey PRIMARY KEY (akun_id, perusahaan_kode)`,
+    );
+    console.log("  PK produksi_kendaraan_aktif_pkey (akun_id, perusahaan_kode) ditambahkan.");
+  } else {
+    console.log(`  PK ${pkSekarang.conname} (${pkSekarang.kolom.join(", ")}) sudah sesuai.`);
+  }
   console.log("produksi_kendaraan_aktif siap.");
 
   // ---------------------------------------------------------------------------
@@ -241,7 +280,25 @@ async function main() {
   await pg.query(`
     CREATE INDEX IF NOT EXISTS produksi_log_at_idx ON produksi_log (perusahaan_kode, at DESC)
   `);
+  // namaAkun (DISTINCT ON akun_id ... ORDER BY at DESC) dan riwayat operator.
+  await pg.query(`
+    CREATE INDEX IF NOT EXISTS produksi_log_akun_at_idx ON produksi_log (perusahaan_kode, akun_id, at DESC)
+  `);
   console.log("produksi_log siap.");
+
+  // ---------------------------------------------------------------------------
+  // Index untuk polling keadaan (getDataPabrik → kosongSejak: max(selesai_at)
+  // per kolom dari isian & maintenance yang sudah selesai).
+  // ---------------------------------------------------------------------------
+  await pg.query(`
+    CREATE INDEX IF NOT EXISTS produksi_kolom_isi_kolom_selesai_idx
+      ON produksi_kolom_isi (perusahaan_kode, kolom_id, selesai_at DESC)
+  `);
+  await pg.query(`
+    CREATE INDEX IF NOT EXISTS produksi_maintenance_kolom_selesai_idx
+      ON produksi_maintenance (perusahaan_kode, kolom_id, selesai_at DESC)
+  `);
+  console.log("index polling siap.");
 
   console.log("\nSelesai.");
 }

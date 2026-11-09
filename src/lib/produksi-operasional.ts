@@ -230,7 +230,39 @@ export function validasiPanen(
 ): string | null {
   const { muatan, babonan, pecah } = input;
   if (!bulatTakNegatif(babonan) || !bulatTakNegatif(pecah)) return "Jumlah Babonan dan pecah harus bilangan bulat ≥ 0.";
+  const galatMuatan = cekDaftarMuatan(muatan);
+  if (galatMuatan) return galatMuatan;
 
+  const dimuat = muatan.reduce((s, m) => s + m.jumlah, 0);
+  if (jenis === "babonan") {
+    if (babonan !== 0 || pecah !== 0) return "Can Babonan tidak bisa dipindah lagi ke Babonan atau pecah.";
+    if (dimuat <= 0) return "Belum ada can Babonan yang dimuat.";
+    if (dimuat > sisa) return `Babonan di rek ini tinggal ${sisa} can (diminta ${dimuat}).`;
+    return null;
+  }
+
+  const total = dimuat + babonan + pecah;
+  if (total !== sisa) return `Jumlah dimuat + Babonan + pecah harus ${sisa} can (sekarang ${total}).`;
+  return null;
+}
+
+/**
+ * Koreksi admin "Ubah kendaraan" sebuah panen: daftar muatan baru harus sah
+ * (jumlah > 0, kendaraan unik) dan Σ jumlah = dimuat panen (dimuat tidak
+ * berubah — yang dikoreksi hanya pembagian ke kendaraan). null = sah.
+ */
+export function validasiKoreksiMuatan(dimuat: number, muatan: MuatanInput[]): string | null {
+  if (!(dimuat > 0)) return "Panen ini tidak memuat can ke kendaraan; tidak ada muatan untuk dikoreksi.";
+  if (muatan.length === 0) return "Tambahkan minimal satu kendaraan.";
+  const galatMuatan = cekDaftarMuatan(muatan);
+  if (galatMuatan) return galatMuatan;
+  const total = muatan.reduce((s, m) => s + m.jumlah, 0);
+  if (total !== dimuat) return `Jumlah muatan harus ${dimuat} can (sama dengan yang dipanen), sekarang ${total}.`;
+  return null;
+}
+
+// Bentuk daftar muatan: jumlah > 0, kendaraan terisi, kendaraan unik.
+function cekDaftarMuatan(muatan: MuatanInput[]): string | null {
   const kunciTerpakai = new Set<string>();
   for (const m of muatan) {
     if (!Number.isInteger(m.jumlah) || m.jumlah <= 0) return "Jumlah setiap muatan harus bilangan bulat lebih dari 0.";
@@ -246,17 +278,6 @@ export function validasiPanen(
     if (kunciTerpakai.has(kunci)) return `Kendaraan ${plat || m.kendaraanErpId} tercatat dua kali dalam satu panen.`;
     kunciTerpakai.add(kunci);
   }
-
-  const dimuat = muatan.reduce((s, m) => s + m.jumlah, 0);
-  if (jenis === "babonan") {
-    if (babonan !== 0 || pecah !== 0) return "Can Babonan tidak bisa dipindah lagi ke Babonan atau pecah.";
-    if (dimuat <= 0) return "Belum ada can Babonan yang dimuat.";
-    if (dimuat > sisa) return `Babonan di rek ini tinggal ${sisa} can (diminta ${dimuat}).`;
-    return null;
-  }
-
-  const total = dimuat + babonan + pecah;
-  if (total !== sisa) return `Jumlah dimuat + Babonan + pecah harus ${sisa} can (sekarang ${total}).`;
   return null;
 }
 
@@ -272,18 +293,24 @@ export interface RingkasanStok {
   perBak: { bakId: string; nama: string; kapasitas: number; terisi: number }[];
 }
 
-// Tahap seluruh can produksi di satu rek mengikuti tahap rek (isian tertua) —
-// sama dengan yang tampil di kartu rek.
-export function ringkasStok(denah: DenahDokumen, keadaan: KeadaanRek[]): RingkasanStok {
+// Tahap dihitung PER ISIAN (mulaiAt + durasi beku masing-masing), bukan
+// mengikuti tahap rek: rek berisi 34 can jadi + 2 can yang baru diisi air
+// terhitung 34 matang + 2 air. `sekarang` = jam server keadaan (wajib).
+export function ringkasStok(denah: DenahDokumen, keadaan: KeadaanRek[], sekarang: Date): RingkasanStok {
   const r: RingkasanStok = { sehat: 0, air: 0, proses: 0, matang: 0, babonan: 0, maintenance: 0, perBak: [] };
   const perBak = new Map<string, { kapasitas: number; terisi: number }>();
   let kapasitasAktif = 0;
 
   for (const k of keadaan) {
-    const produksi = k.isianProduksi.reduce((s, i) => s + i.sisa, 0);
-    if (k.tahap === "air") r.air += produksi;
-    else if (k.tahap === "jadi") r.matang += produksi;
-    else if (k.tahap !== null) r.proses += produksi;
+    let produksi = 0;
+    for (const i of k.isianProduksi) {
+      if (i.sisa <= 0) continue;
+      produksi += i.sisa;
+      const tahap = tahapDari(hitungKematangan(new Date(i.mulaiAt), i.durasiBekuJam ?? 0, sekarang));
+      if (tahap === "air") r.air += i.sisa;
+      else if (tahap === "jadi") r.matang += i.sisa;
+      else r.proses += i.sisa;
+    }
     r.babonan += k.babonan;
 
     const b = perBak.get(k.bakId) ?? { kapasitas: 0, terisi: 0 };
@@ -414,6 +441,83 @@ export function cocokkanMuatan(panen: MuatanKendaraan[], dos: DoKendaraan[]): Ba
   return hasil.sort((a, b) => URUTAN_STATUS[a.status] - URUTAN_STATUS[b.status] || a.plat.localeCompare(b.plat));
 }
 
+// ── Kendaraan pembeli ↔ DO "Ambil Sendiri" ─────────────────────────────────
+//
+// Keputusan controller: kendaraan ERP bernama "Ambil Sendiri" (tanpa beda
+// huruf besar/kecil, di-trim) adalah pasangan sisi DO untuk muatan
+// "kendaraan pembeli". DO-nya tidak dicocokkan per kendaraan; totalnya
+// (K/B) dibandingkan dengan total muatan pembeli hari itu.
+
+export const NAMA_AMBIL_SENDIRI = "Ambil Sendiri";
+
+export function adalahAmbilSendiri(plat: string | null | undefined): boolean {
+  return (plat ?? "").trim().replace(/\s+/g, " ").toLowerCase() === NAMA_AMBIL_SENDIRI.toLowerCase();
+}
+
+export interface PencocokanPembeli {
+  panenKecil: number;
+  panenBesar: number;
+  doKecil: number;
+  doBesar: number;
+  selisihKecil: number;
+  selisihBesar: number;
+  noDo: string[];
+  cocok: boolean;
+}
+
+/**
+ * Pencocokan satu hari bisnis: armada per kendaraan (tanpa DO "Ambil
+ * Sendiri"), lalu total muatan pembeli vs total DO "Ambil Sendiri". Muatan
+ * armada yang (data lama) tercatat ke kendaraan "Ambil Sendiri" ikut sisi
+ * pembeli.
+ */
+export function cocokkanHarian(
+  panenArmada: MuatanKendaraan[],
+  panenPembeli: { kecil: number; besar: number }[],
+  dos: DoKendaraan[],
+): { baris: BarisCocok[]; pembeli: PencocokanPembeli } {
+  const doArmada = dos.filter((d) => !adalahAmbilSendiri(d.plat));
+  const doAmbil = dos.filter((d) => adalahAmbilSendiri(d.plat));
+  const armada = panenArmada.filter((p) => !adalahAmbilSendiri(p.plat));
+  const armadaKePembeli = panenArmada.filter((p) => adalahAmbilSendiri(p.plat));
+
+  const pb: PencocokanPembeli = {
+    panenKecil: 0, panenBesar: 0, doKecil: 0, doBesar: 0, selisihKecil: 0, selisihBesar: 0, noDo: [], cocok: true,
+  };
+  for (const p of [...panenPembeli, ...armadaKePembeli]) {
+    pb.panenKecil += p.kecil;
+    pb.panenBesar += p.besar;
+  }
+  for (const d of doAmbil) {
+    pb.doKecil += d.kecil;
+    pb.doBesar += d.besar;
+    for (const n of d.noDo) if (!pb.noDo.includes(n)) pb.noDo.push(n);
+  }
+  pb.selisihKecil = pb.panenKecil - pb.doKecil;
+  pb.selisihBesar = pb.panenBesar - pb.doBesar;
+  pb.cocok = pb.selisihKecil === 0 && pb.selisihBesar === 0;
+  return { baris: cocokkanMuatan(armada, doArmada), pembeli: pb };
+}
+
+// ── Log ────────────────────────────────────────────────────────────────────
+
+/**
+ * Apakah baris log `batal_panen` membatalkan "Tandai Babonan" (bukan panen
+ * sungguhan)? Aturan sama dengan server (getPanenTerakhir): dimuat = 0 DAN
+ * persen NULL DAN isian asal berjenis produksi. Log lama (sebelum `persen` /
+ * `jenisIsian` ikut dicatat) memakai heuristik lama: dimuat 0 dan ada can ke
+ * Babonan.
+ */
+export function batalAdalahTandaiBabonan(sebelum: unknown): boolean {
+  const a = sebelum && typeof sebelum === "object" ? (sebelum as Record<string, unknown>) : {};
+  const dimuat = typeof a.dimuat === "number" ? a.dimuat : 0;
+  if ("persen" in a && typeof a.jenisIsian === "string") {
+    return dimuat === 0 && a.persen === null && a.jenisIsian === "produksi";
+  }
+  const keBab = (typeof a.keBabonan === "number" ? a.keBabonan : 0) + (typeof a.pecah === "number" ? a.pecah : 0);
+  return dimuat === 0 && keBab > 0;
+}
+
 // ── Peringatan ─────────────────────────────────────────────────────────────
 
 export type KodePeringatan =
@@ -452,10 +556,12 @@ export function peringatanDari(a: {
   kosongSejak: Record<string, string>;
   panenBelumSiap: { kolomId: string; panenAt: string; persen: number }[];
   selisih: BarisCocok[];
+  /** Total kendaraan pembeli vs DO "Ambil Sendiri" (hari yang sama dengan `selisih`). */
+  selisihPembeli?: PencocokanPembeli | null;
   sekarang: Date;
   label: (kolomId: string) => string;
 }): Peringatan[] {
-  const { keadaan, kosongSejak, panenBelumSiap, selisih, sekarang, label } = a;
+  const { keadaan, kosongSejak, panenBelumSiap, selisih, selisihPembeli, sekarang, label } = a;
   const hasil: Peringatan[] = [];
 
   for (const k of keadaan) {
@@ -516,6 +622,15 @@ export function peringatanDari(a: {
       kode: "SELISIH_MUATAN",
       kolomId: null,
       pesan: `${b.plat}: ${LABEL_STATUS[b.status]} (selisih kecil ${b.selisihKecil}, besar ${b.selisihBesar}).`,
+      sejak: sekarang.toISOString(),
+    });
+  }
+  if (selisihPembeli && !selisihPembeli.cocok) {
+    const lebih = selisihPembeli.selisihKecil > 0 || selisihPembeli.selisihBesar > 0;
+    hasil.push({
+      kode: "SELISIH_MUATAN",
+      kolomId: null,
+      pesan: `Kendaraan pembeli: ${lebih ? "muatan pembeli lebih banyak dari DO Ambil Sendiri" : "DO Ambil Sendiri lebih banyak dari muatan pembeli"} (selisih kecil ${selisihPembeli.selisihKecil}, besar ${selisihPembeli.selisihBesar}).`,
       sejak: sekarang.toISOString(),
     });
   }

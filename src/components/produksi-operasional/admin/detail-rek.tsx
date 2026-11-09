@@ -3,7 +3,8 @@
 // Detail satu rek di layar admin (/{kode}/produksi, spec §8): daftar isian
 // aktif + aksi operasional. Memakai ulang isi lembar aksi aplikasi HP
 // (IsiLembar + FormPanen) supaya aturan aksi tidak diduplikasi. Khusus
-// `admin`: bagian Koreksi (ubah isian aktif, batalkan panen ≤ 7 hari).
+// `admin`: bagian Koreksi (ubah isian aktif, batalkan panen ≤ 7 hari, ubah
+// kendaraan muatan panen ≤ 7 hari).
 //
 // Dirender di dalam <SheetContent> milik pemanggil (judul memakai SheetTitle).
 // Beri `key={keadaan.kolomId}` supaya state formulir tidak terbawa antar-rek.
@@ -17,7 +18,7 @@ import type { IsianAktif, KeadaanRek, KendaraanPilihan } from "@/lib/produksi-op
 import type { PanenTerakhir } from "@/lib/queries/produksi-operasional";
 import type { KendaraanArmada } from "@/lib/queries/produksi-do-erp";
 import { singkatVarian, tanggalJamWib } from "../warna-tahap";
-import { DialogBatalPanen, DialogKoreksi, RincianPanen } from "./dialog-koreksi";
+import { DialogBatalPanen, DialogKoreksi, DialogUbahKendaraan, RincianPanen } from "./dialog-koreksi";
 import { IsiLembar } from "../app/lembar-aksi-rek";
 import type { Jalankan } from "../app/produksi-app";
 
@@ -55,7 +56,7 @@ export function DetailRek({ kode, keadaan, admin, onBerubah, bolehAksi, namaBak,
   // Pilihan kendaraan (armada ERP + kendaraan aktif akun ini) hanya diperlukan
   // untuk formulir panen — dimuat saat panel dibuka oleh akun yang boleh beraksi.
   useEffect(() => {
-    if (!dapatAksi) return;
+    if (!dapatAksi && !admin) return;
     let batal = false;
     getPilihanKendaraanAction(kode).then(
       (r) => {
@@ -75,7 +76,7 @@ export function DetailRek({ kode, keadaan, admin, onBerubah, bolehAksi, namaBak,
     return () => {
       batal = true;
     };
-  }, [kode, dapatAksi]);
+  }, [kode, dapatAksi, admin]);
 
   const jalankan: Jalankan = useCallback(
     async (fn, pesanSukses) => {
@@ -136,7 +137,16 @@ export function DetailRek({ kode, keadaan, admin, onBerubah, bolehAksi, namaBak,
           Mode lihat saja. Aksi rek hanya untuk operator dan admin produksi.
         </p>
       )}
-      {admin && <KoreksiAdmin kode={kode} keadaan={keadaan} lokasi={`${namaBak?.trim() || "Bak"} – Rek ${keadaan.nomor}`} onBerubah={onBerubah} />}
+      {admin && (
+        <KoreksiAdmin
+          kode={kode}
+          keadaan={keadaan}
+          lokasi={`${namaBak?.trim() || "Bak"} – Rek ${keadaan.nomor}`}
+          armada={armada}
+          armadaGalat={armadaGalat}
+          onBerubah={onBerubah}
+        />
+      )}
     </div>
   );
 }
@@ -147,11 +157,15 @@ function KoreksiAdmin({
   kode,
   keadaan,
   lokasi,
+  armada,
+  armadaGalat,
   onBerubah,
 }: {
   kode: KodeProduksi;
   keadaan: KeadaanRek;
   lokasi: string;
+  armada: KendaraanArmada[];
+  armadaGalat: string | null;
   onBerubah: () => void;
 }) {
   const isian = [...keadaan.isianProduksi, ...(keadaan.isianBabonan ? [keadaan.isianBabonan] : [])];
@@ -159,6 +173,7 @@ function KoreksiAdmin({
   const [panenGalat, setPanenGalat] = useState<string | null>(null);
   const [koreksi, setKoreksi] = useState<IsianAktif | null>(null);
   const [batal, setBatal] = useState<PanenTerakhir | null>(null);
+  const [ubahKendaraan, setUbahKendaraan] = useState<PanenTerakhir | null>(null);
   const [muatUlang, setMuatUlang] = useState(0);
 
   // Muat ulang daftar panen kalau isian rek berubah (mis. panen baru dari
@@ -188,6 +203,7 @@ function KoreksiAdmin({
   const selesai = () => {
     setKoreksi(null);
     setBatal(null);
+    setUbahKendaraan(null);
     setMuatUlang((n) => n + 1);
     onBerubah();
   };
@@ -231,14 +247,33 @@ function KoreksiAdmin({
                 {!p.isianAktif && " · isian asal sudah selesai (batal hanya menandai)"}
               </span>
             </span>
-            <Button variant="destructive" size="sm" onClick={() => setBatal(p)}>
-              Batalkan
-            </Button>
+            <div className="flex shrink-0 flex-col gap-1">
+              {!p.tandaiBabonan && p.dimuat > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setUbahKendaraan(p)}>
+                  Ubah kendaraan
+                </Button>
+              )}
+              <Button variant="destructive" size="sm" onClick={() => setBatal(p)}>
+                Batalkan
+              </Button>
+            </div>
           </div>
         ))}
       </div>
 
       {koreksi && <DialogKoreksi key={koreksi.id} kode={kode} isian={koreksi} lokasi={lokasi} onTutup={() => setKoreksi(null)} onBerhasil={selesai} />}
+      {ubahKendaraan && (
+        <DialogUbahKendaraan
+          key={ubahKendaraan.id}
+          kode={kode}
+          panen={ubahKendaraan}
+          lokasi={lokasi}
+          armada={armada}
+          armadaGalat={armadaGalat}
+          onTutup={() => setUbahKendaraan(null)}
+          onBerhasil={selesai}
+        />
+      )}
       {batal && <DialogBatalPanen key={batal.id} kode={kode} panen={batal} lokasi={lokasi} onTutup={() => setBatal(null)} onBerhasil={selesai} />}
     </section>
   );

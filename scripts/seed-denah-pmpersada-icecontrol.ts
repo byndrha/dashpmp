@@ -9,7 +9,7 @@
 //     diperpanjang secukupnya agar kolom & ice can muat; kanvas diperbesar.
 //
 // Bawaan DRY-RUN: hanya mencetak ringkasan + hasil validasi. Dengan argumen
-// `--tulis`: tolak bila ada isian kolom aktif, lalu simpan lewat
+// `--tulis`: tolak bila ada isian kolom aktif atau maintenance terbuka, lalu simpan lewat
 // simpanDenahUntukKode (menimpa denah PMPersada yang ada — butuh persetujuan
 // pengguna).
 //
@@ -19,7 +19,7 @@ import { getPgPool } from "../src/lib/pg";
 import { buatBak, buatKolom, denahKosong, ringkasDenah, validasiDenah, type BakElemen, type DenahDokumen } from "../src/lib/produksi-denah";
 import { tataBakMeter } from "../src/lib/produksi-denah-geometri";
 import { periksaTeknik } from "../src/lib/produksi-denah-teknik";
-import { getDenahUntukKode, getKolomIsiIdsUntukKode, simpanDenahUntukKode } from "../src/lib/queries/produksi-denah";
+import { getDenahUntukKode, getKolomIsiIdsUntukKode, getKolomTerkunciUntukKode, simpanDenahUntukKode } from "../src/lib/queries/produksi-denah";
 
 const KODE = "pmpersada";
 const JUMLAH_KOLOM = [37, 37, 44, 66, 66];
@@ -112,6 +112,11 @@ async function main() {
 
   const isi = await getKolomIsiIdsUntukKode(KODE);
   if (isi.size > 0) throw new Error(`Ditolak: ${isi.size} kolom ${KODE} masih berisi es (isian aktif). Kosongkan dulu.`);
+  // Maintenance terbuka mengunci kolom seperti isian aktif.
+  const terkunci = await getKolomTerkunciUntukKode(KODE);
+  if (terkunci.size > 0) {
+    throw new Error(`Ditolak: ${terkunci.size} kolom ${KODE} masih berisi es atau sedang maintenance. Selesaikan dulu.`);
+  }
   const sekarang = await getDenahUntukKode(KODE);
   const versiSekarang = sekarang ? sekarang.versi : null;
   if (sekarang?.rusak) console.warn("Denah lama tercatat rusak; simpanDenahUntukKode akan menolak menimpanya.");

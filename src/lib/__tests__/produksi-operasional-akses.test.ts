@@ -65,7 +65,7 @@ test("server action operasional memakai gerbang yang benar", () => {
   assert.match(isi, /^\s*["']use server["'];/);
   const potong = isi.split(/(?=^export async function )/m).slice(1);
   const badan = new Map(potong.map((b) => [/^export async function (\w+)/.exec(b)![1], b]));
-  const admin = ["koreksiIsianAction", "batalkanPanenAction", "getPencocokanAction", "getLogAction", "getPanenTerakhirAction"];
+  const admin = ["koreksiIsianAction", "koreksiMuatanAction", "batalkanPanenAction", "getPencocokanAction", "getLogAction", "getPanenTerakhirAction"];
   const lihat = ["getKeadaanAction"];
   const semua = [
     "getKeadaanAction",
@@ -89,4 +89,17 @@ test("server action operasional memakai gerbang yang benar", () => {
     // Gerbang "lihat" (tanpa cek peran) tidak boleh menyebar tanpa disengaja.
     if (!lihat.includes(nama)) assert.doesNotMatch(b, /gerbang\(kode, "lihat"\)/, `${nama} tidak boleh memakai gerbang "lihat"`);
   }
+});
+
+test("koreksi kendaraan panen hanya admin (gerbang kelola)", () => {
+  const isi = readFileSync(join(process.cwd(), "src/app/produksi-operasional-actions.ts"), "utf8");
+  const badan = isi.split(/(?=^export async function )/m).find((b) => b.startsWith("export async function koreksiMuatanAction"));
+  assert.ok(badan, "koreksiMuatanAction harus ada");
+  assert.match(badan, /gerbang\(kode, "kelola"\)/);
+});
+
+// Aksi tulis tidak boleh merender ulang halaman HP (page itu membaca armada ERP).
+test("aksi tulis tidak me-revalidate halaman HP", () => {
+  const isi = readFileSync(join(process.cwd(), "src/app/produksi-operasional-actions.ts"), "utf8");
+  assert.doesNotMatch(isi, /revalidatePath\([^)]*produksi-app/);
 });
