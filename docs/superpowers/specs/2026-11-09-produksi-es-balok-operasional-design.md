@@ -123,7 +123,7 @@ Can yang ditinggal saat panen tidak dibiarkan menggantung di isian lama. Can itu
 | **Maintenance** | Ada catatan maintenance terbuka |
 | **Nonaktif** | `DenahKolom.nonaktif = true` |
 
-Kematangan isian `produksi`: `pct = clamp(round((now − mulai_at) / durasi_beku_jam × 100), 0, 100)`, dengan tahap 0 → Air baru, 1–49 → Mulai, 50–74 → Kristal, 75–99 → Siap, 100 → Jadi. Warna mengikuti `TAHAP_KEMATANGAN` di `warna.ts`.
+Kematangan isian `produksi`: `pct = clamp(round((now − mulai_at) / durasi_beku_jam × 100), 0, 100)`, dengan tahap 0 → Air baru, 1–49 → Mulai, 50–74 → Kristal, 75–99 → Siap, 100 → Jadi. Warna tahap didefinisikan baru di `src/components/produksi-operasional/warna-tahap.ts` (belum ada di repo).
 
 `durasi_beku_jam` dan `varian` di-**snapshot** dari `bak.durasiBekuJam[varian]` dan `DenahKolom` saat isi air (Claude). Perubahan denah tidak memengaruhi isian yang sedang berjalan.
 
