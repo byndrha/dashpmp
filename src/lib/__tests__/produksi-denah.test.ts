@@ -11,6 +11,8 @@ import {
   validasiDenah,
   validasiBentukDenah,
   migrasiDenah,
+  kodeBakEfektif,
+  orientasiKolom,
   lapisanElemen,
   kotakJalur,
   PRESET_ICE_CAN,
@@ -543,4 +545,51 @@ test("migrasiDenah v1: ukuranGrid ×2 di-clamp ke BATAS_UKURAN_GRID", () => {
   const kecil = dokV1();
   kecil.kanvas.ukuranGrid = 30;
   assert.equal(migrasiDenah(kecil).kanvas.ukuranGrid, 60);
+});
+
+// ---------- orientasi can & kode bak ----------
+
+test("kodeBakEfektif: kodeBak, angka pertama nama, atau urutan", () => {
+  assert.equal(kodeBakEfektif(buatBak(0, 0, { nama: "Bak 3" }), 0), "3");
+  assert.equal(kodeBakEfektif(buatBak(0, 0, { nama: "Bak Utama" }), 4), "5");
+  assert.equal(kodeBakEfektif(buatBak(0, 0, { nama: "Bak 3", kodeBak: "A1" }), 0), "A1");
+  assert.equal(kodeBakEfektif(buatBak(0, 0, { nama: "B12 baru" }), 0), "12");
+});
+
+test("migrasiDenah v2 tanpa bidang baru: orientasiCan kolom = mendatar", () => {
+  const a = buatBak(0, 0, { nama: "BAK 1" });
+  for (const k of a.kolom) delete (k as { orientasiCan?: string }).orientasiCan;
+  const d = migrasiDenah({ skemaVersi: 2, kanvas: { lebar: 30, tinggi: 20, ukuranGrid: 20 }, elemen: [a] });
+  const b = d.elemen[0] as BakElemen;
+  assert.ok(b.kolom.length > 0);
+  assert.ok(b.kolom.every((k) => k.orientasiCan === "mendatar" && orientasiKolom(k) === "mendatar"));
+});
+
+test("validasiDenah: kode bak ganda, tidak sah, nomor ganda, orientasi tidak sah", () => {
+  const dokDari = (...bak: BakElemen[]): DenahDokumen => ({ ...denahKosong(), elemen: bak });
+  const pesan = (d: DenahDokumen) => validasiDenah(d).map((g) => g.pesan).join(" | ").toLowerCase();
+
+  const ganda = pesan(dokDari(buatBak(0, 0, { nama: "Bak 3A" }), buatBak(0, 10, { nama: "Bak 3B" })));
+  assert.ok(ganda.includes("kode bak") && ganda.includes("bak 3a") && ganda.includes("bak 3b"));
+
+  assert.ok(pesan(dokDari(buatBak(0, 0, { nama: "Bak 1", kodeBak: "3-1" }))).includes("kode bak tidak sah"));
+  assert.ok(pesan(dokDari(buatBak(0, 0, { nama: "Bak 1", kodeBak: "ABCD" }))).includes("kode bak tidak sah"));
+
+  const bakNomor = buatBak(0, 0, { nama: "Bak 1", kolom: buatKolom(2, { varian: "kecil", jumlahIceCan: 36 }) });
+  bakNomor.kolom[1].nomor = bakNomor.kolom[0].nomor = 5;
+  assert.ok(pesan(dokDari(bakNomor)).includes("nomor rek ganda"));
+
+  const bakMiring = buatBak(0, 0, { nama: "Bak 1" });
+  (bakMiring.kolom[0] as { orientasiCan?: string }).orientasiCan = "miring";
+  assert.ok(pesan(dokDari(bakMiring)).includes("orientasi can tidak sah"));
+
+  const bakSah = [1, 2, 3, 4, 5].map((n, i) => buatBak(0, i * 10, { nama: `Bak ${n}` }));
+  assert.deepEqual(validasiDenah({ ...denahKosong(), kanvas: { ...denahKosong().kanvas, tinggi: 80 }, elemen: bakSah }), []);
+});
+
+test("buatBak/ubahJumlahKolom: orientasiCanBawaan tegak diwariskan ke kolom baru", () => {
+  const b = buatBak(0, 0, { orientasiCanBawaan: "tegak" });
+  assert.ok(b.kolom.every((k) => k.orientasiCan === "tegak"));
+  const lebih = ubahJumlahKolom(b, b.kolom.length + 2);
+  assert.equal(lebih.kolom[lebih.kolom.length - 1].orientasiCan, "tegak");
 });

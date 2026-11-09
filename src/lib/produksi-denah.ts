@@ -20,11 +20,15 @@
 export type Varian = "kecil" | "besar";
 export type Rotasi = 0 | 90 | 180 | 270;
 
+export type OrientasiCan = "mendatar" | "tegak";
+
 export interface DenahKolom {
   id: string;
   nomor: number;
   varian: Varian;
   jumlahIceCan: number;
+  /** Posisi ice can di rek; tidak ada = "mendatar". */
+  orientasiCan?: OrientasiCan;
   ukuranIceCan?: string;
   catatan?: string;
   nonaktif?: boolean;
@@ -72,6 +76,10 @@ export interface BakElemen extends ElemenDasar {
   kolom: DenahKolom[];
   varianBawaan: Varian;
   iceCanPerKolomBawaan: number;
+  /** Orientasi can bawaan untuk kolom baru; tidak ada = "mendatar". */
+  orientasiCanBawaan?: OrientasiCan;
+  /** Kode bak 1–3 karakter [0-9A-Za-z]; tidak ada = angka pertama nama bak, atau urutan bak. */
+  kodeBak?: string;
   durasiBekuJam: { kecil: number; besar: number };
   kolomPerPanen: number;
   mesinIds: string[];
@@ -323,12 +331,29 @@ export function denahKosong(): DenahDokumen {
   return { skemaVersi: 2, kanvas: kanvasBawaan(), elemen: [] };
 }
 
-export function buatKolom(jumlah: number, bawaan: { varian: Varian; jumlahIceCan: number }, mulaiNomor = 1): DenahKolom[] {
+export function orientasiKolom(k: DenahKolom): OrientasiCan {
+  return k.orientasiCan ?? "mendatar";
+}
+
+/** Kode bak efektif: kodeBak bila diisi, selain itu angka pertama pada nama, selain itu indeksBak + 1 (indeksBak 0-based di antara bak). */
+export function kodeBakEfektif(bak: BakElemen, indeksBak: number): string {
+  const k = bak.kodeBak?.trim();
+  if (k) return k;
+  const m = /\d+/.exec(bak.nama);
+  return m ? String(Number(m[0])) : String(indeksBak + 1);
+}
+
+export function buatKolom(
+  jumlah: number,
+  bawaan: { varian: Varian; jumlahIceCan: number; orientasiCan?: OrientasiCan },
+  mulaiNomor = 1
+): DenahKolom[] {
   return Array.from({ length: Math.max(0, Math.floor(jumlah)) }, (_, i) => ({
     id: idBaru(),
     nomor: mulaiNomor + i,
     varian: bawaan.varian,
     jumlahIceCan: bawaan.jumlahIceCan,
+    orientasiCan: bawaan.orientasiCan ?? "mendatar",
   }));
 }
 
@@ -360,7 +385,7 @@ export function buatBak(x: number, y: number, opsi: Partial<BakElemen> = {}): Ba
     y,
     varianBawaan,
     iceCanPerKolomBawaan,
-    kolom: opsi.kolom ?? buatKolom(KOLOM_BAWAAN, { varian: varianBawaan, jumlahIceCan: iceCanPerKolomBawaan }),
+    kolom: opsi.kolom ?? buatKolom(KOLOM_BAWAAN, { varian: varianBawaan, jumlahIceCan: iceCanPerKolomBawaan, orientasiCan: opsi.orientasiCanBawaan }),
   };
 }
 
@@ -371,7 +396,7 @@ export function ubahJumlahKolom(bak: BakElemen, n: number): BakElemen {
   const nomorAkhir = bak.kolom.reduce((m, k) => Math.max(m, k.nomor), 0);
   const tambahan = buatKolom(
     target - bak.kolom.length,
-    { varian: bak.varianBawaan, jumlahIceCan: bak.iceCanPerKolomBawaan },
+    { varian: bak.varianBawaan, jumlahIceCan: bak.iceCanPerKolomBawaan, orientasiCan: bak.orientasiCanBawaan },
     nomorAkhir + 1
   );
   return { ...bak, kolom: [...bak.kolom, ...tambahan] };
@@ -455,6 +480,9 @@ function normalNama(s: string): string {
   return s.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+const POLA_KODE_BAK = /^[0-9A-Za-z]{1,3}$/;
+const ORIENTASI_CAN: readonly string[] = ["mendatar", "tegak"];
+
 export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
   const galat: GalatDenah[] = [];
   const { lebar, tinggi, utaraDerajat } = dok.kanvas;
@@ -468,6 +496,8 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
   }
 
   const namaBak = new Map<string, BakElemen>();
+  const kodeBakPeta = new Map<string, BakElemen>();
+  let indeksBak = 0;
   for (const e of dok.elemen) {
     const label = labelElemen(e);
     if (!e.nama.trim()) galat.push({ elemenId: e.id, pesan: `Nama ${e.tipe} tidak boleh kosong.` });
@@ -494,6 +524,19 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
         if (lain) galat.push({ elemenId: e.id, pesan: `Nama bak ${label} ganda — sudah dipakai bak lain.` });
         else namaBak.set(kunci, e);
       }
+      const kodeEf = kodeBakEfektif(e, indeksBak++);
+      if (e.kodeBak !== undefined && !POLA_KODE_BAK.test(e.kodeBak)) {
+        galat.push({ elemenId: e.id, pesan: `Kode bak tidak sah pada bak ${label}: harus 1–3 karakter huruf/angka, tanpa tanda "-".` });
+      } else {
+        const lainKode = kodeBakPeta.get(kodeEf.toLowerCase());
+        if (lainKode) {
+          galat.push({ elemenId: e.id, pesan: `Kode bak "${kodeEf}" ganda: bak ${labelElemen(lainKode)} dan ${label} memakai kode yang sama.` });
+        } else kodeBakPeta.set(kodeEf.toLowerCase(), e);
+      }
+      if (e.orientasiCanBawaan !== undefined && !ORIENTASI_CAN.includes(e.orientasiCanBawaan)) {
+        galat.push({ elemenId: e.id, pesan: `Orientasi can bawaan tidak sah pada bak ${label}.` });
+      }
+      const nomorDipakai = new Set<number>();
       if (e.kolom.length <= 0) galat.push({ elemenId: e.id, pesan: `Bak ${label} harus punya minimal 1 kolom.` });
       if (!(e.iceCanPerKolomBawaan > 0)) galat.push({ elemenId: e.id, pesan: `Ice can per kolom bawaan bak ${label} harus lebih dari 0.` });
       if (!(e.durasiBekuJam.kecil > 0) || !(e.durasiBekuJam.besar > 0)) {
@@ -514,6 +557,11 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
       for (const kol of e.kolom) {
         if (idKolom.has(kol.id)) galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `ID kolom ganda pada bak ${label} kolom ${kol.nomor}.` });
         idKolom.add(kol.id);
+        if (nomorDipakai.has(kol.nomor)) galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `Nomor rek ganda pada bak ${label}: nomor ${kol.nomor}.` });
+        nomorDipakai.add(kol.nomor);
+        if (kol.orientasiCan !== undefined && !ORIENTASI_CAN.includes(kol.orientasiCan)) {
+          galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `Orientasi can tidak sah pada bak ${label} kolom ${kol.nomor}.` });
+        }
         if (!(kol.jumlahIceCan > 0)) {
           galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `Jumlah ice can bak ${label} kolom ${kol.nomor} harus lebih dari 0.` });
         }
@@ -845,6 +893,9 @@ function lengkapiElemen(asli: unknown, skala: number): DenahElemen {
       isi(e, "levelBrineM", BAK_BAWAAN.levelBrineM);
       isi(e, "jarakAntarKolomMm", BAK_BAWAAN.jarakAntarKolomMm);
       isi(e, "jarakAntarCanMm", BAK_BAWAAN.jarakAntarCanMm);
+      if (Array.isArray(e.kolom)) {
+        for (const k of e.kolom) if (objek(k)) isi(k, "orientasiCan", "mendatar");
+      }
       if (!objek(e.iceCan)) e.iceCan = {};
       const ic = e.iceCan as Mentah;
       for (const v of ["kecil", "besar"] as const) {

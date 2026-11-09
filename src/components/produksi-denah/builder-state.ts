@@ -738,8 +738,9 @@ export function builderReducer(s: StateBuilder, a: AksiBuilder): StateBuilder {
 
     case "terapkanBawaan": {
       const dok = ubahBak(s.dok, a.bakId, (b) => {
-        if (b.kolom.every((k) => k.varian === b.varianBawaan && k.jumlahIceCan === b.iceCanPerKolomBawaan)) return b;
-        return { ...b, kolom: b.kolom.map((k) => ({ ...k, varian: b.varianBawaan, jumlahIceCan: b.iceCanPerKolomBawaan })) };
+        const ori = b.orientasiCanBawaan ?? "mendatar";
+        if (b.kolom.every((k) => k.varian === b.varianBawaan && k.jumlahIceCan === b.iceCanPerKolomBawaan && (k.orientasiCan ?? "mendatar") === ori)) return b;
+        return { ...b, kolom: b.kolom.map((k) => ({ ...k, varian: b.varianBawaan, jumlahIceCan: b.iceCanPerKolomBawaan, orientasiCan: ori })) };
       });
       return catat(s, dok);
     }
