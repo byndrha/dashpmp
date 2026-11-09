@@ -527,6 +527,8 @@ test("ringkas bak dan tugas sekarang", () => {
   const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
   const daftar = [
     isian(bak, 0, { mulaiAt: lalu(21.6), durasiBekuJam: 24 }), // 90%
+    // rek 3 penuh: 34 produksi muda (belum siap) + Babonan 2 can 50 jam
+    isian(bak, 2, { sisa: 34, mulaiAt: lalu(2) }),
     isian(bak, 2, { jenis: "babonan", sisa: 2, jumlahAwal: 2, mulaiAt: lalu(50), durasiBekuJam: null }),
   ];
   const keadaan = keadaanPabrik(denah, daftar, [], SEKARANG);
@@ -545,11 +547,41 @@ test("ringkas bak dan tugas sekarang", () => {
   // Babonan belum lama dan produksi belum siap → tidak ada tugas untuk rek itu
   const muda = keadaanPabrik(
     denah,
-    [isian(bak, 0, { mulaiAt: lalu(6) }), isian(bak, 2, { jenis: "babonan", sisa: 2, mulaiAt: lalu(10) })],
+    [
+      isian(bak, 0, { mulaiAt: lalu(6) }),
+      isian(bak, 2, { sisa: 34, mulaiAt: lalu(2) }),
+      isian(bak, 2, { jenis: "babonan", sisa: 2, mulaiAt: lalu(10) }),
+    ],
     [],
     SEKARANG,
   );
   assert.deepEqual(tugasSekarang(muda, {}, SEKARANG).map((t) => t.jenis), ["isi-air"]);
+});
+
+test("isi air & chip kosong: rek terisi sebagian, Babonan saja, semua rusak, maintenance", () => {
+  const bak = bakUji(5);
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const rusakSemua = rentang(1, 36).map((s) => rusakUji(bak.kolom[2].id, s));
+  const keadaan = keadaanPabrik(
+    denah,
+    [
+      isian(bak, 0, { sisa: 34, mulaiAt: lalu(2) }), // 34 produksi + 2 slot kosong
+      isian(bak, 1, { jenis: "babonan", sisa: 2, jumlahAwal: 2, mulaiAt: lalu(5) }), // Babonan saja, 34 kosong
+      isian(bak, 4, { sisa: 34, mulaiAt: lalu(22) }), // siap tapi maintenance
+    ],
+    [mt(bak.kolom[3].id, 1), mt(bak.kolom[4].id, 1)],
+    SEKARANG,
+    rusakSemua,
+  );
+  assert.deepEqual(keadaan[0].slotKosong, [35, 36]);
+  assert.equal(keadaan[2].slotKosong.length, 0);
+
+  const tugas = tugasSekarang(keadaan, { [bak.kolom[1].id]: lalu(4) }, SEKARANG);
+  // rek 2 punya kosongSejak → lebih dulu; rek 1 tanpa kosongSejak → sejak = sekarang, paling akhir
+  assert.deepEqual(tugas.map((t) => `${t.jenis}:${t.nomor}`), ["isi-air:2", "isi-air:1"]);
+  assert.equal(tugas[1].sejak, SEKARANG.toISOString());
+  // rek 3 (semua rusak) dan rek 4/5 (maintenance) bukan kosong, rek 5 bukan siap
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 0, kosong: 2, babonan: 1, rusak: 1 }]);
 });
 
 test("tugas sekarang: urutan FIFO panen dan kosong terlama", () => {

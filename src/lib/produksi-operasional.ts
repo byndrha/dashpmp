@@ -325,7 +325,12 @@ function adaProduksiSiap(k: KeadaanRek): boolean {
   return k.pct !== null && k.pct >= AMBANG.panenBelumSiapPersen;
 }
 
-/** Jumlah REK per kategori per bak (rek nonaktif tidak dihitung), urut bak sesuai `keadaan`. */
+/**
+ * Jumlah REK per kategori per bak, urut bak sesuai `keadaan`. Rek nonaktif
+ * tidak dihitung; rek maintenance tidak dihitung siap/kosong (sama dengan
+ * tugasSekarang). kosong = ada slot kosong tak rusak yang bisa diisi
+ * (termasuk rek terisi sebagian dan rek Babonan saja).
+ */
 export function ringkasBak(keadaan: KeadaanRek[]): RingkasanBak[] {
   const peta = new Map<string, RingkasanBak>();
   for (const k of keadaan) {
@@ -335,8 +340,9 @@ export function ringkasBak(keadaan: KeadaanRek[]): RingkasanBak[] {
       peta.set(k.bakId, r);
     }
     if (k.utama === "nonaktif") continue;
-    if (adaProduksiSiap(k)) r.siap++;
-    if (k.utama === "kosong") r.kosong++;
+    const bisaDikerjakan = k.utama !== "maintenance";
+    if (bisaDikerjakan && adaProduksiSiap(k)) r.siap++;
+    if (bisaDikerjakan && k.slotKosong.length > 0) r.kosong++;
     if (k.isianBabonan) r.babonan++;
     if (k.rusak > 0) r.rusak++;
   }
@@ -357,7 +363,9 @@ export interface Tugas {
 /**
  * Daftar "apa yang harus dikerjakan sekarang" (rek nonaktif & maintenance
  * dilewati): panen (isian produksi tertua ≥ ambang siap, FIFO tertua dulu) →
- * isi air (rek kosong dengan slot kosong tak rusak, paling lama kosong dulu)
+ * isi air (rek yang punya slot kosong tak rusak, termasuk rek terisi
+ * sebagian / Babonan saja; paling lama kosong dulu — `sejak` =
+ * kosongSejak[kolomId] bila ada, selain itu `sekarang` sehingga di urutan akhir)
  * → Babonan lama (> AMBANG.babonanJam, tertua dulu).
  */
 export function tugasSekarang(keadaan: KeadaanRek[], kosongSejak: Record<string, string>, sekarang: Date): Tugas[] {
@@ -369,7 +377,7 @@ export function tugasSekarang(keadaan: KeadaanRek[], kosongSejak: Record<string,
     const dasar = { kolomId: k.kolomId, bakId: k.bakId, nomor: k.nomor };
     const tertua = k.isianProduksi[0];
     if (tertua && adaProduksiSiap(k)) panen.push({ jenis: "panen", ...dasar, pct: k.pct, sejak: tertua.mulaiAt });
-    if (k.utama === "kosong" && k.slotKosong.length > 0) {
+    if (k.slotKosong.length > 0) {
       isiAir.push({ jenis: "isi-air", ...dasar, pct: null, sejak: kosongSejak[k.kolomId] ?? sekarang.toISOString() });
     }
     if (k.isianBabonan && lebihDariJam(k.isianBabonan.mulaiAt, AMBANG.babonanJam, sekarang)) {
