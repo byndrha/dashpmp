@@ -80,9 +80,25 @@ export interface MuatanHarian {
   ringkasan: { dimuat: number; keBabonan: number; pecah: number; babonanDibuang: number };
 }
 
+export interface PanenTerakhir {
+  id: string;
+  panenAt: string;
+  varian: Varian;
+  dimuat: number;
+  keBabonan: number;
+  pecah: number;
+  /** Baris dari Tandai Babonan (dimuat 0, persen NULL, isian produksi), bukan panen sungguhan. */
+  tandaiBabonan: boolean;
+  /** Isian asal masih aktif (pembatalan bisa mengembalikan can). */
+  isianAktif: boolean;
+  operatorNama: string;
+  kendaraan: { plat: string; jumlah: number }[];
+}
+
 export interface BarisLog {
   id: string;
   at: string;
+  akunId: string;
   akunNama: string;
   peran: string;
   shift: number;
@@ -1067,6 +1083,7 @@ export async function getMuatanHarian(kode: string, tanggalBisnis: string): Prom
 type BarisLogDb = {
   id: string;
   at: Date;
+  akun_id: string;
   akun_nama: string;
   peran: string;
   shift: number | null;
@@ -1095,7 +1112,7 @@ async function bacaLog(
   if (f.aksi) tambah("aksi", "=", f.aksi);
   nilai.push(Math.min(BATAS_LOG_MAKS, Math.max(1, Math.floor(Number(batas) || 1))));
   const { rows } = await getPgPool().query<BarisLogDb>(
-    `SELECT id::text AS id, at, akun_nama, peran, shift, aksi, bak_nama, kolom_nomor, sebelum, sesudah, alasan
+    `SELECT id::text AS id, at, akun_id, akun_nama, peran, shift, aksi, bak_nama, kolom_nomor, sebelum, sesudah, alasan
        FROM produksi_log
       WHERE ${syarat.join(" AND ")}
       ORDER BY at DESC, id DESC
@@ -1105,6 +1122,7 @@ async function bacaLog(
   return rows.map((r) => ({
     id: r.id,
     at: r.at.toISOString(),
+    akunId: r.akun_id,
     akunNama: r.akun_nama,
     peran: r.peran,
     shift: r.shift ?? 0,
@@ -1138,4 +1156,51 @@ export async function getLog(
 
 export async function getRiwayatOperator(kode: string, akunId: string, sejak: string): Promise<BarisLog[]> {
   return bacaLog(kode, { dari: cekTanggalIso(sejak, "Sejak"), sampai: null, akunId: teksWajib(akunId, "Akun") }, BATAS_RIWAYAT);
+}
+
+/**
+ * Panen (dan Tandai Babonan) yang belum dibatalkan di satu rek, ≤ BATAS_HARI_BATAL
+ * hari terakhir, terbaru dulu — untuk tombol "Batalkan panen" admin.
+ */
+export async function getPanenTerakhir(kode: string, kolomId: string): Promise<PanenTerakhir[]> {
+  const kolom = teksWajib(kolomId, "Rek");
+  const { rows } = await getPgPool().query<{
+    id: string;
+    panen_at: Date;
+    varian: Varian;
+    dimuat: number;
+    ke_babonan: number;
+    pecah: number;
+    tandai: boolean;
+    isian_aktif: boolean;
+    operator_akun_id: string;
+    kendaraan: { plat: string; jumlah: number }[] | null;
+  }>(
+    `SELECT p.id::text AS id, p.panen_at, p.varian, p.dimuat, p.ke_babonan, p.pecah,
+            (p.dimuat = 0 AND p.persen_saat_panen IS NULL AND ki.jenis = 'produksi') AS tandai,
+            (ki.selesai_at IS NULL) AS isian_aktif,
+            p.operator_akun_id,
+            (SELECT json_agg(json_build_object('plat', m.plat, 'jumlah', m.jumlah) ORDER BY m.id)
+               FROM produksi_muatan m WHERE m.panen_id = p.id) AS kendaraan
+       FROM produksi_panen p
+       JOIN produksi_kolom_isi ki ON ki.id = p.isian_id
+      WHERE p.perusahaan_kode = $1 AND p.kolom_id = $2 AND p.dibatalkan_at IS NULL
+        AND p.panen_at >= now() - make_interval(days => $3)
+      ORDER BY p.panen_at DESC, p.id DESC
+      LIMIT 50`,
+    [kode, kolom, BATAS_HARI_BATAL],
+  );
+  const nama = await namaAkun(kode, rows.map((r) => r.operator_akun_id));
+  return rows.map((r) => ({
+    id: r.id,
+    panenAt: r.panen_at.toISOString(),
+    varian: r.varian,
+    dimuat: r.dimuat,
+    keBabonan: r.ke_babonan,
+    pecah: r.pecah,
+    tandaiBabonan: r.tandai,
+    isianAktif: r.isian_aktif,
+    operatorNama: nama.get(r.operator_akun_id) ?? r.operator_akun_id,
+    kendaraan: r.kendaraan ?? [],
+  }));
 }

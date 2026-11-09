@@ -46,6 +46,7 @@ import {
   getKendaraanAktif,
   getLog,
   getMuatanHarian,
+  getPanenTerakhir,
   getRiwayatOperator,
   isiAir,
   koreksiIsian,
@@ -58,6 +59,7 @@ import {
   type DataPabrik,
   type KodeGalatProduksi,
   type MuatanHarian,
+  type PanenTerakhir,
   type Pelaku,
 } from "@/lib/queries/produksi-operasional";
 import { cariAgen, getDoPerKendaraan, getKendaraanArmada, type KendaraanArmada } from "@/lib/queries/produksi-do-erp";
@@ -356,6 +358,13 @@ export async function getLogAction(
       },
       batas,
     );
+  });
+}
+
+export async function getPanenTerakhirAction(kode: KodeProduksi, kolomId: string): Promise<HasilAksi<PanenTerakhir[]>> {
+  return jalankan(async () => {
+    const g = await gerbang(kode, "kelola");
+    return getPanenTerakhir(g.kode, teksWajib(kolomId, "Rek"));
   });
 }
 

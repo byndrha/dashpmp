@@ -205,10 +205,10 @@ export function TabOperasional({
         {admin && (
           <>
             <TabsContent value="pencocokan">
-              <TabPencocokan />
+              <TabPencocokan kode={kode} />
             </TabsContent>
             <TabsContent value="log">
-              <TabLogAudit />
+              <TabLogAudit kode={kode} daftarBak={daftarBak} />
             </TabsContent>
           </>
         )}
