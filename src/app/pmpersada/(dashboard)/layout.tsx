@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requirePmpersada, canAccessAllPT } from "@/lib/require-access";
+import { bolehKelolaProduksi } from "@/lib/permissions";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { PmpersadaSidebar } from "@/components/dashboard/pmpersada-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
@@ -9,11 +11,13 @@ import { Separator } from "@/components/ui/separator";
 export default async function PmpersadaLayout({ children }: { children: React.ReactNode }) {
   const session = await requirePmpersada();
 
-  // Modul Produksi lama (dan app mobile /pmpersada/produksi-app-nya) sudah
-  // dihapus total untuk dibangun ulang (lihat riset Es Balok, September
-  // 2026) — akun is_produksi untuk sementara jatuh ke beranda generik di
-  // bawah ini seperti akun lain, sampai modul barunya siap dan gerbang
-  // redirect-nya didesain ulang.
+  // Akun operator produksi (is_produksi) dikurung di aplikasi HP
+  // /pmpersada/produksi-app — rute itu di luar route group (dashboard) ini,
+  // jadi redirect ini tidak pernah mengarah ke dirinya sendiri. Admin
+  // produksi dan Direktur/superadmin tetap boleh membuka dashboard.
+  if (session.user.isProduksi && !bolehKelolaProduksi(session.user) && !canAccessAllPT(session.user)) {
+    redirect("/pmpersada/produksi-app");
+  }
 
   const perusahaanList = await listPerusahaanForSwitcher();
   const canSwitchPt = canAccessAllPT(session.user);
