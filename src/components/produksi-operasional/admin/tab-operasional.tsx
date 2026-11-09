@@ -20,7 +20,7 @@ import { getKeadaanAction } from "@/app/produksi-operasional-actions";
 import { DenahPenampil } from "@/components/produksi-denah/denah-penampil";
 import type { StatusKolom } from "@/components/produksi-denah/denah-kanvas";
 import type { BakElemen, DenahDokumen, KodeProduksi } from "@/lib/produksi-denah";
-import type { KeadaanRek, Peringatan, RingkasanStok, Tahap } from "@/lib/produksi-operasional";
+import { kodeRek, type KeadaanRek, type Peringatan, type RingkasanStok, type Tahap } from "@/lib/produksi-operasional";
 import type { DataPabrik } from "@/lib/queries/produksi-operasional";
 import { isiPetaRek, jamWib, RENTANG_TAHAP, warnaRek, WARNA_KEADAAN, WARNA_TAHAP } from "../warna-tahap";
 import { DaftarPeringatan } from "./daftar-peringatan";
@@ -124,7 +124,7 @@ export function TabOperasional({
     for (const k of keadaan) {
       if (k.utama === "nonaktif") continue; // pola arsir nonaktif bawaan kanvas tetap terlihat
       const w = warnaRek(k.utama, k.tahap);
-      const bagian = [`${namaBak.get(k.bakId) ?? "Bak"} – Rek ${k.nomor}`];
+      const bagian = [`${namaBak.get(k.bakId) ?? "Bak"} – Rek ${k.nomor} (${kodeRek(k.kodeBak, k.nomor)})`];
       bagian.push(k.utama === "berisi" ? `${k.pct ?? 0}% ${w.label}` : w.label);
       if (k.utama === "berisi" && k.babonan > 0) bagian.push(`Babonan ${k.babonan}`);
       bagian.push(`kosong ${k.canKosong}/${k.kapasitas} can`);

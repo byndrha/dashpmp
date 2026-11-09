@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getPanenTerakhirAction, getPilihanKendaraanAction, setKendaraanAktifAction } from "@/app/produksi-operasional-actions";
 import type { KodeProduksi } from "@/lib/produksi-denah";
-import type { IsianAktif, KeadaanRek, KendaraanPilihan } from "@/lib/produksi-operasional";
+import { kodeRek, type IsianAktif, type KeadaanRek, type KendaraanPilihan } from "@/lib/produksi-operasional";
 import type { PanenTerakhir } from "@/lib/queries/produksi-operasional";
 import type { KendaraanArmada } from "@/lib/queries/produksi-do-erp";
 import { singkatVarian, tanggalJamWib } from "../warna-tahap";
@@ -142,7 +142,7 @@ export function DetailRek({ kode, keadaan, admin, onBerubah, bolehAksi, namaBak,
         <KoreksiAdmin
           kode={kode}
           keadaan={keadaan}
-          lokasi={`${namaBak?.trim() || "Bak"} – Rek ${keadaan.nomor}`}
+          lokasi={`${namaBak?.trim() || "Bak"} – Rek ${keadaan.nomor} (${kodeRek(keadaan.kodeBak, keadaan.nomor)})`}
           armada={armada}
           armadaGalat={armadaGalat}
           onBerubah={onBerubah}

@@ -20,7 +20,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { lapisanElemen, type BakElemen, type DenahDokumen, type Lapisan, type MesinElemen } from "@/lib/produksi-denah";
+import { lapisanElemen, orientasiKolom, type BakElemen, type DenahDokumen, type Lapisan, type MesinElemen } from "@/lib/produksi-denah";
 
 const angka = new Intl.NumberFormat("id-ID");
 const NAMA_VARIAN = { kecil: "Kecil", besar: "Besar" } as const;
@@ -180,7 +180,7 @@ function DetailBak({ bak, dokumen, kolomId }: { bak: BakElemen; dokumen: DenahDo
       <SheetHeader className="border-b pr-12">
         <SheetTitle>{bak.nama}</SheetTitle>
         <SheetDescription>
-          {angka.format(bak.kolom.length)} kolom ({angka.format(aktif.length)} aktif) · orientasi {bak.orientasiKolom}
+          {angka.format(bak.kolom.length)} kolom ({angka.format(aktif.length)} aktif) · orientasi {bak.orientasiKolom} · mendatar {angka.format(bak.kolom.filter((k) => orientasiKolom(k) === "mendatar").length)} / tegak {angka.format(bak.kolom.filter((k) => orientasiKolom(k) === "tegak").length)}
         </SheetDescription>
       </SheetHeader>
       <div className="flex-1 overflow-y-auto">

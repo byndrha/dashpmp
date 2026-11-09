@@ -9,7 +9,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { hitungKematangan, tahapDari, type IsianAktif, type JenisIsian, type KeadaanRek, type Tahap } from "@/lib/produksi-operasional";
+import { hitungKematangan, kodeRek, tahapDari, type IsianAktif, type JenisIsian, type KeadaanRek, type Tahap } from "@/lib/produksi-operasional";
 import type { Varian } from "@/lib/produksi-denah";
 import { formatUsia, RENTANG_TAHAP, singkatVarian, tanggalJamWib, WARNA_KEADAAN, WARNA_TAHAP } from "../warna-tahap";
 
@@ -54,7 +54,7 @@ export function TabelFifo({
     const now = new Date(sekarang);
     const hasil: BarisFifo[] = [];
     for (const k of keadaan) {
-      const lokasi = `${namaBak.get(k.bakId) ?? "Bak"} – Rek ${k.nomor}`;
+      const lokasi = `${namaBak.get(k.bakId) ?? "Bak"} – Rek ${k.nomor} (${kodeRek(k.kodeBak, k.nomor)})`;
       for (const i of [...k.isianProduksi, ...(k.isianBabonan ? [k.isianBabonan] : [])]) {
         const mulai = Date.parse(i.mulaiAt);
         const produksi = i.jenis === "produksi" && i.durasiBekuJam !== null;

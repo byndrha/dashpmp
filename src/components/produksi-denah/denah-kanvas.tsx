@@ -1112,6 +1112,9 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
   const diDinding = tebal >= fsNomor * 1.1;
   const bNomor = diDinding ? tebal / 2 : tebal + fsNomor * 0.7;
   const tampilNomor = fsNomor * skalaKira >= 7;
+  // Posisi can "1" (ujung b0 tiap kolom): angka kecil di tengah can pertama, hanya saat cukup besar.
+  const fsPosisi = tata.kolom.reduce((m, k) => (!k.nonaktif && k.jumlah > 0 ? Math.min(m, k.lebar * 0.7, k.panjangCan * 0.7) : m), 0.3);
+  const tampilPosisi = tampilIceCan && fsPosisi * skalaKira >= 8;
 
   // Area kebutuhan kolom/ice can yang melebihi ruang dalam → arsir merah.
   const lebih: { x: number; y: number; w: number; h: number }[] = [];
@@ -1223,6 +1226,16 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
           return (
             <Teks key={k.kolomId} x={p.x} y={p.y} ukuran={fsNomor} transform={lawanRotasi(p.x, p.y)} className={k.nonaktif ? "fill-muted-foreground" : undefined}>
               {nomor}
+            </Teks>
+          );
+        })}
+      {tampilPosisi &&
+        tata.kolom.map((k) => {
+          if (k.nonaktif || k.jumlah <= 0) return null;
+          const p = tata.keXY(k.a0 + k.lebar / 2, k.b0 + k.panjangCan / 2, 0, 0);
+          return (
+            <Teks key={`${k.kolomId}-pos1`} x={p.x} y={p.y} ukuran={fsPosisi} transform={lawanRotasi(p.x, p.y)} className="fill-muted-foreground">
+              1
             </Teks>
           );
         })}
