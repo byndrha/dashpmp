@@ -10,7 +10,9 @@
 // Aturan transaksi SETIAP fungsi tulis:
 //   BEGIN → kunci baris produksi_denah (FOR SHARE) + validasi kolom →
 //   kunci advisory per (kode, kolom) → kunci isian aktif rek (FOR UPDATE) →
-//   hitung ulang di server → tulis → INSERT produksi_log → COMMIT.
+//   kunci can rusak aktif rek (FOR UPDATE) → hitung ulang keadaan slot di
+//   server + cek invarian slot (cekInvarianRek) → tulis → INSERT
+//   produksi_log → COMMIT.
 //   Error apa pun → ROLLBACK. Satu-satunya DELETE di modul ini ada di
 //   koreksiMuatan: baris anak produksi_muatan milik SATU panen diganti utuh
 //   (DELETE + INSERT) di transaksi yang juga mencatat daftar muatan lama di
@@ -36,16 +38,18 @@ import {
   hitungKematangan,
   ROLLOVER_PANEN_JAM,
   shiftDari,
+  slotDimuatDari,
   tanggalBisnisPanen,
   validasiKoreksiMuatan,
-  validasiPanen,
+  validasiPanenSlot,
   type IsianAktif,
   type JenisIsian,
   type KendaraanPilihan,
   type MaintenanceAktif,
   type MuatanInput,
   type MuatanKendaraan,
-  type PanenInput,
+  type PanenSlotInput,
+  type SlotRusak,
 } from "@/lib/produksi-operasional";
 import { getDenahUntukKode } from "@/lib/queries/produksi-denah";
 
@@ -74,6 +78,14 @@ export interface DataPabrik {
   denah: DenahDokumen | null;
   isian: IsianAktif[];
   maintenance: MaintenanceAktif[];
+  /** Can rusak aktif (belum "Sudah diperbaiki"). */
+  rusak: SlotRusak[];
+  /**
+   * Sejak kapan rek punya slot kosong yang bisa diisi: rek kosong total →
+   * isian/maintenance terakhir selesai; rek terisi sebagian → saat terakhir
+   * slot dikosongkan (panen, buang Babonan, isian selesai). Rek maintenance
+   * atau tanpa slot kosong tidak punya entri.
+   */
   kosongSejak: Record<string, string>;
   panenBelumSiap: { kolomId: string; panenAt: string; persen: number }[];
   sekarang: string;
@@ -133,6 +145,8 @@ const LABEL_AKSI: Record<string, string> = {
   koreksi_isian: "koreksi isian",
   koreksi_muatan: "koreksi kendaraan",
   batal_panen: "batal panen",
+  tandai_rusak: "tandai can rusak",
+  perbaiki_rusak: "perbaiki can rusak",
 };
 
 function galat(kode: KodeGalatProduksi, pesan: string): GalatAksiProduksi {
@@ -203,7 +217,13 @@ async function transaksi<T>(fn: (c: PoolClient, sekarang: Date) => Promise<T>): 
   try {
     await client.query("BEGIN");
     // now() Postgres = awal transaksi; dipakai untuk semua cap waktu aksi ini.
-    const { rows } = await client.query<{ sekarang: Date }>(`SELECT now() AS sekarang`);
+    // idle_in_transaction_session_timeout (khusus transaksi ini): bila koneksi
+    // putus diam-diam di tengah transaksi, server menutup sesinya dalam 30 dtk
+    // sehingga kunci advisory/baris rek tidak tertahan sampai TCP keepalive
+    // (2 jam) — terlihat saat uji integrasi 2026-11-09.
+    const { rows } = await client.query<{ sekarang: Date }>(
+      `SELECT now() AS sekarang, set_config('idle_in_transaction_session_timeout', '30s', true)`,
+    );
     const hasil = await fn(client, rows[0].sekarang);
     await client.query("COMMIT");
     return hasil;
@@ -273,11 +293,16 @@ type BarisIsian = {
   pecah: number;
   mulai_at: Date;
   durasi_beku_jam: string | null;
+  slot: number[];
+  slot_pecah: number[];
 };
+
+const KOLOM_ISIAN = `id::text AS id, kolom_id, bak_id, jenis, varian, jumlah_awal, sisa, pecah, mulai_at, durasi_beku_jam,
+       slot, slot_pecah`;
 
 async function kunciIsian(c: PoolClient, kode: string, kolomId: string): Promise<BarisIsian[]> {
   const { rows } = await c.query<BarisIsian>(
-    `SELECT id::text AS id, kolom_id, bak_id, jenis, varian, jumlah_awal, sisa, pecah, mulai_at, durasi_beku_jam
+    `SELECT ${KOLOM_ISIAN}
        FROM produksi_kolom_isi
       WHERE perusahaan_kode = $1 AND kolom_id = $2 AND selesai_at IS NULL
       ORDER BY mulai_at, id
@@ -306,8 +331,99 @@ async function maintenanceTerbuka(c: PoolClient, kode: string, kolomId: string) 
   return rows[0] ?? null;
 }
 
-function totalSisa(aktif: BarisIsian[]): number {
-  return aktif.reduce((s, i) => s + i.sisa, 0);
+type BarisRusak = { id: string; slot: number; mulai_at: Date; catatan: string | null };
+
+// Can rusak aktif rek (dikunci; urutan kunci: sesudah isian aktif).
+async function kunciRusak(c: PoolClient, kode: string, kolomId: string): Promise<BarisRusak[]> {
+  const { rows } = await c.query<BarisRusak>(
+    `SELECT id::text AS id, slot, mulai_at, catatan FROM produksi_slot_rusak
+      WHERE perusahaan_kode = $1 AND kolom_id = $2 AND selesai_at IS NULL
+      ORDER BY slot
+      FOR UPDATE`,
+    [kode, kolomId],
+  );
+  return rows;
+}
+
+// ── Slot can ───────────────────────────────────────────────────────────────
+// Invarian (spec slot can §1): setiap isian aktif cardinality(slot) = sisa;
+// slot isian aktif satu rek tidak beririsan; semua slot di 1..jumlahIceCan;
+// slot rusak aktif tidak ditempati; Babonan slot_pecah ⊆ slot dan
+// pecah = cardinality(slot_pecah); produksi slot_pecah = '{}'.
+//
+// Pembedaan galat: daftar slot dari klien yang CACAT (bukan bilangan bulat,
+// ganda, < 1, di luar kapasitas) → VALIDASI; slot yang sah bentuknya tapi
+// tidak cocok dengan keadaan rek terkini (sudah ditempati, bukan milik isian,
+// rusak) → KEADAAN_BERUBAH (klien basi).
+
+function urutUnik(a: Iterable<number>): number[] {
+  return [...new Set(a)].sort((x, y) => x - y);
+}
+
+function kurangi(a: number[], b: Iterable<number>): number[] {
+  const buang = new Set(b);
+  return a.filter((s) => !buang.has(s));
+}
+
+function daftarSlot(a: number[]): string {
+  return a.join(", ");
+}
+
+// Bentuk daftar slot dari klien: array bilangan bulat ≥ 1, unik → urut naik.
+// Rentang atas (≤ kapasitas) dicek sesudah kolom dikunci (cekRentang).
+function normalisasiSlot(raw: unknown, nama: string, bolehKosong: boolean): number[] {
+  if (!Array.isArray(raw)) throw galat("VALIDASI", `Daftar slot ${nama} tidak sah.`);
+  const lihat = new Set<number>();
+  for (const s of raw as unknown[]) {
+    if (typeof s !== "number" || !Number.isInteger(s) || s < 1) throw galat("VALIDASI", `Nomor slot ${nama} harus bilangan bulat ≥ 1.`);
+    if (lihat.has(s)) throw galat("VALIDASI", `Slot ${s} dipilih dua kali (${nama}).`);
+    lihat.add(s);
+  }
+  if (!bolehKosong && lihat.size === 0) throw galat("VALIDASI", "Pilih minimal satu can.");
+  return urutUnik(lihat);
+}
+
+function cekRentang(slot: number[], kapasitas: number, kode: KodeGalatProduksi = "VALIDASI"): void {
+  const luar = slot.filter((s) => s > kapasitas);
+  if (luar.length > 0) throw galat(kode, `Slot ${daftarSlot(luar)} di luar kapasitas rek (1–${kapasitas}).`);
+}
+
+function slotTerisi(aktif: BarisIsian[], kecualiId?: string): Set<number> {
+  return new Set(aktif.filter((i) => i.id !== kecualiId).flatMap((i) => i.slot));
+}
+
+/** Slot 1..kapasitas yang tidak ditempati isian aktif dan tidak rusak. */
+function slotBebas(kapasitas: number, aktif: BarisIsian[], rusak: BarisRusak[]): number[] {
+  const tidakBoleh = new Set([...slotTerisi(aktif), ...rusak.map((r) => r.slot)]);
+  const hasil: number[] = [];
+  for (let s = 1; s <= kapasitas; s++) if (!tidakBoleh.has(s)) hasil.push(s);
+  return hasil;
+}
+
+type KeadaanSlotIsian = { id: string; jenis: JenisIsian; slot: number[]; slot_pecah: number[] };
+
+function salinSlot(aktif: BarisIsian[]): Map<string, KeadaanSlotIsian> {
+  return new Map(aktif.map((i) => [i.id, { id: i.id, jenis: i.jenis, slot: [...i.slot], slot_pecah: [...i.slot_pecah] }]));
+}
+
+// Jaring pengaman: keadaan slot rek SESUDAH aksi (dihitung di memori dari
+// baris yang sudah dikunci) wajib memenuhi invarian sebelum apa pun ditulis.
+// Pelanggaran di sini berarti keadaan bergeser di bawah aksi → KEADAAN_BERUBAH.
+function cekInvarianRek(kapasitas: number | null, isian: Iterable<KeadaanSlotIsian>, rusak: BarisRusak[]): void {
+  const slotRusak = new Set(rusak.map((r) => r.slot));
+  const dipakai = new Set<number>();
+  const gagal = (pesan: string) => galat("KEADAAN_BERUBAH", `${pesan} Muat ulang lalu coba lagi.`);
+  for (const i of isian) {
+    for (const s of i.slot) {
+      if (!Number.isInteger(s) || s < 1 || (kapasitas !== null && s > kapasitas)) throw gagal(`Slot ${s} di luar kapasitas rek.`);
+      if (dipakai.has(s)) throw gagal(`Slot ${s} akan terisi dua kali.`);
+      if (slotRusak.has(s)) throw gagal(`Slot ${s} sedang rusak.`);
+      dipakai.add(s);
+    }
+    if (i.jenis === "produksi" && i.slot_pecah.length > 0) throw gagal("Isian produksi tidak boleh punya slot pecah.");
+    const milik = new Set(i.slot);
+    if (i.slot_pecah.some((s) => !milik.has(s))) throw gagal("Slot pecah Babonan tidak sesuai slot isiannya.");
+  }
 }
 
 function snapshotIsian(i: BarisIsian) {
@@ -318,6 +434,8 @@ function snapshotIsian(i: BarisIsian) {
     jumlahAwal: i.jumlah_awal,
     sisa: i.sisa,
     pecah: i.pecah,
+    slot: i.slot,
+    slotPecah: i.slot_pecah,
     mulaiAt: i.mulai_at.toISOString(),
     durasiBekuJam: i.durasi_beku_jam === null ? null : Number(i.durasi_beku_jam),
   };
@@ -335,59 +453,93 @@ async function galatBerubah(c: PoolClient, kode: string, kolomId: string, awal: 
   return galat("KEADAAN_BERUBAH", `${awal}${ekor}`);
 }
 
-// Ubah sisa; selesai_at diisi begitu sisa 0. pecah (babonan) tidak boleh
-// melebihi sisa.
-async function setSisa(c: PoolClient, isianId: string, sisaBaru: number, akunId: string): Promise<void> {
+// Tulis slot isian; sisa = |slot|, pecah = |slot_pecah|. selesai_at diisi
+// begitu slot kosong. `deltaJumlahAwal` menggeser jumlah_awal (Babonan yang
+// bertambah/berkurang, koreksi admin).
+async function tulisSlotIsian(c: PoolClient, i: KeadaanSlotIsian, akunId: string, deltaJumlahAwal = 0): Promise<void> {
   await c.query(
     `UPDATE produksi_kolom_isi
-        SET sisa = $2,
-            pecah = LEAST(pecah, $2),
-            selesai_at = CASE WHEN $2 = 0 THEN now() ELSE NULL END,
-            ditutup_oleh_akun_id = CASE WHEN $2 = 0 THEN $3 ELSE ditutup_oleh_akun_id END
+        SET slot = $2::int[],
+            slot_pecah = $3::int[],
+            sisa = cardinality($2::int[]),
+            pecah = cardinality($3::int[]),
+            jumlah_awal = jumlah_awal + $5,
+            selesai_at = CASE WHEN cardinality($2::int[]) = 0 THEN now() ELSE NULL END,
+            ditutup_oleh_akun_id = CASE WHEN cardinality($2::int[]) = 0 THEN $4 ELSE ditutup_oleh_akun_id END
       WHERE id = $1`,
-    [isianId, sisaBaru, akunId],
+    [i.id, urutUnik(i.slot), urutUnik(i.slot_pecah), akunId, deltaJumlahAwal],
   );
 }
 
-async function buatIsianProduksi(c: PoolClient, kode: string, ctx: KonteksKolom, jumlah: number, p: Pelaku): Promise<string> {
-  const varian = ctx.kolom.varian;
+async function buatIsian(
+  c: PoolClient,
+  kode: string,
+  v: { kolomId: string; bakId: string; varian: Varian; jenis: JenisIsian; slot: number[]; slotPecah: number[]; durasiBekuJam: number | null },
+  p: Pelaku,
+): Promise<string> {
+  const slot = urutUnik(v.slot);
   const { rows } = await c.query<{ id: string }>(
     `INSERT INTO produksi_kolom_isi
-       (perusahaan_kode, kolom_id, mulai_at, jenis, bak_id, varian, jumlah_awal, sisa, pecah, durasi_beku_jam, diisi_oleh_akun_id)
-     VALUES ($1, $2, now(), 'produksi', $3, $4, $5, $5, 0, $6, $7)
+       (perusahaan_kode, kolom_id, mulai_at, jenis, bak_id, varian, jumlah_awal, sisa, pecah, durasi_beku_jam, diisi_oleh_akun_id,
+        slot, slot_pecah)
+     VALUES ($1, $2, now(), $3, $4, $5, $6, $6, $7, $8, $9, $10::int[], $11::int[])
      RETURNING id::text AS id`,
-    [kode, ctx.kolom.id, ctx.bak.id, varian, jumlah, ctx.bak.durasiBekuJam[varian], p.akunId],
+    [kode, v.kolomId, v.jenis, v.bakId, v.varian, slot.length, v.slotPecah.length, v.durasiBekuJam, p.akunId, slot, urutUnik(v.slotPecah)],
   );
   return rows[0].id;
 }
 
-// Pindahkan n can (pecah di antaranya) ke isian Babonan aktif rek; buat baru
-// bila belum ada (mulai_at = sekarang = babonan_sejak).
+function buatIsianProduksi(c: PoolClient, kode: string, ctx: KonteksKolom, slot: number[], p: Pelaku): Promise<string> {
+  const varian = ctx.kolom.varian;
+  return buatIsian(
+    c,
+    kode,
+    { kolomId: ctx.kolom.id, bakId: ctx.bak.id, varian, jenis: "produksi", slot, slotPecah: [], durasiBekuJam: ctx.bak.durasiBekuJam[varian] },
+    p,
+  );
+}
+
+// Pindahkan slot (pecah di antaranya) ke isian Babonan aktif rek: slot
+// digabung; buat isian baru bila belum ada (mulai_at = sekarang = babonan_sejak).
+// `sesudah` (keadaan di memori) sudah memuat hasilnya dan sudah lolos
+// cekInvarianRek.
 async function tambahKeBabonan(
   c: PoolClient,
   kode: string,
   asal: BarisIsian,
-  aktif: BarisIsian[],
-  n: number,
-  pecah: number,
+  bab: KeadaanSlotIsian | null,
+  pindah: number[],
+  pecah: number[],
   p: Pelaku,
 ): Promise<string> {
-  const ada = aktif.find((i) => i.jenis === "babonan");
-  if (ada) {
-    await c.query(
-      `UPDATE produksi_kolom_isi SET sisa = sisa + $2, jumlah_awal = jumlah_awal + $2, pecah = pecah + $3 WHERE id = $1`,
-      [ada.id, n, pecah],
-    );
-    return ada.id;
+  if (bab) {
+    await tulisSlotIsian(c, bab, p.akunId, pindah.length);
+    return bab.id;
   }
-  const { rows } = await c.query<{ id: string }>(
-    `INSERT INTO produksi_kolom_isi
-       (perusahaan_kode, kolom_id, mulai_at, jenis, bak_id, varian, jumlah_awal, sisa, pecah, durasi_beku_jam, diisi_oleh_akun_id)
-     VALUES ($1, $2, now(), 'babonan', $3, $4, $5, $5, $6, NULL, $7)
-     RETURNING id::text AS id`,
-    [kode, asal.kolom_id, asal.bak_id, asal.varian, n, pecah, p.akunId],
+  return buatIsian(
+    c,
+    kode,
+    { kolomId: asal.kolom_id, bakId: asal.bak_id, varian: asal.varian, jenis: "babonan", slot: pindah, slotPecah: pecah, durasiBekuJam: null },
+    p,
   );
-  return rows[0].id;
+}
+
+// Gabungkan slot pindahan ke keadaan Babonan rek di memori (atau buat
+// keadaan Babonan baru berid null). Dipakai panen & Tandai Babonan.
+function rencanaBabonan(
+  sesudah: Map<string, KeadaanSlotIsian>,
+  asalId: string,
+  pindah: number[],
+  pecah: number[],
+): { bab: KeadaanSlotIsian | null; baru: KeadaanSlotIsian | null } {
+  if (pindah.length === 0) return { bab: null, baru: null };
+  const bab = [...sesudah.values()].find((i) => i.jenis === "babonan" && i.id !== asalId) ?? null;
+  if (bab) {
+    bab.slot = urutUnik([...bab.slot, ...pindah]);
+    bab.slot_pecah = urutUnik([...bab.slot_pecah, ...pecah]);
+    return { bab, baru: null };
+  }
+  return { bab: null, baru: { id: "babonan-baru", jenis: "babonan", slot: urutUnik(pindah), slot_pecah: urutUnik(pecah) } };
 }
 
 async function tulisLog(
@@ -436,14 +588,15 @@ async function insertPanen(
   kode: string,
   asal: BarisIsian,
   sekarang: Date,
-  v: { dimuat: number; keBabonan: number; pecah: number; persen: number | null },
+  v: { slotDimuat: number[]; slotBabonan: number[]; slotPecah: number[]; persen: number | null },
   p: Pelaku,
 ): Promise<string> {
   const { rows } = await c.query<{ id: string }>(
     `INSERT INTO produksi_panen
        (perusahaan_kode, isian_id, kolom_id, bak_id, varian, panen_at, tanggal_bisnis, dimuat, ke_babonan, pecah,
-        persen_saat_panen, operator_akun_id, shift)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8, $9, $10, $11, $12, $13)
+        persen_saat_panen, operator_akun_id, shift, slot_dimuat, slot_babonan, slot_pecah)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::date, cardinality($8::int[]), cardinality($9::int[]), cardinality($10::int[]),
+             $11, $12, $13, $8::int[], $9::int[], $10::int[])
      RETURNING id::text AS id`,
     [
       kode,
@@ -453,9 +606,9 @@ async function insertPanen(
       asal.varian,
       sekarang,
       tanggalBisnisPanen(sekarang),
-      v.dimuat,
-      v.keBabonan,
-      v.pecah,
+      urutUnik(v.slotDimuat),
+      urutUnik(v.slotBabonan),
+      urutUnik(v.slotPecah),
       v.persen,
       p.akunId,
       shiftDari(sekarang),
@@ -466,34 +619,61 @@ async function insertPanen(
 
 // ── Aksi operator ──────────────────────────────────────────────────────────
 
-export async function isiAir(kode: string, kolomId: string, jumlah: number | null, p: Pelaku): Promise<{ isianId: string }> {
+// slot null = semua slot kosong yang tidak rusak (satu ketukan); daftar
+// eksplisit wajib ⊆ slot kosong non-rusak.
+export async function isiAir(kode: string, kolomId: string, slot: number[] | null, p: Pelaku): Promise<{ isianId: string }> {
   cekPelaku(p);
   teksWajib(kolomId, "Rek");
-  if (jumlah !== null && (!Number.isInteger(jumlah) || jumlah < 1)) {
-    throw galat("VALIDASI", "Jumlah can harus bilangan bulat minimal 1.");
-  }
+  const pilihan = slot === null || slot === undefined ? null : normalisasiSlot(slot, "isi air", false);
   return transaksi(async (c, sekarang) => {
     const ctx = await kunciKolom(c, kode, kolomId);
     const aktif = await kunciIsian(c, kode, kolomId);
+    const rusak = await kunciRusak(c, kode, kolomId);
     if (await maintenanceTerbuka(c, kode, kolomId)) {
       throw galat("VALIDASI", "Rek sedang maintenance. Selesaikan maintenance dulu sebelum isi air.");
     }
-    const terisi = totalSisa(aktif);
-    const kosong = ctx.kolom.jumlahIceCan - terisi;
-    if (kosong <= 0) throw galat("KAPASITAS", `Rek sudah penuh (${terisi}/${ctx.kolom.jumlahIceCan} can).`);
-    const n = jumlah ?? kosong;
-    if (n > kosong) throw galat("KAPASITAS", `Can kosong di rek ini tinggal ${kosong} (diminta ${n}).`);
+    const kapasitas = ctx.kolom.jumlahIceCan;
+    const bebas = slotBebas(kapasitas, aktif, rusak);
+    let isi: number[];
+    if (pilihan === null) {
+      if (bebas.length === 0) {
+        const ket = rusak.length > 0 ? `, ${rusak.length} can rusak` : "";
+        throw galat("KAPASITAS", `Rek sudah penuh: tidak ada can kosong (${totalTerisi(aktif)}/${kapasitas} terisi${ket}).`);
+      }
+      isi = bebas;
+    } else {
+      cekRentang(pilihan, kapasitas);
+      const setBebas = new Set(bebas);
+      const tidakBebas = pilihan.filter((s) => !setBebas.has(s));
+      if (tidakBebas.length > 0) {
+        throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(tidakBebas)} sudah terisi atau rusak.`);
+      }
+      isi = pilihan;
+    }
+    const sesudah = salinSlot(aktif);
+    sesudah.set("baru", { id: "baru", jenis: "produksi", slot: isi, slot_pecah: [] });
+    cekInvarianRek(kapasitas, sesudah.values(), rusak);
 
-    const isianId = await buatIsianProduksi(c, kode, ctx, n, p);
+    const isianId = await buatIsianProduksi(c, kode, ctx, isi, p);
     await tulisLog(c, kode, p, sekarang, {
       aksi: "isi_air",
       kolomId,
       ctx,
       rujukanId: isianId,
-      sesudah: { isianId, jumlah: n, varian: ctx.kolom.varian, durasiBekuJam: ctx.bak.durasiBekuJam[ctx.kolom.varian] },
+      sesudah: {
+        isianId,
+        jumlah: isi.length,
+        slot: isi,
+        varian: ctx.kolom.varian,
+        durasiBekuJam: ctx.bak.durasiBekuJam[ctx.kolom.varian],
+      },
     });
     return { isianId };
   });
+}
+
+function totalTerisi(aktif: BarisIsian[]): number {
+  return aktif.reduce((s, i) => s + i.slot.length, 0);
 }
 
 function normalisasiMuatan(raw: unknown): MuatanInput[] {
@@ -512,15 +692,29 @@ function normalisasiMuatan(raw: unknown): MuatanInput[] {
   });
 }
 
-export async function panen(kode: string, input: PanenInput, p: Pelaku): Promise<{ panenId: string; isianBaruId: string | null }> {
+export interface PanenInputSlot extends PanenSlotInput {
+  isianId: string;
+  isiUlang: boolean;
+  konfirmasiBelumSiap: boolean;
+}
+
+// Panen isian produksi: slotBabonan + slotPecah pindah ke isian Babonan rek
+// (slot digabung), sisanya dimuat; isian produksi selesai. Panen isian
+// Babonan: slotDimuat keluar dari Babonan. isiUlang mengisi PERSIS slot
+// yang dimuat (bebas & tidak rusak karena tadinya ditempati) sebagai isian
+// produksi baru.
+export async function panen(kode: string, input: PanenInputSlot, p: Pelaku): Promise<{ panenId: string; isianBaruId: string | null }> {
   cekPelaku(p);
   const isianId = cekId(input?.isianId, "Isian");
   const muatan = normalisasiMuatan(input.muatan);
-  const babonan = typeof input.babonan === "number" ? input.babonan : Number.NaN;
-  const pecah = typeof input.pecah === "number" ? input.pecah : Number.NaN;
+  const slotBabonan = normalisasiSlot(input.slotBabonan ?? [], "Babonan", true);
+  const slotPecah = normalisasiSlot(input.slotPecah ?? [], "pecah", true);
+  const slotDimuatKlien = input.slotDimuat === undefined || input.slotDimuat === null ? null : normalisasiSlot(input.slotDimuat, "dimuat", true);
   const isiUlang = input.isiUlang === true;
   const konfirmasi = input.konfirmasiBelumSiap === true;
-  const bersih = { muatan, babonan, pecah };
+  const setBabonan = new Set(slotBabonan);
+  const ganda = slotPecah.filter((s) => setBabonan.has(s));
+  if (ganda.length > 0) throw galat("VALIDASI", `Slot ${daftarSlot(ganda)} tidak bisa sekaligus Babonan dan pecah.`);
 
   return transaksi(async (c, sekarang) => {
     const kolomId = await kolomDariIsian(c, kode, isianId);
@@ -528,18 +722,34 @@ export async function panen(kode: string, input: PanenInput, p: Pelaku): Promise
     const aktif = await kunciIsian(c, kode, kolomId);
     const asal = aktif.find((i) => i.id === isianId);
     if (!asal) throw await galatBerubah(c, kode, kolomId, "Isian ini sudah tidak aktif (sudah dipanen atau dikoreksi).");
+    const rusak = await kunciRusak(c, kode, kolomId);
+    const kapasitas = ctx.kolom.jumlahIceCan;
+    cekRentang([...slotBabonan, ...slotPecah, ...(slotDimuatKlien ?? [])], kapasitas);
 
     const jenis = asal.jenis;
-    const dimuat = muatan.reduce((s, m) => s + m.jumlah, 0);
-    const keluar = jenis === "produksi" ? dimuat + babonan + pecah : dimuat;
-    // Cek bentuk input dulu (VALIDASI), terlepas dari sisa terkini.
-    const galatBentuk = validasiPanen(jenis, jenis === "produksi" ? keluar : Number.MAX_SAFE_INTEGER, bersih);
-    if (galatBentuk) throw galat("VALIDASI", galatBentuk);
-    if (keluar > asal.sisa) {
-      throw await galatBerubah(c, kode, kolomId, `Rek ini tinggal ${asal.sisa} can (diminta ${keluar}).`);
+    const milik = new Set(asal.slot);
+    const dimuatJumlah = muatan.reduce((s, m) => s + m.jumlah, 0);
+    if (jenis === "babonan") {
+      if (slotBabonan.length > 0 || slotPecah.length > 0) throw galat("VALIDASI", "Can Babonan tidak bisa dipindah lagi ke Babonan atau pecah.");
+      if (!slotDimuatKlien || slotDimuatKlien.length === 0) throw galat("VALIDASI", "Belum ada can Babonan yang dimuat.");
+      const bukan = slotDimuatKlien.filter((s) => !milik.has(s));
+      if (bukan.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(bukan)} bukan lagi Babonan di rek ini.`);
+    } else {
+      const bukan = [...slotBabonan, ...slotPecah].filter((s) => !milik.has(s));
+      if (bukan.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(urutUnik(bukan))} bukan lagi milik isian ini.`);
+      const diminta = dimuatJumlah + slotBabonan.length + slotPecah.length;
+      if (diminta > asal.slot.length) {
+        throw await galatBerubah(c, kode, kolomId, `Rek ini tinggal ${asal.slot.length} can (diminta ${diminta}).`);
+      }
     }
-    const galatJumlah = validasiPanen(jenis, asal.sisa, bersih);
-    if (galatJumlah) throw galat("VALIDASI", galatJumlah);
+    const masukan: PanenSlotInput = { muatan, slotBabonan, slotPecah, slotDimuat: slotDimuatKlien ?? undefined };
+    const galatSlot = validasiPanenSlot({ jenis, slot: asal.slot, slotPecah: asal.slot_pecah }, masukan);
+    if (galatSlot) throw galat("VALIDASI", galatSlot);
+    const slotDimuat = slotDimuatDari({ jenis, slot: asal.slot }, masukan);
+    // Produksi: slotDimuat dari klien (opsional) harus sama dengan hasil hitungan server.
+    if (jenis === "produksi" && slotDimuatKlien && slotDimuatKlien.length > 0 && daftarSlot(slotDimuatKlien) !== daftarSlot(slotDimuat)) {
+      throw await galatBerubah(c, kode, kolomId, "Slot yang dimuat tidak cocok dengan isi rek terkini.");
+    }
 
     let persen: number | null = null;
     if (jenis === "produksi") {
@@ -550,25 +760,31 @@ export async function panen(kode: string, input: PanenInput, p: Pelaku): Promise
       }
     }
 
-    const keBabonan = jenis === "produksi" ? babonan + pecah : 0;
-    const isiUlangJumlah = isiUlang ? dimuat : 0;
-    if (isiUlangJumlah > 0) {
-      if (await maintenanceTerbuka(c, kode, kolomId)) {
-        throw galat("VALIDASI", "Rek sedang maintenance; panen tanpa isi ulang.");
-      }
-      const terisiSesudah = totalSisa(aktif) - keluar + keBabonan + isiUlangJumlah;
-      if (terisiSesudah > ctx.kolom.jumlahIceCan) {
-        throw galat("KAPASITAS", `Isi ulang ${isiUlangJumlah} can melebihi kapasitas rek (${terisiSesudah}/${ctx.kolom.jumlahIceCan}).`);
-      }
+    const slotIsiUlang = isiUlang ? slotDimuat : [];
+    if (slotIsiUlang.length > 0 && (await maintenanceTerbuka(c, kode, kolomId))) {
+      throw galat("VALIDASI", "Rek sedang maintenance; panen tanpa isi ulang.");
     }
 
-    await setSisa(c, asal.id, asal.sisa - keluar, p.akunId);
+    // Keadaan sesudah di memori → cek invarian → tulis.
+    const sesudah = salinSlot(aktif);
+    const asalSesudah = sesudah.get(asal.id)!;
+    const pindah = jenis === "produksi" ? urutUnik([...slotBabonan, ...slotPecah]) : [];
+    asalSesudah.slot = kurangi(asal.slot, [...slotDimuat, ...pindah]);
+    asalSesudah.slot_pecah = kurangi(asal.slot_pecah, [...slotDimuat, ...pindah]);
+    const { bab, baru } = rencanaBabonan(sesudah, asal.id, pindah, jenis === "produksi" ? slotPecah : []);
+    if (baru) sesudah.set(baru.id, baru);
+    if (slotIsiUlang.length > 0) sesudah.set("isi-ulang", { id: "isi-ulang", jenis: "produksi", slot: slotIsiUlang, slot_pecah: [] });
+    cekInvarianRek(kapasitas, sesudah.values(), rusak);
+
+    await tulisSlotIsian(c, asalSesudah, p.akunId);
+    const slotBabonanPanen = jenis === "produksi" ? slotBabonan : [];
+    const slotPecahPanen = jenis === "produksi" ? slotPecah : [];
     const panenId = await insertPanen(
       c,
       kode,
       asal,
       sekarang,
-      { dimuat, keBabonan: jenis === "produksi" ? babonan : 0, pecah: jenis === "produksi" ? pecah : 0, persen },
+      { slotDimuat, slotBabonan: slotBabonanPanen, slotPecah: slotPecahPanen, persen },
       p,
     );
     for (const m of muatan) {
@@ -578,8 +794,8 @@ export async function panen(kode: string, input: PanenInput, p: Pelaku): Promise
         [panenId, m.jenis, m.kendaraanErpId, m.plat, m.agenId, m.agenNama, m.jumlah],
       );
     }
-    const babonanIsianId = keBabonan > 0 ? await tambahKeBabonan(c, kode, asal, aktif, keBabonan, pecah, p) : null;
-    const isianBaruId = isiUlangJumlah > 0 ? await buatIsianProduksi(c, kode, ctx, isiUlangJumlah, p) : null;
+    const babonanIsianId = pindah.length > 0 ? await tambahKeBabonan(c, kode, asal, bab, pindah, slotPecahPanen, p) : null;
+    const isianBaruId = slotIsiUlang.length > 0 ? await buatIsianProduksi(c, kode, ctx, slotIsiUlang, p) : null;
 
     await tulisLog(c, kode, p, sekarang, {
       aksi: "panen",
@@ -590,15 +806,20 @@ export async function panen(kode: string, input: PanenInput, p: Pelaku): Promise
       sesudah: {
         panenId,
         muatan,
-        dimuat,
-        babonan: jenis === "produksi" ? babonan : 0,
-        pecah: jenis === "produksi" ? pecah : 0,
-        sisa: asal.sisa - keluar,
+        dimuat: slotDimuat.length,
+        babonan: slotBabonanPanen.length,
+        pecah: slotPecahPanen.length,
+        slotDimuat,
+        slotBabonan: slotBabonanPanen,
+        slotPecah: slotPecahPanen,
+        sisa: asalSesudah.slot.length,
+        slotSisa: asalSesudah.slot,
         persen,
         belumSiap: persen !== null && persen < AMBANG.panenBelumSiapPersen,
         babonanIsianId,
         isiUlang,
         isianBaruId,
+        slotIsiUlang,
         tanggalBisnis: tanggalBisnisPanen(sekarang),
       },
     });
@@ -606,13 +827,14 @@ export async function panen(kode: string, input: PanenInput, p: Pelaku): Promise
   });
 }
 
-// Pindah n can isian produksi ke Babonan tanpa panen. Dicatat juga sebagai
-// baris produksi_panen (dimuat 0, ke_babonan n, persen NULL) supaya invarian
-// jumlah_awal = sisa + Σ dimuat + Σ ke_babonan + Σ pecah tetap berlaku.
-export async function tandaiBabonan(kode: string, isianId: string, jumlah: number, p: Pelaku): Promise<void> {
+// Pindah slot terpilih isian produksi ke Babonan tanpa panen. Dicatat juga
+// sebagai baris produksi_panen (dimuat 0, ke_babonan |slot|, persen NULL)
+// supaya invarian jumlah_awal = sisa + Σ dimuat + Σ ke_babonan + Σ pecah
+// tetap berlaku.
+export async function tandaiBabonan(kode: string, isianId: string, slot: number[], p: Pelaku): Promise<void> {
   cekPelaku(p);
   const id = cekId(isianId, "Isian");
-  if (!Number.isInteger(jumlah) || jumlah < 1) throw galat("VALIDASI", "Jumlah can Babonan harus bilangan bulat minimal 1.");
+  const pilihan = normalisasiSlot(slot, "Babonan", false);
   await transaksi(async (c, sekarang) => {
     const kolomId = await kolomDariIsian(c, kode, id);
     const ctx = await kunciKolom(c, kode, kolomId);
@@ -620,49 +842,155 @@ export async function tandaiBabonan(kode: string, isianId: string, jumlah: numbe
     const asal = aktif.find((i) => i.id === id);
     if (!asal) throw await galatBerubah(c, kode, kolomId, "Isian ini sudah tidak aktif.");
     if (asal.jenis !== "produksi") throw galat("VALIDASI", "Isian ini sudah Babonan.");
-    if (jumlah > asal.sisa) throw await galatBerubah(c, kode, kolomId, `Rek ini tinggal ${asal.sisa} can (diminta ${jumlah}).`);
+    const rusak = await kunciRusak(c, kode, kolomId);
+    const kapasitas = ctx.kolom.jumlahIceCan;
+    cekRentang(pilihan, kapasitas);
+    const milik = new Set(asal.slot);
+    const bukan = pilihan.filter((s) => !milik.has(s));
+    if (bukan.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(bukan)} bukan lagi milik isian ini.`);
 
-    await setSisa(c, asal.id, asal.sisa - jumlah, p.akunId);
-    const panenId = await insertPanen(c, kode, asal, sekarang, { dimuat: 0, keBabonan: jumlah, pecah: 0, persen: null }, p);
-    const babonanIsianId = await tambahKeBabonan(c, kode, asal, aktif, jumlah, 0, p);
+    const sesudah = salinSlot(aktif);
+    const asalSesudah = sesudah.get(asal.id)!;
+    asalSesudah.slot = kurangi(asal.slot, pilihan);
+    const { bab, baru } = rencanaBabonan(sesudah, asal.id, pilihan, []);
+    if (baru) sesudah.set(baru.id, baru);
+    cekInvarianRek(kapasitas, sesudah.values(), rusak);
+
+    await tulisSlotIsian(c, asalSesudah, p.akunId);
+    const panenId = await insertPanen(c, kode, asal, sekarang, { slotDimuat: [], slotBabonan: pilihan, slotPecah: [], persen: null }, p);
+    const babonanIsianId = await tambahKeBabonan(c, kode, asal, bab, pilihan, [], p);
     await tulisLog(c, kode, p, sekarang, {
       aksi: "tandai_babonan",
       kolomId,
       ctx,
       rujukanId: panenId,
       sebelum: snapshotIsian(asal),
-      sesudah: { panenId, jumlah, sisa: asal.sisa - jumlah, babonanIsianId },
+      sesudah: { panenId, jumlah: pilihan.length, slot: pilihan, sisa: asalSesudah.slot.length, slotSisa: asalSesudah.slot, babonanIsianId },
     });
   });
 }
 
-// Babonan dibuang/dilebur (tidak dimuat; tidak ikut pencocokan DO).
-export async function buangBabonan(kode: string, kolomId: string, jumlah: number, alasan: string, p: Pelaku): Promise<void> {
+// Babonan dibuang/dilebur (tidak dimuat; tidak ikut pencocokan DO). Slot
+// terpilih ⊆ slot Babonan (boleh termasuk pecah).
+export async function buangBabonan(kode: string, kolomId: string, slot: number[], alasan: string, p: Pelaku): Promise<void> {
   cekPelaku(p);
   teksWajib(kolomId, "Rek");
-  if (!Number.isInteger(jumlah) || jumlah < 1) throw galat("VALIDASI", "Jumlah can dibuang harus bilangan bulat minimal 1.");
+  const pilihan = normalisasiSlot(slot, "dibuang", false);
   const alasanBersih = teksOpsional(alasan);
   await transaksi(async (c, sekarang) => {
     const ctx = await kunciKolom(c, kode, kolomId);
     const aktif = await kunciIsian(c, kode, kolomId);
     const bab = aktif.find((i) => i.jenis === "babonan");
     if (!bab) throw await galatBerubah(c, kode, kolomId, "Rek ini tidak punya Babonan.");
-    if (jumlah > bab.sisa) throw await galatBerubah(c, kode, kolomId, `Babonan di rek ini tinggal ${bab.sisa} can (diminta ${jumlah}).`);
+    const rusak = await kunciRusak(c, kode, kolomId);
+    const kapasitas = ctx.kolom.jumlahIceCan;
+    cekRentang(pilihan, kapasitas);
+    const milik = new Set(bab.slot);
+    const bukan = pilihan.filter((s) => !milik.has(s));
+    if (bukan.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(bukan)} bukan lagi Babonan di rek ini.`);
 
-    await setSisa(c, bab.id, bab.sisa - jumlah, p.akunId);
+    const sesudah = salinSlot(aktif);
+    const babSesudah = sesudah.get(bab.id)!;
+    babSesudah.slot = kurangi(bab.slot, pilihan);
+    babSesudah.slot_pecah = kurangi(bab.slot_pecah, pilihan);
+    cekInvarianRek(kapasitas, sesudah.values(), rusak);
+
+    await tulisSlotIsian(c, babSesudah, p.akunId);
     const { rows } = await c.query<{ id: string }>(
       `INSERT INTO produksi_babonan_keluar (isian_id, at, jumlah, alasan, akun_id)
        VALUES ($1, $2, $3, $4, $5) RETURNING id::text AS id`,
-      [bab.id, sekarang, jumlah, alasanBersih, p.akunId],
+      [bab.id, sekarang, pilihan.length, alasanBersih, p.akunId],
     );
+    const pecahDibuang = pilihan.filter((s) => bab.slot_pecah.includes(s));
     await tulisLog(c, kode, p, sekarang, {
       aksi: "buang_babonan",
       kolomId,
       ctx,
       rujukanId: rows[0].id,
       sebelum: snapshotIsian(bab),
-      sesudah: { jumlah, sisa: bab.sisa - jumlah },
+      sesudah: {
+        jumlah: pilihan.length,
+        slot: pilihan,
+        slotPecah: pecahDibuang,
+        sisa: babSesudah.slot.length,
+        slotSisa: babSesudah.slot,
+        slotPecahSisa: babSesudah.slot_pecah,
+      },
       alasan: alasanBersih,
+    });
+  });
+}
+
+// Tandai can rusak: hanya slot yang tidak ditempati isian aktif (can berisi
+// es tidak bisa ditandai rusak — panen/buang dulu). Slot rusak dilewati Isi
+// Air dan mengunci kolom di denah sampai diperbaiki.
+export async function tandaiRusak(kode: string, kolomId: string, slot: number[], catatan: string, p: Pelaku): Promise<void> {
+  cekPelaku(p);
+  teksWajib(kolomId, "Rek");
+  const pilihan = normalisasiSlot(slot, "rusak", false);
+  const catatanBersih = teksOpsional(catatan);
+  await transaksi(async (c, sekarang) => {
+    const ctx = await kunciKolom(c, kode, kolomId);
+    const aktif = await kunciIsian(c, kode, kolomId);
+    const rusak = await kunciRusak(c, kode, kolomId);
+    cekRentang(pilihan, ctx.kolom.jumlahIceCan);
+    const terisi = slotTerisi(aktif);
+    const berisi = pilihan.filter((s) => terisi.has(s));
+    if (berisi.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(berisi)} masih berisi can es.`);
+    const sudahRusak = new Set(rusak.map((r) => r.slot));
+    const ganda = pilihan.filter((s) => sudahRusak.has(s));
+    if (ganda.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(ganda)} sudah ditandai rusak.`);
+
+    const ids: string[] = [];
+    for (const s of pilihan) {
+      const { rows } = await c.query<{ id: string }>(
+        `INSERT INTO produksi_slot_rusak (perusahaan_kode, kolom_id, slot, mulai_at, catatan, dibuka_oleh_akun_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id::text AS id`,
+        [kode, kolomId, s, sekarang, catatanBersih, p.akunId],
+      );
+      ids.push(rows[0].id);
+    }
+    await tulisLog(c, kode, p, sekarang, {
+      aksi: "tandai_rusak",
+      kolomId,
+      ctx,
+      rujukanId: ids[0],
+      sebelum: { slotRusak: rusak.map((r) => r.slot) },
+      sesudah: { slot: pilihan, rusakId: ids, catatan: catatanBersih, slotRusak: urutUnik([...sudahRusak, ...pilihan]) },
+    });
+  });
+}
+
+// "Sudah diperbaiki": tutup can rusak aktif pada slot terpilih. Longgar:
+// rek yang dinonaktifkan/dihapus dari denah tetap bisa dibersihkan.
+export async function perbaikiRusak(kode: string, kolomId: string, slot: number[], p: Pelaku): Promise<void> {
+  cekPelaku(p);
+  teksWajib(kolomId, "Rek");
+  const pilihan = normalisasiSlot(slot, "diperbaiki", false);
+  await transaksi(async (c, sekarang) => {
+    const ctx = await kunciKolomDasar(c, kode, kolomId, true);
+    await kunciIsian(c, kode, kolomId);
+    const rusak = await kunciRusak(c, kode, kolomId);
+    const perSlot = new Map(rusak.map((r) => [r.slot, r]));
+    const bukan = pilihan.filter((s) => !perSlot.has(s));
+    if (bukan.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(bukan)} tidak sedang ditandai rusak.`);
+
+    const ditutup = pilihan.map((s) => perSlot.get(s)!);
+    await c.query(
+      `UPDATE produksi_slot_rusak SET selesai_at = $2, ditutup_oleh_akun_id = $3 WHERE id = ANY($1::bigint[])`,
+      [ditutup.map((r) => r.id), sekarang, p.akunId],
+    );
+    await tulisLog(c, kode, p, sekarang, {
+      aksi: "perbaiki_rusak",
+      kolomId,
+      ctx,
+      rujukanId: ditutup[0].id,
+      sebelum: {
+        slot: pilihan,
+        rusak: ditutup.map((r) => ({ id: r.id, slot: r.slot, mulaiAt: r.mulai_at.toISOString(), catatan: r.catatan })),
+        slotRusak: rusak.map((r) => r.slot),
+      },
+      sesudah: { slotRusak: kurangi(rusak.map((r) => r.slot), pilihan) },
     });
   });
 }
@@ -718,22 +1046,26 @@ export async function selesaiMaintenance(kode: string, kolomId: string, p: Pelak
 
 // ── Koreksi admin ──────────────────────────────────────────────────────────
 
-// Mengubah sisa menggeser jumlah_awal dengan selisih yang sama, supaya
-// invarian jumlah_awal = sisa + Σ keluar tetap berlaku (salah hitung can).
+// `slot` mengganti himpunan slot isian (sisa = |slot|). jumlah_awal digeser
+// dengan selisih yang sama, supaya invarian jumlah_awal = sisa + Σ keluar
+// tetap berlaku (salah hitung can). Slot harus dalam kapasitas (KAPASITAS),
+// tidak ditempati isian aktif lain dan tidak rusak (KEADAAN_BERUBAH). Slot
+// pecah Babonan yang tidak lagi ada di slot ikut dibuang. Slot kosong = isian
+// selesai (sama seperti koreksi sisa 0 dulu).
 export async function koreksiIsian(
   kode: string,
   isianId: string,
-  ubah: { mulaiAt?: string; varian?: Varian; sisa?: number },
+  ubah: { mulaiAt?: string; varian?: Varian; slot?: number[] },
   alasan: string,
   p: Pelaku,
 ): Promise<void> {
   const alasanBersih = cekAdmin(p, alasan);
   const id = cekId(isianId, "Isian");
   const u = ubah ?? {};
-  if (u.mulaiAt === undefined && u.varian === undefined && u.sisa === undefined) throw galat("VALIDASI", "Tidak ada yang dikoreksi.");
+  if (u.mulaiAt === undefined && u.varian === undefined && u.slot === undefined) throw galat("VALIDASI", "Tidak ada yang dikoreksi.");
   const mulaiBaru = u.mulaiAt === undefined ? null : cekTanggalIso(u.mulaiAt, "Waktu isi air");
   if (u.varian !== undefined && u.varian !== "kecil" && u.varian !== "besar") throw galat("VALIDASI", "Varian tidak sah.");
-  if (u.sisa !== undefined && (!Number.isInteger(u.sisa) || u.sisa < 0)) throw galat("VALIDASI", "Sisa can harus bilangan bulat ≥ 0.");
+  const slotBaru = u.slot === undefined ? null : normalisasiSlot(u.slot, "isian", true);
 
   await transaksi(async (c, sekarang) => {
     const kolomId = await kolomDariIsian(c, kode, id);
@@ -741,13 +1073,27 @@ export async function koreksiIsian(
     const aktif = await kunciIsian(c, kode, kolomId);
     const lama = aktif.find((i) => i.id === id);
     if (!lama) throw await galatBerubah(c, kode, kolomId, "Isian ini sudah tidak aktif.");
+    const rusak = await kunciRusak(c, kode, kolomId);
     if (mulaiBaru && mulaiBaru.getTime() > sekarang.getTime()) throw galat("VALIDASI", "Waktu isi air tidak boleh di masa depan.");
 
-    const sisaBaru = u.sisa ?? lama.sisa;
-    const terisi = totalSisa(aktif) - lama.sisa + sisaBaru;
-    if (terisi > ctx.kolom.jumlahIceCan) {
-      throw galat("KAPASITAS", `Total can di rek menjadi ${terisi}, melebihi kapasitas ${ctx.kolom.jumlahIceCan}.`);
+    const kapasitas = ctx.kolom.jumlahIceCan;
+    const slot = slotBaru ?? lama.slot;
+    if (slotBaru) {
+      cekRentang(slotBaru, kapasitas, "KAPASITAS");
+      const lain = slotTerisi(aktif, lama.id);
+      const bentrok = slotBaru.filter((s) => lain.has(s));
+      if (bentrok.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(bentrok)} sudah ditempati isian lain.`);
+      const slotRusak = new Set(rusak.map((r) => r.slot));
+      const kenaRusak = slotBaru.filter((s) => slotRusak.has(s));
+      if (kenaRusak.length > 0) throw await galatBerubah(c, kode, kolomId, `Slot ${daftarSlot(kenaRusak)} sedang rusak.`);
     }
+    const slotPecah = lama.slot_pecah.filter((s) => slot.includes(s));
+    const sesudah = salinSlot(aktif);
+    const isianSesudah = sesudah.get(lama.id)!;
+    isianSesudah.slot = slot;
+    isianSesudah.slot_pecah = slotPecah;
+    if (slotBaru) cekInvarianRek(kapasitas, sesudah.values(), rusak);
+
     const varianBaru = u.varian ?? lama.varian;
     const durasiBaru =
       lama.jenis === "babonan"
@@ -758,24 +1104,26 @@ export async function koreksiIsian(
             ? null
             : Number(lama.durasi_beku_jam);
     const mulaiAt = mulaiBaru ?? lama.mulai_at;
-    const jumlahAwalBaru = lama.jumlah_awal + (sisaBaru - lama.sisa);
+    const deltaJumlah = slotBaru ? slotBaru.length - lama.sisa : 0;
 
     await c.query(
       `UPDATE produksi_kolom_isi
-          SET mulai_at = $2, varian = $3, durasi_beku_jam = $4, jumlah_awal = $5
+          SET mulai_at = $2, varian = $3, durasi_beku_jam = $4
         WHERE id = $1`,
-      [id, mulaiAt, varianBaru, durasiBaru, jumlahAwalBaru],
+      [id, mulaiAt, varianBaru, durasiBaru],
     );
-    if (sisaBaru !== lama.sisa) await setSisa(c, id, sisaBaru, p.akunId);
+    if (slotBaru) await tulisSlotIsian(c, isianSesudah, p.akunId, deltaJumlah);
 
     const baru: BarisIsian = {
       ...lama,
       mulai_at: mulaiAt,
       varian: varianBaru,
       durasi_beku_jam: durasiBaru === null ? null : String(durasiBaru),
-      jumlah_awal: jumlahAwalBaru,
-      sisa: sisaBaru,
-      pecah: Math.min(lama.pecah, sisaBaru),
+      jumlah_awal: lama.jumlah_awal + deltaJumlah,
+      sisa: slotBaru ? slot.length : lama.sisa,
+      pecah: slotBaru ? slotPecah.length : lama.pecah,
+      slot,
+      slot_pecah: slotPecah,
     };
     await tulisLog(c, kode, p, sekarang, {
       aksi: "koreksi_isian",
@@ -789,11 +1137,13 @@ export async function koreksiIsian(
   });
 }
 
-// Batal panen ≤ 7 hari. Bila isian asal masih aktif, can dikembalikan ke
-// sisa (can yang tadinya dipindah ke Babonan ditarik lagi dari isian Babonan
-// aktif). Bila tidak bisa dikembalikan (isian sudah selesai, Babonan sudah
-// berkurang, kapasitas penuh, rek tidak lagi aktif) panen hanya ditandai.
-// Isian baru hasil isiUlang TIDAK diubah; admin mengoreksinya terpisah.
+// Batal panen ≤ 7 hari. Slot dikembalikan PERSIS bila semua syarat ini
+// terpenuhi: isian asal masih aktif, slot_dimuat panen itu masih kosong dan
+// tidak rusak, slot_babonan/slot_pecah panen itu masih ada di isian Babonan
+// rek, dan rek masih aktif di denah. Selain itu panen hanya ditandai batal.
+// Panen sebelum slot dicatat (slot_* kosong padahal jumlahnya > 0) juga
+// hanya ditandai. Isian baru hasil isiUlang TIDAK diubah; admin
+// mengoreksinya terpisah.
 export async function batalkanPanen(kode: string, panenId: string, alasan: string, p: Pelaku): Promise<void> {
   const alasanBersih = cekAdmin(p, alasan);
   const id = cekId(panenId, "Panen");
@@ -806,18 +1156,22 @@ export async function batalkanPanen(kode: string, panenId: string, alasan: strin
     const kolomId = awal.rows[0].kolom_id;
     const ctx = await kunciKolomDasar(c, kode, kolomId, true);
     const aktif = await kunciIsian(c, kode, kolomId);
+    const rusak = await kunciRusak(c, kode, kolomId);
     const { rows } = await c.query<{
       isian_id: string;
       dimuat: number;
       ke_babonan: number;
       pecah: number;
+      slot_dimuat: number[];
+      slot_babonan: number[];
+      slot_pecah: number[];
       panen_at: Date;
       dibatalkan_at: Date | null;
       persen_saat_panen: number | null;
       jenis_isian: JenisIsian;
     }>(
-      `SELECT p.isian_id::text AS isian_id, p.dimuat, p.ke_babonan, p.pecah, p.panen_at, p.dibatalkan_at,
-              p.persen_saat_panen, ki.jenis AS jenis_isian
+      `SELECT p.isian_id::text AS isian_id, p.dimuat, p.ke_babonan, p.pecah, p.slot_dimuat, p.slot_babonan, p.slot_pecah,
+              p.panen_at, p.dibatalkan_at, p.persen_saat_panen, ki.jenis AS jenis_isian
          FROM produksi_panen p JOIN produksi_kolom_isi ki ON ki.id = p.isian_id
         WHERE p.id = $1 FOR UPDATE OF p`,
       [id],
@@ -829,20 +1183,37 @@ export async function batalkanPanen(kode: string, panenId: string, alasan: strin
     }
 
     const asal = aktif.find((i) => i.id === pn.isian_id) ?? null;
-    const tarikBabonan = pn.ke_babonan + pn.pecah;
-    const bab = aktif.find((i) => i.jenis === "babonan" && i.id !== asal?.id) ?? null;
-    const babonanCukup = tarikBabonan === 0 || (bab !== null && bab.sisa >= tarikBabonan);
-    const muat = ctx !== null && !ctx.kolom.nonaktif && totalSisa(aktif) + pn.dimuat <= ctx.kolom.jumlahIceCan;
-    const dikembalikan = asal !== null && babonanCukup && muat;
+    const tarik = urutUnik([...pn.slot_babonan, ...pn.slot_pecah]);
+    const bab = tarik.length > 0 ? (aktif.find((i) => i.jenis === "babonan" && i.id !== asal?.id) ?? null) : null;
+    const slotTercatat =
+      pn.slot_dimuat.length === pn.dimuat && pn.slot_babonan.length === pn.ke_babonan && pn.slot_pecah.length === pn.pecah;
+    const babonanMasih = tarik.length === 0 || (bab !== null && tarik.every((s) => bab.slot.includes(s)));
+    const terisi = slotTerisi(aktif);
+    const slotRusak = new Set(rusak.map((r) => r.slot));
+    const kapasitas = ctx?.kolom.jumlahIceCan ?? 0;
+    const dimuatKosong = pn.slot_dimuat.every((s) => !terisi.has(s) && !slotRusak.has(s) && s <= kapasitas);
+    const rekAktif = ctx !== null && !ctx.kolom.nonaktif;
+    let dikembalikan = asal !== null && slotTercatat && babonanMasih && dimuatKosong && rekAktif;
 
-    if (dikembalikan) {
-      await setSisa(c, asal.id, asal.sisa + pn.dimuat + tarikBabonan, p.akunId);
-      if (tarikBabonan > 0 && bab) {
-        await c.query(
-          `UPDATE produksi_kolom_isi SET jumlah_awal = jumlah_awal - $2, pecah = GREATEST(0, pecah - $3) WHERE id = $1`,
-          [bab.id, tarikBabonan, pn.pecah],
-        );
-        await setSisa(c, bab.id, bab.sisa - tarikBabonan, p.akunId);
+    let asalSesudah: KeadaanSlotIsian | null = null;
+    if (dikembalikan && asal) {
+      const sesudah = salinSlot(aktif);
+      asalSesudah = sesudah.get(asal.id)!;
+      asalSesudah.slot = urutUnik([...asal.slot, ...pn.slot_dimuat, ...tarik]);
+      if (bab) {
+        const babSesudah = sesudah.get(bab.id)!;
+        babSesudah.slot = kurangi(bab.slot, tarik);
+        babSesudah.slot_pecah = kurangi(bab.slot_pecah, tarik);
+      }
+      try {
+        cekInvarianRek(kapasitas, sesudah.values(), rusak);
+      } catch {
+        dikembalikan = false;
+        asalSesudah = null;
+      }
+      if (asalSesudah) {
+        await tulisSlotIsian(c, asalSesudah, p.akunId);
+        if (bab) await tulisSlotIsian(c, sesudah.get(bab.id)!, p.akunId, -tarik.length);
       }
     }
     await c.query(`UPDATE produksi_panen SET dibatalkan_at = $2, alasan_batal = $3 WHERE id = $1`, [id, sekarang, alasanBersih]);
@@ -858,17 +1229,22 @@ export async function batalkanPanen(kode: string, panenId: string, alasan: strin
         dimuat: pn.dimuat,
         keBabonan: pn.ke_babonan,
         pecah: pn.pecah,
+        slotDimuat: pn.slot_dimuat,
+        slotBabonan: pn.slot_babonan,
+        slotPecah: pn.slot_pecah,
         // persen + jenisIsian: label "Tandai Babonan" di log memakai aturan
         // yang sama dengan server (dimuat 0, persen NULL, isian produksi).
         persen: pn.persen_saat_panen,
         jenisIsian: pn.jenis_isian,
         panenAt: pn.panen_at.toISOString(),
         isian: asal ? snapshotIsian(asal) : null,
+        babonan: bab ? snapshotIsian(bab) : null,
       },
       sesudah: {
         dibatalkan: true,
         dikembalikan,
-        sisaIsian: asal ? (dikembalikan ? asal.sisa + pn.dimuat + tarikBabonan : asal.sisa) : null,
+        sisaIsian: asal ? (asalSesudah ? asalSesudah.slot.length : asal.sisa) : null,
+        slotIsian: asal ? (asalSesudah ? asalSesudah.slot : asal.slot) : null,
       },
       alasan: alasanBersih,
     });
@@ -1006,11 +1382,10 @@ async function namaAkun(kode: string, ids: string[]): Promise<Map<string, string
 
 export async function getDataPabrik(kode: string): Promise<DataPabrik> {
   const pool = getPgPool();
-  const [denahTersimpan, isianQ, mtQ, kosongQ, belumSiapQ, nowQ] = await Promise.all([
+  const [denahTersimpan, isianQ, mtQ, rusakQ, kosongQ, belumSiapQ, nowQ] = await Promise.all([
     getDenahUntukKode(kode),
     pool.query<BarisIsian & { diisi_oleh_akun_id: string }>(
-      `SELECT id::text AS id, kolom_id, bak_id, jenis, varian, jumlah_awal, sisa, pecah, mulai_at, durasi_beku_jam,
-              diisi_oleh_akun_id
+      `SELECT ${KOLOM_ISIAN}, diisi_oleh_akun_id
          FROM produksi_kolom_isi
         WHERE perusahaan_kode = $1 AND selesai_at IS NULL
         ORDER BY mulai_at, id`,
@@ -1021,14 +1396,33 @@ export async function getDataPabrik(kode: string): Promise<DataPabrik> {
         WHERE perusahaan_kode = $1 AND selesai_at IS NULL ORDER BY mulai_at`,
       [kode],
     ),
-    // Rek kosong sejak isian terakhirnya selesai — atau maintenance terakhirnya
-    // ditutup, bila lebih baru (supaya rek tidak langsung "kosong lama" begitu
-    // maintenance panjang selesai).
-    pool.query<{ kolom_id: string; sejak: Date }>(
-      `SELECT kolom_id, max(t) AS sejak FROM (
-         SELECT kolom_id, selesai_at AS t FROM produksi_kolom_isi WHERE perusahaan_kode = $1 AND selesai_at IS NOT NULL
+    pool.query<{ id: string; kolom_id: string; slot: number; mulai_at: Date; catatan: string | null }>(
+      `SELECT id::text AS id, kolom_id, slot, mulai_at, catatan FROM produksi_slot_rusak
+        WHERE perusahaan_kode = $1 AND selesai_at IS NULL ORDER BY kolom_id, slot`,
+      [kode],
+    ),
+    // total: rek kosong total sejak isian terakhirnya selesai — atau
+    // maintenance terakhirnya ditutup, bila lebih baru (supaya rek tidak
+    // langsung "kosong lama" begitu maintenance panjang selesai).
+    // sebagian: rek terisi sebagian sejak slot terakhir dikosongkan (panen
+    // yang memuat can, buang Babonan, isian selesai, can rusak diperbaiki).
+    pool.query<{ kolom_id: string; total: Date | null; sebagian: Date | null }>(
+      `SELECT kolom_id, max(t) FILTER (WHERE total) AS total, max(t) FILTER (WHERE sebagian) AS sebagian FROM (
+         SELECT kolom_id, selesai_at AS t, true AS total, true AS sebagian
+           FROM produksi_kolom_isi WHERE perusahaan_kode = $1 AND selesai_at IS NOT NULL
          UNION ALL
-         SELECT kolom_id, selesai_at AS t FROM produksi_maintenance WHERE perusahaan_kode = $1 AND selesai_at IS NOT NULL
+         SELECT kolom_id, selesai_at, true, false
+           FROM produksi_maintenance WHERE perusahaan_kode = $1 AND selesai_at IS NOT NULL
+         UNION ALL
+         SELECT kolom_id, panen_at, false, true
+           FROM produksi_panen WHERE perusahaan_kode = $1 AND dibatalkan_at IS NULL AND dimuat > 0
+         UNION ALL
+         SELECT ki.kolom_id, bk.at, false, true
+           FROM produksi_babonan_keluar bk JOIN produksi_kolom_isi ki ON ki.id = bk.isian_id
+          WHERE ki.perusahaan_kode = $1
+         UNION ALL
+         SELECT kolom_id, selesai_at, false, true
+           FROM produksi_slot_rusak WHERE perusahaan_kode = $1 AND selesai_at IS NOT NULL
        ) x GROUP BY kolom_id`,
       [kode],
     ),
@@ -1060,6 +1454,8 @@ export async function getDataPabrik(kode: string): Promise<DataPabrik> {
     mulaiAt: r.mulai_at.toISOString(),
     durasiBekuJam: r.durasi_beku_jam === null ? null : Number(r.durasi_beku_jam),
     diisiOlehNama: nama.get(r.diisi_oleh_akun_id) ?? r.diisi_oleh_akun_id,
+    slot: r.slot,
+    slotPecah: r.slot_pecah,
   }));
   const maintenance: MaintenanceAktif[] = mtQ.rows.map((r) => ({
     id: r.id,
@@ -1069,14 +1465,40 @@ export async function getDataPabrik(kode: string): Promise<DataPabrik> {
     dibukaOlehNama: nama.get(r.dibuka_oleh_akun_id) ?? r.dibuka_oleh_akun_id,
   }));
 
-  const sibuk = new Set([...isian.map((i) => i.kolomId), ...maintenance.map((m) => m.kolomId)]);
+  const rusak: SlotRusak[] = rusakQ.rows.map((r) => ({
+    id: r.id,
+    kolomId: r.kolom_id,
+    slot: r.slot,
+    mulaiAt: r.mulai_at.toISOString(),
+    catatan: r.catatan ?? "",
+  }));
+  const denah = denahTersimpan && !denahTersimpan.rusak ? denahTersimpan.data : null;
+
+  // Kapasitas per kolom dari denah: rek terisi sebagian hanya mendapat
+  // kosongSejak bila masih punya slot kosong yang tidak rusak.
+  const kapasitas = new Map<string, number>();
+  for (const e of denah?.elemen ?? []) if (e.tipe === "bak") for (const k of e.kolom) kapasitas.set(k.id, k.jumlahIceCan);
+  const terisi = new Map<string, number>();
+  for (const i of isian) terisi.set(i.kolomId, (terisi.get(i.kolomId) ?? 0) + i.slot.length);
+  for (const r of rusak) terisi.set(r.kolomId, (terisi.get(r.kolomId) ?? 0) + 1);
+  const adaIsian = new Set(isian.map((i) => i.kolomId));
+  const maint = new Set(maintenance.map((m) => m.kolomId));
   const kosongSejak: Record<string, string> = {};
-  for (const r of kosongQ.rows) if (!sibuk.has(r.kolom_id)) kosongSejak[r.kolom_id] = r.sejak.toISOString();
+  for (const r of kosongQ.rows) {
+    if (maint.has(r.kolom_id)) continue;
+    if (!adaIsian.has(r.kolom_id)) {
+      if (r.total) kosongSejak[r.kolom_id] = r.total.toISOString();
+      continue;
+    }
+    const kap = kapasitas.get(r.kolom_id);
+    if (r.sebagian && kap !== undefined && (terisi.get(r.kolom_id) ?? 0) < kap) kosongSejak[r.kolom_id] = r.sebagian.toISOString();
+  }
 
   return {
-    denah: denahTersimpan && !denahTersimpan.rusak ? denahTersimpan.data : null,
+    denah,
     isian,
     maintenance,
+    rusak,
     kosongSejak,
     panenBelumSiap: belumSiapQ.rows.map((r) => ({
       kolomId: r.kolom_id,

@@ -102,11 +102,15 @@ export async function getKolomIsiIds(kode: KodeProduksi): Promise<Set<string>> {
 // Kolom yang TERKUNCI di builder: ada isian aktif apa pun (termasuk Babonan)
 // ATAU maintenance yang masih terbuka. Maintenance terbuka mengunci sama
 // seperti isian: rek yang sedang dikerjakan tidak boleh diubah/dihapus di
-// bawah operator (catatan maintenance akan yatim).
+// bawah operator (catatan maintenance akan yatim). Can rusak aktif juga
+// mengunci (slot can bernomor 1..jumlahIceCan; mengubah kapasitas bisa
+// membuat slot rusak yatim).
 const SQL_KOLOM_TERKUNCI = `
   SELECT kolom_id FROM produksi_kolom_isi WHERE perusahaan_kode = $1 AND selesai_at IS NULL
   UNION
-  SELECT kolom_id FROM produksi_maintenance WHERE perusahaan_kode = $1 AND selesai_at IS NULL`;
+  SELECT kolom_id FROM produksi_maintenance WHERE perusahaan_kode = $1 AND selesai_at IS NULL
+  UNION
+  SELECT kolom_id FROM produksi_slot_rusak WHERE perusahaan_kode = $1 AND selesai_at IS NULL`;
 
 export async function getKolomTerkunciUntukKode(kode: string): Promise<Set<string>> {
   const { rows } = await getPgPool().query<{ kolom_id: string }>(SQL_KOLOM_TERKUNCI, [kode]);
@@ -120,7 +124,7 @@ function pesanPelanggaran(judul: string, galat: GalatDenah[]): string {
 }
 
 // Satu transaksi: kunci baris denah (FOR UPDATE), cek versi, validasi aturan
-// + aturan kolom berisi es (isian aktif atau maintenance terbuka) terhadap
+// + aturan kolom berisi es (isian aktif, maintenance terbuka, can rusak) terhadap
 // denah lama, lalu tulis versi+1. Baris produksi_kolom_isi &
 // produksi_maintenance dibaca DI DALAM transaksi yang sama. Bila apa pun gagal
 // -> ROLLBACK, denah lama tetap utuh.
@@ -149,7 +153,7 @@ export async function simpanDenahUntukKode(
     const barisLama = lama.rows[0] ?? null;
     if ((barisLama?.versi ?? null) !== versiDasar) throw new GalatSimpanDenah(PESAN_DENAH_BASI, "VERSI_BASI");
 
-    // Isian aktif ∪ maintenance terbuka, dibaca di transaksi yang sama.
+    // Isian aktif ∪ maintenance terbuka ∪ can rusak aktif, dibaca di transaksi yang sama.
     const isi = await client.query<{ kolom_id: string }>(SQL_KOLOM_TERKUNCI, [kode]);
     // Tetap KETAT: baris lama yang rusak menolak simpan (tidak pernah ditimpa diam-diam).
     let dataLama: DenahDokumen | null = null;
@@ -164,7 +168,7 @@ export async function simpanDenahUntukKode(
     const pelanggaran = kolomTerkunciBerubah(dataLama, data, new Set(isi.rows.map((r) => r.kolom_id)));
     if (pelanggaran.length > 0) {
       throw new GalatSimpanDenah(
-        pesanPelanggaran("Denah tidak bisa disimpan karena mengubah kolom yang masih berisi es atau sedang maintenance:", pelanggaran),
+        pesanPelanggaran("Denah tidak bisa disimpan karena mengubah kolom yang masih berisi es, sedang maintenance, atau punya can rusak:", pelanggaran),
         "KOLOM_TERKUNCI",
         pelanggaran
       );
