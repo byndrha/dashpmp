@@ -40,6 +40,7 @@ interface DataKeadaan {
 
 const INTERVAL_SEGAR_MS = 30_000;
 const PESAN_DENAH_KOSONG = "Denah produksi belum diatur — hubungi admin.";
+const PESAN_GAGAL_MUAT = "Gagal memuat — periksa koneksi. Data mungkin belum terbaru.";
 
 export function ProduksiApp({
   kode,
@@ -48,6 +49,7 @@ export function ProduksiApp({
   admin,
   awalKeadaan,
   awalArmada,
+  armadaGalat,
   awalKendaraanAktif,
   awalRiwayat,
 }: {
@@ -57,6 +59,7 @@ export function ProduksiApp({
   admin: boolean;
   awalKeadaan: { data: DataKeadaan | null; galat: string | null };
   awalArmada: KendaraanArmada[];
+  armadaGalat: string | null;
   awalKendaraanAktif: KendaraanPilihan | null;
   awalRiwayat: { data: DataRiwayat | null; galat: string | null };
 }) {
@@ -73,13 +76,19 @@ export function ProduksiApp({
   const [sibuk, setSibuk] = useState(false);
   const sibukRef = useRef(false);
 
+  // Kedua pemuat tidak pernah melempar: kegagalan jaringan (wifi putus)
+  // ditampilkan sebagai galat, data lama tetap tampil.
   const muatKeadaan = useCallback(async () => {
-    const r = await getKeadaanAction(kode);
-    if (r.success) {
-      setKeadaan({ data: r.data.data, keadaan: r.data.keadaan });
-      setGalatKeadaan(null);
-    } else {
-      setGalatKeadaan(r.error);
+    try {
+      const r = await getKeadaanAction(kode);
+      if (r.success) {
+        setKeadaan({ data: r.data.data, keadaan: r.data.keadaan });
+        setGalatKeadaan(null);
+      } else {
+        setGalatKeadaan(r.error);
+      }
+    } catch {
+      setGalatKeadaan(PESAN_GAGAL_MUAT);
     }
   }, [kode]);
 
@@ -93,6 +102,8 @@ export function ProduksiApp({
       } else {
         setGalatRiwayat(r.error);
       }
+    } catch {
+      setGalatRiwayat(PESAN_GAGAL_MUAT);
     } finally {
       setMemuatRiwayat(false);
     }
@@ -130,7 +141,9 @@ export function ProduksiApp({
         }
         if (r.success) toast.success(pesanSukses);
         else if (!("kodeGalat" in r && r.kodeGalat === "BELUM_SIAP")) toast.error(r.error);
-        await Promise.all([muatKeadaan(), muatRiwayat()]);
+        // Penyegaran sesudah aksi tidak boleh menggagalkan aksi yang sudah
+        // berhasil (pemuat menangkap galatnya sendiri; allSettled = jaring kedua).
+        await Promise.allSettled([muatKeadaan(), muatRiwayat()]);
         return r;
       } finally {
         sibukRef.current = false;
@@ -144,10 +157,16 @@ export function ProduksiApp({
     async (k: KendaraanPilihan) => {
       const lama = kendaraanAktif;
       setKendaraanAktifState(k);
-      const r = await setKendaraanAktifAction(kode, k);
-      if (!r.success) {
+      let galat: string | null = null;
+      try {
+        const r = await setKendaraanAktifAction(kode, k);
+        if (!r.success) galat = r.error;
+      } catch {
+        galat = "Gagal menyimpan kendaraan aktif — periksa koneksi.";
+      }
+      if (galat) {
         setKendaraanAktifState(lama);
-        toast.error(r.error);
+        toast.error(galat);
       }
     },
     [kode, kendaraanAktif],
@@ -198,6 +217,7 @@ export function ProduksiApp({
           <PemilihKendaraan
             kode={kode}
             armada={awalArmada}
+            armadaGalat={armadaGalat}
             nilai={kendaraanAktif}
             onPilih={(k) => void gantiKendaraanAktif(k)}
             disabled={sibuk}
@@ -269,6 +289,7 @@ export function ProduksiApp({
         rek={rekTerpilih}
         namaBak={namaBakTerpilih}
         armada={awalArmada}
+        armadaGalat={armadaGalat}
         kendaraanAktif={kendaraanAktif}
         sekarang={sekarang}
         sibuk={sibuk}

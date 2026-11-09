@@ -33,6 +33,7 @@ const BATAS_TAMPIL = 80;
 export function PemilihKendaraan({
   kode,
   armada,
+  armadaGalat = null,
   nilai,
   onPilih,
   disabled,
@@ -41,6 +42,7 @@ export function PemilihKendaraan({
 }: {
   kode: KodeProduksi;
   armada: KendaraanArmada[];
+  armadaGalat?: string | null;
   nilai: KendaraanPilihan | null;
   onPilih: (k: KendaraanPilihan) => void;
   disabled?: boolean;
@@ -74,6 +76,7 @@ export function PemilihKendaraan({
             <IsiPemilih
               kode={kode}
               armada={armada}
+              armadaGalat={armadaGalat}
               nilai={nilai}
               judul={judul}
               onPilih={(k) => {
@@ -91,12 +94,14 @@ export function PemilihKendaraan({
 function IsiPemilih({
   kode,
   armada,
+  armadaGalat,
   nilai,
   judul,
   onPilih,
 }: {
   kode: KodeProduksi;
   armada: KendaraanArmada[];
+  armadaGalat: string | null;
   nilai: KendaraanPilihan | null;
   judul: string;
   onPilih: (k: KendaraanPilihan) => void;
@@ -149,7 +154,7 @@ function IsiPemilih({
           <div className="max-h-[50dvh] overflow-y-auto rounded-lg border">
             {daftar.length === 0 ? (
               <p className="p-3 text-center text-sm text-muted-foreground">
-                {armada.length === 0 ? "Daftar armada tidak tersedia." : "Tidak ada yang cocok."}
+                {armada.length === 0 ? (armadaGalat ?? "Daftar armada tidak tersedia.") : "Tidak ada yang cocok."}
               </p>
             ) : (
               daftar.map((a) => {

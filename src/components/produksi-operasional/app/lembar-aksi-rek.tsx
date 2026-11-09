@@ -36,6 +36,7 @@ export interface PropsLembar {
   rek: KeadaanRek | null;
   namaBak: string;
   armada: KendaraanArmada[];
+  armadaGalat: string | null;
   kendaraanAktif: KendaraanPilihan | null;
   sekarang: string;
   sibuk: boolean;
@@ -62,6 +63,7 @@ function IsiLembar({
   rek,
   namaBak,
   armada,
+  armadaGalat,
   kendaraanAktif,
   sekarang,
   sibuk,
@@ -130,6 +132,7 @@ function IsiLembar({
             isian={isianPanen}
             namaBak={namaBak}
             armada={armada}
+            armadaGalat={armadaGalat}
             kendaraanAktif={kendaraanAktif}
             sibuk={sibuk}
             jalankan={jalankan}

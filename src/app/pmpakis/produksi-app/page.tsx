@@ -28,6 +28,7 @@ export default async function PmpakisProduksiAppPage() {
           : { data: null, galat: keadaan.error }
       }
       awalArmada={kendaraan.success ? kendaraan.data.armada : []}
+      armadaGalat={kendaraan.success ? kendaraan.data.armadaGalat : kendaraan.error}
       awalKendaraanAktif={kendaraan.success ? kendaraan.data.aktif : null}
       awalRiwayat={riwayat.success ? { data: riwayat.data, galat: null } : { data: null, galat: riwayat.error }}
     />

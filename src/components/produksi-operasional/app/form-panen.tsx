@@ -43,6 +43,7 @@ export function FormPanen({
   isian,
   namaBak,
   armada,
+  armadaGalat,
   kendaraanAktif,
   sibuk,
   jalankan,
@@ -55,6 +56,7 @@ export function FormPanen({
   isian: IsianAktif;
   namaBak: string;
   armada: KendaraanArmada[];
+  armadaGalat: string | null;
   kendaraanAktif: KendaraanPilihan | null;
   sibuk: boolean;
   jalankan: Jalankan;
@@ -142,6 +144,7 @@ export function FormPanen({
               <PemilihKendaraan
                 kode={kode}
                 armada={armada}
+                armadaGalat={armadaGalat}
                 nilai={b.kendaraan}
                 onPilih={(k) => ubahBaris(b.kunci, { kendaraan: k })}
                 disabled={sibuk}

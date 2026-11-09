@@ -280,11 +280,24 @@ export async function getKeadaanAction(
 
 export async function getPilihanKendaraanAction(
   kode: KodeProduksi,
-): Promise<HasilAksi<{ armada: KendaraanArmada[]; aktif: KendaraanPilihan | null }>> {
+): Promise<HasilAksi<{ armada: KendaraanArmada[]; armadaGalat: string | null; aktif: KendaraanPilihan | null }>> {
   return jalankan(async () => {
     const g = await gerbang(kode, "aksi");
-    const [armada, aktif] = await Promise.all([getKendaraanArmada(g.kode), getKendaraanAktif(g.pelaku.akunId, g.kode)]);
-    return { armada: armada.map((a) => ({ ...a, plat: a.plat ?? "" })), aktif };
+    // Daftar armada dari ERP boleh gagal sendiri: kendaraan aktif (Postgres)
+    // tetap dikembalikan supaya tidak hilang dari layar saat ERP mati.
+    const [armadaR, aktif] = await Promise.all([
+      getKendaraanArmada(g.kode).then(
+        (a) => ({ ok: true as const, a }),
+        (err: unknown) => {
+          console.error("[produksi-operasional] gagal membaca armada ERP", err);
+          return { ok: false as const };
+        },
+      ),
+      getKendaraanAktif(g.pelaku.akunId, g.kode),
+    ]);
+    return armadaR.ok
+      ? { armada: armadaR.a.map((a) => ({ ...a, plat: a.plat ?? "" })), armadaGalat: null, aktif }
+      : { armada: [], armadaGalat: "Daftar armada ERP gagal dimuat. Pakai kendaraan pembeli atau coba lagi nanti.", aktif };
   });
 }
 
