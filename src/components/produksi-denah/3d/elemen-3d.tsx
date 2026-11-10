@@ -242,6 +242,7 @@ export function TepiKotak({ kotak, zBawah, zAtas, jenis }: { kotak: Kotak2D; zBa
 
 // ---------- Bak ----------
 
+const CELAH_VISUAL_CAN_M = 0.008;
 const bantu = new Object3D();
 const warnaBantu = new Color();
 
@@ -258,7 +259,11 @@ function IceCanVarian({ bak, varian, onKlikKolom }: { bak: BakElemen; varian: Va
     for (let i = 0; i < instans.length; i++) {
       const c = instans[i];
       bantu.position.set(c.pusat[0], c.pusat[1], c.pusat[2]);
-      bantu.scale.set(c.ukuran[0], c.ukuran[1], c.ukuran[2]);
+      // Celah visual tipis (≤ 8 mm, maks 6% sisi) agar can yang berdempet tampak terpisah;
+      // hanya tampilan — posisi & panjang rek tetap dari tataBakMeter.
+      const celahA = Math.min(CELAH_VISUAL_CAN_M, c.ukuran[0] * 0.06);
+      const celahB = Math.min(CELAH_VISUAL_CAN_M, c.ukuran[2] * 0.06);
+      bantu.scale.set(c.ukuran[0] - celahA, c.ukuran[1], c.ukuran[2] - celahB);
       bantu.updateMatrix();
       mesh.setMatrixAt(i, bantu.matrix);
       mesh.setColorAt(i, warnaBantu.set(c.nonaktif ? WARNA_CAN.nonaktif : WARNA_CAN[varian]));

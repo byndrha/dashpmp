@@ -1102,6 +1102,7 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
   const tebal = bak.tebalDindingM;
   const jarakKolom = bak.jarakAntarKolomMm / 1000;
   const tampilIceCan = sisiIceCanTerkecil(tata) * skalaKira >= 3;
+  const tampilBatasCan = sisiIceCanTerkecil(tata) * skalaKira >= 5;
   const iceCan = useMemo(() => (tampilIceCan ? pathIceCan(tata) : null), [tata, tampilIceCan]);
   const ruangB = Math.max(0, tata.ruangB);
   const lawanRotasi = bak.rotasi ? (cx: number, cy: number) => `rotate(${-bak.rotasi} ${cx} ${cy})` : () => undefined;
@@ -1179,8 +1180,14 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
           </rect>
         );
       })}
-      {iceCan?.kecil && <path d={iceCan.kecil} className={KELAS_ICE_CAN.kecil} pointerEvents="none" />}
-      {iceCan?.besar && <path d={iceCan.besar} className={KELAS_ICE_CAN.besar} pointerEvents="none" />}
+      {/* Garis batas tiap can (tebal piksel tetap) agar can yang berdempet tetap terbaca
+          sebagai can terpisah; hanya saat satu can cukup besar di layar. */}
+      {iceCan?.kecil && (
+        <path d={iceCan.kecil} className={cn(KELAS_ICE_CAN.kecil, tampilBatasCan && "stroke-background")} strokeWidth={tampilBatasCan ? 1 : 0} vectorEffect={NS} pointerEvents="none" />
+      )}
+      {iceCan?.besar && (
+        <path d={iceCan.besar} className={cn(KELAS_ICE_CAN.besar, tampilBatasCan && "stroke-background")} strokeWidth={tampilBatasCan ? 1 : 0} vectorEffect={NS} pointerEvents="none" />
+      )}
       {/* Overlay status (di atas ice can supaya tetap terlihat saat zoom dekat). */}
       {statusKolom &&
         tata.kolom.map((k) => {
