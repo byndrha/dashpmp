@@ -225,7 +225,7 @@ function Keterangan({ tugas, rek, usia }: { tugas: Tugas; rek: KeadaanRek; usia:
     );
   }
   return (
-    <span className="min-w-0 truncate text-xs font-semibold text-orange-700 dark:text-orange-300">
+    <span className="min-w-0 truncate text-xs font-semibold text-stone-600 dark:text-stone-300">
       ◆ Babonan {rek.babonan} · {formatUsiaRingkas(usia)}
     </span>
   );

@@ -16,7 +16,10 @@ import {
 import type { ActionResult } from "@/lib/action-result";
 import type { BakElemen, KodeProduksi } from "@/lib/produksi-denah";
 import {
+  cocokFilterVarian,
+  filterVarianSah,
   shiftDari,
+  type FilterVarian,
   type KeadaanRek,
   type KendaraanPilihan,
   type RingkasanBak,
@@ -28,6 +31,7 @@ import { LegendaCan } from "../grid-can";
 import { DaftarRek } from "./daftar-rek";
 import { DaftarTugas } from "./daftar-tugas";
 import { LembarAksiRek, type TampilanAwal } from "./lembar-aksi-rek";
+import { singkatVarian } from "../warna-tahap";
 import { PemilihKendaraan } from "./pemilih-kendaraan";
 import { RiwayatSaya, type DataRiwayat } from "./riwayat-saya";
 
@@ -238,6 +242,29 @@ export function ProduksiApp({
     [kode, muatKeadaan, muatRiwayat],
   );
 
+  // Filter varian dibaca setelah mount (localStorage tidak ada di server) dan
+  // gagal dengan tenang bila penyimpanan diblokir.
+  const kunciFilter = `produksi-app:filter-varian:${kode}`;
+  const [filterTersimpan, setFilterTersimpan] = useState<string | null>(null);
+  useEffect(() => {
+    let v: string | null = null;
+    try {
+      v = window.localStorage.getItem(kunciFilter);
+    } catch {
+      v = null;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sinkron sekali dari penyimpanan browser
+    setFilterTersimpan(v);
+  }, [kunciFilter]);
+  function pilihFilter(f: FilterVarian) {
+    setFilterTersimpan(f);
+    try {
+      window.localStorage.setItem(kunciFilter, f);
+    } catch {
+      /* penyimpanan tidak tersedia — filter tetap berlaku untuk sesi ini */
+    }
+  }
+
   function gantiTab(t: TabKey) {
     setTab(t);
     setDikunjungi((s) => (s.has(t) ? s : new Set(s).add(t)));
@@ -253,11 +280,19 @@ export function ProduksiApp({
   const bakTampil = bakAktif?.id ?? "";
   const rekLembar = rekTerpilih ? petaKeadaan.get(rekTerpilih.kolomId) ?? null : null;
   const namaBakTerpilih = rekLembar ? daftarBak.find((b) => b.id === rekLembar.bakId)?.nama.trim() || "Bak" : "";
-  const ringkasan = keadaan?.ringkasBak.find((r) => r.bakId === bakTampil) ?? null;
-  const tugasBak = useMemo(() => (keadaan?.tugas ?? []).filter((t) => t.bakId === bakTampil), [keadaan, bakTampil]);
+  // Satu entri per varian di bak aktif; filter BK/BB hanya muncul bila ≥ 2 varian.
+  const ringkasanBak = useMemo(() => (keadaan?.ringkasBak ?? []).filter((r) => r.bakId === bakTampil), [keadaan, bakTampil]);
+  const varianBak = useMemo(() => ringkasanBak.map((r) => r.varian), [ringkasanBak]);
+  const filter: FilterVarian = filterVarianSah(filterTersimpan, varianBak);
+  const tampilFilter = varianBak.length >= 2;
+  const filterAktif: FilterVarian = tampilFilter ? filter : "semua";
+  const tugasBak = useMemo(
+    () => (keadaan?.tugas ?? []).filter((t) => t.bakId === bakTampil && cocokFilterVarian(filterAktif, t.varian)),
+    [keadaan, bakTampil, filterAktif],
+  );
   const rekSlotBelumSiap = useMemo(
-    () => (keadaan?.keadaan ?? []).filter((k) => k.bakId === bakTampil && k.slotBelumSiap && k.utama !== "nonaktif"),
-    [keadaan, bakTampil],
+    () => (keadaan?.keadaan ?? []).filter((k) => k.bakId === bakTampil && k.slotBelumSiap && k.utama !== "nonaktif" && cocokFilterVarian(filterAktif, k.varian)),
+    [keadaan, bakTampil, filterAktif],
   );
   const panenPerBak = useMemo(() => {
     const m = new Map<string, number>();
@@ -318,7 +353,7 @@ export function ProduksiApp({
             {bakAktif && (
               <div className="flex flex-col pb-4">
                 <TabBak daftarBak={daftarBak} bakAktifId={bakAktif.id} onPilih={setBakAktifId} panenPerBak={panenPerBak} />
-                <ChipRingkasan jumlahRek={bakAktif.kolom.length} ringkasan={ringkasan} />
+                <ChipRingkasan ringkasan={ringkasanBak} filter={tampilFilter ? filter : null} onFilter={pilihFilter} />
                 <DaftarTugas
                   key={bakAktif.id}
                   tugas={tugasBak}
@@ -332,7 +367,7 @@ export function ProduksiApp({
                   onBuka={(kolomId) => setRekTerpilih({ kolomId, awal: "menu" })}
                 />
                 <h2 className="px-3 pt-4 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Semua rek</h2>
-                <DaftarRek bak={bakAktif} keadaan={petaKeadaan} onPilihRek={(kolomId) => setRekTerpilih({ kolomId, awal: "menu" })} />
+                <DaftarRek bak={bakAktif} keadaan={petaKeadaan} filter={filterAktif} onPilihRek={(kolomId) => setRekTerpilih({ kolomId, awal: "menu" })} />
                 <LegendaCan className="px-3 pt-3" />
               </div>
             )}
@@ -437,15 +472,55 @@ function TabBak({
   );
 }
 
-// Chip jumlah rek per kategori bak aktif (ringkasBak di server).
-function ChipRingkasan({ jumlahRek, ringkasan }: { jumlahRek: number; ringkasan: RingkasanBak | null }) {
-  const r = ringkasan ?? { siap: 0, kosong: 0, babonan: 0, rusak: 0 };
+// Chip jumlah rek per kategori, satu baris per varian bak aktif (ringkasBak di
+// server), diawali "BK 30 rek". Filter Semua | BK | BB hanya bila ≥ 2 varian.
+function ChipRingkasan({
+  ringkasan,
+  filter,
+  onFilter,
+}: {
+  ringkasan: RingkasanBak[];
+  filter: FilterVarian | null;
+  onFilter: (f: FilterVarian) => void;
+}) {
+  const opsi: { nilai: FilterVarian; label: string }[] = [
+    { nilai: "semua", label: "Semua" },
+    ...ringkasan.map((r) => ({ nilai: r.varian as FilterVarian, label: singkatVarian(r.varian) })),
+  ];
+  return (
+    <div className="flex flex-col gap-1.5 px-3 pt-2.5">
+      {filter !== null && (
+        <div role="group" aria-label="Saring varian" className="flex gap-1">
+          {opsi.map((o) => (
+            <button
+              key={o.nilai}
+              type="button"
+              onClick={() => onFilter(o.nilai)}
+              aria-pressed={filter === o.nilai}
+              className={cn(
+                "h-8 min-w-14 rounded-full border px-3 text-xs font-semibold",
+                filter === o.nilai ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground",
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {ringkasan.map((r) => (
+        <BarisChip key={r.varian} r={r} />
+      ))}
+    </div>
+  );
+}
+
+function BarisChip({ r }: { r: RingkasanBak }) {
   const chip = [
     {
       label: "Siap",
       n: r.siap,
-      tanda: <span className="size-2.5 shrink-0 rounded-full bg-green-600" />,
-      kelas: "border-green-600/60 bg-green-50 text-green-800 dark:bg-green-950/60 dark:text-green-200",
+      tanda: <span className="size-2.5 shrink-0 rounded-full bg-[#14a89a]" />,
+      kelas: "border-teal-600/60 bg-teal-50 text-teal-800 dark:bg-teal-950/60 dark:text-teal-200",
     },
     {
       label: "Kosong",
@@ -457,7 +532,7 @@ function ChipRingkasan({ jumlahRek, ringkasan }: { jumlahRek: number; ringkasan:
       label: "Babonan",
       n: r.babonan,
       tanda: <span className="shrink-0 text-[10px] leading-none">◆</span>,
-      kelas: "border-orange-500/60 bg-orange-50 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200",
+      kelas: "border-stone-500/60 bg-stone-100 text-stone-800 dark:bg-stone-800/60 dark:text-stone-200",
     },
     {
       label: "Rusak",
@@ -467,8 +542,10 @@ function ChipRingkasan({ jumlahRek, ringkasan }: { jumlahRek: number; ringkasan:
     },
   ];
   return (
-    <div className="flex flex-col gap-1.5 px-3 pt-2.5">
-      <p className="text-xs text-muted-foreground">{jumlahRek} rek</p>
+    <div className="flex flex-col gap-1">
+      <p className="text-xs text-muted-foreground">
+        <b className="text-foreground">{singkatVarian(r.varian)}</b> {r.rek} rek
+      </p>
       {/* 2 × 2 di layar HP (≥ 375 px label tidak terpotong), 4 kolom di layar lebar. */}
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {chip.map((c) => (

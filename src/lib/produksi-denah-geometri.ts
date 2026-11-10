@@ -7,7 +7,7 @@
 // SEBELUM rotasi — sama dengan isi grup SVG `translate(x y) rotate(r w/2 h/2)`.
 // keDunia() menerapkan transformasi itu.
 
-import { kotakElemen, type BakElemen, type DenahDokumen, type DenahElemen, type DerekElemen, type JalurElemen, type Titik, type Titik3D, type Varian } from "./produksi-denah";
+import { kotakElemen, orientasiKolom, type BakElemen, type OrientasiCan, type DenahDokumen, type DenahElemen, type DerekElemen, type JalurElemen, type Titik, type Titik3D, type Varian } from "./produksi-denah";
 
 // ---------- Tata bak ----------
 
@@ -29,6 +29,8 @@ export interface TataKolom {
   jarakCan: number;
   jumlah: number;
   varian: Varian;
+  /** Orientasi can di kolom ini; `lebar` & `panjangCan` sudah mengikutinya. */
+  orientasi: OrientasiCan;
   nonaktif: boolean;
 }
 
@@ -68,8 +70,10 @@ export function tataBakMeter(bak: BakElemen): TataBak {
     const i = urutPosisi[p];
     const k = bak.kolom[i];
     const dim = bak.iceCan[k.varian];
-    const lebar = dim.lebarMm / 1000;
-    const panjangCan = dim.panjangMm / 1000;
+    const orientasi = orientasiKolom(k);
+    const tegak = orientasi === "tegak";
+    const lebar = (tegak ? dim.panjangMm : dim.lebarMm) / 1000;
+    const panjangCan = (tegak ? dim.lebarMm : dim.panjangMm) / 1000;
     kolom[i] = {
       kolomId: k.id,
       indeks: i,
@@ -82,6 +86,7 @@ export function tataBakMeter(bak: BakElemen): TataBak {
       jumlah: k.jumlahIceCan,
       varian: k.varian,
       nonaktif: k.nonaktif === true,
+      orientasi,
     };
     a += lebar + jarakKolom;
     maksB = Math.max(maksB, k.jumlahIceCan * (panjangCan + jarakCan));

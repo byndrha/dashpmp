@@ -20,11 +20,15 @@
 export type Varian = "kecil" | "besar";
 export type Rotasi = 0 | 90 | 180 | 270;
 
+export type OrientasiCan = "mendatar" | "tegak";
+
 export interface DenahKolom {
   id: string;
   nomor: number;
   varian: Varian;
   jumlahIceCan: number;
+  /** Posisi ice can di rek; tidak ada = "mendatar". */
+  orientasiCan?: OrientasiCan;
   ukuranIceCan?: string;
   catatan?: string;
   nonaktif?: boolean;
@@ -72,6 +76,10 @@ export interface BakElemen extends ElemenDasar {
   kolom: DenahKolom[];
   varianBawaan: Varian;
   iceCanPerKolomBawaan: number;
+  /** Orientasi can bawaan untuk kolom baru; tidak ada = "mendatar". */
+  orientasiCanBawaan?: OrientasiCan;
+  /** Kode bak 1–3 karakter [0-9A-Za-z]; tidak ada = angka pertama nama bak, atau urutan bak. */
+  kodeBak?: string;
   durasiBekuJam: { kecil: number; besar: number };
   kolomPerPanen: number;
   mesinIds: string[];
@@ -276,18 +284,22 @@ export const PRESET_ICE_CAN: readonly { id: string; label: string; panjangMm: nu
   { id: "fao-25", label: "FAO 25 kg", panjangMm: 190, lebarMm: 190, tinggiMm: 1105, beratKg: 25 },
   { id: "fao-50", label: "FAO 50 kg", panjangMm: 184, lebarMm: 408, tinggiMm: 1000, beratKg: 50 },
   { id: "fao-136", label: "FAO 136 kg", panjangMm: 280, lebarMm: 560, tinggiMm: 1220, beratKg: 136 },
+  // Ukuran nyata pabrik PMP (informasi pengguna 2026-11-10): Balok Besar = 2× panjang Balok Kecil.
+  // Panjang = sumbu sepanjang rek, jadi BB 38 cm memanjang di rek (18 can = 36 BK = 6,84 m).
+  { id: "pmp-kecil", label: "PMP Balok Kecil", panjangMm: 190, lebarMm: 190, tinggiMm: 1190, beratKg: 35 },
+  { id: "pmp-besar", label: "PMP Balok Besar", panjangMm: 380, lebarMm: 190, tinggiMm: 1190, beratKg: 70 },
   { id: "kustom", label: "Kustom", panjangMm: 120, lebarMm: 360, tinggiMm: 750, beratKg: 25 },
 ];
 
-/** Kecil = preset "pasar 25 kg"; Besar = panjang 2× Kecil (lebar & tinggi sama — fakta pengguna). */
+/** Bawaan = preset PMP: Kecil 19×19×119 cm 35 kg; Besar 38×19×119 cm 70 kg (lebar & tinggi sama — fakta pengguna). */
 export const ICE_CAN_DIMENSI_BAWAAN: Record<Varian, DimensiIceCan> = {
-  kecil: { panjangMm: 120, lebarMm: 360, tinggiMm: 750, beratKg: 25, presetId: "pasar-25" },
-  besar: { panjangMm: 240, lebarMm: 360, tinggiMm: 750, beratKg: 50 },
+  kecil: { panjangMm: 190, lebarMm: 190, tinggiMm: 1190, beratKg: 35, presetId: "pmp-kecil" },
+  besar: { panjangMm: 380, lebarMm: 190, tinggiMm: 1190, beratKg: 70, presetId: "pmp-besar" },
 };
 
 /** Elevasi/tinggi bawaan (meter) per tipe, spec v2 §3. */
 export const ELEVASI_TINGGI_BAWAAN: Record<TipeElemen, { elevasiM: number; tinggiM: number }> = {
-  bak: { elevasiM: -0.7, tinggiM: 1.0 },
+  bak: { elevasiM: -1.2, tinggiM: 1.5 }, // bibir tetap +0,3 m
   mesin: { elevasiM: 0, tinggiM: 1.8 },
   derek: { elevasiM: 3.5, tinggiM: 0.3 },
   dinding: { elevasiM: 0, tinggiM: 4.0 },
@@ -299,7 +311,13 @@ export const ELEVASI_TINGGI_BAWAAN: Record<TipeElemen, { elevasiM: number; tingg
   jalur: { elevasiM: 0, tinggiM: 0.05 },
 };
 
-export const BAK_BAWAAN = { w: 16, h: 6.5, tebalDindingM: 0.2, levelBrineM: 0.95, jarakAntarKolomMm: 60, jarakAntarCanMm: 40 } as const;
+/**
+ * Bak bawaan untuk 36 rek Balok Kecil preset PMP (36 can × 19 cm), diturunkan dari aturan teknik,
+ * BUKAN hasil ukur lapangan: lebar = 2 × dinding + 6 cm + 36 × (19 + 6) cm; panjang = 2 × dinding + 36 × 19 cm
+ * (jarak antar can 0 agar rek BB dan BK sama panjang); dalam 1,5 m = dinding dasar + can 119 cm +
+ * sisa 11 cm; brine 5 cm di bawah bibir (bibir can sejajar brine).
+ */
+export const BAK_BAWAAN = { w: 9.7, h: 7.3, tebalDindingM: 0.2, levelBrineM: 1.45, jarakAntarKolomMm: 60, jarakAntarCanMm: 0 } as const;
 export const TINGGI_KAIT_BAWAAN = 0.8;
 export const KATEGORI_MESIN_BAWAAN: KategoriMesin = "refrigerasi";
 export const TANGKI_BAWAAN = { jenis: "tandon", bentuk: "kotak", levelIsiPersen: 70 } as const;
@@ -323,12 +341,29 @@ export function denahKosong(): DenahDokumen {
   return { skemaVersi: 2, kanvas: kanvasBawaan(), elemen: [] };
 }
 
-export function buatKolom(jumlah: number, bawaan: { varian: Varian; jumlahIceCan: number }, mulaiNomor = 1): DenahKolom[] {
+export function orientasiKolom(k: DenahKolom): OrientasiCan {
+  return k.orientasiCan ?? "mendatar";
+}
+
+/** Kode bak efektif: kodeBak bila diisi, selain itu angka pertama pada nama, selain itu indeksBak + 1 (indeksBak 0-based di antara bak). */
+export function kodeBakEfektif(bak: BakElemen, indeksBak: number): string {
+  const k = bak.kodeBak?.trim();
+  if (k) return k;
+  const m = /\d+/.exec(bak.nama);
+  return m ? String(Number(m[0])) : String(indeksBak + 1);
+}
+
+export function buatKolom(
+  jumlah: number,
+  bawaan: { varian: Varian; jumlahIceCan: number; orientasiCan?: OrientasiCan },
+  mulaiNomor = 1
+): DenahKolom[] {
   return Array.from({ length: Math.max(0, Math.floor(jumlah)) }, (_, i) => ({
     id: idBaru(),
     nomor: mulaiNomor + i,
     varian: bawaan.varian,
     jumlahIceCan: bawaan.jumlahIceCan,
+    orientasiCan: bawaan.orientasiCan ?? "mendatar",
   }));
 }
 
@@ -360,7 +395,7 @@ export function buatBak(x: number, y: number, opsi: Partial<BakElemen> = {}): Ba
     y,
     varianBawaan,
     iceCanPerKolomBawaan,
-    kolom: opsi.kolom ?? buatKolom(KOLOM_BAWAAN, { varian: varianBawaan, jumlahIceCan: iceCanPerKolomBawaan }),
+    kolom: opsi.kolom ?? buatKolom(KOLOM_BAWAAN, { varian: varianBawaan, jumlahIceCan: iceCanPerKolomBawaan, orientasiCan: opsi.orientasiCanBawaan }),
   };
 }
 
@@ -371,7 +406,7 @@ export function ubahJumlahKolom(bak: BakElemen, n: number): BakElemen {
   const nomorAkhir = bak.kolom.reduce((m, k) => Math.max(m, k.nomor), 0);
   const tambahan = buatKolom(
     target - bak.kolom.length,
-    { varian: bak.varianBawaan, jumlahIceCan: bak.iceCanPerKolomBawaan },
+    { varian: bak.varianBawaan, jumlahIceCan: bak.iceCanPerKolomBawaan, orientasiCan: bak.orientasiCanBawaan },
     nomorAkhir + 1
   );
   return { ...bak, kolom: [...bak.kolom, ...tambahan] };
@@ -455,6 +490,9 @@ function normalNama(s: string): string {
   return s.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+const POLA_KODE_BAK = /^[0-9A-Za-z]{1,3}$/;
+const ORIENTASI_CAN: readonly string[] = ["mendatar", "tegak"];
+
 export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
   const galat: GalatDenah[] = [];
   const { lebar, tinggi, utaraDerajat } = dok.kanvas;
@@ -468,6 +506,8 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
   }
 
   const namaBak = new Map<string, BakElemen>();
+  const kodeBakPeta = new Map<string, BakElemen>();
+  let indeksBak = 0;
   for (const e of dok.elemen) {
     const label = labelElemen(e);
     if (!e.nama.trim()) galat.push({ elemenId: e.id, pesan: `Nama ${e.tipe} tidak boleh kosong.` });
@@ -494,6 +534,26 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
         if (lain) galat.push({ elemenId: e.id, pesan: `Nama bak ${label} ganda — sudah dipakai bak lain.` });
         else namaBak.set(kunci, e);
       }
+      const kodeEf = kodeBakEfektif(e, indeksBak++);
+      const eksplisit = e.kodeBak?.trim();
+      if (e.kodeBak !== undefined && !POLA_KODE_BAK.test(e.kodeBak)) {
+        galat.push({ elemenId: e.id, pesan: `Kode bak tidak sah pada bak ${label}: harus 1–3 karakter huruf/angka, tanpa tanda "-".` });
+      } else if (!eksplisit && !/\d/.test(e.nama)) {
+        // Cadangan urutan bak bergeser bila ada bak disisipkan/dihapus, sehingga label
+        // di lapangan ("2-5-3") bisa pindah rek: wajib kode eksplisit.
+        galat.push({ elemenId: e.id, pesan: `Bak ${label} tidak punya angka pada nama: isi Kode bak agar kode posisinya tidak bergeser.` });
+      } else if (!POLA_KODE_BAK.test(kodeEf)) {
+        galat.push({ elemenId: e.id, pesan: `Kode bak turunan "${kodeEf}" dari nama ${label} lebih dari 3 karakter: isi Kode bak (1–3 karakter).` });
+      } else {
+        const lainKode = kodeBakPeta.get(kodeEf.toLowerCase());
+        if (lainKode) {
+          galat.push({ elemenId: e.id, pesan: `Kode bak "${kodeEf}" ganda: bak ${labelElemen(lainKode)} dan ${label} memakai kode yang sama.` });
+        } else kodeBakPeta.set(kodeEf.toLowerCase(), e);
+      }
+      if (e.orientasiCanBawaan !== undefined && !ORIENTASI_CAN.includes(e.orientasiCanBawaan)) {
+        galat.push({ elemenId: e.id, pesan: `Orientasi can bawaan tidak sah pada bak ${label}.` });
+      }
+      const nomorDipakai = new Set<number>();
       if (e.kolom.length <= 0) galat.push({ elemenId: e.id, pesan: `Bak ${label} harus punya minimal 1 kolom.` });
       if (!(e.iceCanPerKolomBawaan > 0)) galat.push({ elemenId: e.id, pesan: `Ice can per kolom bawaan bak ${label} harus lebih dari 0.` });
       if (!(e.durasiBekuJam.kecil > 0) || !(e.durasiBekuJam.besar > 0)) {
@@ -514,6 +574,11 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
       for (const kol of e.kolom) {
         if (idKolom.has(kol.id)) galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `ID kolom ganda pada bak ${label} kolom ${kol.nomor}.` });
         idKolom.add(kol.id);
+        if (nomorDipakai.has(kol.nomor)) galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `Nomor rek ganda pada bak ${label}: nomor ${kol.nomor}.` });
+        nomorDipakai.add(kol.nomor);
+        if (kol.orientasiCan !== undefined && !ORIENTASI_CAN.includes(kol.orientasiCan)) {
+          galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `Orientasi can tidak sah pada bak ${label} kolom ${kol.nomor}.` });
+        }
         if (!(kol.jumlahIceCan > 0)) {
           galat.push({ elemenId: e.id, kolomId: kol.id, pesan: `Jumlah ice can bak ${label} kolom ${kol.nomor} harus lebih dari 0.` });
         }
@@ -845,6 +910,9 @@ function lengkapiElemen(asli: unknown, skala: number): DenahElemen {
       isi(e, "levelBrineM", BAK_BAWAAN.levelBrineM);
       isi(e, "jarakAntarKolomMm", BAK_BAWAAN.jarakAntarKolomMm);
       isi(e, "jarakAntarCanMm", BAK_BAWAAN.jarakAntarCanMm);
+      if (Array.isArray(e.kolom)) {
+        for (const k of e.kolom) if (objek(k)) isi(k, "orientasiCan", "mendatar");
+      }
       if (!objek(e.iceCan)) e.iceCan = {};
       const ic = e.iceCan as Mentah;
       for (const v of ["kecil", "besar"] as const) {

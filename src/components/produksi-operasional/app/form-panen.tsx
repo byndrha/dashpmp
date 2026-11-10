@@ -10,6 +10,7 @@ import { panenAction } from "@/app/produksi-operasional-actions";
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import {
   hitungKematangan,
+  kodeRek,
   slotDimuatDari,
   validasiPanenSlot,
   type IsianAktif,
@@ -190,7 +191,7 @@ export function FormPanen({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-muted-foreground">
-        {namaBak} · Rek {rek.nomor} · {singkatVarian(isian.varian)} · isian {jamWib(isian.mulaiAt)}
+        {namaBak} · Rek {rek.nomor} ({kodeRek(rek.kodeBak, rek.nomor)}) · {singkatVarian(isian.varian)} · isian {jamWib(isian.mulaiAt)}
         {pctIsian !== null && ` (${pctIsian}%)`} · <span className="font-semibold text-foreground">{isian.slot.length} can</span>
         {babonanMode && " Babonan"}
       </p>
@@ -200,14 +201,14 @@ export function FormPanen({
           <GridCan
             mode="pilih"
             can={rek.can}
-            varian={rek.varian}
+            rek={rek}
             boleh={bolehMuatBabonan}
             pilihan={pilihMuat}
             onUbah={ubahPilihMuat}
             disabled={sibuk}
           />
         ) : (
-          <GridCan mode="panen" can={rek.can} varian={rek.varian} boleh={milik} pilihan={tanda} onUbah={ubahTanda} disabled={sibuk} />
+          <GridCan mode="panen" can={rek.can} rek={rek} boleh={milik} pilihan={tanda} onUbah={ubahTanda} disabled={sibuk} />
         )}
         <p className="text-[11px] text-muted-foreground">
           {babonanMode
@@ -227,7 +228,7 @@ export function FormPanen({
           {!babonanMode && (
             <>
               {" "}
-              · <span className="text-orange-700 dark:text-orange-300">◆</span> <b>{slotBabonan.length}</b> · ✕ <b>{slotPecah.length}</b>
+              · <span className="text-stone-600 dark:text-stone-300">◆</span> <b>{slotBabonan.length}</b> · ✕ <b>{slotPecah.length}</b>
             </>
           )}
           {!tanpaMuatan && (

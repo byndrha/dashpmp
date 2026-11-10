@@ -6,7 +6,7 @@
 
 import { memo, type Dispatch } from "react";
 import { cn } from "@/lib/utils";
-import type { BakElemen, DenahKolom, Varian } from "@/lib/produksi-denah";
+import { orientasiKolom, type BakElemen, type DenahKolom, type OrientasiCan, type Varian } from "@/lib/produksi-denah";
 import type { AksiBuilder } from "@/components/produksi-denah/builder-state";
 import { Bidang, Centang, InputAngka, InputTeks, Judul, Segmen, TombolKecil } from "@/components/produksi-denah/bidang";
 
@@ -113,6 +113,16 @@ export const PanelKolom = memo(function PanelKolom({
                 { nilai: "besar", label: "Besar" },
               ]}
               onUbah={(varian) => ubah({ varian })}
+            />
+          </Bidang>
+          <Bidang label="Orientasi can" petunjuk="Boleh diubah walau rek berisi es: hanya mengubah gambar dan penomoran posisi.">
+            <Segmen<OrientasiCan>
+              nilai={sama(pilih, (k) => orientasiKolom(k))}
+              pilihan={[
+                { nilai: "mendatar", label: "Mendatar ▭" },
+                { nilai: "tegak", label: "Tegak ▯" },
+              ]}
+              onUbah={(orientasiCan) => ubah({ orientasiCan })}
             />
           </Bidang>
           <Bidang label="Jumlah ice can">

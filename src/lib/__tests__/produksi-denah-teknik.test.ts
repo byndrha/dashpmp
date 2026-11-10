@@ -47,7 +47,7 @@ test("periksaTeknik: bak bawaan + derek bawaan yang melintas → nol peringatan"
 });
 
 test("periksaTeknik: semua hasil bertingkat peringatan dan menyertakan elemenId", () => {
-  const g = periksaTeknik(dok(bak({ w: 13.5, tinggiM: 0.8, levelBrineM: 0.7 }), derek({ elevasiM: 1.8, titikAwal: { x: 1, y: 30 }, titikAkhir: { x: 21, y: 30 } })));
+  const g = periksaTeknik(dok(bak({ w: 8, tinggiM: 0.8, levelBrineM: 0.3 }), derek({ elevasiM: 1.0, titikAwal: { x: 1, y: 30 }, titikAkhir: { x: 21, y: 30 } })));
   assert.ok(g.length >= 4);
   for (const x of g) {
     assert.equal(x.tingkat, "peringatan");
@@ -55,18 +55,18 @@ test("periksaTeknik: semua hasil bertingkat peringatan dan menyertakan elemenId"
   }
 });
 
-test("aturan 1: bak lebar 13,5 → kolom tidak muat (kurang 2,08 m)", () => {
-  const g = periksaTeknik(dok(bak({ w: 13.5 })));
+test("aturan 1: bak lebar 8 → kolom tidak muat (kurang 1,46 m)", () => {
+  const g = periksaTeknik(dok(bak({ w: 8 })));
   ada(g, "Bak 1");
-  ada(g, "36 kolom butuh 15,18 m, ruang dalam 13,10 m (kurang 2,08 m)");
+  ada(g, "36 kolom butuh 9,06 m, ruang dalam 7,60 m (kurang 1,46 m)");
   assert.equal(g.length, 1);
   assert.equal(g[0].elemenId, "b1");
 });
 
 test("aturan 1: sumbu sepanjang kolom (ice can per kolom) juga diperiksa", () => {
   const g = periksaTeknik(dok(bak({ h: 5.5 })));
-  // butuh 0,04 + 36 × 0,16 = 5,80; ruang 5,5 − 0,4 = 5,10
-  ada(g, "butuh 5,80 m, ruang dalam 5,10 m (kurang 0,70 m)");
+  // butuh 0 + 36 × 0,19 = 6,84; ruang 5,5 − 0,4 = 5,10
+  ada(g, "butuh 6,84 m, ruang dalam 5,10 m (kurang 1,74 m)");
 });
 
 test("aturan 2a: tinggiM 0,8 → ice can menyentuh dasar bak", () => {
@@ -75,30 +75,32 @@ test("aturan 2a: tinggiM 0,8 → ice can menyentuh dasar bak", () => {
   tidakAda(periksaTeknik(dok(bak())), "menyentuh dasar bak");
 });
 
-test("aturan 2b: levelBrineM 0,7 → brine terlalu rendah, terendam 60%", () => {
-  const g = periksaTeknik(dok(bak({ levelBrineM: 0.7 })));
+test("aturan 2b: levelBrineM 1,03 → brine terlalu rendah, terendam 60%", () => {
+  // dasar can = bibir 0,3 − 1,19 = −0,89; brine = −1,2 + 1,03 = −0,17 → (−0,17 + 0,89) / 1,19 = 60,5%
+  const g = periksaTeknik(dok(bak({ levelBrineM: 1.03 })));
   ada(g, "brine terlalu rendah, ice can hanya terendam 60%");
-  // 85% tepat lolos: brine = dasar can + 0,85 × 0,75
-  tidakAda(periksaTeknik(dok(bak({ levelBrineM: 0.25 + 0.6375 + 0.001 }))), "brine terlalu rendah");
+  // 85% tepat lolos: brine = dasar can + 0,85 × 1,19 → levelBrineM = 0,31 + 1,0115
+  tidakAda(periksaTeknik(dok(bak({ levelBrineM: 0.31 + 0.85 * 1.19 + 0.001 }))), "brine terlalu rendah");
 });
 
 test("aturan 2: hanya varian kolom aktif yang dipakai", () => {
   const b = bak();
-  b.iceCan.besar = { ...b.iceCan.besar, tinggiMm: 1200 };
+  b.iceCan.besar = { ...b.iceCan.besar, tinggiMm: 1400 };
   b.kolom[0] = { ...b.kolom[0], varian: "besar", jumlahIceCan: 18, nonaktif: true };
   tidakAda(periksaTeknik(dok(b)), "menyentuh dasar bak");
   b.kolom[0] = { ...b.kolom[0], nonaktif: false };
   ada(periksaTeknik(dok(b)), "menyentuh dasar bak");
 });
 
-test("aturan 3: derek elevasi 1,8 untuk bak bawaan → kurang 25 cm", () => {
-  const g = periksaTeknik(dok(bak(), derek({ elevasiM: 1.8 })));
+test("aturan 3: derek elevasi 2,24 untuk bak bawaan → kurang 25 cm", () => {
+  // butuh bibir 0,3 + can 1,19 + 0,2 = 1,69; kait = 2,24 − 0,8 = 1,44
+  const g = periksaTeknik(dok(bak(), derek({ elevasiM: 2.24 })));
   ada(g, "kurang 25 cm");
   const x = g.find((y) => y.pesan.includes("kurang 25 cm"))!;
   assert.equal(x.elemenId, "d1");
   assert.deepEqual(x.elemenTerkaitIds, ["b1"]);
-  // tepat 1,25 + 0,8 = 2,05 lolos
-  assert.deepEqual(periksaTeknik(dok(bak(), derek({ elevasiM: 2.05 }))), []);
+  // tepat 1,69 + 0,8 = 2,49 lolos
+  assert.deepEqual(periksaTeknik(dok(bak(), derek({ elevasiM: 2.49 }))), []);
 });
 
 test("aturan 4: rel derek tidak memotong bak yang dilayani", () => {
@@ -109,7 +111,7 @@ test("aturan 4: rel derek tidak memotong bak yang dilayani", () => {
 });
 
 test("aturan 5: pipa menembus bak tanpa dari/ke bak → peringatan; dari/ke bak atau di atas bibir → lolos", () => {
-  // Bak (2,2)-(18,8.5), z −0,7…+0,3.
+  // Bak (2,2)-(11.7,9.3), z −1,2…+0,3.
   const tembus = jalur("j1", [{ x: 0, y: 5, z: 0 }, { x: 20, y: 5, z: 0 }], { dariId: "m1", keId: "m2" });
   const g = periksaTeknik(dok(bak(), tembus, mesin("m1", 0), mesin("m2", 20)));
   ada(g, "menembus bak");
@@ -170,9 +172,9 @@ test("galat baru: jalur 1 titik, diameter 0, dariId tak ada, levelBrineM > tingg
   ada(validasiDenah(dok(jalur("j1", [{ x: 1, y: 1, z: 0 }, { x: 2, y: 1, z: 0 }], { diameterMm: 0 }))), "Diameter");
   ada(validasiDenah(dok(jalur("j1", [{ x: 1, y: 1, z: 0 }, { x: 2, y: 1, z: 0 }], { dariId: "hantu" }))), "menunjuk elemen yang tidak ada");
   ada(validasiDenah(dok(jalur("j1", [{ x: 1, y: 1, z: 0 }, { x: 2, y: 1, z: 0 }], { keId: "hantu" }))), "menunjuk elemen yang tidak ada");
-  ada(validasiDenah(dok(bak({ levelBrineM: 1.1 }))), "Level brine");
+  ada(validasiDenah(dok(bak({ levelBrineM: 1.6 }))), "Level brine");
   // galat tidak bertingkat peringatan
-  for (const x of validasiDenah(dok(bak({ levelBrineM: 1.1 })))) assert.notEqual(x.tingkat, "peringatan");
+  for (const x of validasiDenah(dok(bak({ levelBrineM: 1.6 })))) assert.notEqual(x.tingkat, "peringatan");
 });
 
 test("galat baru: dimensi ice can ≤ 0, tinggiM ≤ 0 tipe ber-volume, utara, tangki, dinding bak", () => {

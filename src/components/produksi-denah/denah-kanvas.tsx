@@ -1102,6 +1102,7 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
   const tebal = bak.tebalDindingM;
   const jarakKolom = bak.jarakAntarKolomMm / 1000;
   const tampilIceCan = sisiIceCanTerkecil(tata) * skalaKira >= 3;
+  const tampilBatasCan = sisiIceCanTerkecil(tata) * skalaKira >= 5;
   const iceCan = useMemo(() => (tampilIceCan ? pathIceCan(tata) : null), [tata, tampilIceCan]);
   const ruangB = Math.max(0, tata.ruangB);
   const lawanRotasi = bak.rotasi ? (cx: number, cy: number) => `rotate(${-bak.rotasi} ${cx} ${cy})` : () => undefined;
@@ -1112,6 +1113,9 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
   const diDinding = tebal >= fsNomor * 1.1;
   const bNomor = diDinding ? tebal / 2 : tebal + fsNomor * 0.7;
   const tampilNomor = fsNomor * skalaKira >= 7;
+  // Posisi can "1" (ujung b0 tiap kolom): angka kecil di tengah can pertama, hanya saat cukup besar.
+  const fsPosisi = tata.kolom.reduce((m, k) => (!k.nonaktif && k.jumlah > 0 ? Math.min(m, k.lebar * 0.7, k.panjangCan * 0.7) : m), 0.3);
+  const tampilPosisi = tampilIceCan && fsPosisi * skalaKira >= 8;
 
   // Area kebutuhan kolom/ice can yang melebihi ruang dalam → arsir merah.
   const lebih: { x: number; y: number; w: number; h: number }[] = [];
@@ -1176,8 +1180,14 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
           </rect>
         );
       })}
-      {iceCan?.kecil && <path d={iceCan.kecil} className={KELAS_ICE_CAN.kecil} pointerEvents="none" />}
-      {iceCan?.besar && <path d={iceCan.besar} className={KELAS_ICE_CAN.besar} pointerEvents="none" />}
+      {/* Garis batas tiap can (tebal piksel tetap) agar can yang berdempet tetap terbaca
+          sebagai can terpisah; hanya saat satu can cukup besar di layar. */}
+      {iceCan?.kecil && (
+        <path d={iceCan.kecil} className={cn(KELAS_ICE_CAN.kecil, tampilBatasCan && "stroke-background")} strokeWidth={tampilBatasCan ? 1 : 0} vectorEffect={NS} pointerEvents="none" />
+      )}
+      {iceCan?.besar && (
+        <path d={iceCan.besar} className={cn(KELAS_ICE_CAN.besar, tampilBatasCan && "stroke-background")} strokeWidth={tampilBatasCan ? 1 : 0} vectorEffect={NS} pointerEvents="none" />
+      )}
       {/* Overlay status (di atas ice can supaya tetap terlihat saat zoom dekat). */}
       {statusKolom &&
         tata.kolom.map((k) => {
@@ -1223,6 +1233,16 @@ function BakTubuh({ bak, kolomTerpilih, kolomSorot, skalaKira, idPola, statusKol
           return (
             <Teks key={k.kolomId} x={p.x} y={p.y} ukuran={fsNomor} transform={lawanRotasi(p.x, p.y)} className={k.nonaktif ? "fill-muted-foreground" : undefined}>
               {nomor}
+            </Teks>
+          );
+        })}
+      {tampilPosisi &&
+        tata.kolom.map((k) => {
+          if (k.nonaktif || k.jumlah <= 0) return null;
+          const p = tata.keXY(k.a0 + k.lebar / 2, k.b0 + k.panjangCan / 2, 0, 0);
+          return (
+            <Teks key={`${k.kolomId}-pos1`} x={p.x} y={p.y} ukuran={fsPosisi} transform={lawanRotasi(p.x, p.y)} className="fill-muted-foreground">
+              1
             </Teks>
           );
         })}

@@ -17,7 +17,12 @@ import {
   ringkasBak,
   ringkasStok,
   slotDimuatDari,
-  SUSUNAN_CAN,
+  kodePosisi,
+  kodePosisiPendek,
+  kodeRek,
+  filterVarianSah,
+  cocokFilterVarian,
+  patahBaris,
   tugasSekarang,
   validasiPanenSlot,
   validasiPilihSlot,
@@ -408,9 +413,49 @@ function rusakUji(kolomId: string, slot: number): SlotRusak {
   return { id: crypto.randomUUID(), kolomId, slot, mulaiAt: lalu(3), catatan: "bocor" };
 }
 
-test("susunan can", () => {
-  assert.deepEqual(SUSUNAN_CAN.kecil, { kolom: 12, baris: 3 });
-  assert.deepEqual(SUSUNAN_CAN.besar, { kolom: 9, baris: 2 });
+test("kode posisi dan patah baris", () => {
+  assert.equal(kodePosisi("3", 52, 14), "3-52-14");
+  assert.equal(kodePosisiPendek(52, 14), "52-14");
+  assert.equal(kodeRek("3", 52), "3-52");
+  assert.deepEqual(patahBaris(36), [{ dari: 1, sampai: 18 }, { dari: 19, sampai: 36 }]);
+  assert.deepEqual(patahBaris(18), [{ dari: 1, sampai: 18 }]);
+  assert.deepEqual(patahBaris(20), [{ dari: 1, sampai: 18 }, { dari: 19, sampai: 20 }]);
+  assert.deepEqual(patahBaris(0), []);
+});
+
+test("keadaanPabrik mengisi kodeBak dan orientasiCan", () => {
+  const bak = buatBak(0, 0, {
+    nama: "Bak 3",
+    kolom: [
+      ...buatKolom(1, { varian: "kecil", jumlahIceCan: 36 }),
+      ...buatKolom(1, { varian: "besar", jumlahIceCan: 18, orientasiCan: "tegak" }, 2),
+    ],
+  });
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak] };
+  const k = keadaanPabrik(denah, [], [], SEKARANG);
+  assert.deepEqual(k.map((x) => x.kodeBak), ["3", "3"]);
+  assert.deepEqual(k.map((x) => x.orientasiCan), ["mendatar", "tegak"]);
+  assert.equal(keadaanRek(bak, bak.kolom[0], [], null, SEKARANG).kodeBak, "?");
+});
+
+test("ringkas bak per varian", () => {
+  const bak = buatBak(0, 0, {
+    nama: "Bak 2",
+    kolom: [
+      ...buatKolom(2, { varian: "kecil", jumlahIceCan: 36 }),
+      ...buatKolom(1, { varian: "besar", jumlahIceCan: 18 }, 3),
+    ],
+  });
+  const hanyaKecil = bakUji(2);
+  const denah: DenahDokumen = { ...denahKosong(), elemen: [bak, hanyaKecil] };
+  const r = ringkasBak(keadaanPabrik(denah, [], [], SEKARANG));
+  assert.deepEqual(r.map((x) => [x.bakId, x.varian, x.rek]), [
+    [bak.id, "kecil", 2],
+    [bak.id, "besar", 1],
+    [hanyaKecil.id, "kecil", 2],
+  ]);
+  assert.equal(r[0].kosong, 2);
+  assert.equal(r[1].kosong, 1);
 });
 
 test("keadaan can BK", () => {
@@ -526,11 +571,11 @@ test("ringkas bak dan tugas sekarang", () => {
   const keadaan = keadaanPabrik(denah, daftar, [], SEKARANG);
   assert.equal(keadaan[0].pct, 90);
 
-  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 1, kosong: 1, babonan: 1, rusak: 0 }]);
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, varian: "kecil", rek: 3, siap: 1, kosong: 1, babonan: 1, rusak: 0 }]);
 
   const tugas = tugasSekarang(keadaan, { [bak.kolom[1].id]: lalu(7) }, SEKARANG);
   assert.deepEqual(tugas.map((t) => t.jenis), ["panen", "isi-air", "babonan-lama"]);
-  assert.deepEqual(tugas[0], { jenis: "panen", kolomId: bak.kolom[0].id, bakId: bak.id, nomor: 1, pct: 90, sejak: lalu(21.6) });
+  assert.deepEqual(tugas[0], { jenis: "panen", kolomId: bak.kolom[0].id, bakId: bak.id, nomor: 1, varian: "kecil", pct: 90, sejak: lalu(21.6) });
   assert.equal(tugas[1].kolomId, bak.kolom[1].id);
   assert.equal(tugas[1].sejak, lalu(7));
   assert.equal(tugas[2].kolomId, bak.kolom[2].id);
@@ -573,7 +618,7 @@ test("isi air & chip kosong: rek terisi sebagian, Babonan saja, semua rusak, mai
   assert.deepEqual(tugas.map((t) => `${t.jenis}:${t.nomor}`), ["isi-air:2", "isi-air:1"]);
   assert.equal(tugas[1].sejak, SEKARANG.toISOString());
   // rek 3 (semua rusak) dan rek 4/5 (maintenance) bukan kosong, rek 5 bukan siap
-  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 0, kosong: 2, babonan: 1, rusak: 1 }]);
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, varian: "kecil", rek: 5, siap: 0, kosong: 2, babonan: 1, rusak: 1 }]);
 });
 
 test("tugas sekarang: urutan FIFO panen dan kosong terlama", () => {
@@ -588,7 +633,7 @@ test("tugas sekarang: urutan FIFO panen dan kosong terlama", () => {
   );
   const tugas = tugasSekarang(keadaan, { [bak.kolom[2].id]: lalu(2), [bak.kolom[3].id]: lalu(9) }, SEKARANG);
   assert.deepEqual(tugas.map((t) => `${t.jenis}:${t.nomor}`), ["panen:2", "panen:1", "isi-air:4", "isi-air:3"]);
-  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 2, kosong: 2, babonan: 0, rusak: 1 }]);
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, varian: "kecil", rek: 4, siap: 2, kosong: 2, babonan: 0, rusak: 1 }]);
 });
 
 test("slot belum siap: rek dengan isian aktif tanpa slot tidak masuk tugas dan diberi peringatan", () => {
@@ -623,11 +668,26 @@ test("slot belum siap: rek dengan isian aktif tanpa slot tidak masuk tugas dan d
     tugas.filter((t) => t.jenis !== "babonan-lama").map((t) => `${t.jenis}:${t.nomor}`),
     ["panen:3", "isi-air:3", "isi-air:4"],
   );
-  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, siap: 1, kosong: 2, babonan: 1, rusak: 0 }]);
+  assert.deepEqual(ringkasBak(keadaan), [{ bakId: bak.id, varian: "kecil", rek: 4, siap: 1, kosong: 2, babonan: 1, rusak: 0 }]);
 
   const p = peringatanDari({ keadaan, kosongSejak: {}, panenBelumSiap: [], selisih: [], sekarang: SEKARANG, label: (id) => id });
   assert.deepEqual(
     p.filter((x) => x.kode === "SLOT_BELUM_SIAP").map((x) => x.kolomId),
     [bak.kolom[0].id, bak.kolom[1].id],
   );
+});
+
+test("filterVarianSah: nilai tersimpan hanya berlaku bila varian ada di bak", () => {
+  assert.equal(filterVarianSah("kecil", ["kecil", "besar"]), "kecil");
+  assert.equal(filterVarianSah("besar", ["kecil", "besar"]), "besar");
+  assert.equal(filterVarianSah("besar", ["kecil"]), "semua");
+  assert.equal(filterVarianSah("semua", ["kecil", "besar"]), "semua");
+  assert.equal(filterVarianSah("rusak", ["kecil", "besar"]), "semua");
+  assert.equal(filterVarianSah(null, ["kecil", "besar"]), "semua");
+});
+
+test("cocokFilterVarian: semua meloloskan semuanya", () => {
+  assert.equal(cocokFilterVarian("semua", "kecil"), true);
+  assert.equal(cocokFilterVarian("kecil", "kecil"), true);
+  assert.equal(cocokFilterVarian("kecil", "besar"), false);
 });

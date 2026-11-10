@@ -15,26 +15,26 @@ const dekat = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < 
 
 test("tataBakMeter: bak bawaan 36 kolom kecil × 36 can muat dengan angka spec", () => {
   const t = tataBakMeter(buatBak(0, 0));
-  dekat(t.butuhA, 0.06 + 36 * 0.42);
-  dekat(t.butuhA, 15.18);
-  dekat(t.ruangA, 15.6);
-  dekat(t.butuhB, 0.04 + 36 * 0.16);
-  dekat(t.butuhB, 5.8);
-  dekat(t.ruangB, 6.1);
+  dekat(t.butuhA, 0.06 + 36 * 0.25);
+  dekat(t.butuhA, 9.06);
+  dekat(t.ruangA, 9.3);
+  dekat(t.butuhB, 0 + 36 * 0.19);
+  dekat(t.butuhB, 6.84);
+  dekat(t.ruangB, 6.9);
   dekat(t.bibirZ, 0.3);
-  dekat(t.lantaiDalamZ, -0.5);
+  dekat(t.lantaiDalamZ, -1.0);
   dekat(t.brineZ, 0.25);
   assert.equal(t.kolom.length, 36);
   const k0 = t.kolom.find((k) => k.indeks === 0)!;
   dekat(k0.a0, 0.2 + 0.06);
-  dekat(k0.b0, 0.2 + 0.04);
-  dekat(k0.lebar, 0.36);
-  dekat(k0.panjangCan, 0.12);
-  dekat(k0.jarakCan, 0.04);
+  dekat(k0.b0, 0.2 + 0);
+  dekat(k0.lebar, 0.19);
+  dekat(k0.panjangCan, 0.19);
+  dekat(k0.jarakCan, 0);
   assert.equal(k0.jumlah, 36);
   assert.equal(k0.posisi, 0);
   const k1 = t.kolom.find((k) => k.indeks === 1)!;
-  dekat(k1.a0, 0.2 + 0.06 + 0.42);
+  dekat(k1.a0, 0.2 + 0.06 + 0.25);
 });
 
 test("tataBakMeter: arahNomor mundur → kolom indeks 0 punya a0 terbesar", () => {
@@ -44,23 +44,25 @@ test("tataBakMeter: arahNomor mundur → kolom indeks 0 punya a0 terbesar", () =
   for (const k of t.kolom) if (k.indeks !== 0) assert.ok(k.a0 < k0.a0);
 });
 
-test("tataBakMeter: kolom besar memakai lebar 0,36 dan panjang 0,24; a0 menjumlah lebar campuran", () => {
+test("tataBakMeter: kolom besar memakai lebar 0,40 (diganti) dan panjang 0,38; a0 menjumlah lebar campuran", () => {
   const bak = buatBak(0, 0);
-  bak.kolom = bak.kolom.slice(0, 3).map((k, i) => ({ ...k, varian: i === 1 ? ("besar" as const) : ("kecil" as const), jumlahIceCan: i === 1 ? 18 : 36 }));
+  bak.kolom = bak.kolom.slice(0, 3).map((k, i) => ({ ...k, varian: i === 1 ? ("besar" as const) : ("kecil" as const), jumlahIceCan: i === 1 ? 20 : 36 }));
   bak.iceCan.besar = { ...bak.iceCan.besar, lebarMm: 400 };
   const t = tataBakMeter(bak);
   const k1 = t.kolom.find((k) => k.indeks === 1)!;
   dekat(k1.lebar, 0.4);
-  dekat(k1.panjangCan, 0.24);
+  dekat(k1.panjangCan, 0.38);
   assert.equal(k1.varian, "besar");
   const k2 = t.kolom.find((k) => k.indeks === 2)!;
-  dekat(k2.a0, 0.2 + 0.06 + 0.42 + 0.46);
-  dekat(t.butuhA, 0.06 + 0.42 + 0.46 + 0.42);
-  dekat(t.butuhB, 0.04 + Math.max(36 * 0.16, 18 * 0.28));
-  // bawaan besar 360 mm
+  dekat(k2.a0, 0.2 + 0.06 + 0.25 + 0.46);
+  dekat(t.butuhA, 0.06 + 0.25 + 0.46 + 0.25);
+  // 20 can besar (20 × 0,38 = 7,6) lebih panjang daripada 36 can kecil (36 × 0,19 = 6,84)
+  dekat(t.butuhB, 0 + Math.max(36 * 0.19, 20 * 0.38));
+  dekat(t.butuhB, 7.6);
+  // bawaan besar: lebar 190 mm, panjang 380 mm
   const t2 = tataBakMeter(buatBak(0, 0, { varianBawaan: "besar" }));
-  dekat(t2.kolom[0].lebar, 0.36);
-  dekat(t2.kolom[0].panjangCan, 0.24);
+  dekat(t2.kolom[0].lebar, 0.19);
+  dekat(t2.kolom[0].panjangCan, 0.38);
 });
 
 test("tataBakMeter: keXY memetakan (a,b) ke x/y lokal sesuai orientasi", () => {
@@ -159,4 +161,40 @@ test("potongSegmenKotak: lolos dan potong", () => {
   assert.equal(potongSegmenKotak({ x: -1, y: 1, z: 2 }, { x: 1, y: 1, z: 0 }, kotak), true);
   // segmen berhenti sebelum kotak
   assert.equal(potongSegmenKotak({ x: -3, y: 1, z: 0.5 }, { x: -1, y: 1, z: 0.5 }, kotak), false);
+});
+
+test("tataBakMeter: orientasi can per kolom menukar lebar dan panjangCan", () => {
+  const bak = buatBak(0, 0);
+  // Varian besar (190 × 380 mm) dipakai karena ice can kecil bawaan persegi (tak terbedakan saat ditukar).
+  bak.kolom = bak.kolom.slice(0, 2).map((k, i) => ({ ...k, varian: "besar" as const, jumlahIceCan: i === 0 ? 10 : 30, ...(i === 1 ? { orientasiCan: "tegak" as const } : {}) }));
+  const t = tataBakMeter(bak);
+  const [a, b] = t.kolom;
+  dekat(a.lebar, 0.19);
+  dekat(a.panjangCan, 0.38);
+  assert.equal(a.orientasi, "mendatar");
+  dekat(b.lebar, 0.38);
+  dekat(b.panjangCan, 0.19);
+  assert.equal(b.orientasi, "tegak");
+  dekat(b.a0, a.a0 + 0.19 + 0.06);
+  dekat(t.butuhA, 0.06 + 0.25 + 0.44);
+  dekat(t.butuhB, 0 + Math.max(10 * 0.38, 30 * 0.19));
+});
+
+test("tataBakMeter: tanpa orientasiCan hasilnya sama dengan perilaku lama (beku)", () => {
+  const bak = buatBak(0, 0);
+  bak.kolom = bak.kolom.slice(0, 3).map((k, i) => ({ ...k, varian: i === 1 ? ("besar" as const) : ("kecil" as const), jumlahIceCan: 5 + i }));
+  const t = tataBakMeter(bak);
+  const beku = [
+    { a0: 0.26, lebar: 0.19, panjangCan: 0.19, jumlah: 5 },
+    { a0: 0.26 + 0.25, lebar: bak.iceCan.besar.lebarMm / 1000, panjangCan: bak.iceCan.besar.panjangMm / 1000, jumlah: 6 },
+  ];
+  for (let i = 0; i < 2; i++) {
+    dekat(t.kolom[i].a0, beku[i].a0);
+    dekat(t.kolom[i].lebar, beku[i].lebar);
+    dekat(t.kolom[i].panjangCan, beku[i].panjangCan);
+    assert.equal(t.kolom[i].jumlah, beku[i].jumlah);
+    assert.equal(t.kolom[i].orientasi, "mendatar");
+  }
+  dekat(t.kolom[0].b0, 0.2);
+  dekat(t.butuhB, 0 + Math.max(5 * 0.19, 6 * (beku[1].panjangCan + 0), 7 * 0.19));
 });

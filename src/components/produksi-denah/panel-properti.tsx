@@ -31,7 +31,9 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   kotakElemen,
+  kodeBakEfektif,
   ringkasDenah,
+  type OrientasiCan,
   BATAS_KANVAS,
   BATAS_TITIK_JALUR,
   FLUIDA_BAWAAN,
@@ -254,6 +256,8 @@ function IsianBak({ bak, dok, dispatch, onKeKolom }: { bak: BakElemen; dok: Dena
   const mesin = dok.elemen.filter((x): x is MesinElemen => x.tipe === "mesin");
   const r = ringkasDenah({ ...dok, elemen: [bak] });
   const beda = bak.kolom.filter((k) => k.varian !== bak.varianBawaan || k.jumlahIceCan !== bak.iceCanPerKolomBawaan).length;
+  const indeksBak = dok.elemen.filter((x) => x.tipe === "bak").findIndex((x) => x.id === bak.id);
+  const kodeEf = kodeBakEfektif(bak, Math.max(0, indeksBak));
 
   return (
     <div className="flex flex-col gap-2">
@@ -262,6 +266,18 @@ function IsianBak({ bak, dok, dispatch, onKeKolom }: { bak: BakElemen; dok: Dena
         <Statistik label="Ice can K" nilai={r.iceCanKecil} />
         <Statistik label="Ice can B" nilai={r.iceCanBesar} />
       </div>
+
+      <Bidang label="Kode bak" petunjuk={`Kode posisi can: ${kodeEf}-<rek>-<posisi>, mis. ${kodeEf}-1-1. Kosongkan untuk memakai angka pada nama bak.`}>
+        <InputTeks
+          nilai={bak.kodeBak ?? ""}
+          placeholder={kodeBakEfektif({ ...bak, kodeBak: undefined }, Math.max(0, indeksBak))}
+          onUbah={(v) => {
+            const bersih = v.replace(/[^0-9A-Za-z]/g, "").slice(0, 3);
+            dispatch({ type: "ubahElemen", id: bak.id, patch: { kodeBak: bersih === "" ? undefined : bersih }, gabung: `${bak.id}:kodeBak` });
+          }}
+          onSelesai={() => dispatch({ type: "putusGabung" })}
+        />
+      </Bidang>
 
       <Judul aksi={<TombolKecil onClick={onKeKolom} title="Atur kolom satu per satu">Atur kolom →</TombolKecil>}>Kolom</Judul>
       <Bidang label="Jumlah kolom" petunjuk="Ditambah/dikurangi dari ujung; ID kolom yang tetap ada tidak berubah.">
@@ -306,6 +322,16 @@ function IsianBak({ bak, dok, dispatch, onKeKolom }: { bak: BakElemen; dok: Dena
           <InputAngka nilai={bak.iceCanPerKolomBawaan} min={1} max={200} onUbah={(iceCanPerKolomBawaan) => ubah({ iceCanPerKolomBawaan })} />
         </Bidang>
       </div>
+      <Bidang label="Orientasi can bawaan" petunjuk="Dipakai kolom baru; kolom yang sudah ada diatur di panel kolom.">
+        <Segmen<OrientasiCan>
+          nilai={bak.orientasiCanBawaan ?? "mendatar"}
+          pilihan={[
+            { nilai: "mendatar", label: "Mendatar ▭" },
+            { nilai: "tegak", label: "Tegak ▯" },
+          ]}
+          onUbah={(orientasiCanBawaan) => ubah({ orientasiCanBawaan })}
+        />
+      </Bidang>
       <Button variant="outline" size="sm" className="h-auto min-h-8 w-full whitespace-normal" disabled={beda === 0} onClick={() => setKonfirmasi(true)}>
         <WandSparkles /> Terapkan ke semua kolom{beda > 0 ? ` (${beda} beda)` : ""}
       </Button>

@@ -613,6 +613,8 @@ export function builderReducer(s: StateBuilder, a: AksiBuilder): StateBuilder {
         const kunci = Object.keys(a.patch) as (keyof DenahElemen)[];
         if (kunci.every((k) => Object.is(e[k], a.patch[k]))) return e;
         const baru = { ...e, ...a.patch, id: e.id, tipe: e.tipe } as DenahElemen;
+        // kodeBak dikosongkan = properti dibuang (validasi menolak string kosong).
+        if (baru.tipe === "bak" && baru.kodeBak === undefined) delete baru.kodeBak;
         // Jalur: kotak/elevasi selalu diturunkan dari titik (bukan disunting langsung).
         return baru.tipe === "jalur" ? rapikanJalur(baru) : baru;
       });
@@ -738,8 +740,9 @@ export function builderReducer(s: StateBuilder, a: AksiBuilder): StateBuilder {
 
     case "terapkanBawaan": {
       const dok = ubahBak(s.dok, a.bakId, (b) => {
-        if (b.kolom.every((k) => k.varian === b.varianBawaan && k.jumlahIceCan === b.iceCanPerKolomBawaan)) return b;
-        return { ...b, kolom: b.kolom.map((k) => ({ ...k, varian: b.varianBawaan, jumlahIceCan: b.iceCanPerKolomBawaan })) };
+        const ori = b.orientasiCanBawaan ?? "mendatar";
+        if (b.kolom.every((k) => k.varian === b.varianBawaan && k.jumlahIceCan === b.iceCanPerKolomBawaan && (k.orientasiCan ?? "mendatar") === ori)) return b;
+        return { ...b, kolom: b.kolom.map((k) => ({ ...k, varian: b.varianBawaan, jumlahIceCan: b.iceCanPerKolomBawaan, orientasiCan: ori })) };
       });
       return catat(s, dok);
     }

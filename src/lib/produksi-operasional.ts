@@ -7,7 +7,8 @@
 // `babonan` (can penjaga suhu, termasuk es pecah).
 
 import { getBusinessDateWithRollover, ROLLOVER_HOUR } from "./business-date";
-import type { BakElemen, DenahDokumen, DenahKolom, Varian } from "./produksi-denah";
+import { kodeBakEfektif, orientasiKolom } from "./produksi-denah";
+import type { BakElemen, DenahDokumen, DenahKolom, OrientasiCan, Varian } from "./produksi-denah";
 
 // Jam closing hari bisnis panen & DO (13:59 masih hari ini, 14:00 sudah besok).
 // Dipisah dari ROLLOVER_HOUR app-wide supaya bisa diganti sendiri.
@@ -44,11 +45,33 @@ export interface IsianAktif {
   slotPecah: number[];
 }
 
-// Susunan tampilan can per rek (hanya konstanta tampilan): BK 12 × 3, BB 9 × 2.
-export const SUSUNAN_CAN: Record<Varian, { kolom: number; baris: number }> = {
-  kecil: { kolom: 12, baris: 3 },
-  besar: { kolom: 9, baris: 2 },
-};
+// ── Kode posisi ────────────────────────────────────────────────────────────
+
+/** Kode posisi satu can: "{bak}-{rek}-{slot}", mis. "3-52-14". */
+export function kodePosisi(kodeBak: string, nomorRek: number, slot: number): string {
+  return `${kodeBak}-${nomorRek}-${slot}`;
+}
+
+/** Kode posisi tanpa bak (dalam konteks satu bak): "52-14". */
+export function kodePosisiPendek(nomorRek: number, slot: number): string {
+  return `${nomorRek}-${slot}`;
+}
+
+/** Kode satu rek: "3-52". */
+export function kodeRek(kodeBak: string, nomorRek: number): string {
+  return `${kodeBak}-${nomorRek}`;
+}
+
+/** Jumlah can per baris saat rek digambar sebagai baris-baris can. */
+export const PATAH_BARIS_CAN = 18;
+
+/** Rentang slot (1-based, inklusif) per baris. */
+export function patahBaris(kapasitas: number, per: number = PATAH_BARIS_CAN): { dari: number; sampai: number }[] {
+  const hasil: { dari: number; sampai: number }[] = [];
+  if (!(per > 0)) return hasil;
+  for (let dari = 1; dari <= kapasitas; dari += per) hasil.push({ dari, sampai: Math.min(dari + per - 1, kapasitas) });
+  return hasil;
+}
 
 /** Can rusak aktif (belum "Sudah diperbaiki"). Slot rusak dilewati saat Isi Air. */
 export interface SlotRusak {
@@ -82,8 +105,11 @@ export type KeadaanUtama = "kosong" | "berisi" | "babonan" | "maintenance" | "no
 export interface KeadaanRek {
   kolomId: string;
   bakId: string;
+  /** Kode bak efektif (kodeBakEfektif), mis. "3". */
+  kodeBak: string;
   nomor: number;
   varian: Varian;
+  orientasiCan: OrientasiCan;
   kapasitas: number;
   utama: KeadaanUtama;
   pct: number | null;
@@ -182,6 +208,7 @@ export function keadaanRek(
   mt: MaintenanceAktif | null,
   sekarang: Date,
   rusak: SlotRusak[] = [],
+  kodeBak: string = "?",
 ): KeadaanRek {
   const milikRek = isian.filter((i) => i.kolomId === kolom.id && i.sisa > 0);
   const isianProduksi = milikRek
@@ -218,8 +245,10 @@ export function keadaanRek(
   return {
     kolomId: kolom.id,
     bakId: bak.id,
+    kodeBak,
     nomor: kolom.nomor,
     varian: kolom.varian,
+    orientasiCan: orientasiKolom(kolom),
     kapasitas: kolom.jumlahIceCan,
     utama,
     pct,
@@ -302,8 +331,9 @@ export function keadaanPabrik(
   const isianPerKolom = kelompokkan(isian);
   const rusakPerKolom = kelompokkan(rusak);
   const mtPerKolom = new Map(mt.map((m) => [m.kolomId, m]));
-  return daftarBak(denah).flatMap((bak) =>
-    bak.kolom.map((kolom) =>
+  return daftarBak(denah).flatMap((bak, i) => {
+    const kodeBak = kodeBakEfektif(bak, i);
+    return bak.kolom.map((kolom) =>
       keadaanRek(
         bak,
         kolom,
@@ -311,15 +341,32 @@ export function keadaanPabrik(
         mtPerKolom.get(kolom.id) ?? null,
         sekarang,
         rusakPerKolom.get(kolom.id) ?? [],
+        kodeBak,
       ),
-    ),
-  );
+    );
+  });
+}
+
+// ── Filter varian layar HP ─────────────────────────────────────────────────
+
+export type FilterVarian = "semua" | Varian;
+
+/** Nilai filter tersimpan yang sah untuk bak ini; selain itu kembali ke "semua". */
+export function filterVarianSah(tersimpan: string | null, tersedia: Varian[]): FilterVarian {
+  return tersimpan === "kecil" || tersimpan === "besar" ? (tersedia.includes(tersimpan) ? tersimpan : "semua") : "semua";
+}
+
+export function cocokFilterVarian(filter: FilterVarian, varian: Varian): boolean {
+  return filter === "semua" || filter === varian;
 }
 
 // ── Ringkasan bak & tugas sekarang ─────────────────────────────────────────
 
 export interface RingkasanBak {
   bakId: string;
+  varian: Varian;
+  /** Jumlah rek aktif (bukan nonaktif) varian ini di bak. */
+  rek: number;
   siap: number;
   kosong: number;
   babonan: number;
@@ -331,27 +378,34 @@ function adaProduksiSiap(k: KeadaanRek): boolean {
 }
 
 /**
- * Jumlah REK per kategori per bak, urut bak sesuai `keadaan`. Rek nonaktif
- * tidak dihitung; rek maintenance tidak dihitung siap/kosong (sama dengan
+ * Jumlah REK per kategori per (bak, varian), urut bak sesuai `keadaan` lalu
+ * kecil, besar. Hanya (bak, varian) yang punya rek aktif. Rek nonaktif tidak
+ * dihitung; rek maintenance tidak dihitung siap/kosong (sama dengan
  * tugasSekarang). kosong = ada slot kosong tak rusak yang bisa diisi
  * (termasuk rek terisi sebagian dan rek Babonan saja).
  */
 export function ringkasBak(keadaan: KeadaanRek[]): RingkasanBak[] {
   const peta = new Map<string, RingkasanBak>();
+  const urutBak: string[] = [];
   for (const k of keadaan) {
-    let r = peta.get(k.bakId);
-    if (!r) {
-      r = { bakId: k.bakId, siap: 0, kosong: 0, babonan: 0, rusak: 0 };
-      peta.set(k.bakId, r);
-    }
+    if (!urutBak.includes(k.bakId)) urutBak.push(k.bakId);
     if (k.utama === "nonaktif") continue;
+    const kunci = `${k.bakId}|${k.varian}`;
+    let r = peta.get(kunci);
+    if (!r) {
+      r = { bakId: k.bakId, varian: k.varian, rek: 0, siap: 0, kosong: 0, babonan: 0, rusak: 0 };
+      peta.set(kunci, r);
+    }
+    r.rek++;
     const bisaDikerjakan = k.utama !== "maintenance" && !k.slotBelumSiap;
     if (bisaDikerjakan && adaProduksiSiap(k)) r.siap++;
     if (bisaDikerjakan && k.slotKosong.length > 0) r.kosong++;
     if (k.isianBabonan) r.babonan++;
     if (k.rusak > 0) r.rusak++;
   }
-  return [...peta.values()];
+  return urutBak.flatMap((bakId) =>
+    (["kecil", "besar"] as const).flatMap((v) => peta.get(`${bakId}|${v}`) ?? []),
+  );
 }
 
 export type JenisTugas = "panen" | "isi-air" | "babonan-lama";
@@ -361,6 +415,7 @@ export interface Tugas {
   kolomId: string;
   bakId: string;
   nomor: number;
+  varian: Varian;
   pct: number | null;
   sejak: string;
 }
@@ -379,7 +434,7 @@ export function tugasSekarang(keadaan: KeadaanRek[], kosongSejak: Record<string,
   const babonanLama: Tugas[] = [];
   for (const k of keadaan) {
     if (k.utama === "nonaktif" || k.utama === "maintenance") continue;
-    const dasar = { kolomId: k.kolomId, bakId: k.bakId, nomor: k.nomor };
+    const dasar = { kolomId: k.kolomId, bakId: k.bakId, nomor: k.nomor, varian: k.varian };
     const tertua = k.isianProduksi[0];
     // Slot belum dicatat: aksi slot ditolak server; tampil sebagai peringatan.
     if (!k.slotBelumSiap && tertua && adaProduksiSiap(k)) panen.push({ jenis: "panen", ...dasar, pct: k.pct, sejak: tertua.mulaiAt });

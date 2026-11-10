@@ -18,6 +18,7 @@ import {
 import type { KodeProduksi } from "@/lib/produksi-denah";
 import {
   hitungKematangan,
+  kodeRek,
   PESAN_SLOT_BELUM_SIAP,
   tahapDari,
   validasiPilihSlot,
@@ -113,7 +114,7 @@ export function IsiLembar({
 
   const judul =
     tampilan.jenis === "menu"
-      ? `${namaBak} · Rek ${rek.nomor}`
+      ? `${namaBak} · Rek ${rek.nomor} (${kodeRek(rek.kodeBak, rek.nomor)})`
       : tampilan.jenis === "panen"
         ? isianPanen?.jenis === "babonan"
           ? "Lepas Babonan — dimuat"
@@ -147,7 +148,8 @@ export function IsiLembar({
           <SheetTitle className="text-base">{judul}</SheetTitle>
           <SheetDescription className="text-xs">
             {tampilan.jenis !== "menu" && `Rek ${rek.nomor} · `}
-            {singkatVarian(rek.varian)} · {rek.kapasitas} can · kosong {rek.canKosong}
+            {singkatVarian(rek.varian)} · {rek.orientasiCan === "tegak" ? "tegak ▯" : "mendatar ▭"} · {rek.kapasitas} can · kosong{" "}
+            {rek.canKosong}
             {rek.rusak > 0 && ` · rusak ${rek.rusak}`}
           </SheetDescription>
         </div>
@@ -326,7 +328,7 @@ function Menu({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 rounded-xl border bg-muted/30 p-2.5">
-        <GridCan mode="lihat" can={rek.can} varian={rek.varian} />
+        <GridCan mode="lihat" can={rek.can} rek={rek} />
         <LegendaCan />
       </div>
 
@@ -492,7 +494,7 @@ function FormPilihSlot({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-2.5">
-        <GridCan mode="pilih" can={rek.can} varian={rek.varian} boleh={boleh} pilihan={new Set(efektif)} onUbah={setPilihan} disabled={sibuk} />
+        <GridCan mode="pilih" can={rek.can} rek={rek} boleh={boleh} pilihan={new Set(efektif)} onUbah={setPilihan} disabled={sibuk} />
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="text-muted-foreground tabular-nums">
             Dipilih <b className="text-foreground">{efektif.length}</b> can

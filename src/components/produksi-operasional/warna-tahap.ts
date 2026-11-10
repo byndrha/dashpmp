@@ -3,9 +3,10 @@
 // Kelas Tailwind lengkap (bukan dirakit) supaya ikut terpindai; setiap entri
 // punya varian terang dan gelap.
 //
-// Palet tegas (spec slot can §4): air = merah, mulai = amber, kristal = ungu,
-// siap = biru muda, jadi = hijau, Babonan = oranye ◆, pecah = oranye ✕,
-// rusak = abu ✕, kosong = garis putus.
+// Palet tahap (urutan = pil gradasi di LegendaCan): Isian = merah tua,
+// Solidifikasi = oranye, Kristalisasi = hijau, Siap = teal, Matang = biru tua,
+// Jaga (Babonan) = cokelat keabuan ◆; pecah = oranye muda ✕, rusak = abu ✕,
+// kosong = garis putus. Kunci kode tetap air/mulai/kristal/siap/jadi.
 import type { JenisCan, KeadaanCan, KeadaanUtama, Tahap } from "@/lib/produksi-operasional";
 
 export interface WarnaKeadaan {
@@ -18,34 +19,34 @@ export const WARNA_TAHAP: Record<Tahap, WarnaKeadaan> = {
   air: {
     latar: "bg-red-100 border-red-400 dark:bg-red-950/70 dark:border-red-700",
     teks: "text-red-900 dark:text-red-100",
-    label: "Air baru",
+    label: "Isian",
   },
   mulai: {
-    latar: "bg-amber-200 border-amber-500 dark:bg-amber-900/70 dark:border-amber-600",
-    teks: "text-amber-950 dark:text-amber-50",
-    label: "Mulai",
+    latar: "bg-orange-200 border-orange-500 dark:bg-orange-900/70 dark:border-orange-600",
+    teks: "text-orange-950 dark:text-orange-50",
+    label: "Solidifikasi",
   },
   kristal: {
-    latar: "bg-violet-200 border-violet-500 dark:bg-violet-900/70 dark:border-violet-600",
-    teks: "text-violet-950 dark:text-violet-50",
-    label: "Kristal",
+    latar: "bg-green-200 border-green-600 dark:bg-green-900/70 dark:border-green-600",
+    teks: "text-green-950 dark:text-green-50",
+    label: "Kristalisasi",
   },
   siap: {
-    latar: "bg-sky-200 border-sky-500 dark:bg-sky-900/70 dark:border-sky-500",
-    teks: "text-sky-950 dark:text-sky-50",
+    latar: "bg-teal-200 border-teal-500 dark:bg-teal-900/70 dark:border-teal-500",
+    teks: "text-teal-950 dark:text-teal-50",
     label: "Siap",
   },
   jadi: {
-    latar: "bg-green-600 border-green-700 dark:bg-green-600 dark:border-green-500",
+    latar: "bg-indigo-800 border-indigo-900 dark:bg-indigo-800 dark:border-indigo-600",
     teks: "text-white dark:text-white",
-    label: "Jadi",
+    label: "Matang",
   },
 };
 
 export const WARNA_KEADAAN: Record<Exclude<KeadaanUtama, "berisi">, WarnaKeadaan> = {
   babonan: {
-    latar: "bg-orange-200 border-orange-500 dark:bg-orange-900/70 dark:border-orange-600",
-    teks: "text-orange-950 dark:text-orange-50",
+    latar: "bg-stone-300 border-stone-500 dark:bg-stone-700/80 dark:border-stone-500",
+    teks: "text-stone-900 dark:text-stone-50",
     label: "Babonan",
   },
   maintenance: {
@@ -88,19 +89,19 @@ export interface WarnaCan {
  * kematangan isiannya); kunci "produksi" hanya cadangan bila tahap tak ada.
  */
 export const WARNA_CAN: Record<JenisCan | Tahap, WarnaCan> = {
-  air: { sel: "bg-red-500 border-red-600 dark:bg-red-500 dark:border-red-400", teks: "text-white", simbol: "", label: "Air" },
-  mulai: { sel: "bg-amber-400 border-amber-500 dark:bg-amber-400 dark:border-amber-300", teks: "text-amber-950", simbol: "", label: "Mulai" },
+  air: { sel: "bg-[#9b1c1f] border-[#7d1417] dark:bg-[#b32428] dark:border-[#d4585b]", teks: "text-white", simbol: "", label: "Isian" },
+  mulai: { sel: "bg-[#f7941d] border-[#d97a06] dark:bg-[#f7941d] dark:border-[#fbb45a]", teks: "text-orange-950", simbol: "", label: "Solidifikasi" },
   kristal: {
-    sel: "bg-violet-500 border-violet-600 dark:bg-violet-500 dark:border-violet-400",
+    sel: "bg-[#1b7a3e] border-[#135c2d] dark:bg-[#1f8f48] dark:border-[#4fb877]",
     teks: "text-white",
     simbol: "",
-    label: "Kristal",
+    label: "Kristalisasi",
   },
-  siap: { sel: "bg-sky-400 border-sky-500 dark:bg-sky-400 dark:border-sky-300", teks: "text-sky-950", simbol: "", label: "Siap" },
-  jadi: { sel: "bg-green-600 border-green-700 dark:bg-green-500 dark:border-green-400", teks: "text-white", simbol: "", label: "Jadi" },
-  produksi: { sel: "bg-red-500 border-red-600 dark:bg-red-500 dark:border-red-400", teks: "text-white", simbol: "", label: "Produksi" },
+  siap: { sel: "bg-[#14a89a] border-[#0e8478] dark:bg-[#14a89a] dark:border-[#52cfc3]", teks: "text-white", simbol: "", label: "Siap" },
+  jadi: { sel: "bg-[#2a3590] border-[#1d2670] dark:bg-[#3a47b5] dark:border-[#7f8be0]", teks: "text-white", simbol: "", label: "Matang" },
+  produksi: { sel: "bg-[#9b1c1f] border-[#7d1417] dark:bg-[#b32428] dark:border-[#d4585b]", teks: "text-white", simbol: "", label: "Produksi" },
   babonan: {
-    sel: "bg-orange-500 border-orange-600 dark:bg-orange-500 dark:border-orange-400",
+    sel: "bg-[#9c8a7c] border-[#7d6c5f] dark:bg-[#9c8a7c] dark:border-[#c2b3a6]",
     teks: "text-white",
     simbol: "◆",
     label: "Babonan",
@@ -135,14 +136,14 @@ export function warnaCan(c: Pick<KeadaanCan, "jenis" | "tahap">): WarnaCan {
 // tidak berlaku untuk `fill`, jadi peta memakai nilai CSS langsung; dipilih
 // nada tengah yang terbaca di tema terang maupun gelap (overlay semi-transparan).
 const ISI_TAHAP: Record<Tahap, string> = {
-  air: "#ef4444", // red-500
-  mulai: "#f59e0b", // amber-500
-  kristal: "#8b5cf6", // violet-500
-  siap: "#38bdf8", // sky-400
-  jadi: "#16a34a", // green-600
+  air: "#b32428", // Isian
+  mulai: "#f7941d", // Solidifikasi
+  kristal: "#1f8f48", // Kristalisasi
+  siap: "#14a89a", // Siap
+  jadi: "#3a47b5", // Matang
 };
 const ISI_KEADAAN: Record<Exclude<KeadaanUtama, "berisi">, string> = {
-  babonan: "#f97316", // orange-500
+  babonan: "#9c8a7c", // Jaga (Babonan)
   maintenance: "#64748b", // slate-500
   nonaktif: "var(--muted-foreground)",
   kosong: "var(--muted)",
