@@ -328,9 +328,9 @@ test("denahKosong v2: 60×40 m, grid 20, snap 0.1, utara 0, pelat 0.2", () => {
 
 test("buatBak v2: bawaan meter & ice can", () => {
   const b = buatBak(1, 2);
-  assert.deepEqual([b.w, b.h, b.elevasiM, b.tinggiM, b.tebalDindingM, b.levelBrineM, b.jarakAntarKolomMm, b.jarakAntarCanMm], [16, 6.5, -0.7, 1, 0.2, 0.95, 60, 40]);
-  assert.deepEqual(b.iceCan.kecil, { panjangMm: 120, lebarMm: 360, tinggiMm: 750, beratKg: 25, presetId: "pasar-25" });
-  assert.deepEqual(b.iceCan.besar, { panjangMm: 240, lebarMm: 360, tinggiMm: 750, beratKg: 50 });
+  assert.deepEqual([b.w, b.h, b.elevasiM, b.tinggiM, b.tebalDindingM, b.levelBrineM, b.jarakAntarKolomMm, b.jarakAntarCanMm], [9.7, 7.3, -1.2, 1.5, 0.2, 1.45, 60, 0]);
+  assert.deepEqual(b.iceCan.kecil, { panjangMm: 190, lebarMm: 190, tinggiMm: 1190, beratKg: 35, presetId: "pmp-kecil" });
+  assert.deepEqual(b.iceCan.besar, { panjangMm: 380, lebarMm: 190, tinggiMm: 1190, beratKg: 70, presetId: "pmp-besar" });
   assert.notEqual(b.iceCan.kecil, ICE_CAN_DIMENSI_BAWAAN.kecil, "ice can bak tidak berbagi objek dengan bawaan");
 });
 
@@ -382,7 +382,7 @@ test("migrasiDenah v1→v2: skala 0,5 m per unit, grid ×2, ID tetap, bawaan ter
   assert.deepEqual(d.elemen.map((e) => e.id), ["bak-1", "d-1", "m-1"]);
   assert.deepEqual(bak.kolom.map((k) => k.id), ["k-1", "k-2"]);
   assert.deepEqual(bak.iceCan, ICE_CAN_DIMENSI_BAWAAN);
-  assert.deepEqual([bak.elevasiM, bak.tinggiM, bak.tebalDindingM, bak.levelBrineM, bak.jarakAntarKolomMm, bak.jarakAntarCanMm], [-0.7, 1, 0.2, 0.95, 60, 40]);
+  assert.deepEqual([bak.elevasiM, bak.tinggiM, bak.tebalDindingM, bak.levelBrineM, bak.jarakAntarKolomMm, bak.jarakAntarCanMm], [-1.2, 1.5, 0.2, 1.45, 60, 0]);
   assert.deepEqual(derek.titikAwal, { x: 1, y: 5 });
   assert.deepEqual(derek.titikAkhir, { x: 15, y: 5 });
   assert.deepEqual([derek.elevasiM, derek.tinggiKaitM, derek.tinggiM], [3.5, 0.8, 0.3]);
@@ -413,7 +413,7 @@ test("migrasiDenah v2: field opsional yang hilang dilengkapi bawaan", () => {
   assert.deepEqual(d.kanvas, { lebar: 30, tinggi: 20, ukuranGrid: 20, langkahSnapM: 0.1, utaraDerajat: 0, pelatLantai: { tebalM: 0.2 } });
   const b = d.elemen[0] as BakElemen;
   assert.deepEqual(b.iceCan, ICE_CAN_DIMENSI_BAWAAN);
-  assert.equal(b.levelBrineM, 0.95);
+  assert.equal(b.levelBrineM, 1.45);
 });
 
 test("migrasiDenah: bentuk lain melempar Error", () => {

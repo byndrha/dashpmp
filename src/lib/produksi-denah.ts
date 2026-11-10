@@ -285,22 +285,21 @@ export const PRESET_ICE_CAN: readonly { id: string; label: string; panjangMm: nu
   { id: "fao-50", label: "FAO 50 kg", panjangMm: 184, lebarMm: 408, tinggiMm: 1000, beratKg: 50 },
   { id: "fao-136", label: "FAO 136 kg", panjangMm: 280, lebarMm: 560, tinggiMm: 1220, beratKg: 136 },
   // Ukuran nyata pabrik PMP (informasi pengguna 2026-11-10): Balok Besar = 2× panjang Balok Kecil.
-  // Belum jadi bawaan bak baru: bak bawaan (16 × 6,5 m, dalam 1,0 m) tidak muat untuk can 119 cm.
   // Panjang = sumbu sepanjang rek, jadi BB 38 cm memanjang di rek (18 can = 36 BK = 6,84 m).
   { id: "pmp-kecil", label: "PMP Balok Kecil", panjangMm: 190, lebarMm: 190, tinggiMm: 1190, beratKg: 35 },
   { id: "pmp-besar", label: "PMP Balok Besar", panjangMm: 380, lebarMm: 190, tinggiMm: 1190, beratKg: 70 },
   { id: "kustom", label: "Kustom", panjangMm: 120, lebarMm: 360, tinggiMm: 750, beratKg: 25 },
 ];
 
-/** Kecil = preset "pasar 25 kg"; Besar = panjang 2× Kecil (lebar & tinggi sama — fakta pengguna). */
+/** Bawaan = preset PMP: Kecil 19×19×119 cm 35 kg; Besar 38×19×119 cm 70 kg (lebar & tinggi sama — fakta pengguna). */
 export const ICE_CAN_DIMENSI_BAWAAN: Record<Varian, DimensiIceCan> = {
-  kecil: { panjangMm: 120, lebarMm: 360, tinggiMm: 750, beratKg: 25, presetId: "pasar-25" },
-  besar: { panjangMm: 240, lebarMm: 360, tinggiMm: 750, beratKg: 50 },
+  kecil: { panjangMm: 190, lebarMm: 190, tinggiMm: 1190, beratKg: 35, presetId: "pmp-kecil" },
+  besar: { panjangMm: 380, lebarMm: 190, tinggiMm: 1190, beratKg: 70, presetId: "pmp-besar" },
 };
 
 /** Elevasi/tinggi bawaan (meter) per tipe, spec v2 §3. */
 export const ELEVASI_TINGGI_BAWAAN: Record<TipeElemen, { elevasiM: number; tinggiM: number }> = {
-  bak: { elevasiM: -0.7, tinggiM: 1.0 },
+  bak: { elevasiM: -1.2, tinggiM: 1.5 }, // bibir tetap +0,3 m
   mesin: { elevasiM: 0, tinggiM: 1.8 },
   derek: { elevasiM: 3.5, tinggiM: 0.3 },
   dinding: { elevasiM: 0, tinggiM: 4.0 },
@@ -312,7 +311,13 @@ export const ELEVASI_TINGGI_BAWAAN: Record<TipeElemen, { elevasiM: number; tingg
   jalur: { elevasiM: 0, tinggiM: 0.05 },
 };
 
-export const BAK_BAWAAN = { w: 16, h: 6.5, tebalDindingM: 0.2, levelBrineM: 0.95, jarakAntarKolomMm: 60, jarakAntarCanMm: 40 } as const;
+/**
+ * Bak bawaan untuk 36 rek Balok Kecil preset PMP (36 can × 19 cm), diturunkan dari aturan teknik,
+ * BUKAN hasil ukur lapangan: lebar = 2 × dinding + 6 cm + 36 × (19 + 6) cm; panjang = 2 × dinding + 36 × 19 cm
+ * (jarak antar can 0 agar rek BB dan BK sama panjang); dalam 1,5 m = dinding dasar + can 119 cm +
+ * sisa 11 cm; brine 5 cm di bawah bibir (bibir can sejajar brine).
+ */
+export const BAK_BAWAAN = { w: 9.7, h: 7.3, tebalDindingM: 0.2, levelBrineM: 1.45, jarakAntarKolomMm: 60, jarakAntarCanMm: 0 } as const;
 export const TINGGI_KAIT_BAWAAN = 0.8;
 export const KATEGORI_MESIN_BAWAAN: KategoriMesin = "refrigerasi";
 export const TANGKI_BAWAAN = { jenis: "tandon", bentuk: "kotak", levelIsiPersen: 70 } as const;

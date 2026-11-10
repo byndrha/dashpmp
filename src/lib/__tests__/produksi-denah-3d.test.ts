@@ -196,10 +196,12 @@ test("hitungInstansIceCan: jumlah ice can semua kolom bak (termasuk nonaktif), t
 });
 
 test("iceCanBak: kolom tegak menukar ukuran tapak dibanding mendatar", () => {
-  const m = iceCanBak(bak()).kecil[0];
-  const b = bak();
+  // Varian besar (190 × 380 mm): ice can kecil bawaan persegi sehingga penukaran tapak tak terlihat.
+  const dasar = () => bak({ kolom: buatKolom(3, { varian: "besar", jumlahIceCan: 4 }) });
+  const m = iceCanBak(dasar()).besar[0];
+  const b = dasar();
   b.kolom[0] = { ...b.kolom[0], orientasiCan: "tegak" };
-  const t = iceCanBak(b).kecil[0];
+  const t = iceCanBak(b).besar[0];
   assert.ok(dekat(m.ukuran[0], t.ukuran[2]) && dekat(m.ukuran[2], t.ukuran[0]));
   assert.ok(!dekat(m.ukuran[0], t.ukuran[0]));
 });

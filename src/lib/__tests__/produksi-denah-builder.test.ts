@@ -289,7 +289,7 @@ test("buatElemen mengisi elevasi/tinggi bawaan spec §3 tiap tipe", () => {
   const d = el("derek") as DerekElemen;
   assert.deepEqual([d.elevasiM, d.tinggiM, d.tinggiKaitM], [3.5, 0.3, 0.8]);
   const b = el("bak") as BakElemen;
-  assert.deepEqual([b.elevasiM, b.tinggiM, b.tebalDindingM], [-0.7, 1, 0.2]);
+  assert.deepEqual([b.elevasiM, b.tinggiM, b.tebalDindingM], [-1.2, 1.5, 0.2]);
   assert.deepEqual([el("dinding").tinggiM, el("pintu").tinggiM, el("area").elevasiM], [4, 2.4, 0]);
   const beton = el("beton");
   assert.deepEqual([beton.elevasiM, beton.tinggiM], [-0.5, 0.5]);
@@ -305,7 +305,7 @@ test("bakBertumpuk memperhitungkan pergeseran sementara", () => {
   const a = buatBak(0, 0, { nama: "Bak 1" });
   const b = buatBak(30, 0, { nama: "Bak 2" });
   assert.equal(bakBertumpuk([a, b]).size, 0);
-  assert.deepEqual([...bakBertumpuk([a, b], { ids: new Set([b.id]), dx: -15, dy: 0 })].sort(), [a.id, b.id].sort());
+  assert.deepEqual([...bakBertumpuk([a, b], { ids: new Set([b.id]), dx: -25, dy: 0 })].sort(), [a.id, b.id].sort());
 });
 
 test("snapTitik membulatkan ke kelipatan langkah snap; nonaktif = presisi 1 cm", () => {
@@ -347,7 +347,7 @@ test("panjangSkalaBatang: angka bulat terbesar {1,2,5,10,20,50} m yang ≤ 120 p
 test("kapasitasSiklusKg: Σ ice can × berat varian, kolom nonaktif tidak dihitung", () => {
   const b = buatBak(0, 0, { nama: "Bak 1" });
   const kolom = b.kolom.slice(0, 3).map((k, i) => ({ ...k, varian: (i === 1 ? "besar" : "kecil") as "kecil" | "besar", jumlahIceCan: 10, nonaktif: i === 2 ? true : undefined }));
-  assert.equal(kapasitasSiklusKg({ ...b, kolom }), 10 * 25 + 10 * 50);
+  assert.equal(kapasitasSiklusKg({ ...b, kolom }), 10 * 35 + 10 * 70);
 });
 
 // ---------- Task 5: beton, tangki, ukur, lapisan, warna ----------
