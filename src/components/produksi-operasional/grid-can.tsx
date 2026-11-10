@@ -222,19 +222,23 @@ export function LegendaCan({ className }: { className?: string }) {
   const lain = ["pecah", "rusak", "kosong"] as const;
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
+      {/* Tanpa garis tepi: ujung bulat segmen berikutnya menimpa ujung segmen
+          sebelumnya (tumpang tindih ≥ jari-jari) sehingga tak ada celah/garis. */}
       <ol
         className="flex w-full items-stretch"
         aria-label={`Tahap can: ${URUTAN_PIL.map((p) => p.teks).join(", ")}`}
       >
         {URUTAN_PIL.map(({ kunci, teks }, i) => {
           const w = WARNA_CAN[kunci];
+          const akhir = i === URUTAN_PIL.length - 1;
           return (
             <li
               key={kunci}
               style={{ zIndex: i }}
               className={cn(
-                "relative flex min-w-0 flex-auto items-center justify-center rounded-full border px-2.5 py-1 text-[10px] leading-none font-bold whitespace-nowrap",
-                i > 0 && "-ml-2",
+                "relative flex min-w-0 flex-auto items-center justify-center rounded-full py-[5px] text-[10px] leading-[12px] font-bold whitespace-nowrap",
+                i === 0 ? "pl-2.5" : "-ml-[11px] pl-2",
+                akhir ? "pr-2" : "pr-[13px]",
                 w.sel,
                 w.teks
               )}
