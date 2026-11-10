@@ -284,6 +284,11 @@ export const PRESET_ICE_CAN: readonly { id: string; label: string; panjangMm: nu
   { id: "fao-25", label: "FAO 25 kg", panjangMm: 190, lebarMm: 190, tinggiMm: 1105, beratKg: 25 },
   { id: "fao-50", label: "FAO 50 kg", panjangMm: 184, lebarMm: 408, tinggiMm: 1000, beratKg: 50 },
   { id: "fao-136", label: "FAO 136 kg", panjangMm: 280, lebarMm: 560, tinggiMm: 1220, beratKg: 136 },
+  // Ukuran nyata pabrik PMP (informasi pengguna 2026-11-10): Balok Besar = 2× panjang Balok Kecil.
+  // Belum jadi bawaan bak baru: bak bawaan (16 × 6,5 m, dalam 1,0 m) tidak muat untuk can 119 cm.
+  // Panjang = sumbu sepanjang rek, jadi BB 38 cm memanjang di rek (18 can = 36 BK = 6,84 m).
+  { id: "pmp-kecil", label: "PMP Balok Kecil", panjangMm: 190, lebarMm: 190, tinggiMm: 1190, beratKg: 35 },
+  { id: "pmp-besar", label: "PMP Balok Besar", panjangMm: 380, lebarMm: 190, tinggiMm: 1190, beratKg: 70 },
   { id: "kustom", label: "Kustom", panjangMm: 120, lebarMm: 360, tinggiMm: 750, beratKg: 25 },
 ];
 

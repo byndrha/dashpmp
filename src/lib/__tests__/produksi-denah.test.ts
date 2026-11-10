@@ -334,11 +334,17 @@ test("buatBak v2: bawaan meter & ice can", () => {
   assert.notEqual(b.iceCan.kecil, ICE_CAN_DIMENSI_BAWAAN.kecil, "ice can bak tidak berbagi objek dengan bawaan");
 });
 
-test("PRESET_ICE_CAN: 11 baris, pasar-25 = 120×360×750 25 kg", () => {
-  assert.equal(PRESET_ICE_CAN.length, 11);
+test("PRESET_ICE_CAN: 13 baris, pasar-25 = 120×360×750 25 kg, preset PMP = bawaan", () => {
+  assert.equal(PRESET_ICE_CAN.length, 13);
   assert.deepEqual(PRESET_ICE_CAN.map((p) => p.id), [
-    "pasar-5", "pasar-10", "pasar-15", "pasar-20", "pasar-25", "pasar-50", "pasar-100", "fao-25", "fao-50", "fao-136", "kustom",
+    "pasar-5", "pasar-10", "pasar-15", "pasar-20", "pasar-25", "pasar-50", "pasar-100", "fao-25", "fao-50", "fao-136", "pmp-kecil", "pmp-besar", "kustom",
   ]);
+  const pmpK = PRESET_ICE_CAN.find((p) => p.id === "pmp-kecil")!;
+  const pmpB = PRESET_ICE_CAN.find((p) => p.id === "pmp-besar")!;
+  assert.deepEqual([pmpK.panjangMm, pmpK.lebarMm, pmpK.tinggiMm, pmpK.beratKg], [190, 190, 1190, 35]);
+  assert.deepEqual([pmpB.panjangMm, pmpB.lebarMm, pmpB.tinggiMm, pmpB.beratKg], [380, 190, 1190, 70]);
+  assert.equal(pmpB.panjangMm, 2 * pmpK.panjangMm);
+  assert.equal(pmpB.beratKg, 2 * pmpK.beratKg);
   const p25 = PRESET_ICE_CAN.find((p) => p.id === "pasar-25")!;
   assert.deepEqual([p25.label, p25.panjangMm, p25.lebarMm, p25.tinggiMm, p25.beratKg], ["Pasar 25 kg", 120, 360, 750, 25]);
   const f136 = PRESET_ICE_CAN.find((p) => p.id === "fao-136")!;
