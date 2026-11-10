@@ -16,15 +16,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { batalkanPanenAction, koreksiIsianAction, koreksiMuatanAction } from "@/app/produksi-operasional-actions";
 import type { KodeProduksi, Varian } from "@/lib/produksi-denah";
 import {
+  hitungKematangan,
+  mulaiUntukTahap,
+  tahapDari,
   validasiKoreksiMuatan,
   type IsianAktif,
   type KeadaanRek,
   type KendaraanPilihan,
   type MuatanInput,
+  type Tahap,
 } from "@/lib/produksi-operasional";
 import type { PanenTerakhir } from "@/lib/queries/produksi-operasional";
 import type { KendaraanArmada } from "@/lib/queries/produksi-do-erp";
-import { singkatVarian, tanggalJamWib } from "../warna-tahap";
+import { RENTANG_TAHAP, singkatVarian, tanggalJamWib, WARNA_TAHAP } from "../warna-tahap";
 import { PemilihKendaraan } from "../app/pemilih-kendaraan";
 import { GridCan } from "../grid-can";
 
@@ -101,6 +105,19 @@ export function DialogKoreksi({
   const [galat, setGalat] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [maks] = useState(() => keLokalWib(new Date().toISOString()));
+  const [bukaDialog] = useState(() => new Date());
+
+  // Tahap manual: memilih tahap mengisi "Waktu isi air" ke batas bawah tahap itu; es lanjut
+  // berjalan mengikuti waktu. Tahap yang tampil selalu mengikuti waktu yang sedang diisi.
+  const durasiJam = isian.durasiBekuJam;
+  const isoMulai = dariLokalWib(mulai);
+  const pctMulai =
+    isoMulai !== null && durasiJam !== null && durasiJam > 0 ? hitungKematangan(new Date(isoMulai), durasiJam, bukaDialog) : null;
+  const tahapSekarang: Tahap | "" = pctMulai === null ? "" : tahapDari(pctMulai);
+  const pilihTahap = (t: Tahap) => {
+    if (durasiJam === null || !(durasiJam > 0)) return;
+    setMulai(keLokalWib(mulaiUntukTahap(t, durasiJam, new Date()).toISOString()));
+  };
 
   async function simpan() {
     const ubah: { mulaiAt?: string; varian?: Varian; slot?: number[]; slotDiharapkan?: number[] } = {};
@@ -140,6 +157,32 @@ export function DialogKoreksi({
             <Label htmlFor="koreksi-mulai">{babonan ? "Babonan sejak (WIB)" : "Waktu isi air (WIB)"}</Label>
             <Input id="koreksi-mulai" type="datetime-local" value={mulai} max={maks} onChange={(e) => setMulai(e.target.value)} />
           </div>
+          {!babonan && durasiJam !== null && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="koreksi-tahap">Tahap es</Label>
+              <select
+                id="koreksi-tahap"
+                className={KELAS_SELECT}
+                value={tahapSekarang}
+                disabled={varian !== isian.varian}
+                onChange={(e) => pilihTahap(e.target.value as Tahap)}
+              >
+                {tahapSekarang === "" && <option value="">—</option>}
+                {(Object.keys(WARNA_TAHAP) as Tahap[]).map((t) => (
+                  <option key={t} value={t}>
+                    {WARNA_TAHAP[t].label} ({RENTANG_TAHAP[t]})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {varian !== isian.varian
+                  ? "Simpan perubahan varian dulu; durasi beku varian baru belum diketahui."
+                  : `Memilih tahap mengisi waktu isi air ke awal tahap itu, lalu es lanjut berjalan mengikuti waktu${
+                      pctMulai !== null ? ` (sekarang ${pctMulai}%)` : ""
+                    }.`}
+              </p>
+            </div>
+          )}
           <div className="grid gap-1.5">
             <Label htmlFor="koreksi-varian">Varian</Label>
             <select id="koreksi-varian" className={KELAS_SELECT} value={varian} onChange={(e) => setVarian(e.target.value as Varian)}>
@@ -200,6 +243,112 @@ export function DialogKoreksi({
           </Button>
           <Button onClick={() => void simpan()} disabled={sibuk}>
             {sibuk ? "Menyimpan…" : "Simpan koreksi"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Kosongkan can satu isian (admin): tanpa kendaraan dan tanpa syarat tahap. Memakai koreksi isian:
+ * slot yang tersisa = isian − can yang dikosongkan (semua dikosongkan → isian selesai). Can yang
+ * dikosongkan tidak terhitung panen/produksi dan tidak ikut pencocokan DO; tercatat di log audit.
+ */
+export function DialogKosongkan({
+  kode,
+  rek,
+  isian,
+  lokasi,
+  onTutup,
+  onBerhasil,
+}: {
+  kode: KodeProduksi;
+  rek: KeadaanRek;
+  isian: IsianAktif;
+  lokasi: string;
+  onTutup: () => void;
+  onBerhasil: () => void;
+}) {
+  const milik = useMemo(() => new Set(isian.slot), [isian.slot]);
+  const [pilihanMentah, setPilihan] = useState<Set<number>>(() => new Set(isian.slot));
+  // Slot isian bisa berubah selama dialog terbuka (operator memanen): atur ulang pilihan.
+  const sidikSlot = [...isian.slot].sort((a, b) => a - b).join(".");
+  const [sidikDasar, setSidikDasar] = useState(sidikSlot);
+  const [infoBerubah, setInfoBerubah] = useState(false);
+  if (sidikSlot !== sidikDasar) {
+    setSidikDasar(sidikSlot);
+    setPilihan(new Set(isian.slot));
+    setInfoBerubah(true);
+  }
+  const pilihan = new Set([...pilihanMentah].filter((s) => milik.has(s)));
+  const [alasan, setAlasan] = useState("");
+  const [galat, setGalat] = useState<string | null>(null);
+  const [sibuk, setSibuk] = useState(false);
+  const babonan = isian.jenis === "babonan";
+  const sisa = isian.slot.filter((s) => !pilihan.has(s)).sort((a, b) => a - b);
+
+  async function kosongkan() {
+    if (pilihan.size === 0) return setGalat("Pilih minimal satu can untuk dikosongkan.");
+    setSibuk(true);
+    const g = await panggil(() =>
+      koreksiIsianAction(kode, isian.id, { slot: sisa, slotDiharapkan: [...isian.slot].sort((a, b) => a - b) }, alasan),
+    );
+    setSibuk(false);
+    if (g) return setGalat(g);
+    onBerhasil();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !sibuk && onTutup()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Kosongkan can</DialogTitle>
+          <DialogDescription>
+            {lokasi} · {babonan ? "Babonan" : "Produksi"} {singkatVarian(isian.varian)} · {isian.sisa}/{isian.jumlahAwal} can · diisi{" "}
+            {tanggalJamWib(isian.mulaiAt)}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-2.5">
+            <GridCan mode="pilih" can={rek.can} rek={rek} boleh={milik} pilihan={pilihan} onUbah={setPilihan} disabled={sibuk} />
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground tabular-nums">
+                Dikosongkan <b className="text-foreground">{pilihan.size}</b> dari {isian.slot.length} can
+              </span>
+              <span className="flex gap-3">
+                <button type="button" disabled={sibuk} onClick={() => setPilihan(new Set(isian.slot))} className="font-medium text-primary disabled:opacity-50">
+                  Semua
+                </button>
+                <button type="button" disabled={sibuk} onClick={() => setPilihan(new Set())} className="font-medium text-primary disabled:opacity-50">
+                  Tidak ada
+                </button>
+              </span>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Tanpa kendaraan dan tanpa menunggu es matang. Can yang dikosongkan tidak dihitung sebagai panen dan tidak ikut
+            pencocokan DO.{" "}
+            {pilihan.size > 0 &&
+              (sisa.length === 0 ? "Semua can dikosongkan: isian ini selesai." : `Sisa ${sisa.length} can tetap di isian ini.`)}
+          </p>
+          <div className="grid gap-1.5">
+            <Label htmlFor="kosongkan-alasan">Alasan (wajib)</Label>
+            <Textarea id="kosongkan-alasan" value={alasan} onChange={(e) => setAlasan(e.target.value)} rows={2} maxLength={1000} />
+          </div>
+          {infoBerubah && (
+            <p role="status" className="rounded-lg bg-amber-100 p-2 text-sm text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
+              Isian berubah, pilihan diatur ulang.
+            </p>
+          )}
+          {galat && <p className="rounded-lg bg-destructive/10 p-2 text-sm text-destructive">{galat}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onTutup} disabled={sibuk}>
+            Batal
+          </Button>
+          <Button variant="destructive" onClick={() => void kosongkan()} disabled={sibuk}>
+            {sibuk ? "Menyimpan…" : "Kosongkan"}
           </Button>
         </DialogFooter>
       </DialogContent>

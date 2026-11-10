@@ -172,6 +172,17 @@ export function tahapDari(pct: number): Tahap {
   return "jadi";
 }
 
+/** Persen kematangan batas bawah tiap tahap (selaras dengan tahapDari). */
+export const BATAS_BAWAH_TAHAP: Record<Tahap, number> = { air: 0, mulai: 1, kristal: 50, siap: 75, jadi: 100 };
+
+/**
+ * Waktu isi air yang membuat isian berada tepat di batas bawah `tahap` pada `sekarang`
+ * (koreksi tahap manual oleh admin); es lalu lanjut berjalan mengikuti waktu.
+ */
+export function mulaiUntukTahap(tahap: Tahap, durasiBekuJam: number, sekarang: Date): Date {
+  return new Date(sekarang.getTime() - (BATAS_BAWAH_TAHAP[tahap] / 100) * durasiBekuJam * JAM_MS);
+}
+
 // ── Waktu: shift & tanggal bisnis ──────────────────────────────────────────
 
 /** Shift 1 07:00–14:59, Shift 2 15:00–22:59, Shift 3 23:00–06:59 (jam WIB). */

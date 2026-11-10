@@ -19,7 +19,7 @@ import { kodeRek, type IsianAktif, type KeadaanRek, type KendaraanPilihan } from
 import type { PanenTerakhir } from "@/lib/queries/produksi-operasional";
 import type { KendaraanArmada } from "@/lib/queries/produksi-do-erp";
 import { singkatVarian, tanggalJamWib } from "../warna-tahap";
-import { DialogBatalPanen, DialogKoreksi, DialogUbahKendaraan, RincianPanen } from "./dialog-koreksi";
+import { DialogBatalPanen, DialogKoreksi, DialogKosongkan, DialogUbahKendaraan, RincianPanen } from "./dialog-koreksi";
 import { IsiLembar } from "../app/lembar-aksi-rek";
 import type { Jalankan } from "../app/produksi-app";
 
@@ -173,6 +173,7 @@ function KoreksiAdmin({
   const [panen, setPanen] = useState<PanenTerakhir[] | null>(null);
   const [panenGalat, setPanenGalat] = useState<string | null>(null);
   const [koreksi, setKoreksi] = useState<IsianAktif | null>(null);
+  const [kosongkan, setKosongkan] = useState<IsianAktif | null>(null);
   const [batal, setBatal] = useState<PanenTerakhir | null>(null);
   const [ubahKendaraan, setUbahKendaraan] = useState<PanenTerakhir | null>(null);
   const [muatUlang, setMuatUlang] = useState(0);
@@ -203,6 +204,7 @@ function KoreksiAdmin({
 
   const selesai = () => {
     setKoreksi(null);
+    setKosongkan(null);
     setBatal(null);
     setUbahKendaraan(null);
     setMuatUlang((n) => n + 1);
@@ -224,6 +226,9 @@ function KoreksiAdmin({
             </span>
             <Button variant="outline" size="sm" onClick={() => setKoreksi(i)}>
               Koreksi
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setKosongkan(i)}>
+              Kosongkan
             </Button>
           </div>
         ))}
@@ -271,6 +276,17 @@ function KoreksiAdmin({
           isian={isian.find((i) => i.id === koreksi.id) ?? koreksi}
           lokasi={lokasi}
           onTutup={() => setKoreksi(null)}
+          onBerhasil={selesai}
+        />
+      )}
+      {kosongkan && (
+        <DialogKosongkan
+          key={kosongkan.id}
+          kode={kode}
+          rek={keadaan}
+          isian={isian.find((i) => i.id === kosongkan.id) ?? kosongkan}
+          lokasi={lokasi}
+          onTutup={() => setKosongkan(null)}
           onBerhasil={selesai}
         />
       )}
