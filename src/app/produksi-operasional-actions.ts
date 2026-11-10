@@ -21,10 +21,11 @@ import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { bolehAksiProduksi, bolehKelolaProduksi, peranProduksi } from "@/lib/permissions";
 import { canAccessGrup } from "@/lib/require-access";
 import { isPmpDeployment } from "@/lib/tenant";
-import { denahKosong, type BakElemen, type DenahDokumen, type KodeProduksi, type Varian } from "@/lib/produksi-denah";
+import { denahKosong, kodeBakEfektif, type BakElemen, type DenahDokumen, type KodeProduksi, type Varian } from "@/lib/produksi-denah";
 import {
   cocokkanHarian,
   keadaanPabrik,
+  kodeRek,
   peringatanDari,
   ringkasBak,
   ringkasStok,
@@ -326,10 +327,12 @@ function lupakanSelisih(kode: KodeProduksi): void {
 
 function pembuatLabel(denah: DenahDokumen): (kolomId: string) => string {
   const peta = new Map<string, string>();
+  let indeksBak = 0;
   for (const e of denah.elemen) {
     if (e.tipe !== "bak") continue;
     const bak = e as BakElemen;
-    for (const k of bak.kolom) peta.set(k.id, `${bak.nama} – Rek ${k.nomor}`);
+    const kodeBak = kodeBakEfektif(bak, indeksBak++);
+    for (const k of bak.kolom) peta.set(k.id, `${bak.nama} – Rek ${k.nomor} (${kodeRek(kodeBak, k.nomor)})`);
   }
   return (kolomId) => peta.get(kolomId) ?? "Rek tidak dikenal";
 }

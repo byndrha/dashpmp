@@ -575,6 +575,12 @@ test("validasiDenah: kode bak ganda, tidak sah, nomor ganda, orientasi tidak sah
   assert.ok(pesan(dokDari(buatBak(0, 0, { nama: "Bak 1", kodeBak: "3-1" }))).includes("kode bak tidak sah"));
   assert.ok(pesan(dokDari(buatBak(0, 0, { nama: "Bak 1", kodeBak: "ABCD" }))).includes("kode bak tidak sah"));
 
+  // kode turunan harus sah juga: >3 karakter ditolak, tanpa angka & tanpa kodeBak ditolak
+  assert.ok(pesan(dokDari(buatBak(0, 0, { nama: "Bak 1234" }))).includes("lebih dari 3 karakter"));
+  assert.ok(pesan(dokDari(buatBak(0, 0, { nama: "Bak Utama" }))).includes("tidak punya angka"));
+  assert.ok(!pesan(dokDari(buatBak(0, 0, { nama: "Bak Utama", kodeBak: "U" }))).includes("tidak punya angka"));
+  assert.ok(!pesan(dokDari(buatBak(0, 0, { nama: "Bak 1234", kodeBak: "12" }))).includes("lebih dari 3 karakter"));
+
   const bakNomor = buatBak(0, 0, { nama: "Bak 1", kolom: buatKolom(2, { varian: "kecil", jumlahIceCan: 36 }) });
   bakNomor.kolom[1].nomor = bakNomor.kolom[0].nomor = 5;
   assert.ok(pesan(dokDari(bakNomor)).includes("nomor rek ganda"));

@@ -525,8 +525,15 @@ export function validasiDenah(dok: DenahDokumen): GalatDenah[] {
         else namaBak.set(kunci, e);
       }
       const kodeEf = kodeBakEfektif(e, indeksBak++);
+      const eksplisit = e.kodeBak?.trim();
       if (e.kodeBak !== undefined && !POLA_KODE_BAK.test(e.kodeBak)) {
         galat.push({ elemenId: e.id, pesan: `Kode bak tidak sah pada bak ${label}: harus 1–3 karakter huruf/angka, tanpa tanda "-".` });
+      } else if (!eksplisit && !/\d/.test(e.nama)) {
+        // Cadangan urutan bak bergeser bila ada bak disisipkan/dihapus, sehingga label
+        // di lapangan ("2-5-3") bisa pindah rek: wajib kode eksplisit.
+        galat.push({ elemenId: e.id, pesan: `Bak ${label} tidak punya angka pada nama: isi Kode bak agar kode posisinya tidak bergeser.` });
+      } else if (!POLA_KODE_BAK.test(kodeEf)) {
+        galat.push({ elemenId: e.id, pesan: `Kode bak turunan "${kodeEf}" dari nama ${label} lebih dari 3 karakter: isi Kode bak (1–3 karakter).` });
       } else {
         const lainKode = kodeBakPeta.get(kodeEf.toLowerCase());
         if (lainKode) {
