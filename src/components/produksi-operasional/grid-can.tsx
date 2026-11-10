@@ -141,16 +141,17 @@ export function GridCan(props: PropsGridCan) {
               const dis = !aktif || props.disabled;
               let w = warnaCan(c);
               let terpilih = false;
-              let label = `Slot ${c.slot}: ${w.label}`;
+              const kode = kodePosisi(rek.kodeBak, rek.nomor, c.slot);
+              let label = `${kode}: ${w.label}`;
               let ditekan: boolean | undefined;
               if (props.mode === "panen" && aktif) {
                 const t = props.pilihan.get(c.slot);
                 if (t) w = WARNA_CAN[t];
-                label = `Slot ${c.slot}: ${LABEL_PANEN[t ?? "biasa"]}`;
+                label = `${kode}: ${LABEL_PANEN[t ?? "biasa"]}`;
                 ditekan = t !== undefined;
               } else if (props.mode === "pilih" && aktif) {
                 terpilih = props.pilihan.has(c.slot);
-                label = `Slot ${c.slot}: ${w.label}${
+                label = `${kode}: ${w.label}${
                   terpilih ? ", dipilih" : ""
                 }`;
                 ditekan = terpilih;
@@ -203,41 +204,65 @@ export function GridCan(props: PropsGridCan) {
   );
 }
 
-const URUTAN_TAHAP: Tahap[] = ["air", "mulai", "kristal", "siap", "jadi"];
+/** Urutan pil gradasi: Isian → Solidifikasi → Kristalisasi → Siap → Matang → Jaga (Babonan). */
+const URUTAN_PIL: { kunci: Tahap | "babonan"; teks: string }[] = [
+  { kunci: "air", teks: "Isian" },
+  { kunci: "mulai", teks: "Solidifikasi" },
+  { kunci: "kristal", teks: "Kristalisasi" },
+  { kunci: "siap", teks: "Siap" },
+  { kunci: "jadi", teks: "Matang" },
+  { kunci: "babonan", teks: "Jaga" },
+];
 
-/** Legenda warna can (tahap + Babonan/pecah/rusak/kosong). */
+/**
+ * Legenda warna can: satu pil gradasi tahap (Isian … Jaga, ujung bulat saling
+ * menimpa) di atas baris kecil untuk pecah/rusak/kosong.
+ */
 export function LegendaCan({ className }: { className?: string }) {
-  const kunci = [
-    ...URUTAN_TAHAP,
-    "babonan",
-    "pecah",
-    "rusak",
-    "kosong",
-  ] as const;
+  const lain = ["pecah", "rusak", "kosong"] as const;
   return (
-    <div
-      className={cn(
-        "flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground",
-        className
-      )}
-    >
-      {kunci.map((k) => {
-        const w = WARNA_CAN[k];
-        return (
-          <span key={k} className="flex items-center gap-1">
-            <span
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      <ol
+        className="flex w-full items-stretch"
+        aria-label={`Tahap can: ${URUTAN_PIL.map((p) => p.teks).join(", ")}`}
+      >
+        {URUTAN_PIL.map(({ kunci, teks }, i) => {
+          const w = WARNA_CAN[kunci];
+          return (
+            <li
+              key={kunci}
+              style={{ zIndex: i }}
               className={cn(
-                "inline-flex size-3.5 items-center justify-center rounded-[3px] border text-[8px] font-bold",
+                "relative flex min-w-0 flex-auto items-center justify-center rounded-full border px-2.5 py-1 text-[10px] leading-none font-bold whitespace-nowrap",
+                i > 0 && "-ml-2",
                 w.sel,
                 w.teks
               )}
             >
-              {w.simbol}
+              {teks}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        {lain.map((k) => {
+          const w = WARNA_CAN[k];
+          return (
+            <span key={k} className="flex items-center gap-1">
+              <span
+                className={cn(
+                  "inline-flex size-3.5 items-center justify-center rounded-[3px] border text-[8px] font-bold",
+                  w.sel,
+                  w.teks
+                )}
+              >
+                {w.simbol}
+              </span>
+              {w.label}
             </span>
-            {w.label}
-          </span>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

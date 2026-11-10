@@ -92,6 +92,6 @@ function Status({ rek }: { rek: KeadaanRek }) {
       </>
     );
   }
-  if (rek.babonan > 0) return <span className="text-xs font-bold text-orange-600 dark:text-orange-400">◆ {rek.babonan}</span>;
+  if (rek.babonan > 0) return <span className="text-xs font-bold text-stone-600 dark:text-stone-300">◆ {rek.babonan}</span>;
   return <span className="text-[11px] text-muted-foreground">Kosong</span>;
 }

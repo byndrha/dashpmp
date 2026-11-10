@@ -228,7 +228,7 @@ export function FormPanen({
           {!babonanMode && (
             <>
               {" "}
-              · <span className="text-orange-700 dark:text-orange-300">◆</span> <b>{slotBabonan.length}</b> · ✕ <b>{slotPecah.length}</b>
+              · <span className="text-stone-600 dark:text-stone-300">◆</span> <b>{slotBabonan.length}</b> · ✕ <b>{slotPecah.length}</b>
             </>
           )}
           {!tanpaMuatan && (

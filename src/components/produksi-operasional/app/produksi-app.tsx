@@ -519,8 +519,8 @@ function BarisChip({ r }: { r: RingkasanBak }) {
     {
       label: "Siap",
       n: r.siap,
-      tanda: <span className="size-2.5 shrink-0 rounded-full bg-green-600" />,
-      kelas: "border-green-600/60 bg-green-50 text-green-800 dark:bg-green-950/60 dark:text-green-200",
+      tanda: <span className="size-2.5 shrink-0 rounded-full bg-[#14a89a]" />,
+      kelas: "border-teal-600/60 bg-teal-50 text-teal-800 dark:bg-teal-950/60 dark:text-teal-200",
     },
     {
       label: "Kosong",
@@ -532,7 +532,7 @@ function BarisChip({ r }: { r: RingkasanBak }) {
       label: "Babonan",
       n: r.babonan,
       tanda: <span className="shrink-0 text-[10px] leading-none">◆</span>,
-      kelas: "border-orange-500/60 bg-orange-50 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200",
+      kelas: "border-stone-500/60 bg-stone-100 text-stone-800 dark:bg-stone-800/60 dark:text-stone-200",
     },
     {
       label: "Rusak",
