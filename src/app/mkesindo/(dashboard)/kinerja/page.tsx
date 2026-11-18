@@ -30,10 +30,12 @@ export default async function KinerjaPage() {
   const [historiByAkunId, allAkun] = await Promise.all([calculator.hitungHistoriSemuaKaryawan(), listAkun()]);
 
   const isPlainMarketing = !session.user.isSuperAdmin && session.user.roleId === MARKETING_ROLE_ID;
-  // listAkun() does not filter by is_active — a deactivated Marketing
-  // employee's historical row still appears here, per the spec's edge
-  // case 2 (kredit NOO tetap melekat walau akun dinonaktifkan).
-  const marketingAkunList = allAkun.filter((a) => a.peranId === MARKETING_ROLE_ID);
+  // Hanya Marketing yang masih aktif yang ditampilkan (permintaan user
+  // 2026-11-18: Novy & Ridho sudah non-aktif, Ferdi bukan Marketing). Kredit
+  // historis mereka tetap ada di data, hanya barisnya tidak ditampilkan;
+  // penjualan setelah tanggal nonaktif_sejak tetap mengalir ke "Tanpa
+  // Marketing".
+  const marketingAkunList = allAkun.filter((a) => a.peranId === MARKETING_ROLE_ID && a.isActive);
   const visibleAkunList = isPlainMarketing
     ? marketingAkunList.filter((a) => String(a.id) === session.user.id)
     : marketingAkunList;
@@ -44,31 +46,15 @@ export default async function KinerjaPage() {
     histori: historiByAkunId.get(String(akun.id)) ?? { akunId: String(akun.id), bulanList: [] },
   }));
 
-  // historiByAkunId is sourced independently from MSSQL and never references
-  // the Postgres akun table — an akunId can show up here without being in
-  // marketingAkunList for three different reasons, each labeled differently:
-  // (a) TANPA_MARKETING_ID, the shared pseudo-owner for mitra whose real
-  // owner has resigned (akun.nonaktif_sejak) — not a real akun at all;
-  // (b) the akun still exists but its peran changed away from Marketing
-  // (e.g. promoted, or a Manager who personally submitted/was credited for
-  // a Pengajuan) — show their real nama, historical credit isn't fictional
-  // just because their current role changed; (c) the akun was hard-deleted
-  // entirely — genuinely nothing to look up, show the placeholder. A plain
-  // Marketing viewer only ever sees their own (necessarily still-existing,
-  // still-Marketing, still-active) row, so none of this applies to them —
-  // "Tanpa Marketing" belongs to nobody, and a resigned/role-changed
-  // account isn't the viewer themselves.
+  // historiByAkunId is sourced independently from MSSQL and can also hold
+  // akunIds outside marketingAkunList (non-aktif, peran bukan Marketing
+  // lagi, atau terhapus). Sejak 2026-11-18 (permintaan user) baris-baris itu
+  // tidak ditampilkan lagi — hanya bucket bersama "Tanpa Marketing" yang
+  // tetap muncul untuk viewer non-Marketing.
   if (!isPlainMarketing) {
-    const marketingAkunIds = new Set(marketingAkunList.map((a) => String(a.id)));
-    const allAkunById = new Map(allAkun.map((a) => [String(a.id), a]));
-    for (const [akunId, histori] of historiByAkunId) {
-      if (marketingAkunIds.has(akunId)) continue;
-      if (akunId === TANPA_MARKETING_ID) {
-        karyawanList.push({ akunId, nama: "Tanpa Marketing", histori });
-        continue;
-      }
-      const akun = allAkunById.get(akunId);
-      karyawanList.push({ akunId, nama: akun ? akun.nama : "Akun tidak ditemukan", histori });
+    const tanpaMarketing = historiByAkunId.get(TANPA_MARKETING_ID);
+    if (tanpaMarketing) {
+      karyawanList.push({ akunId: TANPA_MARKETING_ID, nama: "Tanpa Marketing", histori: tanpaMarketing });
     }
   }
 

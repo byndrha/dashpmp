@@ -47,7 +47,7 @@ export async function getLatestMarketingPositions(): Promise<MarketingPosition[]
     `SELECT DISTINCT ON (a.id) a.id AS akun_id, a.nama, al.latitude, al.longitude, al.recorded_at
      FROM akun a
      JOIN akun_lokasi al ON al.akun_id = a.id
-     WHERE a.peran_id = $1
+     WHERE a.peran_id = $1 AND a.is_active = true
      ORDER BY a.id, al.recorded_at DESC`,
     [MARKETING_ROLE_ID]
   );
@@ -84,7 +84,7 @@ export async function getMarketingPositionHistory(hoursBack: number): Promise<Ma
     `SELECT a.id AS akun_id, a.nama, al.latitude, al.longitude, al.recorded_at
      FROM akun a
      JOIN akun_lokasi al ON al.akun_id = a.id
-     WHERE a.peran_id = $1 AND al.recorded_at >= now() - ($2 || ' hours')::interval
+     WHERE a.peran_id = $1 AND a.is_active = true AND al.recorded_at >= now() - ($2 || ' hours')::interval
      ORDER BY a.id, al.recorded_at ASC`,
     [MARKETING_ROLE_ID, hoursBack]
   );

@@ -114,7 +114,15 @@ export async function getMarketingPerformanceTrend(monthsBack: number): Promise<
   // requires a currently-active DashboardMarketingWilayah assignment (a
   // Marketing who moved wilayah or left keeps their historical NOO/Existing
   // credit and must still show up here).
-  const marketingIdsWithScope = new Set(ownerships.map((o) => o.ownerAkunId));
+  //
+  // Sejak 2026-11-18 (permintaan user): baris hanya untuk Marketing yang
+  // masih aktif (getMarketingUsers()). Pemilik non-aktif / bukan Marketing
+  // (mis. Novy, Ridho, Ferdi) tidak lagi dapat baris sendiri — angka mereka
+  // tetap masuk ke `combined` karena loop di bawah selalu menambah combined
+  // walau rowByMarketing tidak punya barisnya. Pangsa pasar ikut otomatis
+  // (rows-nya diturunkan dari rows di sini).
+  const activeMarketingIds = new Set(marketingUsers.map((u) => u.UserID));
+  const marketingIdsWithScope = new Set(ownerships.map((o) => o.ownerAkunId).filter((id) => activeMarketingIds.has(id)));
   const rows: MarketingTrendRow[] = [...marketingIdsWithScope].map((userId) => ({
     MarketingUserID: userId,
     MarketingNama: marketingUsers.find((u) => u.UserID === userId)?.Nama ?? "Tidak diketahui",
