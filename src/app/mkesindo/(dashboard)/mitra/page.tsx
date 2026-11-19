@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/require-access";
+import { canAccessAllPT, requireModuleAccess } from "@/lib/require-access";
 import { getMitraList, getTermOfPaymentOptions, getPriceLevelOptions } from "@/lib/queries/mitra";
 import { getMitraGrowthByWilayah } from "@/lib/queries/mitra-growth";
 import { getMarketingUsers, getDriverUserOptions, getMarketingMitraAssignments } from "@/lib/queries/marketing-wilayah";
@@ -18,7 +18,7 @@ export default async function MitraPage() {
   // Same role gate as setMitraPemilikAction (mitra/actions.ts) — the
   // dropdown itself is only fetched/rendered for a session that could
   // actually save a change through it.
-  const canEditPemilik = !!user && (user.isSuperAdmin || WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId));
+  const canEditPemilik = !!user && (canAccessAllPT(user) || WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId));
 
   const [mitra, termOptions, priceLevels, growth, pemilikData] = await Promise.all([
     getMitraList(),

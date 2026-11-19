@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireModuleAccess } from "@/lib/require-access";
+import { canAccessAllPT, requireModuleAccess } from "@/lib/require-access";
 import { getPengajuanList, getMarketingKPI, APPROVER_ROLE_IDS, MARKETING_ROLE_ID } from "@/lib/queries/mitra-pengajuan";
 import { getPriceLevelOptions } from "@/lib/queries/mitra";
 import {
@@ -37,11 +37,11 @@ export const metadata: Metadata = { title: "Pemasaran" };
 
 export default async function PemasaranPage() {
   const session = await requireModuleAccess("pemasaran");
-  const canApprove = session.user.isSuperAdmin || APPROVER_ROLE_IDS.includes(session.user.roleId);
+  const canApprove = canAccessAllPT(session.user) || APPROVER_ROLE_IDS.includes(session.user.roleId);
   // Who can see/manage Cakupan Wilayah Marketing — Supervisor/Accounting/
-  // Manager/Super Admin, deliberately separate from canApprove (Pengajuan
+  // Manager/Super Admin/Direktur, deliberately separate from canApprove (Pengajuan
   // approve/reject), per explicit request.
-  const canManageWilayah = session.user.isSuperAdmin || WILAYAH_MANAGER_ROLE_IDS.includes(session.user.roleId);
+  const canManageWilayah = canAccessAllPT(session.user) || WILAYAH_MANAGER_ROLE_IDS.includes(session.user.roleId);
   // Kinerja Marketing is explicitly hidden from Staff — everyone else
   // (Marketing, Supervisor, Accounting, Manager, Super Admin) still sees it.
   const canViewKinerjaMarketing = !(session.user.roleId === STAFF_ROLE_ID && !session.user.isSuperAdmin);
@@ -138,14 +138,14 @@ export default async function PemasaranPage() {
       <PemasaranWilayahDeliveryPanel
         data={wilayahDelivery}
         canEditTarget={canManageWilayah}
-        isSuperAdmin={session.user.isSuperAdmin}
+        isSuperAdmin={canAccessAllPT(session.user)}
       />
 
       <PemasaranSection
         rows={pengajuanRowsForSession}
         priceLevels={priceLevels}
         canApprove={canApprove}
-        isSuperAdmin={session.user.isSuperAdmin}
+        isSuperAdmin={canAccessAllPT(session.user)}
       />
     </div>
   );

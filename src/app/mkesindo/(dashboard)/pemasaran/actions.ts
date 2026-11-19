@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { canAccessAllPT } from "@/lib/require-access";
 import {
   createPengajuan,
   approvePengajuan,
@@ -43,7 +44,7 @@ async function requireApprover() {
   const session = await auth();
   const user = session?.user;
   if (!user) throw new AppError("Unauthorized");
-  if (!user.isSuperAdmin && !APPROVER_ROLE_IDS.includes(user.roleId)) {
+  if (!canAccessAllPT(user) && !APPROVER_ROLE_IDS.includes(user.roleId)) {
     throw new AppError("Tidak punya izin menyetujui/menolak pengajuan");
   }
   return user;
@@ -78,14 +79,14 @@ export async function rejectPengajuanAction(
 }
 
 // Deliberately narrower than requireApprover() — deleting a pengajuan
-// (unlike approve/reject) is restricted to Super Admin only, not
+// (unlike approve/reject) is restricted to Super Admin/Direktur only, not
 // Supervisor/Accounting, per explicit business decision.
 export async function deletePengajuanAction(pengajuanId: number): Promise<ActionResult<void>> {
   return runAction(async () => {
     const session = await auth();
     const user = session?.user;
     if (!user) throw new AppError("Unauthorized");
-    if (!user.isSuperAdmin) throw new AppError("Hanya Super Admin yang dapat menghapus pengajuan");
+    if (!canAccessAllPT(user)) throw new AppError("Hanya Super Admin/Direktur yang dapat menghapus pengajuan");
 
     await deletePengajuan(pengajuanId);
     revalidatePath("/mkesindo/pemasaran");
@@ -93,14 +94,14 @@ export async function deletePengajuanAction(pengajuanId: number): Promise<Action
 }
 
 // Deliberately separate from requireApprover() — who manages Cakupan
-// Wilayah Marketing (Supervisor/Accounting/Manager/Super Admin) was
+// Wilayah Marketing (Supervisor/Accounting/Manager/Super Admin/Direktur) was
 // requested independently of who approves/rejects Pengajuan, so the two
 // checks must be free to diverge.
 async function requireWilayahManager() {
   const session = await auth();
   const user = session?.user;
   if (!user) throw new AppError("Unauthorized");
-  if (!user.isSuperAdmin && !WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId)) {
+  if (!canAccessAllPT(user) && !WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId)) {
     throw new AppError("Tidak punya izin mengatur cakupan wilayah Marketing");
   }
   return user;

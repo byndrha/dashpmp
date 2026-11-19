@@ -37,6 +37,7 @@ import {
   type MitraOption,
 } from "@/lib/queries/marketing-wilayah";
 import { WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
+import { canAccessAllPT } from "@/lib/require-access";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 
 // Same role gate as Cakupan Wilayah's own requireWilayahManager
@@ -48,7 +49,7 @@ async function requireWilayahManager() {
   const session = await auth();
   const user = session?.user;
   if (!user) throw new AppError("Unauthorized");
-  if (!user.isSuperAdmin && !WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId)) {
+  if (!canAccessAllPT(user) && !WILAYAH_MANAGER_ROLE_IDS.includes(user.roleId)) {
     throw new AppError("Tidak punya izin mengubah Pemilik mitra.");
   }
   return user;

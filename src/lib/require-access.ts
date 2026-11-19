@@ -160,14 +160,14 @@ export async function requireSatpam() {
 
 // Gerbang /mkesindo/keamanan (admin roster shift Satpam) dan Server Action
 // yang mengubah roster (add/remove/list) -- Supervisor/Accounting/Manager/
-// Super Admin, sama seperti requireWilayahManager di mitra/actions.ts.
+// Super Admin/Direktur, sama seperti requireWilayahManager di mitra/actions.ts.
 // TIDAK dipakai untuk getSatpamOnDutyNowAction: itu action baca-saja yang
 // akan dipanggil dari satpam-app oleh satpam biasa (bukan Supervisor),
 // jadi hanya butuh sesi login yang valid, tidak digate role ini.
 export async function requireSatpamRosterManager() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!session.user.isSuperAdmin && !WILAYAH_MANAGER_ROLE_IDS.includes(session.user.roleId)) {
+  if (!canAccessAllPT(session.user) && !WILAYAH_MANAGER_ROLE_IDS.includes(session.user.roleId)) {
     redirect("/akses-ditolak");
   }
   return session;

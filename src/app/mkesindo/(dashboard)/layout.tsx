@@ -108,11 +108,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // /mkesindo/keamanan (Roster Shift Satpam) is authorized by role, not by
   // the generic per-module permissions map AppSidebar otherwise filters on,
   // so it needs its own boolean here rather than a moduleKey entry in
-  // NAV_ITEMS. canAccessAllPT's broader "direktur" scope is deliberately
-  // NOT used for this — a direktur account isn't necessarily a superadmin
-  // or a wilayah manager, and would hit /akses-ditolak on the actual page.
+  // NAV_ITEMS. Uses canAccessAllPT (Super Admin OR Direktur) to match
+  // requireSatpamRosterManager on the page itself — Direktur was granted
+  // the same Supervisor-level access, per explicit request 2026-11-19.
   const canAccessKeamanan =
-    !!session?.user && (session.user.isSuperAdmin || WILAYAH_MANAGER_ROLE_IDS.includes(session.user.roleId));
+    !!session?.user && (canAccessAllPT(session.user) || WILAYAH_MANAGER_ROLE_IDS.includes(session.user.roleId));
 
   return (
     <SidebarProvider>
