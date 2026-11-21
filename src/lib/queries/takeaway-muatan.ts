@@ -5,23 +5,36 @@ import type { KantongVariant } from "@/lib/queries/sales-order";
 import { allocateTakeAwayStock } from "@/lib/queries/takeaway-alokasi";
 import { postDeliveryOrderRealtime, postSalesInvoiceRealtime } from "@/lib/queries/gl-posting-backfill";
 
+// Semua kolom waktu di bawah (dibuat/mulai/selesai) dinormalkan ke instant
+// UTC yang benar di SQL (UTC_DARI) — kolom aslinya diisi GETDATE() server
+// DB yang zona waktunya tidak dijamin — supaya browser bisa menghitung
+// shift (WIB) & lama menunggu dengan benar.
 export interface TakeAwayMuatanPendingRow {
   takeAwayMuatanId: number;
   salesOrderId: string;
+  soVoucherNo: string | null;
   customerName: string;
   variant: KantongVariant;
   qtyDipesan: number;
+  dibuatPada: Date;
   jamMulaiMuat: Date | null;
 }
 
 export interface TakeAwayMuatanSelesaiRow {
   takeAwayMuatanId: number;
   salesOrderId: string;
+  soVoucherNo: string | null;
   customerName: string;
   variant: KantongVariant;
+  qtyDipesan: number;
   qtyDimuat: number;
+  dibuatPada: Date;
   jamSelesaiMuat: Date;
 }
+
+// Naive DATETIME dari GETDATE() server → instant UTC (mssql membaca naive
+// sebagai UTC), apa pun zona waktu server DB.
+const UTC_DARI = (kolom: string) => `DATEADD(MINUTE, DATEDIFF(MINUTE, GETDATE(), GETUTCDATE()), ${kolom})`;
 
 // Called from createTakeAwayPemesanan (takeaway.ts) right after the
 // SalesOrder itself is created — one Draft row per TakeAway order,
@@ -44,69 +57,89 @@ export async function createTakeAwayMuatanDraft(
 // Menunggu diproses ("Draft") + sedang dimuat (JamMulaiMuat sudah diisi,
 // JamSelesaiMuat belum) digabung satu daftar — sama seperti
 // getAllDraftJadwalForProduksi (produksi-muatan.ts) menampilkan Draft apa
-// pun status JamMulaiMuat-nya. Oldest-first: ini antrian walk-in, bukan
-// jadwal jauh ke depan seperti Jadwal bertruk, jadi first-come-first-served.
+// pun status JamMulaiMuat-nya. (Dulu oldest-first sebagai antrian walk-in,
+// kini terbaru-dulu dan dibatasi 5 hari — lihat WHERE di bawah.)
 // LEFT JOIN (bukan INNER) supaya baris tetap tampil walau BusinessPartner-nya
 // pernah dihapus setelah order dibuat.
 export async function getTakeAwayMuatanPending(): Promise<TakeAwayMuatanPendingRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT tam.TakeAwayMuatanID, tam.SalesOrderID, ISNULL(bp.Name, 'Tidak diketahui') AS CustomerName,
-           tam.Variant, tam.QtyDipesan, tam.JamMulaiMuat
+    SELECT tam.TakeAwayMuatanID, tam.SalesOrderID, so.VoucherNo, ISNULL(bp.Name, 'Tidak diketahui') AS CustomerName,
+           tam.Variant, tam.QtyDipesan, ${UTC_DARI("tam.CreatedDate")} AS DibuatPada,
+           ${UTC_DARI("tam.JamMulaiMuat")} AS JamMulaiMuat
     FROM DashboardTakeAwayMuatan tam
     LEFT JOIN SalesOrder so ON so.SalesOrderID = tam.SalesOrderID
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     WHERE tam.IsDeleted = 0 AND tam.JamSelesaiMuat IS NULL
-    ORDER BY tam.CreatedDate ASC
+      -- Hanya 5 hari terakhir, terbaru di atas (permintaan pengguna
+      -- 2026-11-22, menggantikan urutan antrian terlama-dulu). Pesanan yang
+      -- menunggu > 24 jam dilabeli "Tidak dilaksanakan" di produksi-app.
+      AND tam.CreatedDate >= DATEADD(DAY, -5, GETDATE())
+    ORDER BY tam.CreatedDate DESC
   `);
   return (
     result.recordset as {
       TakeAwayMuatanID: number;
       SalesOrderID: string;
+      VoucherNo: string | null;
       CustomerName: string;
       Variant: KantongVariant;
       QtyDipesan: number;
+      DibuatPada: Date;
       JamMulaiMuat: Date | null;
     }[]
   ).map((r) => ({
     takeAwayMuatanId: r.TakeAwayMuatanID,
     salesOrderId: r.SalesOrderID,
+    soVoucherNo: r.VoucherNo,
     customerName: r.CustomerName,
     variant: r.Variant,
     qtyDipesan: r.QtyDipesan,
+    dibuatPada: r.DibuatPada,
     jamMulaiMuat: r.JamMulaiMuat,
   }));
 }
 
-// Sudah Selesai Muat — 50 terbaru, sekadar agar operator melihat apa yang
+// Sudah Selesai Muat — 50 terbaru dalam 36 jam terakhir, sekadar agar operator melihat apa yang
 // baru saja diselesaikan tanpa pindah tab (pola sama seperti
 // fetchRecentSelesaiMuatJadwalForProduksi di produksi-muatan.ts).
 export async function getTakeAwayMuatanSelesaiRecent(): Promise<TakeAwayMuatanSelesaiRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT TOP (50) tam.TakeAwayMuatanID, tam.SalesOrderID, ISNULL(bp.Name, 'Tidak diketahui') AS CustomerName,
-           tam.Variant, tam.QtyDimuat, tam.JamSelesaiMuat
+    SELECT TOP (50) tam.TakeAwayMuatanID, tam.SalesOrderID, so.VoucherNo, ISNULL(bp.Name, 'Tidak diketahui') AS CustomerName,
+           tam.Variant, tam.QtyDipesan, tam.QtyDimuat, ${UTC_DARI("tam.CreatedDate")} AS DibuatPada,
+           ${UTC_DARI("tam.JamSelesaiMuat")} AS JamSelesaiMuat
     FROM DashboardTakeAwayMuatan tam
     LEFT JOIN SalesOrder so ON so.SalesOrderID = tam.SalesOrderID
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     WHERE tam.IsDeleted = 0 AND tam.JamSelesaiMuat IS NOT NULL
+      -- Maksimal 36 jam terakhir (permintaan pengguna 2026-11-22). Dibanding
+      -- GETDATE() server yang sama dengan yang menulis JamSelesaiMuat, jadi
+      -- tidak terpengaruh zona waktu Node.
+      AND tam.JamSelesaiMuat >= DATEADD(HOUR, -36, GETDATE())
     ORDER BY tam.JamSelesaiMuat DESC
   `);
   return (
     result.recordset as {
       TakeAwayMuatanID: number;
       SalesOrderID: string;
+      VoucherNo: string | null;
       CustomerName: string;
       Variant: KantongVariant;
+      QtyDipesan: number;
       QtyDimuat: number;
+      DibuatPada: Date;
       JamSelesaiMuat: Date;
     }[]
   ).map((r) => ({
     takeAwayMuatanId: r.TakeAwayMuatanID,
     salesOrderId: r.SalesOrderID,
+    soVoucherNo: r.VoucherNo,
     customerName: r.CustomerName,
     variant: r.Variant,
+    qtyDipesan: r.QtyDipesan,
     qtyDimuat: r.QtyDimuat,
+    dibuatPada: r.DibuatPada,
     jamSelesaiMuat: r.JamSelesaiMuat,
   }));
 }

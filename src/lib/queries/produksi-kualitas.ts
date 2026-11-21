@@ -34,6 +34,13 @@ export interface KualitasRow {
   // (floored at 0) even if over-allocated somehow slipped through before
   // this check existed.
   SisaAlokasi: number | null;
+  // Kode palet tempat hasil pemeriksaan ini diletakkan (DashboardProduksiBatch
+  // aktif ber-KualitasID ini → DashboardProduksiPalletPosisi.Kode), urut,
+  // dipisah koma; null bila belum diletakkan di palet mana pun.
+  PaletKode: string | null;
+  // Ada alokasi langsung ke TakeAway / Armada (tanpa lewat palet).
+  AdaTakeAway: boolean;
+  AdaArmada: boolean;
 }
 
 // Most recent QC entries across all mesin -- a flat riwayat log, not
@@ -49,7 +56,18 @@ export async function getKualitasRiwayat(limit = 50): Promise<KualitasRow[]> {
       SELECT TOP (@limit) k.KualitasID, k.TanggalLabel, k.Waktu, k.Shift, k.MesinID, m.Nama AS MesinNama,
              k.Variant, k.CekKejernihan, k.CekUkuranBentuk, k.Qty10KG, k.DiameterDalamMm, k.Catatan, k.FotoPath,
              k.FotoBeratKemasanPath, k.CreatedByUserID, k.CreatedDate,
-             ISNULL(alok.TotalTeralokasi, 0) AS TotalTeralokasi
+             ISNULL(alok.TotalTeralokasi, 0) AS TotalTeralokasi,
+             STUFF((
+               SELECT ', ' + p.Kode
+               FROM DashboardProduksiBatch b
+               JOIN DashboardProduksiPalletPosisi p ON p.PosisiID = b.PosisiID
+               WHERE b.KualitasID = k.KualitasID AND b.IsDeleted = 0
+               GROUP BY p.Kode
+               ORDER BY p.Kode
+               FOR XML PATH('')
+             ), 1, 2, '') AS PaletKode,
+             CASE WHEN EXISTS (SELECT 1 FROM DashboardTakeAwayAlokasi ta WHERE ta.KualitasID = k.KualitasID AND ta.SumberTipe = 'KUALITAS') THEN 1 ELSE 0 END AS AdaTakeAway,
+             CASE WHEN EXISTS (SELECT 1 FROM DashboardArmadaAlokasi aa WHERE aa.KualitasID = k.KualitasID) THEN 1 ELSE 0 END AS AdaArmada
       FROM DashboardProduksiKualitas k
       LEFT JOIN DashboardProduksiMesin m ON m.MesinID = k.MesinID
       OUTER APPLY (
@@ -62,16 +80,21 @@ export async function getKualitasRiwayat(limit = 50): Promise<KualitasRow[]> {
       ORDER BY k.CreatedDate DESC
     `);
   return (
-    result.recordset as (Omit<KualitasRow, "TanggalLabel" | "CreatedDate" | "SisaAlokasi"> & {
+    result.recordset as (Omit<KualitasRow, "TanggalLabel" | "CreatedDate" | "SisaAlokasi" | "AdaTakeAway" | "AdaArmada"> & {
       TanggalLabel: Date;
       CreatedDate: Date;
       TotalTeralokasi: number;
+      AdaTakeAway: number;
+      AdaArmada: number;
     })[]
   ).map((r) => ({
     ...r,
     TanggalLabel: r.TanggalLabel.toISOString().slice(0, 10),
     CreatedDate: r.CreatedDate.toISOString(),
     SisaAlokasi: r.Qty10KG == null ? null : Math.max(0, r.Qty10KG - r.TotalTeralokasi),
+    PaletKode: r.PaletKode || null,
+    AdaTakeAway: r.AdaTakeAway === 1,
+    AdaArmada: r.AdaArmada === 1,
   }));
 }
 

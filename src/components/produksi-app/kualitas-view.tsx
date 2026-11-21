@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, Check, X, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -358,11 +358,19 @@ function TambahKualitasDialog({
   );
 }
 
-function FotoThumbnail({ path, alt }: { path: string | null; alt: string }) {
+// Foto kecil persegi (ketuk untuk perbesar). `label` tampil sebagai pita
+// kecil di bawah foto supaya operator tahu foto mana (sampel / berat).
+function FotoThumbnail({ path, alt, label }: { path: string | null; alt: string; label: string }) {
+  const keterangan = (
+    <span className="absolute inset-x-0 bottom-0 rounded-b-md bg-black/55 py-0.5 text-center text-[10px] font-medium text-white">
+      {label}
+    </span>
+  );
   if (!path) {
     return (
-      <div className="flex h-20 w-20 items-center justify-center rounded border bg-muted text-center text-[10px] text-muted-foreground">
+      <div className="relative flex size-[84px] shrink-0 items-center justify-center rounded-md border bg-muted pb-3 text-center text-[9px] leading-tight text-muted-foreground">
         Tidak ada foto
+        {keterangan}
       </div>
     );
   }
@@ -370,10 +378,11 @@ function FotoThumbnail({ path, alt }: { path: string | null; alt: string }) {
     <Dialog>
       <DialogTrigger
         type="button"
-        className="block cursor-zoom-in rounded focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        className="relative block size-[84px] shrink-0 cursor-zoom-in overflow-hidden rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- served from public/uploads, not a static build asset */}
-        <img src={path} alt={alt} className="h-20 w-20 rounded object-cover" />
+        <img src={path} alt={alt} className="size-full object-cover" />
+        {keterangan}
       </DialogTrigger>
 
       <DialogContent className="max-w-3xl p-2 sm:p-3">
@@ -384,120 +393,135 @@ function FotoThumbnail({ path, alt }: { path: string | null; alt: string }) {
   );
 }
 
+// Tempat hasil pemeriksaan diletakkan: chip kode palet (mis. T1F), plus
+// TakeAway/Armada bila ada alokasi langsung. Belum diletakkan sama sekali
+// → chip abu-abu "Belum di palet".
+function TempatHasil({ kualitas }: { kualitas: KualitasRow }) {
+  const palet = kualitas.PaletKode ? kualitas.PaletKode.split(", ") : [];
+  const kosong = palet.length === 0 && !kualitas.AdaTakeAway && !kualitas.AdaArmada;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <Layers className="size-3.5 shrink-0 text-muted-foreground" aria-label="Palet" />
+      {palet.map((k) => (
+        <span key={k} className="rounded bg-foreground px-1.5 py-0.5 text-[11px] font-bold tracking-wide text-background">
+          {k}
+        </span>
+      ))}
+      {kualitas.AdaTakeAway && (
+        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">TakeAway</span>
+      )}
+      {kualitas.AdaArmada && (
+        <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">Armada</span>
+      )}
+      {kosong && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">Belum di palet</span>}
+    </div>
+  );
+}
+
+// Kartu satu pemeriksaan (tata letak ringkas untuk HP):
+//   [Msn 3                       ✓ Lolos]
+//   22 Nov 2026 • 01:05 • Shift 3
+//   [foto][foto]  10 KG · 75 kantong (sisa 75)
+//                 ✓ Kejernihan  ✓ Ukuran/Bentuk
+//   Catatan ...
 function KualitasCard({ kualitas }: { kualitas: KualitasRow }) {
   const items = [
     { label: "Kejernihan", pass: kualitas.CekKejernihan },
     { label: "Ukuran/Bentuk", pass: kualitas.CekUkuranBentuk },
   ];
   const allPass = items.every((i) => i.pass);
+  const varian = kualitas.Variant === "10kg" ? "10 KG" : "5 KG";
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border p-3",
-        !allPass && "border-destructive/40 bg-destructive/5"
-      )}
-    >
-      <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-3">
-        {/* Foto */}
-        <div className="flex flex-col gap-1.5">
-          <FotoThumbnail path={kualitas.FotoPath} alt="Foto sampel" />
-          <FotoThumbnail path={kualitas.FotoBeratKemasanPath} alt="Foto berat kemasan" />
+    <div className={cn("flex flex-col gap-2.5 rounded-xl border bg-card p-3", !allPass && "border-destructive/40 bg-destructive/5")}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-semibold leading-tight">{kualitas.MesinNama}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {new Date(kualitas.TanggalLabel).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+            {" • "}
+            {kualitas.Waktu}
+            {" • "}
+            {SHIFT_LABEL[kualitas.Shift]}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+            allPass ? "bg-emerald-500/15 text-emerald-600" : "bg-destructive/15 text-destructive"
+          )}
+        >
+          {allPass ? <Check className="size-3" /> : <X className="size-3" />}
+          {allPass ? "Lolos" : "Ada temuan"}
+        </span>
+      </div>
+
+      <div className="flex gap-3">
+        <div className="flex shrink-0 gap-1.5">
+          <FotoThumbnail path={kualitas.FotoPath} alt="Foto sampel" label="Sampel" />
+          <FotoThumbnail path={kualitas.FotoBeratKemasanPath} alt="Foto berat kemasan" label="Berat" />
         </div>
 
-        {/* Detail */}
-        <div className="min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="truncate font-semibold">{kualitas.MesinNama}</p>
-              <p className="text-xs text-muted-foreground">
-                {new Date(kualitas.TanggalLabel).toLocaleDateString(
-                  "id-ID",
-                  {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  }
-                )}
-                {" • "}
-                {kualitas.Waktu}
-                {" • "}
-                {SHIFT_LABEL[kualitas.Shift]}
-              </p>
-            </div>
-
-            {!allPass && (
-              <span className="shrink-0 rounded bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
-                Ada temuan
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <p className="flex flex-wrap items-center gap-x-1.5 text-xs">
+            <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-sky-600">{varian}</span>
+            {kualitas.Qty10KG != null && (
+              <span className="text-muted-foreground">
+                <span className="font-semibold text-foreground">{kualitas.Qty10KG}</span> kantong (sisa {kualitas.SisaAlokasi})
               </span>
             )}
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="rounded px-2 py-0.5 text-[11px] font-medium bg-sky-500/15 text-sky-600">
-              {kualitas.Variant === "10kg" ? "10 KG" : "5 KG"}
-            </span>
+          </p>
+          <div className="flex flex-col gap-0.5">
             {items.map((i) => (
               <span
                 key={i.label}
-                className={cn(
-                  "rounded px-2 py-0.5 text-[11px] font-medium",
-                  i.pass
-                    ? "bg-emerald-500/15 text-emerald-600"
-                    : "bg-destructive/15 text-destructive"
-                )}
+                className={cn("inline-flex items-center gap-1 text-xs", i.pass ? "text-emerald-600" : "font-medium text-destructive")}
               >
-                {i.label}: {i.pass ? "Lolos" : "Tidak"}
+                {i.pass ? <Check className="size-3.5 shrink-0" /> : <X className="size-3.5 shrink-0" />}
+                {i.label}
               </span>
             ))}
           </div>
-
-          {(kualitas.DiameterDalamMm != null || kualitas.Qty10KG != null) && (
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              {kualitas.DiameterDalamMm != null &&
-                `Diameter dalam: ${kualitas.DiameterDalamMm}mm`}
-              {kualitas.DiameterDalamMm != null &&
-                kualitas.Qty10KG != null &&
-                " • "}
-              {kualitas.Qty10KG != null &&
-                `QTY: ${kualitas.Qty10KG} kantong ${kualitas.Variant === "10kg" ? "10kg" : "5kg"} (sisa ${kualitas.SisaAlokasi})`}
-            </p>
+          {kualitas.DiameterDalamMm != null && (
+            <p className="text-xs text-muted-foreground">Diameter dalam {kualitas.DiameterDalamMm} mm</p>
           )}
-
-          {kualitas.Catatan && (
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Catatan: {kualitas.Catatan}
-            </p>
-          )}
+          <TempatHasil kualitas={kualitas} />
         </div>
       </div>
+
+      {kualitas.Catatan && (
+        <p className="rounded-md bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Catatan:</span> {kualitas.Catatan}
+        </p>
+      )}
     </div>
   );
 }
 
+// Dialog Tambah Pemeriksaan dibuka dari tombol tengah bilah navigasi bawah
+// (ProduksiBottomNav), jadi state open-nya dipegang ProduksiTabShell.
 export function KualitasView({
   initialRiwayat,
   mesinList,
+  tambahOpen,
+  onTambahOpenChange,
 }: {
   initialRiwayat: KualitasRow[];
   mesinList: MesinRow[];
+  tambahOpen: boolean;
+  onTambahOpenChange: (open: boolean) => void;
 }) {
   const [riwayat, setRiwayat] = useState(initialRiwayat);
-  const [open, setOpen] = useState(false);
 
   function handleSaved() {
-    setOpen(false);
+    onTambahOpenChange(false);
     getKualitasRiwayatAction().then((result) => {
       if (result.success) setRiwayat(result.data);
     });
   }
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <Button onClick={() => setOpen(true)} className="w-fit gap-1.5">
-        <Plus className="size-4" />
-        Tambah Pemeriksaan
-      </Button>
+    <div className="flex flex-col gap-2 p-2">
 
       {riwayat.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">Belum ada pemeriksaan kualitas.</p>
@@ -509,7 +533,7 @@ export function KualitasView({
         </div>
       )}
 
-      <TambahKualitasDialog open={open} onOpenChange={setOpen} mesinList={mesinList} onSaved={handleSaved} />
+      <TambahKualitasDialog open={tambahOpen} onOpenChange={onTambahOpenChange} mesinList={mesinList} onSaved={handleSaved} />
     </div>
   );
 }

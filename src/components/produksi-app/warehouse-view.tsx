@@ -279,9 +279,6 @@ export function WarehouseView({
             <span className="flex items-center gap-1">
               <span className="size-3 rounded-sm bg-emerald-600" /> Baru
             </span>
-            <span className="flex items-center gap-1">
-              <span className="size-3 rounded-sm bg-muted" /> Kosong — ketuk untuk detail &amp; tambah produksi
-            </span>
           </div>
         </div>
 

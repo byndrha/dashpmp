@@ -101,6 +101,15 @@ export function ProduksiTabShell({
   // Sesi Mulai Muat sedang berlangsung di tab Stok Es -- lihat
   // WarehouseView.onPickingChange dan ProduksiBottomNav.locked.
   const [mulaiMuatActive, setMulaiMuatActive] = useState(false);
+  // Dialog Tambah Pemeriksaan (tab Kualitas) — dibuka dari tombol tengah
+  // bilah navigasi bawah; pindah ke tab Kualitas dulu supaya riwayatnya
+  // langsung terlihat diperbarui setelah simpan.
+  const [tambahPemeriksaanOpen, setTambahPemeriksaanOpen] = useState(false);
+
+  function bukaTambahPemeriksaan() {
+    handleChangeTab("kualitas");
+    setTambahPemeriksaanOpen(true);
+  }
 
   function handleChangeTab(tab: ProduksiTabKey) {
     setActiveTab(tab);
@@ -297,7 +306,11 @@ export function ProduksiTabShell({
   }, [activeTab, warehouse, mesin, takeAwayPending, warehouseJadwal, kualitas, bahanBaku, aktivitasProduksi]);
 
   return (
-    <div className="flex h-dvh flex-col bg-background">
+    <div
+      // Aplikasi HP: scrollbar disembunyikan di semua area gulir (vertikal &
+      // horizontal) — gulir tetap berfungsi lewat sentuhan/roda.
+      className="relative flex h-dvh flex-col bg-background [&_*::-webkit-scrollbar]:hidden [&_*]:[scrollbar-width:none]"
+    >
       <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background px-4 py-2.5">
         <h1 className="font-display text-base font-semibold">Aplikasi Produksi</h1>
         <div className="flex items-center gap-1">
@@ -305,7 +318,9 @@ export function ProduksiTabShell({
           <UserMenu name={userName} profile={profile} />
         </div>
       </header>
-      <div className="relative min-h-0 flex-1">
+      {/* pb pada tiap area gulir tab: ruang untuk bilah navigasi bawah yang
+          melayang (ProduksiBottomNav) supaya isi terakhir tidak tertutup. */}
+      <div className="relative min-h-0 flex-1 [&>div.overflow-y-auto]:pb-28">
         {loadingTab && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -339,7 +354,12 @@ export function ProduksiTabShell({
         )}
         {visited.has("kualitas") && kualitas && mesin && (
           <div className={cn("h-full overflow-y-auto", activeTab !== "kualitas" && "hidden")}>
-            <KualitasView initialRiwayat={kualitas} mesinList={mesin} />
+            <KualitasView
+              initialRiwayat={kualitas}
+              mesinList={mesin}
+              tambahOpen={tambahPemeriksaanOpen}
+              onTambahOpenChange={setTambahPemeriksaanOpen}
+            />
           </div>
         )}
         {visited.has("bahan-baku") && bahanBaku && (
@@ -372,7 +392,12 @@ export function ProduksiTabShell({
           </div>
         )}
       </div>
-      <ProduksiBottomNav activeTab={activeTab} onChange={handleChangeTab} locked={mulaiMuatActive} />
+      <ProduksiBottomNav
+        activeTab={activeTab}
+        onChange={handleChangeTab}
+        onTambahPemeriksaan={bukaTambahPemeriksaan}
+        locked={mulaiMuatActive}
+      />
     </div>
   );
 }
