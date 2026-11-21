@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, LineChart, Receipt, ShoppingCart, ArrowLeftRight, Zap, Truck, ClipboardList, Users, Megaphone } from "lucide-react";
+import { LayoutGrid, LineChart, Receipt, ShoppingCart, ArrowLeftRight, Zap, Truck, ClipboardList, Users, Megaphone, Snowflake } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +26,7 @@ import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 // 2026-07-30-postgres-directory-multi-company.md for why that's deferred.
 const MODULE_ICONS: Record<string, typeof LineChart> = {
   keuangan: LineChart,
+  produksi: Snowflake,
   piutang: Receipt,
   penjualan: ShoppingCart,
   transaksi: ArrowLeftRight,

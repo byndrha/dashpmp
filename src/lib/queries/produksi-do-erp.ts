@@ -21,7 +21,12 @@ import { tanggalBisnisNaive, type DoKendaraan } from "@/lib/produksi-operasional
 // punya Status '2' sejak Agu 2026; PMPakis punya '2' dan '3', dan baris pindah 2→3 belakangan
 // — di `utama` PMPakis Status '3' terakhir 2 Nov). Menyaring per Status akan membuang hari-hari
 // terbaru. Semua pemesanan aktif (IsDeleted=0, IsVoid=0) sejak Agu 2026 sudah punya jadwal.
+// - PMPutra (cek live 2026-11-21, 14–21 Nov): `utama` (FINAC_ES_PO) dan `logistik`
+//   (FINAC_LOGISTIC_PO) cermin — kendaraan/jadwal/balok per hari identik kecuali 16 Nov
+//   (logistik +1 jadwal). Dua DB milik PMPutra sendiri (BranchID '011' di keduanya), jadi
+//   `utama` tanpa filter branch, sama polanya dengan dua pabrik lain.
 export const SUMBER_DO: Record<KodeProduksi, { label: CompanyKoneksiLabel; branchId: string | null }> = {
+  pmputra: { label: "utama", branchId: null },
   pmpersada: { label: "utama", branchId: null },
   pmpakis: { label: "utama", branchId: null },
 };

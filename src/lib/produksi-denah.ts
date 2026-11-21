@@ -233,7 +233,7 @@ export type KodePeringatan =
   | "ujung-menggantung";
 
 // Kode perusahaan pabrik Es Balok yang punya modul Produksi.
-export type KodeProduksi = "pmpersada" | "pmpakis";
+export type KodeProduksi = "pmputra" | "pmpersada" | "pmpakis";
 
 // ---------- Hasil simpan (dipakai server action & builder) ----------
 // VERSI_BASI     = denah sudah diubah orang lain sejak builder dibuka.

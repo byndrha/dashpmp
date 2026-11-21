@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requirePmputra, canAccessAllPT } from "@/lib/require-access";
+import { bolehKelolaProduksi } from "@/lib/permissions";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { PmputraSidebar } from "@/components/dashboard/pmputra-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
@@ -14,6 +16,15 @@ import { Separator } from "@/components/ui/separator";
 // it never shows for them.
 export default async function PmputraLayout({ children }: { children: React.ReactNode }) {
   const session = await requirePmputra();
+
+  // Akun operator produksi (is_produksi) dikurung di aplikasi HP
+  // /pmputra/produksi-app — rute itu di luar route group (dashboard) ini,
+  // jadi redirect ini tidak pernah mengarah ke dirinya sendiri. Admin
+  // produksi dan Direktur/superadmin tetap boleh membuka dashboard.
+  if (session.user.isProduksi && !bolehKelolaProduksi(session.user) && !canAccessAllPT(session.user)) {
+    redirect("/pmputra/produksi-app");
+  }
+
   const perusahaanList = await listPerusahaanForSwitcher();
   const canSwitchPt = canAccessAllPT(session.user);
 

@@ -13,7 +13,7 @@ import { isPmpDeployment } from "@/lib/tenant";
 import { validasiBentukDenah, type DenahDokumen, type HasilSimpanDenah, type KodeProduksi } from "@/lib/produksi-denah";
 import { GalatSimpanDenah, simpanDenah } from "@/lib/queries/produksi-denah";
 
-const KODE_SAH: readonly string[] = ["pmpersada", "pmpakis"];
+const KODE_SAH: readonly string[] = ["pmputra", "pmpersada", "pmpakis"];
 
 export async function simpanDenahAction(
   kode: KodeProduksi,

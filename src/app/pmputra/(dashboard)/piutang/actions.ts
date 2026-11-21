@@ -13,13 +13,13 @@ import {
 } from "@/lib/queries/piutang-invoice-outstanding";
 import { getEsBalokCollectionPriority, getEsBalokPembayaranByDate, type EsBalokPriorityRow, type EsBalokPembayaranRow } from "@/lib/queries/piutang-priority-es-balok";
 import { setEsBalokCollectionTarget, removeEsBalokCollectionTarget } from "@/lib/queries/piutang-target-es-balok";
-import { requirePmputra } from "@/lib/require-access";
+import { requirePmputraKeuangan } from "@/lib/require-access";
 import { ringkasPiutangTerbuka, type RingkasanPiutangTerbuka } from "@/lib/piutang-es-balok-status";
 
 const KODE = "pmputra";
 
 export async function getPiutangPerAgenAction(startDate: string, endDate: string) {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   end.setDate(end.getDate() + 1); // inclusive of the end date itself
@@ -27,7 +27,7 @@ export async function getPiutangPerAgenAction(startDate: string, endDate: string
 }
 
 export async function getPiutangBayarContextAction(agenId: string) {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   return getPiutangBayarContext(KODE, agenId);
 }
 
@@ -37,12 +37,12 @@ export async function bayarPiutangAction(
   kasBank: { utama?: string; logistik?: string },
   catatan: string | null
 ) {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   return bayarPiutang(KODE, agenId, jumlah, kasBank, catatan);
 }
 
 export async function getPiutangTarikContextAction(agenId: string) {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   return getPiutangTarikContext(KODE, agenId);
 }
 
@@ -52,24 +52,24 @@ export async function tarikPiutangAction(
   kasBank: { utama?: string; logistik?: string },
   catatan: string | null
 ) {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   return tarikPiutang(KODE, agenId, jumlah, kasBank, catatan);
 }
 
 export async function getEsBalokInvoiceOutstandingAction(): Promise<EsBalokInvoiceRow[]> {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   return getEsBalokInvoiceOutstanding(KODE);
 }
 
 // Versi ringkas untuk kartu per Agen (status Sehat/Perhatian/Kritis + umur
 // per pesanan) — hanya angka per Agen/dokumen, bukan ribuan baris mentah.
 export async function getRingkasanPiutangTerbukaAction(): Promise<RingkasanPiutangTerbuka> {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   return ringkasPiutangTerbuka(await getEsBalokInvoiceOutstanding(KODE));
 }
 
 export async function getEsBalokPeriodSummaryAction(startDate: string, endDate: string): Promise<EsBalokPeriodSummary> {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   end.setDate(end.getDate() + 1); // inclusive of the end date itself
@@ -78,13 +78,13 @@ export async function getEsBalokPeriodSummaryAction(startDate: string, endDate: 
 }
 
 export async function getEsBalokStatusOverviewAction(): Promise<EsBalokStatusBucket[]> {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   const invoiceRows = await getEsBalokInvoiceOutstanding(KODE);
   return getEsBalokStatusOverview(invoiceRows);
 }
 
 export async function getEsBalokCollectionPriorityAction(): Promise<EsBalokPriorityRow[]> {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   const invoiceRows = await getEsBalokInvoiceOutstanding(KODE);
   return getEsBalokCollectionPriority(KODE, invoiceRows);
 }
@@ -93,7 +93,7 @@ export async function setEsBalokCollectionTargetAction(
   agenId: string,
   input: { targetDate: string | null; targetAmount: number | null; note: string | null }
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const session = await requirePmputra();
+  const session = await requirePmputraKeuangan();
   try {
     await setEsBalokCollectionTarget(KODE, agenId, input, String(session.user.id));
     return { success: true };
@@ -103,7 +103,7 @@ export async function setEsBalokCollectionTargetAction(
 }
 
 export async function removeEsBalokCollectionTargetAction(agenId: string): Promise<{ success: true } | { success: false; error: string }> {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   try {
     await removeEsBalokCollectionTarget(KODE, agenId);
     return { success: true };
@@ -113,7 +113,7 @@ export async function removeEsBalokCollectionTargetAction(agenId: string): Promi
 }
 
 export async function getEsBalokPembayaranByDateAction(dateISO: string): Promise<EsBalokPembayaranRow[]> {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   const date = new Date(`${dateISO}T00:00:00`);
   const invoiceRows = await getEsBalokInvoiceOutstanding(KODE);
   return getEsBalokPembayaranByDate(KODE, date, invoiceRows);

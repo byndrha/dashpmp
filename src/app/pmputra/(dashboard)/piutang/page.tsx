@@ -1,6 +1,6 @@
 // src/app/pmputra/piutang/page.tsx
 import { getPiutangSummary, getPiutangPerAgen } from "@/lib/queries/penjualan-piutang";
-import { requirePmputra } from "@/lib/require-access";
+import { requirePmputraKeuangan } from "@/lib/require-access";
 import { PiutangSummaryPanel } from "@/components/dashboard/piutang-summary-panel";
 import { PiutangPerAgenTable } from "@/components/dashboard/piutang-per-agen-table";
 import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
@@ -37,7 +37,7 @@ function tomorrow(): Date {
 }
 
 export default async function PmputraPiutangPage() {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   const [data, perAgen, invoiceRows] = await Promise.all([
     getPiutangSummary("pmputra"),
     getPiutangPerAgen("pmputra", monthStart(), tomorrow()),

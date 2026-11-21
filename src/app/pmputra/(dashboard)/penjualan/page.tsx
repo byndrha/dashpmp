@@ -1,6 +1,6 @@
 // src/app/pmputra/penjualan/page.tsx
 import type { Metadata } from "next";
-import { requirePmputra } from "@/lib/require-access";
+import { requirePmputraKeuangan } from "@/lib/require-access";
 import type { DashboardSearchParams } from "@/lib/date-range";
 import { PenjualanEsBalokView } from "@/components/dashboard/penjualan-es-balok-view";
 import { loadHariAction, loadBulanAction, loadTargetAction, saveTargetAction } from "./actions";
@@ -8,7 +8,7 @@ import { loadHariAction, loadBulanAction, loadTargetAction, saveTargetAction } f
 export const metadata: Metadata = { title: "Penjualan" };
 
 export default async function PmputraPenjualanPage({ searchParams }: { searchParams: Promise<DashboardSearchParams> }) {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   return (
     <PenjualanEsBalokView
       kode="pmputra"

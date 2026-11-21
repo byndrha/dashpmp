@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePmputra } from "@/lib/require-access";
+import { requirePmputraKeuangan } from "@/lib/require-access";
 import { setCOABudgetPmputra, setCostBehaviorPmputra } from "@/lib/queries/keuangan-detail-pmputra";
 import {
   saveCashFlowDailyFiguresPmputra,
@@ -19,7 +19,7 @@ export async function saveCOABudgetPmputraAction(input: {
   amount: number;
 }): Promise<ActionResult<void>> {
   return runAction(async () => {
-    const session = await requirePmputra();
+    const session = await requirePmputraKeuangan();
     await setCOABudgetPmputra({ ...input, userId: session.user.id });
     revalidatePath("/pmputra/keuangan");
   });
@@ -31,7 +31,7 @@ export async function saveCashFlowDailyFiguresPmputraAction(input: {
   pengeluaranKasDiTangan: number;
 }): Promise<ActionResult<void>> {
   return runAction(async () => {
-    const session = await requirePmputra();
+    const session = await requirePmputraKeuangan();
     await saveCashFlowDailyFiguresPmputra({ ...input, userId: session.user.id });
     revalidatePath("/pmputra/keuangan");
   });
@@ -43,7 +43,7 @@ export async function addCashFlowExpensePmputraAction(input: {
   nominal: number;
 }): Promise<ActionResult<void>> {
   return runAction(async () => {
-    const session = await requirePmputra();
+    const session = await requirePmputraKeuangan();
     if (!input.deskripsi.trim() || !(input.nominal > 0)) throw new AppError("Data tidak valid");
     await addCashFlowExpensePmputra({ ...input, userId: session.user.id });
     revalidatePath("/pmputra/keuangan");
@@ -52,7 +52,7 @@ export async function addCashFlowExpensePmputraAction(input: {
 
 export async function deleteCashFlowExpensePmputraAction(id: number): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requirePmputra();
+    await requirePmputraKeuangan();
     await deleteCashFlowExpensePmputra(id);
     revalidatePath("/pmputra/keuangan");
   });
@@ -60,12 +60,12 @@ export async function deleteCashFlowExpensePmputraAction(id: number): Promise<Ac
 
 // Read-only refetch (year navigation) — but this app is multi-tenant
 // (accountScope mkesindo/direktur/pmputra), unlike MKEsindo's own
-// getHPPBersihAction which lives in a single-tenant context. requirePmputra()
+// getHPPBersihAction which lives in a single-tenant context. requirePmputraKeuangan()
 // enforces the PT Prima Maesa Putra company boundary, matching every other
 // action in this file.
 export async function getHPPBersihPmputraAction(year: number): Promise<ActionResult<HPPBersihData>> {
   return runAction(async () => {
-    await requirePmputra();
+    await requirePmputraKeuangan();
     return getHPPBersihPmputra(year);
   });
 }
@@ -75,7 +75,7 @@ export async function setCostBehaviorPmputraAction(
   costBehavior: "FIXED" | "VARIABLE" | "MIXED" | null
 ): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requirePmputra();
+    await requirePmputraKeuangan();
     await setCostBehaviorPmputra(chartOfAccountId, costBehavior);
     revalidatePath("/pmputra/keuangan");
   });

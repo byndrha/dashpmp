@@ -72,7 +72,7 @@ import {
 } from "@/lib/queries/produksi-operasional";
 import { cariAgen, getDoPerKendaraan, getKendaraanArmada, type KendaraanArmada } from "@/lib/queries/produksi-do-erp";
 
-const KODE_SAH: readonly string[] = ["pmpersada", "pmpakis"];
+const KODE_SAH: readonly string[] = ["pmputra", "pmpersada", "pmpakis"];
 const BATAS_TEKS = 1000;
 const BATAS_CARI_AGEN = 60; // pola LIKE ber-escape harus muat di VarChar(200)
 const BATAS_MUATAN = 50; // kendaraan per satu panen

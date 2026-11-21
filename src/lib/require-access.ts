@@ -122,10 +122,11 @@ export async function requirePmpakis() {
 
 // Gerbang layar operasional Produksi Es Balok (/{kode}/produksi-app dan tab
 // operasional /{kode}/produksi): sesi pabrik itu + operator (is_produksi)
-// atau admin produksi (bolehAksiProduksi). Kode di luar dua pabrik ditolak.
+// atau admin produksi (bolehAksiProduksi). Kode di luar tiga pabrik ditolak.
 export async function requireProduksiPabrik(kode: KodeProduksi) {
   let session;
-  if (kode === "pmpersada") session = await requirePmpersada();
+  if (kode === "pmputra") session = await requirePmputra();
+  else if (kode === "pmpersada") session = await requirePmpersada();
   else if (kode === "pmpakis") session = await requirePmpakis();
   else redirect("/akses-ditolak");
   if (!bolehAksiProduksi(session.user)) redirect("/akses-ditolak");
@@ -147,6 +148,13 @@ export async function requirePmpersadaKeuangan() {
 // membuka data finansial, kecuali Direktur/superadmin (canAccessAllPT).
 export async function requirePmpakisKeuangan() {
   const session = await requirePmpakis();
+  if (session.user.isProduksi && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
+  return session;
+}
+
+// Padanan untuk PMPutra (pabrik ketiga, Produksi ditambahkan 2026-11-21).
+export async function requirePmputraKeuangan() {
+  const session = await requirePmputra();
   if (session.user.isProduksi && !canAccessAllPT(session.user)) redirect("/akses-ditolak");
   return session;
 }

@@ -1,4 +1,4 @@
-// Halaman Produksi Es Balok (server component) — dipakai /pmpersada/produksi
+// Halaman Produksi Es Balok (server component) — dipakai /pmputra/produksi, /pmpersada/produksi
 // dan /pmpakis/produksi. Pemanggil (page) WAJIB sudah menjalankan gerbang
 // requirePmpersada()/requirePmpakis(); kode perusahaan berasal dari konstanta
 // rute, bukan input client.

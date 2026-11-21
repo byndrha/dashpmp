@@ -1,4 +1,4 @@
-// Halaman Builder Denah (server component) — dipakai /pmpersada/produksi/denah
+// Halaman Builder Denah (server component) — dipakai /pmputra/produksi/denah, /pmpersada/produksi/denah
 // dan /pmpakis/produksi/denah. Pemanggil (page) WAJIB sudah menjalankan
 // requirePmpersada()/requirePmpakis(); kode perusahaan = konstanta rute.
 // Tanpa izin edit -> kembali ke halaman Produksi (simpan juga dijaga di

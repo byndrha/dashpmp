@@ -11,7 +11,7 @@ import { getCashFlowPmputra } from "@/lib/queries/cash-flow-pmputra";
 import { getCashFlowHarianPmputra, getCashFlowHarianHistoryPmputra } from "@/lib/queries/cash-flow-harian-pmputra";
 import { getHPPBersihPmputra } from "@/lib/queries/hpp-bersih-pmputra";
 import { getBusinessDateISO } from "@/lib/business-date";
-import { requirePmputra } from "@/lib/require-access";
+import { requirePmputraKeuangan } from "@/lib/require-access";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -32,7 +32,7 @@ import {
   deleteCashFlowExpensePmputraAction,
   getHPPBersihPmputraAction,
   setCostBehaviorPmputraAction,
-} from "@/app/pmputra/keuangan/actions";
+} from "./actions";
 
 export const metadata: Metadata = { title: "Keuangan" };
 
@@ -41,7 +41,7 @@ export default async function PmputraKeuanganPage({
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
-  await requirePmputra();
+  await requirePmputraKeuangan();
   const params = await searchParams;
   const filter = resolveFilter(params);
   const cfDate = params.cfDate ?? getBusinessDateISO();
