@@ -94,7 +94,7 @@ export default async function PemesananPage({
           tombol Buat Pemesanan lalu tombol ikon Filter di kanan. Judul halaman
           tetap ada untuk pembaca layar (sr-only). */}
       <h1 className="sr-only">Pemesanan</h1>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div data-awal-halaman className="flex flex-wrap items-center justify-between gap-3">
         <TombolTampilanPemesanan />
         {/* Kotak pencarian, Buat Pemesanan, lalu tombol ikon Filter (dropdown
             berisi tanggal & wilayah). Di HP baris ini turun ke bawah dan kotak

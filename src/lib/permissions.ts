@@ -12,7 +12,7 @@ export const MODULE_LABEL: Record<ModuleKey, string> = {
   aging: "Piutang",
   sales: "Penjualan",
   transaksi: "Transaksi",
-  electricity: "Biaya Listrik",
+  electricity: "Kelistrikan",
   delivery: "Pengiriman",
   pemesanan: "Pemesanan",
   mitra: "Mitra",

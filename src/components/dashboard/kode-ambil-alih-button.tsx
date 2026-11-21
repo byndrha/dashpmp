@@ -24,7 +24,7 @@ function nowMs(): number {
 
 const AKSI_LABEL: Record<string, string> = { MULAI_MUAT: "Mulai Muat", SELESAI_MUAT: "Selesai Muat" };
 
-export function KodeAmbilAlihButton() {
+export function KodeAmbilAlihButton({ className }: { className?: string } = {}) {
   const [open, setOpen] = useState(false);
   const [kodeAktif, setKodeAktif] = useState<{ kode: string; kedaluwarsaPada: string } | null | undefined>(undefined);
   const [password, setPassword] = useState("");
@@ -77,7 +77,7 @@ export function KodeAmbilAlihButton() {
 
   return (
     <>
-      <Button variant="ghost" size="icon" onClick={() => setOpen(true)} title="Kode Ambil-Alih">
+      <Button variant="ghost" size="icon" className={className} onClick={() => setOpen(true)} title="Kode Ambil-Alih" aria-label="Kode Ambil-Alih">
         <KeyRound className="size-4" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

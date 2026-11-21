@@ -36,7 +36,11 @@ function useHasMounted() {
   );
 }
 
-export function AppearanceMenu({ triggerClassName }: { triggerClassName?: string } = {}) {
+export function AppearanceMenu({
+  triggerClassName,
+  side = "bottom",
+  align = "end",
+}: { triggerClassName?: string; side?: "top" | "bottom" | "left" | "right"; align?: "start" | "center" | "end" } = {}) {
   const mounted = useHasMounted();
   const { theme, setTheme } = useTheme();
   const { palette, setPalette } = usePalette();
@@ -46,10 +50,10 @@ export function AppearanceMenu({ triggerClassName }: { triggerClassName?: string
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className={cn(triggerClassName)} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className={cn(triggerClassName)} aria-label="Tampilan" title="Tampilan" />}>
         <TriggerIcon className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent side={side} align={align} sideOffset={8} className="w-52">
         <DropdownMenuGroup>
           <DropdownMenuLabel>Mode Tampilan</DropdownMenuLabel>
           {MODE_OPTIONS.map((opt) => (

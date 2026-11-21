@@ -416,7 +416,8 @@ export function PemesananPapan({
     <div
       className={cn(
         "-mx-3 min-h-96 overflow-auto overscroll-contain px-3 pb-4",
-        adaInfo ? "h-[calc(100dvh-11.25rem)]" : "h-[calc(100dvh-9.5rem)]"
+        // md+: lembaran konten (sidebar inset) menambah margin 0,75rem.
+        adaInfo ? "h-[calc(100dvh-7.75rem)] md:h-[calc(100dvh-8.5rem)]" : "h-[calc(100dvh-6rem)] md:h-[calc(100dvh-6.75rem)]"
       )}
     >
       {/* Papan = SATU area gulir (bukan per kolom) setinggi sisa layar:

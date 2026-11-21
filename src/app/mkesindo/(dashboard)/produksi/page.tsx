@@ -60,7 +60,7 @@ export default async function ProduksiPage() {
           "Jadwal Tim Produksi" di bawahnya. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_440px] lg:items-start">
         <div className="relative mb-16 min-w-0">
-          <div className="mb-2 flex justify-end">
+          <div data-awal-halaman className="mb-2 flex justify-end">
             <KoreksiSnapshotDialog />
           </div>
           <PetaWarehouseDesktop posisi={posisi} mesinList={mesinList} />

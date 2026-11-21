@@ -233,7 +233,10 @@ export function MitraLocationsMap({
   points,
   growthRows,
   ringkas = false,
+  kontrolTurun = false,
 }: {
+  // Kontrol zoom digeser ke bawah — ada tombol halaman di pojok kiri atas peta.
+  kontrolTurun?: boolean;
   points: MitraLocationPoint[];
   growthRows: MitraGrowthRow[];
   // Pratinjau di form mitra: lebih pendek, tanpa cari/peringkat/GPS.
@@ -273,7 +276,7 @@ export function MitraLocationsMap({
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
-        <MapZoomControl className="top-2 left-2" />
+        <MapZoomControl className={kontrolTurun ? "top-14 left-2" : "top-2 left-2"} />
         {points.map((p) => (
           <Marker
             key={p.Key}

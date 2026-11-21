@@ -82,8 +82,10 @@ export default async function PnLPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-xl font-semibold">Keuangan</h1>
-      <FilterBar />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-xl font-semibold">Keuangan</h1>
+        <FilterBar />
+      </div>
 
       <Suspense fallback={<KpiRowSkeleton />}>
         <PnlKpiRow filter={filter} />

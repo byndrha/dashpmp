@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
@@ -19,38 +18,28 @@ import {
   TrendingUp,
   Boxes,
 } from "lucide-react";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import { PTSwitcher } from "@/components/dashboard/pt-switcher";
-import { Badge } from "@/components/ui/badge";
+import type { ReactNode } from "react";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
+import { MerekSidebar, NavKelompok, kelompokModul, urutkanModul, type ItemNav } from "@/components/dashboard/sidebar-nav";
 import type { ModuleKey, PermissionMap } from "@/lib/permissions";
 import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
+// Urutan tampil di sidebar diatur URUTAN_MODUL (sidebar-nav.tsx), bukan urutan di sini.
 const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutGrid; exact?: boolean; moduleKey: ModuleKey }[] = [
   { href: "/mkesindo", label: "Beranda", icon: LayoutGrid, exact: true, moduleKey: "beranda" },
+  { href: "/mkesindo/sales", label: "Penjualan", icon: ShoppingCart, moduleKey: "sales" },
+  { href: "/mkesindo/pemesanan", label: "Pemesanan", icon: ClipboardList, moduleKey: "pemesanan" },
+  { href: "/mkesindo/delivery", label: "Pengiriman", icon: Truck, moduleKey: "delivery" },
+  { href: "/mkesindo/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
   { href: "/mkesindo/pnl", label: "Keuangan", icon: LineChart, moduleKey: "pnl" },
   { href: "/mkesindo/aging", label: "Piutang", icon: Receipt, moduleKey: "aging" },
-  { href: "/mkesindo/sales", label: "Penjualan", icon: ShoppingCart, moduleKey: "sales" },
   { href: "/mkesindo/transaksi", label: "Transaksi", icon: ArrowLeftRight, moduleKey: "transaksi" },
-  { href: "/mkesindo/electricity", label: "Biaya Listrik", icon: Zap, moduleKey: "electricity" },
-  { href: "/mkesindo/delivery", label: "Pengiriman", icon: Truck, moduleKey: "delivery" },
-  { href: "/mkesindo/pemesanan", label: "Pemesanan", icon: ClipboardList, moduleKey: "pemesanan" },
-  { href: "/mkesindo/mitra", label: "Mitra", icon: Users, moduleKey: "mitra" },
-  { href: "/mkesindo/pemasaran", label: "Pemasaran", icon: Megaphone, moduleKey: "pemasaran" },
-  { href: "/mkesindo/produksi", label: "Produksi", icon: Factory, moduleKey: "produksi" },
+  { href: "/mkesindo/electricity", label: "Kelistrikan", icon: Zap, moduleKey: "electricity" },
   { href: "/mkesindo/laporan", label: "Laporan", icon: FileSpreadsheet, moduleKey: "laporan" },
-  { href: "/mkesindo/kinerja", label: "Kinerja", icon: TrendingUp, moduleKey: "kinerja" },
+  { href: "/mkesindo/produksi", label: "Produksi", icon: Factory, moduleKey: "produksi" },
   { href: "/mkesindo/inventaris", label: "Inventaris", icon: Boxes, moduleKey: "inventaris" },
+  { href: "/mkesindo/kinerja", label: "Kinerja", icon: TrendingUp, moduleKey: "kinerja" },
+  { href: "/mkesindo/pemasaran", label: "Pemasaran", icon: Megaphone, moduleKey: "pemasaran" },
 ];
 
 // Not part of NAV_ITEMS/the moduleKey permission map above — this route is
@@ -64,14 +53,16 @@ export function AppSidebar({
   canSwitchPt,
   canAccessKeamanan,
   perusahaanList,
+  kaki,
 }: {
+  // Kontrol akun/tampilan/notifikasi di dasar sidebar (KakiSidebar).
+  kaki?: ReactNode;
   permissions: PermissionMap;
   canSwitchPt: boolean;
   canAccessKeamanan: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
-  const { isMobile, setOpenMobile } = useSidebar();
   // canSwitchPt already covers isSuperAdmin (see (dashboard)/layout.tsx) —
   // a PMP Group-scoped account has no per-module permissions of its own
   // (permissions is always {} for it), so it needs the same full-nav
@@ -81,78 +72,34 @@ export function AppSidebar({
     ? NAV_ITEMS
     : NAV_ITEMS.filter((item) => permissions[item.moduleKey]?.canView);
 
-  // On mobile the sidebar renders as an overlay Sheet — picking a module
-  // should feel like navigating to a new screen, not leave the sheet
-  // hanging open on top of it.
-  function closeOnMobile() {
-    if (isMobile) setOpenMobile(false);
-  }
+  const items: ItemNav[] = urutkanModul([
+    ...visibleItems.map((item) => ({
+      href: item.href,
+      label: item.label,
+      icon: item.icon,
+      aktif: item.exact ? pathname === item.href : pathname.startsWith(item.href),
+      kelompok: kelompokModul(item.label),
+    })),
+    ...(canAccessKeamanan
+      ? [{ ...KEAMANAN_ITEM, aktif: pathname.startsWith(KEAMANAN_ITEM.href), kelompok: kelompokModul(KEAMANAN_ITEM.label) }]
+      : []),
+  ]);
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader className="gap-2">
-        <div className="flex items-center gap-2 py-2">
-          {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand asset, no next/image usage elsewhere in this codebase */}
-          <img
-            src="/brand/logo-pmp-group.png"
-            alt="PMP Group"
-            className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
-          />
-          <div className="flex min-w-0 flex-col gap-0.5 truncate group-data-[collapsible=icon]:hidden">
-            <p className="font-display font-semibold leading-tight">PT Mitra Kelola Esindo</p>
-            <div className="flex items-center gap-1.5">
-              <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
-                Es Kristal
-              </Badge>
-              <p className="text-[11px] leading-tight text-muted-foreground">Ponorogo</p>
-            </div>
-          </div>
-        </div>
-        {canSwitchPt && (
-          <div className="px-2 group-data-[collapsible=icon]:px-0">
-            {/* Cross-PT navigation is limited to accounts with authority
-                over every PT (superadmin, or "direktur" scope — Perusahaan
-                "PMP Group") — every other account is confined to its own
-                PT's route tree by the accountScope checks in
-                requirePmputra()/(dashboard)/layout.tsx/requireGrupAccess(),
-                so this is never rendered for them. */}
-            <PTSwitcher list={perusahaanList} current="mkesindo" />
-          </div>
-        )}
+        <MerekSidebar
+          nama="PT Mitra Kelola Esindo"
+          jenis="Es Kristal" lokasi="Ponorogo"
+          current="mkesindo"
+          bolehPindah={canSwitchPt}
+          perusahaanList={perusahaanList}
+        />
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Modul</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {visibleItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    render={<Link href={item.href} onClick={closeOnMobile} />}
-                    isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
-                    tooltip={item.label}
-                  >
-                    <item.icon className="shrink-0" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              {canAccessKeamanan && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href={KEAMANAN_ITEM.href} onClick={closeOnMobile} />}
-                    isActive={pathname.startsWith(KEAMANAN_ITEM.href)}
-                    tooltip={KEAMANAN_ITEM.label}
-                  >
-                    <KEAMANAN_ITEM.icon className="shrink-0" />
-                    <span>{KEAMANAN_ITEM.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavKelompok items={items} />
       </SidebarContent>
+      {kaki && <SidebarFooter>{kaki}</SidebarFooter>}
     </Sidebar>
   );
 }

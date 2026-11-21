@@ -12,7 +12,15 @@ import { cn } from "@/lib/utils";
 import type { NotificationEvent, NotificationRow } from "@/lib/queries/notifications";
 import { getNotificationsAction, markNotificationReadAction } from "@/app/mkesindo/(dashboard)/notification-actions";
 
-export function NotificationBell() {
+type SisiPopup = "top" | "bottom" | "left" | "right";
+
+// side/align: di kaki sidebar popup dibuka ke kanan (side="right"), di
+// header HP ke bawah (bawaan).
+export function NotificationBell({
+  side = "bottom",
+  align = "end",
+  triggerClassName,
+}: { side?: SisiPopup; align?: "start" | "center" | "end"; triggerClassName?: string } = {}) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [open, setOpen] = useState(false);
@@ -105,7 +113,7 @@ export function NotificationBell() {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={<Button variant="ghost" size="icon-sm" className="relative" />}>
+      <PopoverTrigger render={<Button variant="ghost" size="icon-sm" className={cn("relative", triggerClassName)} aria-label="Notifikasi" />}>
         <Bell className="size-4" />
         {unreadCount > 0 && (
           <Badge className="absolute -top-1 -right-1 h-4 min-w-4 justify-center rounded-full px-1 text-[10px] leading-none">
@@ -113,7 +121,7 @@ export function NotificationBell() {
           </Badge>
         )}
       </PopoverTrigger>
-      <PopoverContent className="w-80 gap-0 p-0" align="end">
+      <PopoverContent className="w-80 gap-0 p-0" side={side} align={align} sideOffset={8}>
         <div className="flex max-h-96 flex-col divide-y overflow-y-auto">
           {notifications.length === 0 && (
             <p className="p-4 text-center text-sm text-muted-foreground">Tidak ada notifikasi.</p>

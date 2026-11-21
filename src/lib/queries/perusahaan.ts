@@ -61,6 +61,10 @@ export interface PerusahaanSwitcherEntry {
   Kode: string | null;
   Status: PerusahaanStatus;
   StandaloneUrl: string | null;
+  // Untuk pengelompokan per lokasi di pemilih PT dan kota di blok merek
+  // sidebar. Diisi lewat /grup/perusahaan; boleh kosong.
+  Wilayah: string | null;
+  JenisBisnis: string | null;
 }
 
 export async function listPerusahaan(): Promise<PerusahaanRow[]> {
@@ -99,7 +103,8 @@ export async function getPabrikLocationByKode(kode: string): Promise<{ latitude:
 export async function listPerusahaanForSwitcher(): Promise<PerusahaanSwitcherEntry[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
-    SELECT PerusahaanID, Nama, Kode, Status, StandaloneUrl
+    SELECT PerusahaanID, Nama, Kode, Status, StandaloneUrl,
+           NULLIF(LTRIM(RTRIM(Wilayah)), '') AS Wilayah, NULLIF(LTRIM(RTRIM(JenisBisnis)), '') AS JenisBisnis
     FROM DashboardPerusahaan
     WHERE IsDeleted = 0 AND Status <> 'Draft'
     ORDER BY Status DESC, Nama

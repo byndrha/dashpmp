@@ -6,7 +6,7 @@ export const PMPUTRA_MODULES: Record<string, string> = {
   piutang: "Piutang",
   penjualan: "Penjualan",
   transaksi: "Transaksi",
-  listrik: "Biaya Listrik",
+  listrik: "Kelistrikan",
   pengiriman: "Pengiriman",
   pemesanan: "Pemesanan",
   mitra: "Mitra",

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate, formatPercent, formatRupiah } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Biaya Listrik" };
+export const metadata: Metadata = { title: "Kelistrikan" };
 
 export default async function ElectricityPage({
   searchParams,
@@ -34,7 +34,7 @@ export default async function ElectricityPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-xl font-semibold">Biaya Listrik</h1>
+      <h1 className="font-display text-xl font-semibold">Kelistrikan</h1>
       <FilterBar />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

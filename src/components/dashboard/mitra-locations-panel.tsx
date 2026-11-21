@@ -34,8 +34,10 @@ export function MitraLocationsPanel({
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 shadow-md">
-      <div className="relative">
-        <MitraLocationsMap points={points} growthRows={growthRows} />
+      {/* data-tanpa-ruang: tombol ☰ halaman (TombolHalaman) melayang di pojok
+          kiri atas peta ini, jadi kontrol zoom peta digeser ke bawahnya. */}
+      <div className="relative" data-tanpa-ruang>
+        <MitraLocationsMap points={points} growthRows={growthRows} kontrolTurun />
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <span className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-foreground shadow backdrop-blur">
             {jumlahMitra} mitra dengan lokasi tersimpan

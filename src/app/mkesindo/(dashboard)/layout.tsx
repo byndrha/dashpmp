@@ -8,13 +8,10 @@ import { MARKETING_ROLE_ID, WILAYAH_MANAGER_ROLE_IDS } from "@/lib/roles";
 import { listPerusahaanForSwitcher } from "@/lib/queries/perusahaan";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { AutoRefresh } from "@/components/dashboard/auto-refresh";
-import { KodeAmbilAlihButton } from "@/components/dashboard/kode-ambil-alih-button";
-import { NotificationBell } from "@/components/dashboard/notification-bell";
-import { UserMenu } from "@/components/dashboard/user-menu";
-import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import { PullToRefresh } from "@/components/dashboard/pull-to-refresh";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
+import { KakiSidebar, TombolHalaman } from "@/components/dashboard/sidebar-kaki";
+import { KELAS_HALAMAN } from "@/lib/kelas-halaman";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -121,21 +118,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
         canSwitchPt={groupLevelAccess}
         canAccessKeamanan={canAccessKeamanan}
         perusahaanList={perusahaanList}
+        kaki={
+          <KakiSidebar
+            nama={session?.user?.name ?? session?.user?.username ?? "User"}
+            profile={profile}
+            notifikasi
+            ambilAlih={!!session?.user && (canAccessAllPT(session.user) || session.user.bolehGenerateKodeAmbilAlih)}
+          />
+        }
       />
       <SidebarInset>
-        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
-          <div className="flex items-center gap-2">
-            <SidebarTrigger />
-            <Separator orientation="vertical" className="h-5" />
-            <span className="font-medium">Dashboard PMP Group</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <NotificationBell />
-            {session?.user && (canAccessAllPT(session.user) || session.user.bolehGenerateKodeAmbilAlih) && <KodeAmbilAlihButton />}
-            <AppearanceMenu />
-            <UserMenu name={session?.user?.name ?? session?.user?.username ?? "User"} profile={profile} />
-          </div>
-        </header>
         {/* Named so children can opt into container queries (`@lg:`, `@5xl:`,
             etc.) keyed to the actual content width — which shrinks/grows
             with the sidebar's collapsed/expanded state — instead of the
@@ -143,7 +135,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
             tablet with the sidebar collapsed can be too cramped at the same
             viewport width with the sidebar expanded; container queries see
             that difference, `sm:`/`lg:` viewport breakpoints don't. */}
-        <main className="@container/dashboard-main flex flex-1 flex-col gap-4 p-4">
+        <main data-slot="halaman" data-bel className={`${KELAS_HALAMAN} @container/dashboard-main flex flex-1 flex-col gap-4 p-4`}>
+          <TombolHalaman notifikasi />
           <AutoRefresh />
           <PullToRefresh>{children}</PullToRefresh>
         </main>

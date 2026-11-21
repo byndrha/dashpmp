@@ -21,7 +21,7 @@ const MODULE_LINKS = [
   { href: "/mkesindo/pnl", label: "Keuangan", desc: "Laba rugi dan titik impas", icon: LineChart },
   { href: "/mkesindo/aging", label: "Piutang", desc: "Umur piutang per mitra", icon: Receipt },
   { href: "/mkesindo/sales", label: "Penjualan", desc: "Penjualan harian per wilayah", icon: ShoppingCart },
-  { href: "/mkesindo/electricity", label: "Biaya Listrik", desc: "Biaya listrik vs pendapatan", icon: Zap },
+  { href: "/mkesindo/electricity", label: "Kelistrikan", desc: "Biaya listrik vs pendapatan", icon: Zap },
   { href: "/mkesindo/delivery", label: "Pengiriman", desc: "Delivery order terbuka", icon: Truck },
 ];
 

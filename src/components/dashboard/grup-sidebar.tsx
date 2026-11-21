@@ -1,22 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, ShieldCheck, Building2, Package } from "lucide-react";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import { Badge } from "@/components/ui/badge";
-import { PTSwitcher } from "@/components/dashboard/pt-switcher";
+import type { ReactNode } from "react";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
+import { MerekSidebar, NavKelompok, type ItemNav } from "@/components/dashboard/sidebar-nav";
 import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
 // PMP Group (holding) — the one place Akun/Perusahaan administration
@@ -34,101 +22,47 @@ export function GrupSidebar({
   canSwitchPt,
   canAccessInventaris,
   perusahaanList,
+  kaki,
 }: {
+  // Kontrol akun/tampilan/notifikasi di dasar sidebar (KakiSidebar).
+  kaki?: ReactNode;
   canSwitchPt: boolean;
   canAccessInventaris: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
-  const { isMobile, setOpenMobile } = useSidebar();
-
-  function closeOnMobile() {
-    if (isMobile) setOpenMobile(false);
-  }
+  // Inventaris lintas PT (requireInventarisAccess): Direktur/superadmin
+  // selalu, akun lain butuh flag can_akses_inventaris (diatur di /grup/akun).
+  const items: ItemNav[] = [
+    { href: "/grup", label: "Ringkasan", icon: LayoutGrid, aktif: pathname === "/grup", kelompok: "Grup" },
+    ...(canAccessInventaris
+      ? [{ href: "/grup/inventaris", label: "Inventaris", icon: Package, aktif: pathname.startsWith("/grup/inventaris"), kelompok: "Grup" }]
+      : []),
+    {
+      href: "/grup/akun",
+      label: "Akun",
+      icon: ShieldCheck,
+      aktif: pathname === "/grup/akun" || pathname.startsWith("/grup/akun/peran"),
+      kelompok: "Administrasi",
+    },
+    { href: "/grup/perusahaan", label: "Perusahaan", icon: Building2, aktif: pathname.startsWith("/grup/perusahaan"), kelompok: "Administrasi" },
+  ];
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader className="gap-2">
-        <div className="flex items-center gap-2 py-2">
-          {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand asset, no next/image usage elsewhere in this codebase */}
-          <img
-            src="/brand/logo-pmp-group.png"
-            alt="PMP Group"
-            className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
-          />
-          <div className="flex min-w-0 items-center gap-1.5 truncate group-data-[collapsible=icon]:hidden">
-            <p className="font-display font-semibold leading-tight">PMP Group</p>
-            <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
-              Holding
-            </Badge>
-          </div>
-        </div>
-        {canSwitchPt && (
-          <div className="px-2 group-data-[collapsible=icon]:px-0">
-            {/* Cross-PT navigation requires authority over every PT — see PTSwitcher. */}
-            <PTSwitcher list={perusahaanList} current="grup" />
-          </div>
-        )}
+        <MerekSidebar
+          nama="PMP Group"
+          jenis="Holding"
+          current="grup"
+          bolehPindah={canSwitchPt}
+          perusahaanList={perusahaanList}
+        />
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Grup</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton render={<Link href="/grup" onClick={closeOnMobile} />} isActive={pathname === "/grup"} tooltip="Ringkasan">
-                  <LayoutGrid className="shrink-0" />
-                  <span>Ringkasan</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              {/* Cross-PT vendor directory — gated by requireInventarisAccess
-                  (Task 2): Direktur/superadmin always see it via
-                  canAccessAllPT(), everyone else needs the per-account
-                  can_akses_inventaris flag (set via /grup/akun, Task 11). */}
-              {canAccessInventaris && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/grup/inventaris" onClick={closeOnMobile} />}
-                    isActive={pathname.startsWith("/grup/inventaris")}
-                    tooltip="Inventaris"
-                  >
-                    <Package className="shrink-0" />
-                    <span>Inventaris</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Administrasi</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={<Link href="/grup/akun" onClick={closeOnMobile} />}
-                  isActive={pathname === "/grup/akun" || pathname.startsWith("/grup/akun/peran")}
-                  tooltip="Akun"
-                >
-                  <ShieldCheck className="shrink-0" />
-                  <span>Akun</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={<Link href="/grup/perusahaan" onClick={closeOnMobile} />}
-                  isActive={pathname.startsWith("/grup/perusahaan")}
-                  tooltip="Perusahaan"
-                >
-                  <Building2 className="shrink-0" />
-                  <span>Perusahaan</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavKelompok items={items} />
       </SidebarContent>
+      {kaki && <SidebarFooter>{kaki}</SidebarFooter>}
     </Sidebar>
   );
 }

@@ -50,7 +50,7 @@ export function KartuTransaksiPanel({ orders, collapsed }: { orders: SalesOrderC
   );
 
   return (
-    <div className="@container sticky top-14 z-30 rounded-lg border bg-card p-3 shadow-md">
+    <div className="@container sticky top-0 z-30 rounded-lg border bg-card p-3 shadow-md">
       <div className="flex items-start justify-between gap-2">
         <h2 className="font-display text-sm font-semibold text-muted-foreground">Kartu Transaksi</h2>
         <ExportXlsxButton

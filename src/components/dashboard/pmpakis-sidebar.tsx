@@ -1,22 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, LineChart, Receipt, ShoppingCart, ArrowLeftRight, Zap, Truck, ClipboardList, Users, Megaphone, Snowflake } from "lucide-react";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import { Badge } from "@/components/ui/badge";
-import { PTSwitcher } from "@/components/dashboard/pt-switcher";
+import type { ReactNode } from "react";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
+import { MerekSidebar, NavKelompok, kelompokModul, urutkanModul, type ItemNav } from "@/components/dashboard/sidebar-nav";
 import { PMPAKIS_MODULES } from "@/lib/pmpakis-modules";
 import type { PerusahaanSwitcherEntry } from "@/lib/queries/perusahaan";
 
@@ -37,70 +25,44 @@ const NAV_ITEMS = Object.entries(PMPAKIS_MODULES).map(([slug, label]) => ({ slug
 export function PmpakisSidebar({
   canSwitchPt,
   perusahaanList,
+  kaki,
 }: {
+  // Kontrol akun/tampilan/notifikasi di dasar sidebar (KakiSidebar).
+  kaki?: ReactNode;
   canSwitchPt: boolean;
   perusahaanList: PerusahaanSwitcherEntry[];
 }) {
   const pathname = usePathname();
-  const { isMobile, setOpenMobile } = useSidebar();
-
-  function closeOnMobile() {
-    if (isMobile) setOpenMobile(false);
-  }
+  // Beranda + modul, urutan & kelompok dari URUTAN_MODUL (sidebar-nav.tsx).
+  const items: ItemNav[] = urutkanModul([
+    { href: "/pmpakis", label: "Beranda", icon: LayoutGrid, aktif: pathname === "/pmpakis", kelompok: "Utama" },
+    ...NAV_ITEMS.map((item) => {
+      const href = `/pmpakis/${item.slug}`;
+      return {
+        href,
+        label: item.label,
+        icon: item.icon,
+        aktif: pathname === href || pathname.startsWith(`${href}/`),
+        kelompok: kelompokModul(item.label),
+      };
+    }),
+  ]);
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader className="gap-2">
-        <div className="flex items-center gap-2 py-2">
-          {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand asset, no next/image usage elsewhere in this codebase */}
-          <img
-            src="/brand/logo-pmp-group.png"
-            alt="PMP Group"
-            className="h-7 w-auto max-w-none shrink-0 dark:brightness-0 dark:invert"
-          />
-          <div className="flex min-w-0 flex-col gap-0.5 truncate group-data-[collapsible=icon]:hidden">
-            <p className="font-display font-semibold leading-tight">PT Panen Mutiara Pakis</p>
-            <div className="flex items-center gap-1.5">
-              <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
-                Es Balok
-              </Badge>
-            </div>
-          </div>
-        </div>
-        {canSwitchPt && (
-          <div className="px-2 group-data-[collapsible=icon]:px-0">
-            {/* Only an account with cross-PT authority sees this — see PTSwitcher. */}
-            <PTSwitcher list={perusahaanList} current="pmpakis" />
-          </div>
-        )}
+        <MerekSidebar
+          nama="PT Panen Mutiara Pakis"
+          jenis="Es Balok"
+          current="pmpakis"
+          bolehPindah={canSwitchPt}
+          perusahaanList={perusahaanList}
+        />
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Modul</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton render={<Link href="/pmpakis" onClick={closeOnMobile} />} isActive={pathname === "/pmpakis"} tooltip="Beranda">
-                  <LayoutGrid className="shrink-0" />
-                  <span>Beranda</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.slug}>
-                  <SidebarMenuButton
-                    render={<Link href={`/pmpakis/${item.slug}`} onClick={closeOnMobile} />}
-                    isActive={pathname === `/pmpakis/${item.slug}`}
-                    tooltip={item.label}
-                  >
-                    <item.icon className="shrink-0" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavKelompok items={items} />
       </SidebarContent>
+      {kaki && <SidebarFooter>{kaki}</SidebarFooter>}
     </Sidebar>
   );
 }

@@ -1744,7 +1744,7 @@ export function PengirimanBoard({
 
   return (
     <Card className="relative overflow-visible">
-      <div ref={cardHeaderRef} className="sticky top-14 z-30 border-b bg-card">
+      <div ref={cardHeaderRef} className="sticky top-0 z-30 border-b bg-card">
         {isPending && (
           <div className="absolute inset-x-0 bottom-0 z-10 h-0.5 overflow-hidden bg-primary/15">
             <div className="h-full w-1/3 animate-indeterminate rounded-full bg-primary" />
