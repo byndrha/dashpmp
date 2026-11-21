@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTampilanPemesanan } from "@/components/dashboard/pemesanan-tampilan";
 
 const FIELDS = [
   { key: "hasDO", label: "SO -> DO", yes: "Sudah ada DO", no: "Belum ada DO" },
@@ -49,6 +51,35 @@ export function PemesananDocFilter() {
           </Select>
         );
       })}
+    </div>
+  );
+}
+
+// Filter kelengkapan dokumen hanya untuk mode Daftar: di mode Papan,
+// kelengkapan dokumen sudah terlihat dari kolomnya (Belum Dijadwalkan →
+// Retur). Kalau pengguna pindah ke Papan sementara filter ini aktif, param-nya
+// dibersihkan dari URL — tanpa itu Papan diam-diam menyembunyikan sebagian
+// kartu tanpa ada kontrol yang terlihat untuk mengembalikannya.
+export function PemesananDocFilterDaftar() {
+  const tampilan = useTampilanPemesanan();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const adaFilter = FIELDS.some((f) => searchParams.has(f.key));
+
+  useEffect(() => {
+    if (tampilan !== "papan" || !adaFilter) return;
+    const params = new URLSearchParams(searchParams.toString());
+    for (const f of FIELDS) params.delete(f.key);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }, [tampilan, adaFilter, searchParams, pathname, router]);
+
+  if (tampilan !== "daftar") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground">Kelengkapan dokumen</span>
+      <PemesananDocFilter />
     </div>
   );
 }

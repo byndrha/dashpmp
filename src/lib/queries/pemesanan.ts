@@ -73,15 +73,20 @@ export async function createPemesanan(input: CreatePemesananInput): Promise<Crea
   try {
     const existingJadwalId = await findDraftJadwalByArmadaAndTime(input.armadaId, input.jamJadwal);
     if (existingJadwalId != null) {
-      await addSalesOrdersToJadwal(existingJadwalId, [salesOrderId]);
+      // Buat Pemesanan: kapasitas penuh hanya diperingatkan di UI, tidak
+      // ditolak (permintaan pengguna 2026-11-21) — lihat OpsiKapasitas.
+      await addSalesOrdersToJadwal(existingJadwalId, [salesOrderId], { abaikanKapasitas: true });
       return { salesOrderId, jadwalId: existingJadwalId };
     }
 
-    createdJadwalId = await createJadwalDraft({
-      armadaId: input.armadaId,
-      jamJadwal: input.jamJadwal,
-      salesOrderIds: [salesOrderId],
-    });
+    createdJadwalId = await createJadwalDraft(
+      {
+        armadaId: input.armadaId,
+        jamJadwal: input.jamJadwal,
+        salesOrderIds: [salesOrderId],
+      },
+      { abaikanKapasitas: true }
+    );
 
     if (input.salesmanId) {
       await updateJadwalDriverTime(createdJadwalId, {
@@ -155,6 +160,10 @@ export interface SalesOrderListRow {
   // runs strictly after DO creation), so DeliveryOrderID is the only
   // reliable match key, not SalesOrderID.
   SalesReturnId: string | null;
+  // Total kantong yang diretur atas DO SO ini (SUM SalesReturnDetail.Retur
+  // dari semua SR milik DO tsb — Retur, bukan Qty, lihat getSalesReturnDetail).
+  // null bila tidak ada SR.
+  ReturQty: number | null;
   // The Jadwal's own JamAktualBerangkat (actual departure) — null unless
   // this SO went through the dashboard's own Jadwal/Papan Pengiriman flow.
   // Deliberately NOT falling back to the DeliveryOrder's own TransDate for
@@ -165,6 +174,15 @@ export interface SalesOrderListRow {
   // scheduled through the dashboard.
   DriverName: string | null;
   ArmadaName: string | null;
+  // Data DO itu sendiri — cadangan tampilan pengiriman untuk SO yang TIDAK
+  // lewat Papan Pengiriman dashboard (DO dibuat langsung, mis. TakeAway
+  // "Diambil sendiri"; contoh SO 003646 → DO 003407, cek live 2026-11-21).
+  // DoTransDate = naive WIB (tampilkan dengan formatDateWib/formatTimeWib),
+  // BUKAN jam berangkat; ShippedAt tetap khusus jadwal dashboard.
+  DoVoucherNo: string | null;
+  DoTransDate: string | Date | null;
+  DoVehicleNo: string | null;
+  DoSalesmanName: string | null;
 }
 
 export interface SalesOrderListFilter {
@@ -176,88 +194,74 @@ export interface SalesOrderListFilter {
   hasDoInvoice?: "yes" | "no";
 }
 
-// Aggregates MAX(SalesInvoiceID) by a match key across ALL of SalesInvoice
-// (200K+ rows), unfiltered by any caller-supplied id set. This looks
-// wasteful but is the fast path: filtering via `WHERE <keyExpr> IN (...)`
-// with a large id list was tried and confirmed live to make SQL Server pick
-// a nested-loop plan (probing the IN list against a table scan once per
-// value) that times out well past 40s for 1000+ ids — especially for the
-// DeliveryOrderID key, which needs a non-sargable REPLACE() to strip the
-// stored quote-wrapping. A single unfiltered hash-aggregate over the whole
-// table is a one-pass scan and was confirmed live to take under 3s either
-// way (~660ms by SalesOrderID, ~2.4s by the REPLACE'd DeliveryOrderID) —
-// the caller filters the resulting Map down to the ids it actually needs.
-async function loadAllInvoiceIdsByKey(pool: sql.ConnectionPool, keyExpr: string): Promise<Map<string, string>> {
-  const result = await pool.request().query(`
-    SELECT ${keyExpr} AS MatchKey, MAX(SalesInvoiceID) AS SalesInvoiceID
-    FROM SalesInvoice
-    WHERE IsDeleted = 0 AND ${keyExpr} IS NOT NULL
-    GROUP BY ${keyExpr}
-  `);
+// Peta SI/SR untuk SO DALAM RENTANG filter saja (diukur live 2026-11-21,
+// scripts/diag-pemesanan-lambat-2026-11-21.ts, rentang 1–22 Nov): pola lama
+// mengagregasi SELURUH SalesInvoice (228 ribu + 245 ribu baris dikirim ke
+// Node, 4–7 dtk per peta, lebih lambat lagi saat jaringan ke DB lambat).
+// Dibatasi lewat SUB-QUERY rentang tanggal — bukan daftar IN berisi ribuan
+// id dari JS, yang dulu terbukti memicu rencana nested-loop >40 dtk — hasilnya
+// identik per kunci dengan peta penuh dan turun ke 0,5–1 dtk.
+//
+// Tetap query terpisah dari query utama: menggabungkan SalesInvoice/
+// SalesReturn ke query utama terbukti membuat rencana SQL Server ambruk
+// (245 dtk+) karena interaksi dengan OUTER APPLY di sana.
+const SO_RENTANG = `SELECT SalesOrderID FROM SalesOrder WHERE IsDeleted = 0 AND TransDate >= @from AND TransDate < @to`;
+const DO_RENTANG = `SELECT DeliveryOrderID FROM DeliveryOrder WHERE IsDeleted = 0 AND SalesOrderID IN (${SO_RENTANG})`;
+// SalesInvoice.DeliveryOrderID disimpan berbungkus kutip tunggal.
+const SI_DO_KEY = "REPLACE(DeliveryOrderID, CHAR(39), '')";
+
+async function petaDariQuery(request: sql.Request, query: string): Promise<Map<string, string>> {
+  const result = await request.query(query);
   const map = new Map<string, string>();
-  for (const row of result.recordset as { MatchKey: string; SalesInvoiceID: string }[]) {
-    map.set(row.MatchKey, row.SalesInvoiceID);
-  }
+  for (const row of result.recordset as { K: string; M: string }[]) map.set(row.K, row.M);
   return map;
 }
 
-// Same shape as loadAllInvoiceIdsByKey (see its comment for why this is an
-// unfiltered aggregate, not an id-restricted one) but against SalesReturn,
-// keyed only by DeliveryOrderID — SalesReturn.SalesOrderID is
-// live-confirmed NULL on every observed row, dashboard- and desktop-ERP-
-// originated alike, and DeliveryOrderID is never quote-wrapped there (only
-// SalesInvoice.DeliveryOrderID has that convention), so no REPLACE() is
-// needed here.
-async function loadAllReturnIdsByDeliveryOrderId(pool: sql.ConnectionPool): Promise<Map<string, string>> {
-  const result = await pool.request().query(`
-    SELECT DeliveryOrderID AS MatchKey, MAX(SalesReturnID) AS SalesReturnID
-    FROM SalesReturn
-    WHERE IsDeleted = 0 AND DeliveryOrderID IS NOT NULL AND DeliveryOrderID <> ''
-    GROUP BY DeliveryOrderID
-  `);
-  const map = new Map<string, string>();
-  for (const row of result.recordset as { MatchKey: string; SalesReturnID: string }[]) {
-    map.set(row.MatchKey, row.SalesReturnID);
-  }
+// Total kantong diretur per DeliveryOrderID, dibatasi DO dalam rentang.
+async function getReturQtyByDo(pool: sql.ConnectionPool, from: string, to: string): Promise<Map<string, number>> {
+  const result = await pool
+    .request()
+    .input("from", sql.Date, from)
+    .input("to", sql.Date, to)
+    .query(`
+      SELECT sr.DeliveryOrderID AS K, SUM(ISNULL(srd.Retur, 0)) AS Q
+      FROM SalesReturn sr
+      JOIN SalesReturnDetail srd ON srd.SalesReturnID = sr.SalesReturnID
+      WHERE sr.IsDeleted = 0 AND sr.DeliveryOrderID IN (${DO_RENTANG})
+      GROUP BY sr.DeliveryOrderID
+    `);
+  const map = new Map<string, number>();
+  for (const row of result.recordset as { K: string; Q: number }[]) map.set(row.K, Number(row.Q));
   return map;
 }
 
-// Every /mkesindo/pemesanan page load pays these three lookups' combined
-// cost, even though a newly-issued invoice/return showing up a little late
-// is harmless here (it's just which rows get a button) — so the Maps are
-// cached process-wide for a short TTL instead of re-querying on every
-// request. In-flight promise (not just the resolved Maps) is what's
-// cached, so concurrent requests during a refresh share one query set
-// instead of each starting their own (a "thundering herd" on this app's
-// single long-lived Node process — see Coolify deployment note in
-// [[mkesindo-route-restructuring]] — not a distributed cache, deliberately:
-// this process is the only reader/writer of it).
-const DOCUMENT_ID_CACHE_TTL_MS = 45_000;
-// Satu entri per pool (= per database tenant): satu proses Node melayani
-// beberapa tenant sekaligus, jadi cache bersama akan menyajikan dokumen
-// tenant lain.
-const documentIdCache = new WeakMap<sql.ConnectionPool, {
-  promise: Promise<[Map<string, string>, Map<string, string>, Map<string, string>]>;
-  loadedAt: number;
-}>();
-
-function getDocumentIdMaps(pool: sql.ConnectionPool): Promise<[Map<string, string>, Map<string, string>, Map<string, string>]> {
-  const cached = documentIdCache.get(pool);
-  if (cached && Date.now() - cached.loadedAt < DOCUMENT_ID_CACHE_TTL_MS) {
-    return cached.promise;
-  }
-  const promise = Promise.all([
-    loadAllInvoiceIdsByKey(pool, "SalesOrderID"),
-    loadAllInvoiceIdsByKey(pool, "REPLACE(DeliveryOrderID, '''', '')"),
-    loadAllReturnIdsByDeliveryOrderId(pool),
+function getDocumentIdMaps(
+  pool: sql.ConnectionPool,
+  from: string,
+  to: string
+): Promise<[Map<string, string>, Map<string, string>, Map<string, string>]> {
+  const req = () => pool.request().input("from", sql.Date, from).input("to", sql.Date, to);
+  return Promise.all([
+    // SI per SalesOrderID
+    petaDariQuery(
+      req(),
+      `SELECT SalesOrderID AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
+       WHERE IsDeleted = 0 AND SalesOrderID IN (${SO_RENTANG}) GROUP BY SalesOrderID`
+    ),
+    // SI per DeliveryOrderID
+    petaDariQuery(
+      req(),
+      `SELECT ${SI_DO_KEY} AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
+       WHERE IsDeleted = 0 AND ${SI_DO_KEY} IN (${DO_RENTANG}) GROUP BY ${SI_DO_KEY}`
+    ),
+    // SR per DeliveryOrderID — SalesReturn.SalesOrderID selalu NULL (dicek
+    // live), jadi DeliveryOrderID satu-satunya kunci yang andal.
+    petaDariQuery(
+      req(),
+      `SELECT DeliveryOrderID AS K, MAX(SalesReturnID) AS M FROM SalesReturn
+       WHERE IsDeleted = 0 AND DeliveryOrderID IN (${DO_RENTANG}) GROUP BY DeliveryOrderID`
+    ),
   ]);
-  documentIdCache.set(pool, { promise, loadedAt: Date.now() });
-  // A failed load must not poison the cache for the next 45s — clear it so
-  // the next call retries instead of rethrowing the same stale error.
-  promise.catch(() => {
-    if (documentIdCache.get(pool)?.promise === promise) documentIdCache.delete(pool);
-  });
-  return promise;
 }
 
 // Lists Sales Orders from every source (Pemesanan module, Pengajuan-approval
@@ -275,6 +279,15 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
   const request = pool.request().input("from", sql.Date, filter.from).input("to", sql.Date, filter.to);
   if (filter.wilayah) request.input("wilayah", sql.VarChar(128), filter.wilayah);
 
+  // Peta SI/SR tidak bergantung pada hasil query utama (keduanya dibatasi
+  // rentang yang sama), jadi dimulai bersamaan — hemat satu putaran DB.
+  const petaPromise = Promise.all([
+    getDocumentIdMaps(pool, filter.from, filter.to),
+    getReturQtyByDo(pool, filter.from, filter.to),
+  ]);
+  // Jika query utama gagal lebih dulu, galat peta tidak boleh jadi unhandled
+  // rejection; galatnya tetap muncul saat petaPromise di-await di bawah.
+  petaPromise.catch(() => {});
   const result = await request.query(`
     SELECT
         so.SalesOrderID,
@@ -295,7 +308,11 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
         do_.DeliveryOrderID,
         j.JamAktualBerangkat AS ShippedAt,
         sm.Name AS DriverName,
-        arm.Nama AS ArmadaName
+        arm.Nama AS ArmadaName,
+        do_.VoucherNo AS DoVoucherNo,
+        do_.TransDate AS DoTransDate,
+        NULLIF(LTRIM(RTRIM(do_.VehicleNo)), '') AS DoVehicleNo,
+        dsm.Name AS DoSalesmanName
     FROM SalesOrder so
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = so.BusinessPartnerID
     LEFT JOIN (
@@ -303,6 +320,9 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
              ${JADWAL_KANTONG_10KG_EXPR} AS TotalQty10KG, ${JADWAL_KANTONG_5KG_EXPR} AS TotalQty5KG,
              SUM(Amount) AS TotalAmount
       FROM SalesOrderDetail sod
+      -- Dibatasi ke SO dalam rentang: tanpa ini SQL Server mengagregasi
+      -- detail 234 ribu SO sepanjang masa (±9,6 dtk) demi beberapa ratus SO.
+      WHERE sod.SalesOrderID IN (${SO_RENTANG})
       GROUP BY SalesOrderID
     ) sod ON sod.SalesOrderID = so.SalesOrderID
     OUTER APPLY (
@@ -315,10 +335,12 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
     LEFT JOIN DashboardArmada arm ON arm.ArmadaID = j.ArmadaID
     OUTER APPLY (
-      SELECT TOP 1 do2.DeliveryOrderID
+      SELECT TOP 1 do2.DeliveryOrderID, do2.VoucherNo, do2.TransDate, do2.VehicleNo, do2.SalesmanID
       FROM DeliveryOrder do2
       WHERE do2.SalesOrderID = so.SalesOrderID AND do2.IsDeleted = 0
+      ORDER BY do2.TransDate DESC
     ) do_
+    LEFT JOIN Salesman dsm ON dsm.SalesmanID = do_.SalesmanID
     WHERE so.IsDeleted = 0
       AND so.TransDate >= @from AND so.TransDate < @to
       ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
@@ -340,7 +362,7 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
   // query/round-trips instead (getDocumentIdMaps above) keeps those joins
   // out of this query's plan entirely — see SalesOrderListRow.InvoiceToken
   // for which Status values can have one.
-  const [soInvoiceMap, doInvoiceMap, doReturnMap] = await getDocumentIdMaps(pool);
+  const [[soInvoiceMap, doInvoiceMap, doReturnMap], returQtyMap] = await petaPromise;
 
   const mapped = rows.map((r) => {
     const { DeliveryOrderID, ...rest } = r;
@@ -356,6 +378,7 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
       HasSoInvoice: soInvoiceId != null,
       HasDoInvoice: doInvoiceId != null,
       SalesReturnId: salesReturnId,
+      ReturQty: salesReturnId && hasDO ? (returQtyMap.get(DeliveryOrderID) ?? null) : null,
     };
   });
 
@@ -409,16 +432,21 @@ export async function reschedulePemesanan(input: ReschedulePemesananInput): Prom
     return { jadwalId: existingJadwalId };
   }
 
+  // Ubah Pemesanan disamakan dengan Buat Pemesanan: kapasitas penuh hanya
+  // diperingatkan di UI, tidak ditolak (lihat OpsiKapasitas).
   let jadwalId: number;
   if (existingJadwalId != null) {
-    await addSalesOrdersToJadwal(existingJadwalId, [input.salesOrderId]);
+    await addSalesOrdersToJadwal(existingJadwalId, [input.salesOrderId], { abaikanKapasitas: true });
     jadwalId = existingJadwalId;
   } else {
-    jadwalId = await createJadwalDraft({
-      armadaId: input.armadaId,
-      jamJadwal: input.deliveryDateTime,
-      salesOrderIds: [input.salesOrderId],
-    });
+    jadwalId = await createJadwalDraft(
+      {
+        armadaId: input.armadaId,
+        jamJadwal: input.deliveryDateTime,
+        salesOrderIds: [input.salesOrderId],
+      },
+      { abaikanKapasitas: true }
+    );
 
     if (input.salesmanId) {
       try {
@@ -548,60 +576,4 @@ export async function getSalesReturnDetail(salesReturnId: string): Promise<Sales
   const lines = linesResult.recordset as SalesReturnDetailLine[];
 
   return { ...header, Amount: lines.reduce((sum, l) => sum + l.Amount, 0), Lines: lines };
-}
-
-export interface SalesReturnListRow {
-  SalesReturnID: string;
-  VoucherNo: string;
-  TransDate: string | Date;
-  CustomerName: string;
-  Wilayah: string;
-  Amount: number;
-  // The DO this return was recorded against — SalesReturn.DeliveryOrderID
-  // is reliable (unlike SalesOrderID, live-confirmed NULL on every
-  // observed row — see getSalesOrderList's own comment), so the join goes
-  // through DeliveryOrder, not SalesOrder, for traceability context.
-  DeliveryOrderVoucherNo: string | null;
-}
-
-export interface SalesReturnListFilter {
-  from: string;
-  to: string;
-  wilayah?: string;
-}
-
-// Backs the "Pesanan Kembali" tab on /mkesindo/pemesanan — every MKE/SR/
-// transaction in range, dashboard- and desktop-ERP-originated alike (both
-// write to the same SalesReturn table). Same date-bounded convention as
-// getSalesOrderList — SalesReturn is a much smaller table (~9.6K rows) with
-// no equivalent large-table join to worry about, so this is a plain
-// filtered query, not the unfiltered-aggregate-then-filter-in-JS pattern
-// that table required.
-export async function getSalesReturnList(filter: SalesReturnListFilter): Promise<SalesReturnListRow[]> {
-  const pool = await getPool();
-  const request = pool.request().input("from", sql.Date, filter.from).input("to", sql.Date, filter.to);
-  if (filter.wilayah) request.input("wilayah", sql.VarChar(128), filter.wilayah);
-
-  const result = await request.query(`
-    SELECT
-        sr.SalesReturnID,
-        sr.VoucherNo,
-        sr.TransDate,
-        ISNULL(bp.Name, 'Tidak Diketahui') AS CustomerName,
-        ISNULL(NULLIF(LTRIM(RTRIM(bp.NPWPName)), ''), 'Tidak Diketahui') AS Wilayah,
-        -- sr.Amount trusts SalesReturnDetail.Qty/Amount, which can be stale
-        -- relative to the authoritative Retur column (same desktop-ERP
-        -- correction quirk documented on getSalesReturnDetail above) --
-        -- recompute from Retur*Price instead of trusting the stored header.
-        ISNULL((SELECT SUM(srd.Retur * srd.Price) FROM SalesReturnDetail srd WHERE srd.SalesReturnID = sr.SalesReturnID), 0) AS Amount,
-        do_.VoucherNo AS DeliveryOrderVoucherNo
-    FROM SalesReturn sr
-    LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = sr.BusinessPartnerID
-    LEFT JOIN DeliveryOrder do_ ON do_.DeliveryOrderID = sr.DeliveryOrderID
-    WHERE sr.IsDeleted = 0
-      AND sr.TransDate >= @from AND sr.TransDate < @to
-      ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
-    ORDER BY sr.TransDate DESC
-  `);
-  return result.recordset as SalesReturnListRow[];
 }

@@ -13,14 +13,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export function FilterBar({
   wilayahList,
   showDateRange = true,
+  bare = false,
+  hanyaTombol = false,
 }: {
   wilayahList?: string[];
   showDateRange?: boolean;
+  // true = tanpa bingkai kartu sendiri, untuk halaman yang sudah menaruh
+  // filter ini di dalam toolbar berbingkai (mis. /mkesindo/pemesanan).
+  bare?: boolean;
+  // true = di SEMUA ukuran layar filter tampil sebagai satu tombol ikon yang
+  // membuka dropdown (dipakai /mkesindo/pemesanan, di kanan Buat Pemesanan).
+  hanyaTombol?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -56,16 +66,112 @@ export function FilterBar({
     router.push(`${pathname}?${params.toString()}`);
   }
 
+  // Lebar kotak: mode "bare" (toolbar Pemesanan) memakai kotak lebih ramping;
+  // halaman lain tetap ukuran lama.
+  const lebarTanggal = bare ? "w-[8.5rem]" : "w-40";
+  const lebarWilayah = bare ? "w-36" : "w-48";
+
+  // Jumlah filter yang sedang aktif di URL — penanda pada tombol Filter (HP).
+  const jumlahAktif = ["from", "to", "wilayah"].filter((k) => searchParams.get(k)).length;
+
+  const pilihWilayah = (lebar: string) =>
+    wilayahList && (
+      <Select value={wilayah} onValueChange={(value) => setWilayah(value ?? "all")}>
+        <SelectTrigger className={lebar} aria-label="Wilayah">
+          <SelectValue placeholder="Semua Wilayah">{(v: string) => (v === "all" ? "Semua Wilayah" : v)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Semua Wilayah</SelectItem>
+          {wilayahList.map((w) => (
+            <SelectItem key={w} value={w}>
+              {w}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+
   return (
-    <div className="flex flex-col gap-2 sm:contents">
-      <Button variant="outline" size="sm" className="w-fit sm:hidden" onClick={() => setMobileOpen((v) => !v)}>
-        <Filter className="size-4" />
-        Filter
-      </Button>
+    <>
+      {/* Layar HP: satu tombol "Filter" yang membuka popup berisi semua isian. */}
+      <Popover open={mobileOpen} onOpenChange={setMobileOpen}>
+        {hanyaTombol ? (
+          <PopoverTrigger
+            render={<Button variant="outline" size="icon" className="relative size-9" aria-label="Filter" title="Filter" />}
+          >
+            <Filter className="size-4" />
+            {jumlahAktif > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                {jumlahAktif}
+              </span>
+            )}
+          </PopoverTrigger>
+        ) : (
+          <PopoverTrigger render={<Button variant="outline" size="sm" className="w-fit sm:hidden" />}>
+            <Filter className="size-4" />
+            Filter
+            {jumlahAktif > 0 && (
+              <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold leading-4 text-primary-foreground">
+                {jumlahAktif}
+              </span>
+            )}
+          </PopoverTrigger>
+        )}
+        <PopoverContent align={hanyaTombol ? "end" : "start"} className="w-[min(18rem,calc(100vw-2rem))]">
+          <div className="flex flex-col gap-3">
+            {showDateRange && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="filter-dari" className="text-xs">
+                    Dari tanggal
+                  </Label>
+                  <Input id="filter-dari" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="filter-sampai" className="text-xs">
+                    Sampai tanggal
+                  </Label>
+                  <Input
+                    id="filter-sampai"
+                    type="date"
+                    aria-invalid={sameDate}
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                    className={cn(sameDate && "border-destructive")}
+                  />
+                  {sameDate && (
+                    <p className="text-[11px] text-destructive">
+                      Tanggal &quot;Dari&quot; dan &quot;Sampai&quot; tidak boleh sama — tidak akan ada data.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+            {wilayahList && (
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Wilayah</Label>
+                {pilihWilayah("w-full")}
+              </div>
+            )}
+            <Button
+              onClick={() => {
+                applyFilter();
+                if (!sameDate) setMobileOpen(false);
+              }}
+              disabled={sameDate}
+            >
+              Terapkan
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* Layar sm ke atas: isian sejajar dalam satu baris (kecuali mode hanyaTombol). */}
       <div
         className={cn(
-          "flex-wrap items-end gap-3 rounded-lg border bg-card p-3 sm:flex",
-          mobileOpen ? "flex" : "hidden"
+          "hidden flex-wrap items-end gap-3",
+          !hanyaTombol && "sm:flex",
+          !bare && "rounded-lg border bg-card p-3"
         )}
       >
         {showDateRange && (
@@ -76,7 +182,7 @@ export function FilterBar({
               aria-label="Dari Tanggal"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="w-40"
+              className={lebarTanggal}
             />
             <Tooltip open={sameDate}>
               <TooltipTrigger
@@ -88,7 +194,7 @@ export function FilterBar({
                     aria-invalid={sameDate}
                     value={to}
                     onChange={(e) => setTo(e.target.value)}
-                    className={cn("w-40", sameDate && "border-destructive")}
+                    className={cn(lebarTanggal, sameDate && "border-destructive")}
                   />
                 }
               />
@@ -99,25 +205,11 @@ export function FilterBar({
             </Tooltip>
           </>
         )}
-        {wilayahList && (
-          <Select value={wilayah} onValueChange={(value) => setWilayah(value ?? "all")}>
-            <SelectTrigger className="w-48" aria-label="Wilayah">
-              <SelectValue placeholder="Semua Wilayah">{(v: string) => (v === "all" ? "Semua Wilayah" : v)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Wilayah</SelectItem>
-              {wilayahList.map((w) => (
-                <SelectItem key={w} value={w}>
-                  {w}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        {pilihWilayah(lebarWilayah)}
         <Button onClick={applyFilter} disabled={sameDate}>
           Terapkan
         </Button>
       </div>
-    </div>
+    </>
   );
 }

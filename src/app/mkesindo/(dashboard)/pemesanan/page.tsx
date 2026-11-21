@@ -2,18 +2,17 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requireModuleAccess } from "@/lib/require-access";
 import { getBusinessDateISO } from "@/lib/business-date";
-import { getSalesOrderList, getSalesReturnList, type SalesOrderListFilter, type SalesReturnListFilter } from "@/lib/queries/pemesanan";
+import { getSalesOrderList, type SalesOrderListFilter } from "@/lib/queries/pemesanan";
 import { getMitraList, getPriceLevelOptions } from "@/lib/queries/mitra";
 import { getArmadaList, type ArmadaRow } from "@/lib/queries/armada";
 import { getDriverOptions, type DriverOption } from "@/lib/queries/delivery";
 import { getWilayahList } from "@/lib/queries/wilayah";
 import { resolveFilter, type DashboardSearchParams } from "@/lib/date-range";
 import { FilterBar } from "@/components/dashboard/filter-bar";
-import { PemesananDocFilter } from "@/components/dashboard/pemesanan-doc-filter";
+import { PemesananDocFilterDaftar } from "@/components/dashboard/pemesanan-doc-filter";
 import { PemesananFormDialog } from "@/components/dashboard/pemesanan-form-dialog";
 import { PemesananList } from "@/components/dashboard/pemesanan-list";
-import { PesananKembaliList } from "@/components/dashboard/pesanan-kembali-list";
-import { PemesananTabs } from "@/components/dashboard/pemesanan-tabs";
+import { TombolTampilanPemesanan } from "@/components/dashboard/pemesanan-tampilan";
 
 function docFilterValue(value: string | undefined): "yes" | "no" | undefined {
   return value === "yes" || value === "no" ? value : undefined;
@@ -31,22 +30,15 @@ async function PemesananListSection({
   filter,
   armadaList,
   drivers,
+  todayISO,
 }: {
   filter: SalesOrderListFilter;
   armadaList: ArmadaRow[];
   drivers: DriverOption[];
+  todayISO: string;
 }) {
   const rows = await getSalesOrderList(filter);
-  return <PemesananList rows={rows} armadaList={armadaList} drivers={drivers} />;
-}
-
-// "Pesanan Kembali" tab's own Suspense-streamed content — SalesReturn is a
-// much smaller table than SalesInvoice (see getSalesReturnList's own
-// comment), but this still gets its own boundary so a slow "Pesanan" tab
-// load never blocks this one, and vice versa.
-async function PesananKembaliSection({ filter }: { filter: SalesReturnListFilter }) {
-  const rows = await getSalesReturnList(filter);
-  return <PesananKembaliList rows={rows} />;
+  return <PemesananList rows={rows} armadaList={armadaList} drivers={drivers} todayISO={todayISO} />;
 }
 
 // Same visual language as piutang-payments-panel.tsx's isPending bar
@@ -85,11 +77,6 @@ export default async function PemesananPage({
     hasSoInvoice: docFilterValue(params.hasSoInvoice),
     hasDoInvoice: docFilterValue(params.hasDoInvoice),
   };
-  const srListFilter: SalesReturnListFilter = {
-    from: filter.startDate,
-    to: filter.endDate,
-    wilayah: filter.wilayah,
-  };
 
   const [mitraList, armadaList, drivers, priceLevels10kg, priceLevels5kg, wilayahList] = await Promise.all([
     getMitraList(),
@@ -102,38 +89,36 @@ export default async function PemesananPage({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Baris atas: pilihan tampilan (Papan/Daftar) menggantikan judul di kiri;
+          tombol Buat Pemesanan lalu tombol ikon Filter di kanan. Judul halaman
+          tetap ada untuk pembaca layar (sr-only). */}
+      <h1 className="sr-only">Pemesanan</h1>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-xl font-semibold">Pemesanan</h1>
-        <FilterBar wilayahList={wilayahList} />
+        <TombolTampilanPemesanan />
+        {/* Buat Pemesanan, lalu tombol ikon Filter di kanannya (dropdown berisi
+            tanggal & wilayah). */}
+        <div className="flex items-center gap-2">
+          <PemesananFormDialog
+            mitraList={mitraList}
+            armadaList={armadaList}
+            drivers={drivers}
+            priceLevels10kg={priceLevels10kg}
+            priceLevels5kg={priceLevels5kg}
+            todayISO={todayISO}
+          />
+          <FilterBar wilayahList={wilayahList} bare hanyaTombol />
+        </div>
       </div>
 
-      <PemesananTabs
-        pesananPanel={
-          <div className="flex flex-col gap-4">
-            <PemesananDocFilter />
+      {/* Filter kelengkapan dokumen — hanya di mode Daftar; di mode Papan
+          komponennya kosong dan baris ini disembunyikan (empty:hidden). */}
+      <div className="empty:hidden">
+        <PemesananDocFilterDaftar />
+      </div>
 
-            <div className="flex justify-end">
-              <PemesananFormDialog
-                mitraList={mitraList}
-                armadaList={armadaList}
-                drivers={drivers}
-                priceLevels10kg={priceLevels10kg}
-                priceLevels5kg={priceLevels5kg}
-                todayISO={todayISO}
-              />
-            </div>
-
-            <Suspense fallback={<PemesananListLoadingBar />}>
-              <PemesananListSection filter={soListFilter} armadaList={armadaList} drivers={drivers} />
-            </Suspense>
-          </div>
-        }
-        kembaliPanel={
-          <Suspense fallback={<PemesananListLoadingBar />}>
-            <PesananKembaliSection filter={srListFilter} />
-          </Suspense>
-        }
-      />
+      <Suspense fallback={<PemesananListLoadingBar />}>
+        <PemesananListSection filter={soListFilter} armadaList={armadaList} drivers={drivers} todayISO={todayISO} />
+      </Suspense>
     </div>
   );
 }
