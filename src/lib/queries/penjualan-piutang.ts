@@ -23,51 +23,6 @@ function monthsWindow(): { start: Date; end: Date; keys: string[] } {
   return { start, end, keys };
 }
 
-export interface PenjualanTrendMonth {
-  month: string; // "2026-01"
-  kantongKecil: number;
-  kantongBesar: number;
-  kantongTotal: number;
-  pendapatanRp: number; // GL, utama + logistik combined
-}
-
-export interface PenjualanTrendData {
-  months: PenjualanTrendMonth[];
-  totalKantong12Bulan: number;
-  totalPendapatan12Bulan: number;
-}
-
-// Physical kantong counts from PMP_Pemesanan -- same table/filter as the
-// existing getMonthlyBalokRealisasi (hpp-bersih-pmputra.ts), already proven
-// reliable. Never read this table's price/Rupiah columns (see plan Global
-// Constraints).
-async function getKantongByMonth(
-  kode: string,
-  label: CompanyKoneksiLabel,
-  start: Date,
-  end: Date
-): Promise<Map<string, { kecil: number; besar: number }>> {
-  const pool = await getCompanyPool(kode, label);
-  const result = await pool
-    .request()
-    .input("start", sql.DateTime, start)
-    .input("end", sql.DateTime, end)
-    .query(`
-      SELECT CONVERT(varchar(7), Tanggal, 120) AS Bulan,
-             SUM(ISNULL(BalokKecilRealisasi,0)) AS Kecil,
-             SUM(ISNULL(BalokBesarRealisasi,0)) AS Besar
-      FROM PMP_Pemesanan
-      WHERE Status = '3' AND ISNULL(IsVoid,0) = 0 AND ISNULL(IsDeleted,0) = 0
-        AND Tanggal >= @start AND Tanggal < @end
-      GROUP BY CONVERT(varchar(7), Tanggal, 120)
-    `);
-  const map = new Map<string, { kecil: number; besar: number }>();
-  for (const r of result.recordset as { Bulan: string; Kecil: number; Besar: number }[]) {
-    map.set(r.Bulan, { kecil: r.Kecil, besar: r.Besar });
-  }
-  return map;
-}
-
 // PMPersada's own branch code inside its shared "logistik" database
 // (FINAC_PMP_LOGISTIC) -- that one database is also used by PMPakis
 // (BranchID "011"), confirmed live 18 Sep 2026 via accounting cross-check.
@@ -82,7 +37,7 @@ const PMPAKIS_OWN_BRANCH_ID_PENJUALAN = "011";
 
 // Hanya database logistik yang dipakai bersama PMPersada/PMPakis yang perlu disaring per
 // branch; semua database lain milik satu PT saja.
-function ownBranchFilter(kode: string, sumber: string): string | null {
+export function ownBranchFilter(kode: string, sumber: string): string | null {
   if (sumber !== "logistik") return null;
   if (kode === "pmpersada") return PMPERSADA_OWN_BRANCH_ID;
   if (kode === "pmpakis") return PMPAKIS_OWN_BRANCH_ID_PENJUALAN;
@@ -123,7 +78,7 @@ function getPenjualanAccounts(kode: string, label: CompanyKoneksiLabel): Penjual
 // PENJUALAN_ACCOUNTS whitelist for this (kode,label) -- same Credit-Debit
 // sign convention pnl.ts/pnl-pmputra.ts already use for revenue accounts
 // (credit-normal).
-async function getPendapatanByMonth(
+export async function getPendapatanByMonth(
   kode: string,
   label: CompanyKoneksiLabel,
   start: Date,
@@ -157,35 +112,6 @@ async function getPendapatanByMonth(
     map.set(r.Bulan, r.Pendapatan);
   }
   return map;
-}
-
-export async function getPenjualanTrend(kode: string): Promise<PenjualanTrendData> {
-  const { start, end, keys } = monthsWindow();
-
-  // Kantong sengaja hanya dari "utama" (tidak digabung dengan "logistik" seperti Pendapatan
-  // di bawah): verifikasi live membuktikan PMP_Pemesanan pmputra di utama dan logistik
-  // mirror-duplicate data fisik yang sama (bukan dua order book independen) — menjumlahkan
-  // keduanya akan double-count setiap kantong. Sama seperti precedent di
-  // hpp-bersih-pmputra.ts / hpp-bersih-pmpersada.ts yang juga sumber kantong dari utama saja.
-  const [kantongUtama, pendapatanUtama, pendapatanLogistik] = await Promise.all([
-    getKantongByMonth(kode, "utama", start, end),
-    getPendapatanByMonth(kode, "utama", start, end),
-    getPendapatanByMonth(kode, "logistik", start, end),
-  ]);
-
-  const months: PenjualanTrendMonth[] = keys.map((key) => {
-    const kU = kantongUtama.get(key) ?? { kecil: 0, besar: 0 };
-    const kantongKecil = kU.kecil;
-    const kantongBesar = kU.besar;
-    const pendapatanRp = (pendapatanUtama.get(key) ?? 0) + (pendapatanLogistik.get(key) ?? 0);
-    return { month: key, kantongKecil, kantongBesar, kantongTotal: kantongKecil + kantongBesar, pendapatanRp };
-  });
-
-  return {
-    months,
-    totalKantong12Bulan: months.reduce((sum, m) => sum + m.kantongTotal, 0),
-    totalPendapatan12Bulan: months.reduce((sum, m) => sum + m.pendapatanRp, 0),
-  };
 }
 
 export interface PiutangTrendMonth {

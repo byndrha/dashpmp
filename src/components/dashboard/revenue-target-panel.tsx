@@ -28,12 +28,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { formatRupiah, formatDate, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RevenueTarget } from "@/lib/queries/revenue-target";
+import type { ActionResult } from "@/lib/action-result";
 import { saveMonthlyTargetAction, getRevenueTargetForMonthAction } from "@/app/mkesindo/(dashboard)/sales/actions";
 
-function formatQtyPlain(value: number | null): string {
+function formatQtyPlain(value: number | null, unit: string): string {
   if (value == null) return "-";
-  return `${value.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kantong`;
+  return `${value.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ${unit}`;
 }
+
+type SaveTargetInput = { year: number; month: number; targetNominal: number; targetQty: number };
 
 const INDONESIAN_MONTHS = [
   "Januari",
@@ -120,13 +123,22 @@ function StatTile({
   );
 }
 
+// `loadMonth`/`saveTarget`/`unitLabel` default ke Es Kristal (MKEsindo);
+// modul Penjualan Es Balok mengoper action dan satuan "balok" miliknya sendiri.
 export function RevenueTargetPanel({
   target: initialTarget,
   businessTodayISO,
+  loadMonth = getRevenueTargetForMonthAction,
+  saveTarget = saveMonthlyTargetAction,
+  unitLabel = "kantong",
 }: {
   target: RevenueTarget;
   businessTodayISO: string;
+  loadMonth?: (monthISO: string) => Promise<RevenueTarget>;
+  saveTarget?: (input: SaveTargetInput) => Promise<ActionResult<void>>;
+  unitLabel?: string;
 }) {
+  const qtyText = (value: number | null) => formatQtyPlain(value, unitLabel);
   const [target, setTarget] = useState(initialTarget);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -139,7 +151,7 @@ export function RevenueTargetPanel({
 
   function navigate(nextMonthISO: string) {
     startNavTransition(async () => {
-      const result = await getRevenueTargetForMonthAction(nextMonthISO);
+      const result = await loadMonth(nextMonthISO);
       setTarget(result);
     });
   }
@@ -154,12 +166,15 @@ export function RevenueTargetPanel({
     const targetQty = Number(formData.get("targetQty"));
     setError(null);
     startTransition(async () => {
-      const result = await saveMonthlyTargetAction({ year: target.Year, month: target.Month, targetNominal, targetQty });
+      const result = await saveTarget({ year: target.Year, month: target.Month, targetNominal, targetQty });
       if (!result.success) {
         setError(result.error);
         return;
       }
       setOpen(false);
+      // Muat ulang bulan yang sama supaya angka target langsung tampil
+      // (revalidatePath saja tidak mengganti state lokal panel ini).
+      setTarget(await loadMonth(`${target.Year}-${String(target.Month).padStart(2, "0")}-01`));
     });
   }
 
@@ -231,8 +246,8 @@ export function RevenueTargetPanel({
               </p>
               <p className="text-xs text-muted-foreground">
                 dari target {hasTarget ? formatRupiah(target.TargetNominalToDate!) : "-"} &middot;{" "}
-                {formatQtyPlain(target.RealisasiQtyToDate)}
-                {hasTarget && ` dari ${formatQtyPlain(target.TargetQtyToDate)}`}
+                {qtyText(target.RealisasiQtyToDate)}
+                {hasTarget && ` dari ${qtyText(target.TargetQtyToDate)}`}
               </p>
               {!target.IsCurrentMonth && progressPct != null && (
                 <p className="mt-1 text-xs font-medium text-primary">
@@ -268,13 +283,13 @@ export function RevenueTargetPanel({
             icon={Wallet}
             label="Target Bulanan"
             nominal={hasTarget ? formatRupiah(target.TargetNominalMonthly!) : "-"}
-            qty={hasTarget ? formatQtyPlain(target.TargetQtyMonthly) : undefined}
+            qty={hasTarget ? qtyText(target.TargetQtyMonthly) : undefined}
           />
           <StatTile
             icon={CalendarDays}
             label="Target / Hari"
             nominal={hasTarget ? formatRupiah(target.TargetNominalDaily!) : "-"}
-            qty={hasTarget ? formatQtyPlain(target.TargetQtyDaily) : undefined}
+            qty={hasTarget ? qtyText(target.TargetQtyDaily) : undefined}
           />
           <StatTile
             icon={Gauge}
@@ -292,7 +307,7 @@ export function RevenueTargetPanel({
               icon={Rocket}
               label="Target Revenue Besok"
               nominal={target.TargetNominalBesok != null ? formatRupiah(target.TargetNominalBesok) : "-"}
-              qty={formatQtyPlain(target.TargetQtyBesok)}
+              qty={qtyText(target.TargetQtyBesok)}
               tone="primary"
             />
           )}
@@ -320,7 +335,7 @@ export function RevenueTargetPanel({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="targetQty">Target Qty Bulanan (kantong)</Label>
+              <Label htmlFor="targetQty">Target Qty Bulanan ({unitLabel})</Label>
               <Input
                 id="targetQty"
                 name="targetQty"
