@@ -26,9 +26,14 @@ import type { Segmentasi } from "@/lib/segmentasi-mitra";
 // row. "Jatuh tempo" (due date) is likewise an assumption, not an ERP fact:
 // Tanggal + 14 days.
 
-export type EsBalokAgingBucket = "Belum Jatuh Tempo" | "1-30 Hari" | "31-60 Hari" | "61-90 Hari" | ">90 Hari";
-
-export type EsBalokPiutangStatus = "Sehat" | "Perhatian" | "Kritis";
+import {
+  esBalokAgingBucket,
+  esBalokStatus,
+  ES_BALOK_JATUH_TEMPO_HARI,
+  type EsBalokAgingBucket,
+  type EsBalokPiutangStatus,
+} from "@/lib/piutang-es-balok-status";
+export { esBalokAgingBucket, esBalokStatus, type EsBalokAgingBucket, type EsBalokPiutangStatus };
 
 export interface EsBalokInvoiceRow {
   agenId: string;
@@ -41,27 +46,6 @@ export interface EsBalokInvoiceRow {
   daysOverdue: number;
   agingBucket: EsBalokAgingBucket;
   status: EsBalokPiutangStatus;
-}
-
-// Ported verbatim from aging.ts:95-101's CASE thresholds (same bucket
-// boundaries, same DATEDIFF(DAY, ..., GETDATE()) semantics -- daysOverdue
-// here already IS that DATEDIFF value, computed in JS at call sites below).
-export function esBalokAgingBucket(daysOverdue: number): EsBalokAgingBucket {
-  if (daysOverdue <= 0) return "Belum Jatuh Tempo";
-  if (daysOverdue <= 30) return "1-30 Hari";
-  if (daysOverdue <= 60) return "31-60 Hari";
-  if (daysOverdue <= 90) return "61-90 Hari";
-  return ">90 Hari";
-}
-
-// Ported verbatim from aging.ts:50-55's STATUS_CASE (Sehat <=30, Perhatian
-// <=60, else Kritis) and getPiutangStatusOverview's MaxDaysOverdue IS NULL
-// -> 'Sehat' branch (aging.ts:163).
-export function esBalokStatus(daysOverdue: number | null): EsBalokPiutangStatus {
-  if (daysOverdue === null) return "Sehat";
-  if (daysOverdue <= 30) return "Sehat";
-  if (daysOverdue <= 60) return "Perhatian";
-  return "Kritis";
 }
 
 // Cutoff passed as the "before" bound to getPemesananNetByAgenBefore/
@@ -224,7 +208,7 @@ async function getRawFifoInputs(
 }
 
 function daysOverdueFor(tanggal: Date): number {
-  const dueDate = tanggal.getTime() + 14 * 86400000;
+  const dueDate = tanggal.getTime() + ES_BALOK_JATUH_TEMPO_HARI * 86400000;
   return Math.floor((Date.now() - dueDate) / 86400000);
 }
 

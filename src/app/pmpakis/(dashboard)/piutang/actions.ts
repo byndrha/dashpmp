@@ -14,6 +14,7 @@ import {
 import { getEsBalokCollectionPriority, getEsBalokPembayaranByDate, type EsBalokPriorityRow, type EsBalokPembayaranRow } from "@/lib/queries/piutang-priority-es-balok";
 import { setEsBalokCollectionTarget, removeEsBalokCollectionTarget } from "@/lib/queries/piutang-target-es-balok";
 import { requirePmpakisKeuangan } from "@/lib/require-access";
+import { ringkasPiutangTerbuka, type RingkasanPiutangTerbuka } from "@/lib/piutang-es-balok-status";
 
 const KODE = "pmpakis";
 
@@ -58,6 +59,13 @@ export async function tarikPiutangAction(
 export async function getEsBalokInvoiceOutstandingAction(): Promise<EsBalokInvoiceRow[]> {
   await requirePmpakisKeuangan();
   return getEsBalokInvoiceOutstanding(KODE);
+}
+
+// Versi ringkas untuk kartu per Agen (status Sehat/Perhatian/Kritis + umur
+// per pesanan) — hanya angka per Agen/dokumen, bukan ribuan baris mentah.
+export async function getRingkasanPiutangTerbukaAction(): Promise<RingkasanPiutangTerbuka> {
+  await requirePmpakisKeuangan();
+  return ringkasPiutangTerbuka(await getEsBalokInvoiceOutstanding(KODE));
 }
 
 export async function getEsBalokPeriodSummaryAction(startDate: string, endDate: string): Promise<EsBalokPeriodSummary> {

@@ -6,10 +6,12 @@ import { PiutangPerAgenTable } from "@/components/dashboard/piutang-per-agen-tab
 import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
 import { EsBalokCollectionPriorityTable } from "@/components/dashboard/es-balok-collection-priority-table";
 import { getEsBalokInvoiceOutstanding } from "@/lib/queries/piutang-invoice-outstanding";
+import { ringkasPiutangTerbuka } from "@/lib/piutang-es-balok-status";
 import { getEsBalokCollectionPriority, getEsBalokPembayaranByDate } from "@/lib/queries/piutang-priority-es-balok";
 import { EsBalokPembayaranPanelContainer } from "./pembayaran-panel-container";
 import {
   getPiutangPerAgenAction,
+  getRingkasanPiutangTerbukaAction,
   getPiutangBayarContextAction,
   bayarPiutangAction,
   getPiutangTarikContextAction,
@@ -85,6 +87,8 @@ export default async function PmpersadaPiutangPage() {
         invoicePanel={
           <PiutangPerAgenTable
             initialRows={perAgen}
+            initialTerbuka={ringkasPiutangTerbuka(invoiceRows)}
+            fetchTerbuka={getRingkasanPiutangTerbukaAction}
             fetchAction={getPiutangPerAgenAction}
             fetchBayarContext={getPiutangBayarContextAction}
             submitBayar={bayarPiutangAction}

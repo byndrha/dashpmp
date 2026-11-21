@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Banknote, ChevronDown, Clock, Copy, CreditCard, Download, FileText, MapPin, Package, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,12 @@ import { SEGMENTASI_OPTIONS } from "@/lib/segmentasi-mitra";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { PiutangPerAgenRow, PiutangTransaksiRow } from "@/lib/queries/penjualan-piutang";
 import type { PiutangBayarContext, PiutangTarikContext, BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
+import {
+  esBalokStatus,
+  ES_BALOK_JATUH_TEMPO_HARI,
+  type EsBalokPiutangStatus,
+  type RingkasanPiutangTerbuka,
+} from "@/lib/piutang-es-balok-status";
 
 const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Agen", key: "nama", width: 26 },
@@ -38,7 +44,10 @@ const MONTH_NAMES = [
 ];
 
 type SortKey = "Nama" | "SaldoAkhir" | "Pesanan";
+// "Jenis" saldo Agen (Hutang/Tabungan/Lunas) — nama tipenya dibiarkan
+// StatusFilter agar diff kecil; filter "Status" kesehatan piutang terpisah.
 type StatusFilter = "all" | "hutang" | "tabungan" | "lunas";
+type StatusPiutangFilter = "all" | EsBalokPiutangStatus;
 
 const PAGE_SIZE = 12;
 
@@ -135,13 +144,73 @@ const TIPE_BADGE_CLASS: Record<PiutangTransaksiRow["tipe"], string> = {
   tarikan: "bg-destructive/15 text-destructive",
 };
 
+// Sisa piutang terbuka hasil alokasi FIFO (getEsBalokInvoiceOutstanding),
+// sudah diringkas di server per Agen dan per (Agen, NoDokumen) — lihat
+// ringkasPiutangTerbuka di lib/piutang-es-balok-status.ts.
+interface PiutangTerbuka {
+  outstanding: number;
+  maxDaysOverdue: number;
+}
+
+function bacaTerbuka(v: [number, number] | undefined): PiutangTerbuka | undefined {
+  return v ? { outstanding: v[0], maxDaysOverdue: v[1] } : undefined;
+}
+
+const STATUS_PIUTANG_CLASS: Record<EsBalokPiutangStatus, { badge: string; dot: string }> = {
+  Sehat: { badge: "border-primary/40 text-primary", dot: "bg-primary" },
+  Perhatian: { badge: "border-warning/40 text-warning", dot: "bg-warning" },
+  Kritis: { badge: "border-destructive/40 text-destructive", dot: "bg-destructive" },
+};
+
+const UMUR_CHIP_CLASS: Record<EsBalokPiutangStatus, string> = {
+  Sehat: "bg-primary/15 text-primary",
+  Perhatian: "bg-warning/15 text-warning",
+  Kritis: "bg-destructive/15 text-destructive",
+};
+
+function jatuhTempoISO(tanggalISO: string): string {
+  const d = new Date(`${tanggalISO}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + ES_BALOK_JATUH_TEMPO_HARI);
+  return d.toISOString().slice(0, 10);
+}
+
+// Indikator umur satu Pemesanan: "Lunas" bila sudah tertutup pembayaran
+// (FIFO), atau usia pesanan dalam hari (sejak tanggal pesanan) bila masih
+// ada sisa — warnanya mengikuti status Sehat/Perhatian/Kritis.
+function UmurChip({ item, terbuka }: { item: PiutangTransaksiRow; terbuka: PiutangTerbuka | undefined }) {
+  if (!terbuka) {
+    return (
+      <span
+        className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground"
+        title="Sudah tertutup pembayaran (alokasi FIFO, pesanan terlama dulu)"
+      >
+        Lunas
+      </span>
+    );
+  }
+  const usiaHari = Math.max(0, terbuka.maxDaysOverdue + ES_BALOK_JATUH_TEMPO_HARI);
+  const status = esBalokStatus(terbuka.maxDaysOverdue);
+  const keterangan =
+    terbuka.maxDaysOverdue > 0
+      ? `lewat ${terbuka.maxDaysOverdue} hari dari jatuh tempo`
+      : `jatuh tempo ${formatTanggalPendek(jatuhTempoISO(item.tanggal))}`;
+  return (
+    <span
+      className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", UMUR_CHIP_CLASS[status])}
+      title={`Belum lunas ${formatRupiah(terbuka.outstanding)} — ${keterangan} (jatuh tempo = tanggal + ${ES_BALOK_JATUH_TEMPO_HARI} hari)`}
+    >
+      {usiaHari} hari
+    </span>
+  );
+}
+
 // Bordered card per transaction, per the reference design: doc icon + full
 // NoDokumen and a colored tipe pill on top, date + a merged qty chip
 // ("Kecil 230") and the signed amount below. Pesanan/Tarikan add to Hutang
 // (shown plain), Pembayaran reduces it (shown negative, tinted primary like
 // the Tabungan convention used elsewhere on this card). Padding kept tight
 // (px-2/py-1.5, gap-1) so the box stays compact rather than tall.
-function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
+function TransaksiRow({ item, terbuka }: { item: PiutangTransaksiRow; terbuka: PiutangTerbuka | undefined }) {
   const isReduction = item.jumlah < 0;
   return (
     <div className="flex flex-col gap-1 rounded-lg border px-2 py-1.5">
@@ -167,6 +236,7 @@ function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
               Besar <span className="font-semibold text-foreground">{item.balokBesar.toLocaleString("id-ID")}</span>
             </span>
           )}
+          {item.tipe === "pesanan" && <UmurChip item={item} terbuka={terbuka} />}
         </span>
         <span className={cn("font-data shrink-0 text-xs font-semibold tabular-nums", isReduction ? "text-primary" : "text-foreground")}>
           {isReduction ? "-" : ""}
@@ -179,6 +249,8 @@ function TransaksiRow({ item }: { item: PiutangTransaksiRow }) {
 
 function AgenCard({
   row,
+  terbukaAgen,
+  terbukaDokumen,
   periodeLabel,
   lastUpdated,
   fetchBayarContext,
@@ -187,6 +259,8 @@ function AgenCard({
   submitTarik,
 }: {
   row: PiutangPerAgenRow;
+  terbukaAgen: PiutangTerbuka | undefined;
+  terbukaDokumen: RingkasanPiutangTerbuka["dokumen"];
   periodeLabel: string;
   lastUpdated: Date;
   fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
@@ -205,6 +279,9 @@ function AgenCard({
   ) => Promise<BayarPiutangResult[]>;
 }) {
   const status = statusOf(row);
+  // Status kesehatan piutang Agen = umur piutang terbuka TERBURUK (sama
+  // dengan Prioritas Penagihan); Agen tanpa piutang terbuka = Sehat.
+  const statusPiutang = esBalokStatus(terbukaAgen ? terbukaAgen.maxDaysOverdue : null);
   const [expanded, setExpanded] = useState(false);
   const [bayarOpen, setBayarOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -348,6 +425,20 @@ function AgenCard({
                   />
                   {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
                 </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn("h-5 gap-1 px-1.5 text-[10px]", STATUS_PIUTANG_CLASS[statusPiutang].badge)}
+                  title={
+                    terbukaAgen
+                      ? `Piutang terbuka ${formatRupiah(terbukaAgen.outstanding)}; terlama ${
+                          terbukaAgen.maxDaysOverdue > 0 ? `lewat ${terbukaAgen.maxDaysOverdue} hari dari jatuh tempo` : "belum jatuh tempo"
+                        }`
+                      : "Tidak ada piutang terbuka"
+                  }
+                >
+                  <span className={cn("size-1.5 rounded-full", STATUS_PIUTANG_CLASS[statusPiutang].dot)} />
+                  {statusPiutang}
+                </Badge>
                 {hasPin && (
                   <Button
                     variant="ghost"
@@ -385,7 +476,11 @@ function AgenCard({
             </div>
             <div className="flex flex-col gap-1">
               {visibleTransaksi.map((item, i) => (
-                <TransaksiRow key={`${item.noDokumen}-${item.tipe}-${i}`} item={item} />
+                <TransaksiRow
+                  key={`${item.noDokumen}-${item.tipe}-${i}`}
+                  item={item}
+                  terbuka={bacaTerbuka(terbukaDokumen[`${row.agenId}|${item.noDokumen}`])}
+                />
               ))}
             </div>
           </div>
@@ -510,6 +605,8 @@ function monthStartISO(): string {
 // client-adjustable after first load.
 export function PiutangPerAgenTable({
   initialRows,
+  initialTerbuka,
+  fetchTerbuka,
   fetchAction,
   fetchBayarContext,
   submitBayar,
@@ -517,6 +614,11 @@ export function PiutangPerAgenTable({
   submitTarik,
 }: {
   initialRows: PiutangPerAgenRow[];
+  // Sisa piutang terbuka per pesanan (FIFO) — sumber status Sehat/Perhatian/
+  // Kritis per Agen dan indikator umur per transaksi. Tidak bergantung pada
+  // rentang tanggal; dimuat ulang hanya setelah Bayar/Tarik.
+  initialTerbuka: RingkasanPiutangTerbuka;
+  fetchTerbuka: () => Promise<RingkasanPiutangTerbuka>;
   fetchAction: (startDate: string, endDate: string) => Promise<PiutangPerAgenRow[]>;
   fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
   submitBayar: (
@@ -536,12 +638,14 @@ export function PiutangPerAgenTable({
   const [startDate, setStartDate] = useState(monthStartISO());
   const [endDate, setEndDate] = useState(todayISO());
   const [rows, setRows] = useState(initialRows);
+  const [terbuka, setTerbuka] = useState(initialTerbuka);
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [statusPiutang, setStatusPiutang] = useState<StatusPiutangFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("SaldoAkhir");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -570,7 +674,9 @@ export function PiutangPerAgenTable({
     catatan: string | null
   ) {
     const results = await submitBayar(agenId, jumlah, kasBank, catatan);
-    setRows(await fetchAction(startDate, endDate));
+    const [nextRows, nextTerbuka] = await Promise.all([fetchAction(startDate, endDate), fetchTerbuka()]);
+    setRows(nextRows);
+    setTerbuka(nextTerbuka);
     setLastUpdated(new Date());
     return results;
   }
@@ -584,7 +690,9 @@ export function PiutangPerAgenTable({
     catatan: string | null
   ) {
     const results = await submitTarik(agenId, jumlah, kasBank, catatan);
-    setRows(await fetchAction(startDate, endDate));
+    const [nextRows, nextTerbuka] = await Promise.all([fetchAction(startDate, endDate), fetchTerbuka()]);
+    setRows(nextRows);
+    setTerbuka(nextTerbuka);
     setLastUpdated(new Date());
     return results;
   }
@@ -598,9 +706,19 @@ export function PiutangPerAgenTable({
     }
   }
 
+  // Status kesehatan piutang per Agen — aturan yang sama dengan chip di kartu.
+  const statusPiutangOf = useCallback(
+    (agenId: string): EsBalokPiutangStatus => {
+      const t = terbuka.agen[agenId];
+      return esBalokStatus(t ? t[1] : null);
+    },
+    [terbuka]
+  );
+
   const filtered = useMemo(() => {
     let result = rows.filter((r) => {
       if (status !== "all" && statusOf(r) !== status) return false;
+      if (statusPiutang !== "all" && statusPiutangOf(r.agenId) !== statusPiutang) return false;
       if (search && !r.nama.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
@@ -611,9 +729,9 @@ export function PiutangPerAgenTable({
       return dir * (a.saldoAkhir - b.saldoAkhir);
     });
     return result;
-  }, [rows, search, status, sortKey, sortDir]);
+  }, [rows, search, status, statusPiutang, statusPiutangOf, sortKey, sortDir]);
 
-  const filterKey = `${search}|${status}`;
+  const filterKey = `${search}|${status}|${statusPiutang}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
@@ -663,16 +781,30 @@ export function PiutangPerAgenTable({
       <div className="flex flex-wrap items-center gap-2">
         <Input placeholder="Cari nama Agen..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
         <Select value={status} onValueChange={(v) => setStatus((v as StatusFilter) ?? "all")}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-36" aria-label="Jenis">
             <SelectValue>
-              {() => (status === "all" ? "Semua Status" : status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas")}
+              {() => (status === "all" ? "Semua Jenis" : status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas")}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
+            <SelectItem value="all">Semua Jenis</SelectItem>
             <SelectItem value="hutang">Hutang</SelectItem>
             <SelectItem value="tabungan">Tabungan</SelectItem>
             <SelectItem value="lunas">Lunas</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={statusPiutang}
+          onValueChange={(v) => setStatusPiutang((v as StatusPiutangFilter) ?? "all")}
+        >
+          <SelectTrigger className="w-36" aria-label="Status">
+            <SelectValue>{() => (statusPiutang === "all" ? "Semua Status" : statusPiutang)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Status</SelectItem>
+            <SelectItem value="Sehat">Sehat</SelectItem>
+            <SelectItem value="Perhatian">Perhatian</SelectItem>
+            <SelectItem value="Kritis">Kritis</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex flex-1 flex-wrap items-center gap-1.5 sm:justify-end">
@@ -694,6 +826,8 @@ export function PiutangPerAgenTable({
           <AgenCard
             key={r.agenId}
             row={r}
+            terbukaAgen={bacaTerbuka(terbuka.agen[r.agenId])}
+            terbukaDokumen={terbuka.dokumen}
             periodeLabel={periodeLabel}
             lastUpdated={lastUpdated}
             fetchBayarContext={fetchBayarContext}
