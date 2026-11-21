@@ -12,7 +12,14 @@ import {
   type ReschedulePemesananInput,
   type SalesReturnDetail,
 } from "@/lib/queries/pemesanan";
-import { getCurrentAssignment, type CurrentAssignment } from "@/lib/queries/pengiriman-jadwal";
+import {
+  getCurrentAssignment,
+  getArmadaKetersediaan,
+  type CurrentAssignment,
+  type ArmadaKetersediaan,
+} from "@/lib/queries/pengiriman-jadwal";
+import { getArmadaList } from "@/lib/queries/armada";
+import { requireModuleAccess } from "@/lib/require-access";
 import { createTakeAwayPemesanan, type CreateTakeAwayInput, type CreateTakeAwayResult } from "@/lib/queries/takeaway";
 import {
   getEditableSalesOrderQty,
@@ -22,6 +29,24 @@ import {
 } from "@/lib/queries/sales-order";
 import { getMitraPiutangSummary, type MitraPiutangSummary } from "@/lib/queries/mitra-piutang";
 import { runAction, type ActionResult } from "@/lib/action-result";
+
+// Dropdown "Pilih armada" di Buat Pemesanan: status armada sekarang + isi
+// keberangkatan (batch) yang bentrok dengan jam pengiriman yang dipilih.
+// jamJadwalISO dihitung di browser (resolveBusinessDateTime, zona WIB) —
+// sama dengan yang dikirim checkArmadaConflictAction — bukan dihitung ulang
+// di server yang berzona UTC.
+export async function getArmadaKetersediaanAction(
+  jamJadwalISO: string,
+  candidateQty: number,
+  excludeSalesOrderId?: string
+): Promise<ArmadaKetersediaan[]> {
+  await requireModuleAccess("pemesanan");
+  const jamJadwal = new Date(jamJadwalISO);
+  if (Number.isNaN(jamJadwal.getTime())) return [];
+  const qty = Number.isFinite(candidateQty) && candidateQty > 0 ? candidateQty : 0;
+  const armadaIds = (await getArmadaList()).map((a) => a.ArmadaID);
+  return getArmadaKetersediaan(armadaIds, jamJadwal, qty, excludeSalesOrderId ? [excludeSalesOrderId] : []);
+}
 
 // Powers the mitra-info card in the "Buat Pemesanan" dialog — fetched
 // on-demand once an operator picks a mitra, not with the initial page load

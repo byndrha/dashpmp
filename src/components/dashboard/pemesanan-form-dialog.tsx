@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,12 +31,14 @@ import type { MitraRow, PriceLevelOption } from "@/lib/queries/mitra";
 import type { ArmadaRow } from "@/lib/queries/armada";
 import type { DriverOption } from "@/lib/queries/delivery";
 import type { KantongVariant } from "@/lib/queries/sales-order";
-import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
+import type { ArmadaConflictInfo, ArmadaKetersediaan } from "@/lib/queries/pengiriman-jadwal";
+import { ArmadaPilihan } from "@/components/dashboard/armada-pilihan";
 import type { MitraPiutangSummary } from "@/lib/queries/mitra-piutang";
 import {
   createPemesananAction,
   createTakeAwayPemesananAction,
   getMitraPiutangSummaryAction,
+  getArmadaKetersediaanAction,
 } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 import { checkArmadaConflictAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 
@@ -84,6 +86,38 @@ export function PemesananFormDialog({
   // gets treated as "ready" for the newly selected one just because a
   // network response hasn't landed yet.
   const piutangLoading = !!businessPartnerId && piutangSummary?.BusinessPartnerID !== businessPartnerId;
+
+  // Ketersediaan armada (status sekarang + sisa kapasitas batch di jam yang
+  // dipilih) untuk dropdown armada. Diambil ulang dengan jeda singkat setiap
+  // tanggal/jam/qty berubah; kunciKetersediaan menandai respons mana yang
+  // cocok dengan isian saat ini, jadi "memuat" diturunkan, bukan state terpisah.
+  const qtyKandidat = (Number(qty) || 0) + (Number(bonusQty) || 0);
+  const kunciKetersediaan = `${date}|${time}|${qtyKandidat}`;
+  const [ketersediaan, setKetersediaan] = useState<{ kunci: string; data: Map<number, ArmadaKetersediaan> }>({
+    kunci: "",
+    data: new Map(),
+  });
+  const memuatKetersediaan = ketersediaan.kunci !== kunciKetersediaan;
+
+  useEffect(() => {
+    if (!open || isTakeAway || !date || !/^\d{2}:\d{2}$/.test(time)) return;
+    let batal = false;
+    const t = setTimeout(() => {
+      const jamJadwal = resolveBusinessDateTime(date, time);
+      getArmadaKetersediaanAction(jamJadwal.toISOString(), qtyKandidat)
+        .then((rows) => {
+          if (!batal) setKetersediaan({ kunci: kunciKetersediaan, data: new Map(rows.map((r) => [r.armadaId, r])) });
+        })
+        .catch(() => {
+          // Info pelengkap: bila gagal, dropdown tetap bisa dipakai tanpa data kapasitas.
+          if (!batal) setKetersediaan({ kunci: kunciKetersediaan, data: new Map() });
+        });
+    }, 400);
+    return () => {
+      batal = true;
+      clearTimeout(t);
+    };
+  }, [open, isTakeAway, date, time, qtyKandidat, kunciKetersediaan]);
 
   // Fetched on-demand per selected mitra, mirroring SalesTodayPanel's
   // side-fetch pattern for a comparison figure — this dialog's mitra list
@@ -217,7 +251,8 @@ export function PemesananFormDialog({
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button className="h-9" onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
         Buat Pemesanan
       </Button>
 
@@ -410,25 +445,18 @@ export function PemesananFormDialog({
             </label>
 
             {!isTakeAway && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1.5">
                   <Label className="sr-only">Armada</Label>
-                  <Select value={armadaId} onValueChange={(v) => setArmadaId(v ?? UNSET)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Pilih armada">
-                        {(v: string) =>
-                          v === UNSET ? "Pilih armada" : (armadaList.find((a) => String(a.ArmadaID) === v)?.Nama ?? "Pilih armada")
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {armadaList.map((a) => (
-                        <SelectItem key={a.ArmadaID} value={String(a.ArmadaID)} disabled={a.Status !== "Baik"}>
-                          {a.Nama} {a.Status !== "Baik" && `(${a.Status})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ArmadaPilihan
+                    armadaList={armadaList}
+                    value={armadaId}
+                    onChange={setArmadaId}
+                    ketersediaan={ketersediaan.data}
+                    memuat={memuatKetersediaan}
+                    candidateQty={qtyKandidat}
+                    kosong={UNSET}
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="sr-only">Driver</Label>
@@ -467,6 +495,7 @@ export function PemesananFormDialog({
       {conflict && (
         <ArmadaConflictDialog
           conflict={conflict.info}
+          izinkanMelebihiKapasitas
           onCancel={() => setConflict(null)}
           onConfirm={() => {
             const { deliveryDateTime, jamJadwal } = conflict;

@@ -26,10 +26,12 @@ import {
   reschedulePemesananAction,
   getEditableSalesOrderQtyAction,
   updateSalesOrderQtyAction,
+  getArmadaKetersediaanAction,
 } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 import { checkArmadaConflictAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import { ArmadaConflictDialog } from "@/components/dashboard/armada-conflict-dialog";
-import type { ArmadaConflictInfo } from "@/lib/queries/pengiriman-jadwal";
+import type { ArmadaConflictInfo, ArmadaKetersediaan } from "@/lib/queries/pengiriman-jadwal";
+import { ArmadaPilihan } from "@/components/dashboard/armada-pilihan";
 import { formatKemasanQty } from "@/lib/format";
 
 const UNSET = "__unset__";
@@ -115,6 +117,43 @@ export function UbahPemesananDialog({
       })
       .finally(() => setLoading(false));
   }, [target]);
+
+  // Ketersediaan armada (sama dengan Buat Pemesanan): status sekarang + isi
+  // batch di jam yang dipilih, TANPA pesanan ini sendiri (ia sudah ada di
+  // batch lamanya). Qty kandidat = total kantong pesanan ini setelah diubah
+  // (bonus tetap), 5 KG dihitung setengah — konvensi JADWAL_KANTONG_EXPR.
+  const bonus10 = target && initialQty10KG != null ? target.qty10KG - initialQty10KG : 0;
+  const bonus5 = target && initialQty5KG != null ? target.qty5KG - initialQty5KG : 0;
+  const total10 = initialQty10KG != null ? (Number(qty10KG) || 0) + bonus10 : (target?.qty10KG ?? 0);
+  const total5 = initialQty5KG != null ? (Number(qty5KG) || 0) + bonus5 : (target?.qty5KG ?? 0);
+  const qtyKandidat = total10 + total5 / 2;
+  const kunciKetersediaan = `${target?.salesOrderId}|${date}|${time}|${qtyKandidat}`;
+  const [ketersediaan, setKetersediaan] = useState<{ kunci: string; data: Map<number, ArmadaKetersediaan> }>({
+    kunci: "",
+    data: new Map(),
+  });
+  const memuatKetersediaan = ketersediaan.kunci !== kunciKetersediaan;
+
+  useEffect(() => {
+    if (!target || loading || !/^\d{2}:\d{2}$/.test(time)) return;
+    let batal = false;
+    const t = setTimeout(() => {
+      // Tanpa tanggal (SO belum dijadwalkan): tetap ambil status armada
+      // SEKARANG; sisa per batch tidak ditampilkan (tanpaWaktu).
+      const jamJadwal = date ? new Date(`${date}T${time}:00`) : new Date();
+      getArmadaKetersediaanAction(jamJadwal.toISOString(), qtyKandidat, target.salesOrderId)
+        .then((rows) => {
+          if (!batal) setKetersediaan({ kunci: kunciKetersediaan, data: new Map(rows.map((r) => [r.armadaId, r])) });
+        })
+        .catch(() => {
+          if (!batal) setKetersediaan({ kunci: kunciKetersediaan, data: new Map() });
+        });
+    }, 400);
+    return () => {
+      batal = true;
+      clearTimeout(t);
+    };
+  }, [target, loading, date, time, qtyKandidat, kunciKetersediaan]);
 
   const canSubmit =
     !!target &&
@@ -222,27 +261,19 @@ export function UbahPemesananDialog({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-2">
                     <div className="flex flex-col gap-1.5">
                       <Label className="sr-only">Armada</Label>
-                      <Select value={armadaId} onValueChange={(v) => setArmadaId(v ?? UNSET)}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih armada">
-                            {(v: string) =>
-                              v === UNSET
-                                ? "Pilih armada"
-                                : (armadaList.find((a) => String(a.ArmadaID) === v)?.Nama ?? "Pilih armada")
-                            }
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {armadaList.map((a) => (
-                            <SelectItem key={a.ArmadaID} value={String(a.ArmadaID)} disabled={a.Status !== "Baik"}>
-                              {a.Nama} {a.Status !== "Baik" && `(${a.Status})`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <ArmadaPilihan
+                        armadaList={armadaList}
+                        value={armadaId}
+                        onChange={setArmadaId}
+                        ketersediaan={ketersediaan.data}
+                        memuat={memuatKetersediaan}
+                        candidateQty={qtyKandidat}
+                        kosong={UNSET}
+                        tanpaWaktu={!date}
+                      />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <Label className="sr-only">Driver</Label>
@@ -330,6 +361,7 @@ export function UbahPemesananDialog({
       {conflict && (
         <ArmadaConflictDialog
           conflict={conflict.info}
+          izinkanMelebihiKapasitas
           onCancel={() => setConflict(null)}
           onConfirm={() => {
             if (!target) return;

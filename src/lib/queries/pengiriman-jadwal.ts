@@ -1362,6 +1362,67 @@ export async function checkArmadaConflict(
   };
 }
 
+// Ketersediaan armada untuk dropdown "Pilih armada" di Buat Pemesanan:
+//  - operasional: apa yang sedang dikerjakan armada SEKARANG (diam, muat,
+//    dalam pengiriman, perjalanan kembali, maintenance, ...) — sama dengan
+//    tooltip GPS di halaman Pengiriman (getArmadaOperationalStatuses).
+//  - batch: keberangkatan (Draft/Terbit) armada itu yang bentrok dengan jam
+//    pengiriman yang dipilih — persis keberangkatan yang akan digabungi
+//    pesanan baru (logika sama dengan checkArmadaConflict/createJadwalDraft),
+//    beserta jumlah kantong yang sudah terisi di dalamnya.
+// Murni informasi; tidak menolak apa pun.
+export interface ArmadaKetersediaan {
+  armadaId: number;
+  operasional: ArmadaOperationalStatus | null;
+  batch: { jadwalId: number; status: JadwalStatus; jamJadwal: string; terisi: number } | null;
+}
+
+export async function getArmadaKetersediaan(
+  armadaIds: number[],
+  candidateStart: Date,
+  candidateQty: number,
+  // Ubah Pemesanan: SO yang sedang dijadwal ulang sudah ada di batch lamanya —
+  // dikecualikan supaya isinya tidak terhitung dua kali.
+  excludeSalesOrderIds: string[] = []
+): Promise<ArmadaKetersediaan[]> {
+  if (armadaIds.length === 0) return [];
+  const pool = await getPool();
+  const pabrikLocation = await getPabrikLocation();
+  const pabrikLatLng: LatLng = { lat: pabrikLocation.latitude, lng: pabrikLocation.longitude };
+  const candidateEnd = new Date(
+    candidateStart.getTime() + (estimateDeliveryMinutes(Math.max(candidateQty, 0)) + CONFIRMATION_MINUTES_PER_STOP) * 60 * 1000
+  );
+
+  const [operasional, batches] = await Promise.all([
+    // Status sekarang bersifat pelengkap — galat di sini tidak boleh
+    // menggagalkan info kapasitas.
+    getArmadaOperationalStatuses(armadaIds, getBusinessDateISO()).catch(() => new Map<number, ArmadaOperationalStatus>()),
+    Promise.all(
+      armadaIds.map(async (armadaId) => {
+        const window = await findOverlappingJadwalForArmada(pool, pabrikLatLng, armadaId, candidateStart, candidateEnd, null);
+        if (!window) return null;
+        const detail = await pool
+          .request()
+          .input("jadwalId", sql.Int, window.jadwalId)
+          .query(`SELECT SalesOrderID FROM DashboardPengirimanJadwalDetail WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+        const terisi = await sumSalesOrderQty(
+          pool,
+          (detail.recordset as { SalesOrderID: string }[])
+            .map((r) => r.SalesOrderID)
+            .filter((id) => !excludeSalesOrderIds.includes(id))
+        );
+        return { jadwalId: window.jadwalId, status: window.status, jamJadwal: window.start.toISOString(), terisi };
+      })
+    ),
+  ]);
+
+  return armadaIds.map((armadaId, i) => ({
+    armadaId,
+    operasional: operasional.get(armadaId) ?? null,
+    batch: batches[i],
+  }));
+}
+
 // Moves every JadwalDetail row from `sourceJadwalId` onto `targetJadwalId`
 // (continuing target's own Urutan) and soft-deletes the now-empty source
 // header — used when updateJadwalDriverTime retimes a Draft into another
@@ -1637,15 +1698,20 @@ export async function findDraftJadwalByArmadaAndTime(armadaId: number, jamJadwal
   return row?.JadwalID ?? null;
 }
 
-export async function createJadwalDraft(input: {
-  armadaId: number;
-  jamJadwal: Date;
-  salesOrderIds: string[];
-}): Promise<number> {
+export async function createJadwalDraft(
+  input: {
+    armadaId: number;
+    jamJadwal: Date;
+    salesOrderIds: string[];
+  },
+  opsi: OpsiKapasitas = {}
+): Promise<number> {
   const pool = await getPool();
 
-  const totalQty = await sumSalesOrderQty(pool, input.salesOrderIds);
-  await assertWithinCapacity(pool, input.armadaId, totalQty);
+  if (!opsi.abaikanKapasitas) {
+    const totalQty = await sumSalesOrderQty(pool, input.salesOrderIds);
+    await assertWithinCapacity(pool, input.armadaId, totalQty);
+  }
   await assertJamJadwalNotBeforeOrders(pool, input.salesOrderIds, input.jamJadwal);
 
   // An armada can't have two Jadwal with overlapping estimated busy windows
@@ -1666,7 +1732,7 @@ export async function createJadwalDraft(input: {
         `Armada ini diperkirakan masih dalam perjalanan (berangkat, estimasi kembali ${formatTime(utcInstantToWibDisplay(conflict.end))}) — tidak bisa membuat keberangkatan baru yang tumpang tindih waktunya.`
       );
     }
-    await addSalesOrdersToJadwal(conflict.jadwalId, input.salesOrderIds);
+    await addSalesOrdersToJadwal(conflict.jadwalId, input.salesOrderIds, opsi);
     return conflict.jadwalId;
   }
 
@@ -1884,7 +1950,14 @@ export async function deleteJadwalDraft(jadwalId: number): Promise<void> {
 // to an already-issued DO. Urutan continues from the current max so new
 // stops land at the end of the route by default (still reorderable via
 // drag-and-drop afterwards).
-export async function addSalesOrdersToJadwal(jadwalId: number, salesOrderIds: string[]): Promise<void> {
+// opsi.abaikanKapasitas: HANYA untuk Buat Pemesanan (createPemesanan) —
+// pengguna meminta kapasitas penuh cukup diberi peringatan, tidak ditolak.
+// Semua pemanggil lain tetap memakai batas keras KapasitasMaks.
+export interface OpsiKapasitas {
+  abaikanKapasitas?: boolean;
+}
+
+export async function addSalesOrdersToJadwal(jadwalId: number, salesOrderIds: string[], opsi: OpsiKapasitas = {}): Promise<void> {
   if (salesOrderIds.length === 0) return;
   const pool = await getPool();
 
@@ -1906,8 +1979,10 @@ export async function addSalesOrdersToJadwal(jadwalId: number, salesOrderIds: st
   const existingRows = existing.recordset as { SalesOrderID: string; Urutan: number }[];
   const maxUrutan = existingRows.reduce((max, r) => Math.max(max, r.Urutan), -1);
 
-  const totalQty = await sumSalesOrderQty(pool, [...existingRows.map((r) => r.SalesOrderID), ...salesOrderIds]);
-  await assertWithinCapacity(pool, headerRow.ArmadaID, totalQty);
+  if (!opsi.abaikanKapasitas) {
+    const totalQty = await sumSalesOrderQty(pool, [...existingRows.map((r) => r.SalesOrderID), ...salesOrderIds]);
+    await assertWithinCapacity(pool, headerRow.ArmadaID, totalQty);
+  }
 
   for (let i = 0; i < salesOrderIds.length; i++) {
     await pool

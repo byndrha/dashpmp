@@ -10,10 +10,14 @@ export function ArmadaConflictDialog({
   conflict,
   onConfirm,
   onCancel,
+  izinkanMelebihiKapasitas = false,
 }: {
   conflict: ArmadaConflictInfo;
   onConfirm: () => void;
   onCancel: () => void;
+  // true hanya dari Buat Pemesanan: kapasitas terlampaui cukup diperingatkan,
+  // tombol Gabungkan tetap aktif (server juga melewati batas untuk alur itu).
+  izinkanMelebihiKapasitas?: boolean;
 }) {
   return (
     <Dialog open onOpenChange={(next) => !next && onCancel()}>
@@ -40,7 +44,8 @@ export function ArmadaConflictDialog({
           {conflict.wouldExceedCapacity && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-destructive">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-              Melebihi kapasitas maksimum armada ({conflict.kapasitasMaks} kantong).
+              Melebihi kapasitas maksimum armada ({conflict.kapasitasMaks} kantong)
+              {izinkanMelebihiKapasitas ? " — tetap bisa digabung." : "."}
             </p>
           )}
         </div>
@@ -48,7 +53,7 @@ export function ArmadaConflictDialog({
           <Button variant="outline" onClick={onCancel}>
             Batal
           </Button>
-          <Button onClick={onConfirm} disabled={conflict.wouldExceedCapacity}>
+          <Button onClick={onConfirm} disabled={conflict.wouldExceedCapacity && !izinkanMelebihiKapasitas}>
             Gabungkan
           </Button>
         </DialogFooter>
