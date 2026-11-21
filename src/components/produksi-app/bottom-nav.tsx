@@ -11,12 +11,12 @@ const TABS: { key: ProduksiTabKey; label: string; icon: typeof Snowflake }[] = [
   { key: "aktivitas-produksi", label: "Aktivitas", icon: Users },
 ];
 
-// Potongan tengah bilah (lebar 120, tinggi 64): lekukan berbahu melengkung
+// Potongan tengah bilah (lebar 120, tinggi 72): lekukan berbahu melengkung
 // halus tempat tombol tengah "duduk" — ±10 px dari tepi tombol (Ø56,
 // pusat 1 px di atas tepi bilah) di sepanjang lengkungnya. Sisi kiri & kanan bilah berupa kotak
 // biasa yang melebar, jadi bentuk lekukan tidak ikut terdistorsi.
 const LEKUK_PATH =
-  "M0,0 H6 C18,0 22,5 26,13 C33,29 45,38 60,38 C75,38 87,29 94,13 C98,5 102,0 114,0 H120 V64 H0 Z";
+  "M0,0 H6 C18,0 22,5 26,13 C33,29 45,38 60,38 C75,38 87,29 94,13 C98,5 102,0 114,0 H120 V72 H0 Z";
 
 // Bilah navigasi bawah yang MELAYANG (berjarak dari tepi bawah & samping —
 // isi halaman terlihat di sekitarnya; ProduksiTabShell memberi ruang bawah
@@ -39,7 +39,9 @@ export function ProduksiBottomNav({
 }) {
   if (locked) return null;
 
-  function tombolTab(tab: (typeof TABS)[number]) {
+  // geser: digeser horizontal tanpa mengubah lebar area tab — tab terluar
+  // menjauhi tepi bilah, tab dalam mendekati tombol tengah.
+  function tombolTab(tab: (typeof TABS)[number], geser: string) {
     const active = activeTab === tab.key;
     return (
       <button
@@ -48,7 +50,8 @@ export function ProduksiBottomNav({
         onClick={() => onChange(tab.key)}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 whitespace-nowrap text-[10.5px] transition-colors",
+          "flex min-w-0 flex-1 flex-col items-center justify-end gap-[7px] whitespace-nowrap pb-[10px] text-[10.5px] leading-[15px] transition-colors",
+          geser,
           active ? "font-semibold text-primary" : "text-muted-foreground"
         )}
       >
@@ -63,20 +66,20 @@ export function ProduksiBottomNav({
       className="pointer-events-none absolute inset-x-2.5 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 drop-shadow-[0_6px_18px_rgb(0_0_0/0.14)]"
       aria-label="Navigasi"
     >
-      <div className="pointer-events-auto relative flex h-16">
+      <div className="pointer-events-auto relative flex h-[72px]">
         <div className="flex flex-1 rounded-l-[1.75rem] bg-card">
-          {tombolTab(TABS[0])}
-          {tombolTab(TABS[1])}
+          {tombolTab(TABS[0], "translate-x-[6px]")}
+          {tombolTab(TABS[1], "translate-x-[10px]")}
         </div>
-        <svg viewBox="0 0 120 64" className="-mx-px h-16 w-[122px] shrink-0 fill-card" preserveAspectRatio="none" aria-hidden>
+        <svg viewBox="0 0 120 72" className="-mx-px h-[72px] w-[122px] shrink-0 fill-card" preserveAspectRatio="none" aria-hidden>
           <path d={LEKUK_PATH} />
         </svg>
         <div className="flex flex-1 rounded-r-[1.75rem] bg-card">
-          {tombolTab(TABS[2])}
-          {tombolTab(TABS[3])}
+          {tombolTab(TABS[2], "-translate-x-[10px]")}
+          {tombolTab(TABS[3], "-translate-x-[6px]")}
         </div>
 
-        <span className="pointer-events-none absolute bottom-2.5 left-1/2 -translate-x-1/2 text-[10.5px] text-muted-foreground">
+        <span className="pointer-events-none absolute bottom-[10px] left-1/2 -translate-x-1/2 text-[10.5px] leading-[15px] text-muted-foreground">
           Periksa
         </span>
         <button
