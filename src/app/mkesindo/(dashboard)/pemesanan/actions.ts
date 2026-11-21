@@ -7,6 +7,8 @@ import {
   deletePemesanan,
   updateSalesOrderTransDate,
   getSalesReturnDetail,
+  cariPemesananByNomorDokumen,
+  type SalesOrderListRow,
   type CreatePemesananInput,
   type CreatePemesananResult,
   type ReschedulePemesananInput,
@@ -46,6 +48,13 @@ export async function getArmadaKetersediaanAction(
   const qty = Number.isFinite(candidateQty) && candidateQty > 0 ? candidateQty : 0;
   const armadaIds = (await getArmadaList()).map((a) => a.ArmadaID);
   return getArmadaKetersediaan(armadaIds, jamJadwal, qty, excludeSalesOrderId ? [excludeSalesOrderId] : []);
+}
+
+// Kotak pencarian: nomor dokumen berperiode (mis. MKE/SI/003449/2026-11/…)
+// dicari di semua tanggal — lihat cariPemesananByNomorDokumen.
+export async function cariPemesananDokumenAction(teks: string): Promise<ActionResult<SalesOrderListRow[]>> {
+  await requireModuleAccess("pemesanan");
+  return runAction(() => cariPemesananByNomorDokumen(String(teks).slice(0, 80)));
 }
 
 // Powers the mitra-info card in the "Buat Pemesanan" dialog — fetched

@@ -13,6 +13,7 @@ import { PemesananDocFilterDaftar } from "@/components/dashboard/pemesanan-doc-f
 import { PemesananFormDialog } from "@/components/dashboard/pemesanan-form-dialog";
 import { PemesananList } from "@/components/dashboard/pemesanan-list";
 import { TombolTampilanPemesanan } from "@/components/dashboard/pemesanan-tampilan";
+import { KotakCariPemesanan } from "@/components/dashboard/pemesanan-cari";
 
 function docFilterValue(value: string | undefined): "yes" | "no" | undefined {
   return value === "yes" || value === "no" ? value : undefined;
@@ -95,9 +96,11 @@ export default async function PemesananPage({
       <h1 className="sr-only">Pemesanan</h1>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <TombolTampilanPemesanan />
-        {/* Buat Pemesanan, lalu tombol ikon Filter di kanannya (dropdown berisi
-            tanggal & wilayah). */}
-        <div className="flex items-center gap-2">
+        {/* Kotak pencarian, Buat Pemesanan, lalu tombol ikon Filter (dropdown
+            berisi tanggal & wilayah). Di HP baris ini turun ke bawah dan kotak
+            pencarian mengisi sisa lebarnya. */}
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <KotakCariPemesanan className="min-w-0 flex-1 sm:w-72 sm:flex-none" />
           <PemesananFormDialog
             mitraList={mitraList}
             armadaList={armadaList}

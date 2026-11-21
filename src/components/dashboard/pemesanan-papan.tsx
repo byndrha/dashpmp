@@ -11,6 +11,7 @@ import { formatDate, formatDateWib, formatRupiah, formatTime, formatTimeWib } fr
 import { cn } from "@/lib/utils";
 import type { SalesOrderListRow } from "@/lib/queries/pemesanan";
 import { PemesananAksi, type PemesananAksiHandlers } from "@/components/dashboard/pemesanan-aksi";
+import { nomorPerKode, type KodeDokumen } from "@/lib/pencarian-pemesanan";
 
 export type TahapKey = "belum" | "dijadwalkan" | "dikirim" | "terfaktur" | "retur";
 
@@ -161,6 +162,32 @@ export function labelRetur(row: SalesOrderListRow): string {
 }
 
 // Lencana tahap satu pesanan — warna/ikon sama dengan kepala kolom Papan.
+// Hasil pencarian nomor dokumen: nomor DO/SI/SR yang cocok ditampilkan di
+// kartu/baris (nomor SO sudah selalu tampil — cukup disorot, lihat
+// SorotSo), dengan chip kode berwarna sama seperti ikon dokumen.
+export function NomorCocok({ row, cocok }: { row: SalesOrderListRow; cocok?: KodeDokumen[] }) {
+  const nomor = nomorPerKode(row);
+  const lain = (cocok ?? []).filter((k) => k !== "SO" && nomor[k]);
+  if (lain.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-col gap-0.5">
+      {lain.map((k) => (
+        <p key={k} className="flex min-w-0 items-center gap-1.5 text-[11px]">
+          <span className={cn("rounded-[3px] px-1 py-px text-[9px] font-extrabold leading-none text-white", WARNA_KODE[k])}>{k}</span>
+          <span className="truncate rounded bg-warning/20 px-1 font-medium text-foreground">{nomor[k]}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// Nomor SO pada kartu/baris, disorot bila nomor inilah yang cocok dengan pencarian.
+export function SorotSo({ row, cocok }: { row: SalesOrderListRow; cocok?: KodeDokumen[] }) {
+  return (
+    <span className={cn(cocok?.includes("SO") && "rounded bg-warning/20 px-1 font-medium text-foreground")}>{row.VoucherNo}</span>
+  );
+}
+
 export function TahapBadge({ row }: { row: SalesOrderListRow }) {
   const t = TAHAP.find((x) => x.key === tahapPesanan(row))!;
   const Icon = t.icon;
@@ -180,7 +207,17 @@ function waktu(value: string | Date | null): number {
 // digulir) — jadi kartu dibatasi per "halaman" dengan tombol Tampilkan lagi.
 const HALAMAN = 20;
 
-function KartuPesanan({ row, terlambat, aksi }: { row: SalesOrderListRow; terlambat: boolean; aksi: PemesananAksiHandlers }) {
+function KartuPesanan({
+  row,
+  terlambat,
+  aksi,
+  cocok,
+}: {
+  row: SalesOrderListRow;
+  terlambat: boolean;
+  aksi: PemesananAksiHandlers;
+  cocok?: KodeDokumen[];
+}) {
   const kirim = infoPengiriman(row);
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-card p-2.5 text-sm shadow-xs">
@@ -193,7 +230,7 @@ function KartuPesanan({ row, terlambat, aksi }: { row: SalesOrderListRow; terlam
       <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <FileText className="size-3" />
-          {row.VoucherNo}
+          <SorotSo row={row} cocok={cocok} />
         </span>
         <span className="inline-flex items-center gap-1">
           <CalendarDays className="size-3" />
@@ -208,6 +245,7 @@ function KartuPesanan({ row, terlambat, aksi }: { row: SalesOrderListRow; terlam
           )}
         </span>
       </p>
+      <NomorCocok row={row} cocok={cocok} />
       <div className="flex flex-wrap items-center gap-1">
         <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
           <MapPin className="size-3" />
@@ -265,11 +303,13 @@ function KolomTahap({
   rows,
   todayISO,
   aksiFor,
+  cocokPer,
 }: {
   tahap: Tahap;
   rows: SalesOrderListRow[];
   todayISO: string;
   aksiFor: (row: SalesOrderListRow) => PemesananAksiHandlers;
+  cocokPer?: Map<string, KodeDokumen[]>;
 }) {
   const [tampil, setTampil] = useState(HALAMAN);
   const total = rows.reduce((s, r) => s + r.Amount, 0);
@@ -331,6 +371,7 @@ function KolomTahap({
             row={r}
             terlambat={belumKirim && tanggalISO(r.TransDate) < todayISO}
             aksi={aksiFor(r)}
+            cocok={cocokPer?.get(r.SalesOrderID)}
           />
         ))}
         {rows.length === 0 && <p className="py-6 text-center text-xs text-muted-foreground">Tidak ada pesanan.</p>}
@@ -352,10 +393,14 @@ export function PemesananPapan({
   rows,
   todayISO,
   aksiFor,
+  cocokPer,
+  adaInfo = false,
 }: {
   rows: SalesOrderListRow[];
   todayISO: string;
   aksiFor: (row: SalesOrderListRow) => PemesananAksiHandlers;
+  cocokPer?: Map<string, KodeDokumen[]>;
+  adaInfo?: boolean; // baris keterangan pencarian tampil di atas papan → papan dipendekkan
 }) {
   const perTahap: Record<TahapKey, SalesOrderListRow[]> = { belum: [], dijadwalkan: [], dikirim: [], terfaktur: [], retur: [] };
   for (const r of rows) perTahap[tahapPesanan(r)].push(r);
@@ -368,7 +413,12 @@ export function PemesananPapan({
   perTahap.retur.sort((a, b) => waktu(b.ShippedAt ?? b.TransDate) - waktu(a.ShippedAt ?? a.TransDate));
 
   return (
-    <div className="-mx-3 h-[calc(100dvh-9.5rem)] min-h-96 overflow-auto overscroll-contain px-3 pb-4">
+    <div
+      className={cn(
+        "-mx-3 min-h-96 overflow-auto overscroll-contain px-3 pb-4",
+        adaInfo ? "h-[calc(100dvh-11.25rem)]" : "h-[calc(100dvh-9.5rem)]"
+      )}
+    >
       {/* Papan = SATU area gulir (bukan per kolom) setinggi sisa layar:
           kepala kolom sticky top-0 di dalamnya, yang bergulir hanya isi
           kolom, dan gulir samping tetap bisa saat lima kolom tidak muat.
@@ -376,7 +426,14 @@ export function PemesananPapan({
           ini perlu overflow-x untuk gulir samping.) */}
       <div className="grid auto-cols-[minmax(260px,1fr)] grid-flow-col gap-3">
         {TAHAP.map((t) => (
-          <KolomTahap key={t.key} tahap={t} rows={perTahap[t.key]} todayISO={todayISO} aksiFor={aksiFor} />
+          <KolomTahap
+            key={t.key}
+            tahap={t}
+            rows={perTahap[t.key]}
+            todayISO={todayISO}
+            aksiFor={aksiFor}
+            cocokPer={cocokPer}
+          />
         ))}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { getPool, sql } from "@/lib/db";
 import { createSalesOrderManual, softDeleteSalesOrder, type KantongVariant } from "@/lib/queries/sales-order";
 import { encodeInvoiceToken } from "@/lib/queries/invoice-public";
+import { KODE_DOKUMEN, parseKueriPemesanan, polaLikeDokumen } from "@/lib/pencarian-pemesanan";
 import {
   createJadwalDraft,
   deleteJadwalDraft,
@@ -183,6 +184,11 @@ export interface SalesOrderListRow {
   DoTransDate: string | Date | null;
   DoVehicleNo: string | null;
   DoSalesmanName: string | null;
+  // Nomor SI/SR milik pesanan ini (untuk kotak pencarian & sorotan dokumen
+  // yang cocok) — SI sama dengan yang dipakai InvoiceToken, SR sama dengan
+  // SalesReturnId (yang terbaru bila lebih dari satu).
+  SiVoucherNo: string | null;
+  SrVoucherNo: string | null;
 }
 
 export interface SalesOrderListFilter {
@@ -192,6 +198,9 @@ export interface SalesOrderListFilter {
   hasDO?: "yes" | "no";
   hasSoInvoice?: "yes" | "no";
   hasDoInvoice?: "yes" | "no";
+  // Batasi ke SO tertentu (hasil pencarian nomor dokumen) — from/to tetap
+  // wajib dan harus mencakup TransDate SO-SO tsb.
+  salesOrderIds?: string[];
 }
 
 // Peta SI/SR untuk SO DALAM RENTANG filter saja (diukur live 2026-11-21,
@@ -210,10 +219,15 @@ const DO_RENTANG = `SELECT DeliveryOrderID FROM DeliveryOrder WHERE IsDeleted = 
 // SalesInvoice.DeliveryOrderID disimpan berbungkus kutip tunggal.
 const SI_DO_KEY = "REPLACE(DeliveryOrderID, CHAR(39), '')";
 
-async function petaDariQuery(request: sql.Request, query: string): Promise<Map<string, string>> {
+interface DokumenTerkait {
+  id: string;
+  voucherNo: string | null;
+}
+
+async function petaDariQuery(request: sql.Request, query: string): Promise<Map<string, DokumenTerkait>> {
   const result = await request.query(query);
-  const map = new Map<string, string>();
-  for (const row of result.recordset as { K: string; M: string }[]) map.set(row.K, row.M);
+  const map = new Map<string, DokumenTerkait>();
+  for (const row of result.recordset as { K: string; M: string; V: string | null }[]) map.set(row.K, { id: row.M, voucherNo: row.V });
   return map;
 }
 
@@ -239,27 +253,33 @@ function getDocumentIdMaps(
   pool: sql.ConnectionPool,
   from: string,
   to: string
-): Promise<[Map<string, string>, Map<string, string>, Map<string, string>]> {
+): Promise<[Map<string, DokumenTerkait>, Map<string, DokumenTerkait>, Map<string, DokumenTerkait>]> {
   const req = () => pool.request().input("from", sql.Date, from).input("to", sql.Date, to);
   return Promise.all([
     // SI per SalesOrderID
     petaDariQuery(
       req(),
-      `SELECT SalesOrderID AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
-       WHERE IsDeleted = 0 AND SalesOrderID IN (${SO_RENTANG}) GROUP BY SalesOrderID`
+      `SELECT x.K, x.M, si.VoucherNo AS V FROM (
+         SELECT SalesOrderID AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
+         WHERE IsDeleted = 0 AND SalesOrderID IN (${SO_RENTANG}) GROUP BY SalesOrderID
+       ) x JOIN SalesInvoice si ON si.SalesInvoiceID = x.M`
     ),
     // SI per DeliveryOrderID
     petaDariQuery(
       req(),
-      `SELECT ${SI_DO_KEY} AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
-       WHERE IsDeleted = 0 AND ${SI_DO_KEY} IN (${DO_RENTANG}) GROUP BY ${SI_DO_KEY}`
+      `SELECT x.K, x.M, si.VoucherNo AS V FROM (
+         SELECT ${SI_DO_KEY} AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
+         WHERE IsDeleted = 0 AND ${SI_DO_KEY} IN (${DO_RENTANG}) GROUP BY ${SI_DO_KEY}
+       ) x JOIN SalesInvoice si ON si.SalesInvoiceID = x.M`
     ),
     // SR per DeliveryOrderID — SalesReturn.SalesOrderID selalu NULL (dicek
     // live), jadi DeliveryOrderID satu-satunya kunci yang andal.
     petaDariQuery(
       req(),
-      `SELECT DeliveryOrderID AS K, MAX(SalesReturnID) AS M FROM SalesReturn
-       WHERE IsDeleted = 0 AND DeliveryOrderID IN (${DO_RENTANG}) GROUP BY DeliveryOrderID`
+      `SELECT x.K, x.M, sr.VoucherNo AS V FROM (
+         SELECT DeliveryOrderID AS K, MAX(SalesReturnID) AS M FROM SalesReturn
+         WHERE IsDeleted = 0 AND DeliveryOrderID IN (${DO_RENTANG}) GROUP BY DeliveryOrderID
+       ) x JOIN SalesReturn sr ON sr.SalesReturnID = x.M`
     ),
   ]);
 }
@@ -278,6 +298,8 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
   const pool = await getPool();
   const request = pool.request().input("from", sql.Date, filter.from).input("to", sql.Date, filter.to);
   if (filter.wilayah) request.input("wilayah", sql.VarChar(128), filter.wilayah);
+  const idSo = filter.salesOrderIds ?? [];
+  idSo.forEach((id, i) => request.input(`so${i}`, sql.VarChar(32), id));
 
   // Peta SI/SR tidak bergantung pada hasil query utama (keduanya dibatasi
   // rentang yang sama), jadi dimulai bersamaan — hemat satu putaran DB.
@@ -344,12 +366,13 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     WHERE so.IsDeleted = 0
       AND so.TransDate >= @from AND so.TransDate < @to
       ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
+      ${filter.salesOrderIds ? `AND so.SalesOrderID IN (${idSo.length ? idSo.map((_, i) => `@so${i}`).join(", ") : "NULL"})` : ""}
     ORDER BY so.TransDate DESC
   `);
 
   const rows = result.recordset as (Omit<
     SalesOrderListRow,
-    "HasDO" | "InvoiceToken" | "HasSoInvoice" | "HasDoInvoice" | "SalesReturnId"
+    "HasDO" | "InvoiceToken" | "HasSoInvoice" | "HasDoInvoice" | "SalesReturnId" | "ReturQty" | "SiVoucherNo" | "SrVoucherNo"
   > & { DeliveryOrderID: string | null })[];
 
   // SalesInvoice/SalesReturn have 200K+/9K+ rows and no index on
@@ -369,16 +392,19 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     const hasDO = DeliveryOrderID != null;
     const soInvoiceId = soInvoiceMap.get(r.SalesOrderID);
     const doInvoiceId = hasDO ? doInvoiceMap.get(DeliveryOrderID) : undefined;
-    const invoiceSalesInvoiceId = soInvoiceId ?? doInvoiceId;
-    const salesReturnId = hasDO ? (doReturnMap.get(DeliveryOrderID) ?? null) : null;
+    const invoice = soInvoiceId ?? doInvoiceId;
+    const retur = hasDO ? doReturnMap.get(DeliveryOrderID) : undefined;
+    const salesReturnId = retur?.id ?? null;
     return {
       ...rest,
       HasDO: hasDO,
-      InvoiceToken: invoiceSalesInvoiceId ? encodeInvoiceToken(invoiceSalesInvoiceId) : null,
+      InvoiceToken: invoice ? encodeInvoiceToken(invoice.id) : null,
       HasSoInvoice: soInvoiceId != null,
       HasDoInvoice: doInvoiceId != null,
       SalesReturnId: salesReturnId,
       ReturQty: salesReturnId && hasDO ? (returQtyMap.get(DeliveryOrderID) ?? null) : null,
+      SiVoucherNo: invoice?.voucherNo ?? null,
+      SrVoucherNo: retur?.voucherNo ?? null,
     };
   });
 
@@ -391,6 +417,56 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
     if (filter.hasDoInvoice === "no" && r.HasDoInvoice) return false;
     return true;
   });
+}
+
+// Pencarian nomor dokumen BERPERIODE (lihat lib/pencarian-pemesanan.ts):
+// mengabaikan filter tanggal/wilayah halaman — dokumen yang dicari bisa di
+// luar rentang tampil. Nomor SO/DO/SI/SR dipetakan ke SalesOrderID-nya
+// (SI lewat SalesOrderID atau DO-nya; SR lewat DO, karena
+// SalesReturn.SalesOrderID selalu NULL), lalu baris lengkapnya diambil
+// dengan getSalesOrderList yang sama, dibatasi ke SO tsb. LIKE berawalan
+// tetap (MKE/SI/003449/2026-11%) — dicek live: instan tanpa batas tanggal.
+const BATAS_HASIL_CARI = 50;
+
+export async function cariPemesananByNomorDokumen(teks: string): Promise<SalesOrderListRow[]> {
+  const kueri = parseKueriPemesanan(teks);
+  if (kueri.jenis !== "dokumen" || !kueri.periode) return [];
+  const kodeList = kueri.kode ? [kueri.kode] : KODE_DOKUMEN;
+
+  const pool = await getPool();
+  const request = pool.request();
+  const bagian: string[] = [];
+  for (const kode of kodeList) {
+    request.input(`p${kode}`, sql.VarChar(64), polaLikeDokumen(kode, kueri));
+    if (kode === "SO")
+      bagian.push(`SELECT SalesOrderID AS S FROM SalesOrder WHERE IsDeleted = 0 AND VoucherNo LIKE @pSO`);
+    if (kode === "DO")
+      bagian.push(`SELECT SalesOrderID AS S FROM DeliveryOrder WHERE IsDeleted = 0 AND VoucherNo LIKE @pDO`);
+    if (kode === "SI")
+      bagian.push(`SELECT ISNULL(si.SalesOrderID, d.SalesOrderID) AS S FROM SalesInvoice si
+        LEFT JOIN DeliveryOrder d ON d.DeliveryOrderID = REPLACE(si.DeliveryOrderID, CHAR(39), '')
+        WHERE si.IsDeleted = 0 AND si.VoucherNo LIKE @pSI`);
+    if (kode === "SR")
+      bagian.push(`SELECT d.SalesOrderID AS S FROM SalesReturn sr
+        JOIN DeliveryOrder d ON d.DeliveryOrderID = sr.DeliveryOrderID
+        WHERE sr.IsDeleted = 0 AND sr.VoucherNo LIKE @pSR`);
+  }
+  const hasil = await request.query(`
+    SELECT TOP ${BATAS_HASIL_CARI} so.SalesOrderID, so.TransDate
+    FROM SalesOrder so
+    WHERE so.IsDeleted = 0 AND so.SalesOrderID IN (${bagian.join(" UNION ")})
+  `);
+  const soList = hasil.recordset as { SalesOrderID: string; TransDate: Date }[];
+  if (soList.length === 0) return [];
+
+  // Rentang dari TransDate SO-SO yang ketemu (naive WIB, jadi komponen UTC
+  // = tanggal kalender), batas atas eksklusif +1 hari.
+  const waktu = soList.map((r) => new Date(r.TransDate).getTime());
+  const from = new Date(Math.min(...waktu)).toISOString().slice(0, 10);
+  const akhir = new Date(Math.max(...waktu));
+  akhir.setUTCDate(akhir.getUTCDate() + 1);
+  const to = akhir.toISOString().slice(0, 10);
+  return getSalesOrderList({ from, to, salesOrderIds: soList.map((r) => r.SalesOrderID) });
 }
 
 export interface ReschedulePemesananInput {

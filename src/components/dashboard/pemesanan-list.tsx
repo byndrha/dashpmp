@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Truck } from "lucide-react";
+import { Loader2, Search, Truck } from "lucide-react";
 import { formatDateWib, formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesOrderListRow } from "@/lib/queries/pemesanan";
@@ -15,9 +15,21 @@ import {
 } from "@/components/dashboard/ubah-tanggal-pemesanan-dialog";
 import { SalesReturnDetailDialog } from "@/components/dashboard/sales-return-detail-dialog";
 import { PemesananAksi, type PemesananAksiHandlers } from "@/components/dashboard/pemesanan-aksi";
-import { PemesananPapan, TahapBadge, infoPengiriman, labelRetur, tahapPesanan, tanggalISO } from "@/components/dashboard/pemesanan-papan";
+import {
+  NomorCocok,
+  PemesananPapan,
+  SorotSo,
+  TahapBadge,
+  infoPengiriman,
+  labelRetur,
+  tahapPesanan,
+  tanggalISO,
+} from "@/components/dashboard/pemesanan-papan";
 import { SiPreviewDialog, type SiPreviewTarget } from "@/components/dashboard/si-preview-dialog";
 import { useTampilanPemesanan } from "@/components/dashboard/pemesanan-tampilan";
+import { useKueriPemesanan } from "@/components/dashboard/pemesanan-cari";
+import { cocokkanPesanan, parseKueriPemesanan, type KodeDokumen } from "@/lib/pencarian-pemesanan";
+import { cariPemesananDokumenAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
 
 // Kolom bersama kepala tabel & baris (layar lebar); di HP tiap baris jadi
 // kartu bertumpuk. Tahap memakai lencana yang sama dengan kolom Papan.
@@ -42,7 +54,17 @@ function KepalaDaftar() {
   );
 }
 
-function PemesananRow({ row, terlambat, aksi }: { row: SalesOrderListRow; terlambat: boolean; aksi: PemesananAksiHandlers }) {
+function PemesananRow({
+  row,
+  terlambat,
+  aksi,
+  cocok,
+}: {
+  row: SalesOrderListRow;
+  terlambat: boolean;
+  aksi: PemesananAksiHandlers;
+  cocok?: KodeDokumen[];
+}) {
   const kirim = infoPengiriman(row);
   return (
     <div className={cn("flex flex-col gap-2 px-3 py-2.5 text-sm hover:bg-muted/30", KOLOM_DAFTAR)}>
@@ -55,7 +77,7 @@ function PemesananRow({ row, terlambat, aksi }: { row: SalesOrderListRow; terlam
           <p className="shrink-0 font-display text-sm font-semibold tabular-nums md:hidden">{formatRupiah(row.Amount)}</p>
         </div>
         <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-          <span>{row.VoucherNo}</span>
+          <SorotSo row={row} cocok={cocok} />
           <span>&middot;</span>
           <span>{formatDateWib(row.TransDate)}</span>
           {terlambat && (
@@ -69,6 +91,7 @@ function PemesananRow({ row, terlambat, aksi }: { row: SalesOrderListRow; terlam
           <span>&middot;</span>
           <span>{row.Wilayah}</span>
         </p>
+        <NomorCocok row={row} cocok={cocok} />
       </div>
 
       {/* Tahap */}
@@ -128,6 +151,15 @@ function PemesananRow({ row, terlambat, aksi }: { row: SalesOrderListRow; terlam
   );
 }
 
+// Hasil pencarian nomor dokumen ke server — disimpan bersama kata kuncinya,
+// jadi "sedang memuat" cukup diturunkan (kunci hasil ≠ kunci sekarang) tanpa
+// setState di dalam effect.
+interface HasilCariServer {
+  kunci: string;
+  rows: SalesOrderListRow[];
+  error: string | null;
+}
+
 export function PemesananList({
   rows,
   armadaList,
@@ -145,6 +177,45 @@ export function PemesananList({
   const [editingTransDateTarget, setEditingTransDateTarget] = useState<UbahTanggalPemesananTarget | null>(null);
   const [openSalesReturnId, setOpenSalesReturnId] = useState<string | null>(null);
   const [siPreview, setSiPreview] = useState<SiPreviewTarget | null>(null);
+
+  // Pencarian: nama mitra & nomor tanpa periode disaring dari data yang
+  // tampil; nomor berperiode dicari ke server di semua tanggal (lihat
+  // lib/pencarian-pemesanan.ts).
+  const teksCari = useKueriPemesanan();
+  const kueri = useMemo(() => parseKueriPemesanan(teksCari), [teksCari]);
+  const kunciServer = kueri.jenis === "dokumen" && kueri.periode ? teksCari.trim() : null;
+  const [hasilServer, setHasilServer] = useState<HasilCariServer | null>(null);
+  useEffect(() => {
+    if (!kunciServer) return;
+    let batal = false;
+    const t = setTimeout(async () => {
+      const res = await cariPemesananDokumenAction(kunciServer).catch(() => null);
+      if (batal) return;
+      setHasilServer(
+        res?.success
+          ? { kunci: kunciServer, rows: res.data, error: null }
+          : { kunci: kunciServer, rows: [], error: res && !res.success ? res.error : "Gagal mencari dokumen." }
+      );
+    }, 400);
+    return () => {
+      batal = true;
+      clearTimeout(t);
+    };
+  }, [kunciServer]);
+  const hasilSiap = kunciServer != null && hasilServer?.kunci === kunciServer ? hasilServer : null;
+  const memuatServer = kunciServer != null && !hasilSiap;
+
+  const { tampilRows, cocokPer } = useMemo(() => {
+    const sumber = kunciServer ? (hasilSiap?.rows ?? []) : rows;
+    const cocokPer = new Map<string, KodeDokumen[]>();
+    const tampilRows = sumber.filter((r) => {
+      const c = cocokkanPesanan(r, kueri);
+      if (c) cocokPer.set(r.SalesOrderID, c);
+      return c != null;
+    });
+    return { tampilRows, cocokPer };
+  }, [rows, kueri, kunciServer, hasilSiap]);
+  const mencari = kueri.jenis !== "kosong";
 
   function aksiFor(r: SalesOrderListRow): PemesananAksiHandlers {
     return {
@@ -166,18 +237,30 @@ export function PemesananList({
         }),
       onOpenSr: () => setOpenSalesReturnId(r.SalesReturnId),
       onOpenSi: () => r.InvoiceToken && setSiPreview({ token: r.InvoiceToken, customerName: r.CustomerName, voucherNo: r.VoucherNo }),
-      onDeleted: () => router.refresh(),
+      onDeleted: () => {
+        setHasilServer(null);
+        router.refresh();
+      },
     };
   }
 
   return (
     <>
+      {mencari && (
+        <InfoPencarian
+          teks={teksCari}
+          jumlah={tampilRows.length}
+          semuaTanggal={kunciServer != null}
+          memuat={memuatServer}
+          error={hasilSiap?.error ?? null}
+        />
+      )}
       {tampilan === "papan" ? (
-        <PemesananPapan rows={rows} todayISO={todayISO} aksiFor={aksiFor} />
+        <PemesananPapan rows={tampilRows} todayISO={todayISO} aksiFor={aksiFor} cocokPer={cocokPer} adaInfo={mencari} />
       ) : (
         <div className="flex flex-col divide-y overflow-hidden rounded-xl border bg-card">
           <KepalaDaftar />
-          {rows.map((r) => {
+          {tampilRows.map((r) => {
             const t = tahapPesanan(r);
             return (
               <PemesananRow
@@ -185,11 +268,18 @@ export function PemesananList({
                 row={r}
                 terlambat={(t === "belum" || t === "dijadwalkan") && tanggalISO(r.TransDate) < todayISO}
                 aksi={aksiFor(r)}
+                cocok={cocokPer.get(r.SalesOrderID)}
               />
             );
           })}
-          {rows.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada Sales Order pada rentang ini.</p>
+          {tampilRows.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {memuatServer
+                ? "Mencari dokumen..."
+                : mencari
+                  ? "Tidak ada pesanan yang cocok."
+                  : "Tidak ada Sales Order pada rentang ini."}
+            </p>
           )}
         </div>
       )}
@@ -210,5 +300,39 @@ export function PemesananList({
       />
       <SiPreviewDialog target={siPreview} onOpenChange={(open) => !open && setSiPreview(null)} />
     </>
+  );
+}
+
+// Satu baris keterangan di atas hasil saat kotak pencarian terisi.
+function InfoPencarian({
+  teks,
+  jumlah,
+  semuaTanggal,
+  memuat,
+  error,
+}: {
+  teks: string;
+  jumlah: number;
+  semuaTanggal: boolean;
+  memuat: boolean;
+  error: string | null;
+}) {
+  return (
+    <p className="-mt-2 flex h-5 min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      {memuat ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <Search className="size-3.5 shrink-0" />}
+      <span className="truncate">
+        {memuat ? (
+          <>Mencari &ldquo;{teks.trim()}&rdquo; di semua tanggal...</>
+        ) : error ? (
+          <span className="text-destructive">{error}</span>
+        ) : (
+          <>
+            <span className="font-medium text-foreground">{jumlah.toLocaleString("id-ID")}</span>
+            {" pesanan cocok dengan "}&ldquo;{teks.trim()}&rdquo;
+            {semuaTanggal ? " — semua tanggal & wilayah (filter diabaikan)" : " — dalam filter tanggal & wilayah"}
+          </>
+        )}
+      </span>
+    </p>
   );
 }
