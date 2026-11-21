@@ -63,7 +63,7 @@ export function ProduksiBottomNav({
 
   return (
     <nav
-      className="pointer-events-none absolute inset-x-2.5 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 drop-shadow-[0_6px_18px_rgb(0_0_0/0.14)]"
+      className="pointer-events-none absolute inset-x-2.5 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 [filter:drop-shadow(0_10px_24px_rgb(0_0_0/0.2))_drop-shadow(0_2px_5px_rgb(0_0_0/0.12))]"
       aria-label="Navigasi"
     >
       <div className="pointer-events-auto relative flex h-[72px]">
