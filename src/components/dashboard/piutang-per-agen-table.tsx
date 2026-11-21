@@ -36,6 +36,13 @@ const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Pembayaran", key: "pembayaran", type: "number", width: 16 },
   { header: "Tarikan", key: "tarikan", type: "number", width: 14 },
   { header: "Saldo Akhir", key: "saldoAkhir", type: "number", width: 16 },
+  // Sama dengan chip di kartu: status dari piutang terbuka terburuk; usia =
+  // hari sejak tanggal pesanan belum lunas yang paling lama. Kosong bila
+  // Agen tidak punya piutang terbuka.
+  { header: "Status Piutang", key: "statusPiutang", width: 14 },
+  { header: "Piutang Terbuka", key: "piutangTerbuka", type: "number", width: 16 },
+  { header: "Usia Piutang Terlama (hari)", key: "usiaTerlama", type: "number", numFmt: "0", width: 26 },
+  { header: "Lewat Jatuh Tempo (hari)", key: "lewatJatuhTempo", type: "number", numFmt: "0", width: 24 },
 ];
 
 const MONTH_NAMES = [
@@ -744,17 +751,24 @@ export function PiutangPerAgenTable({
 
   const exportRows = useMemo(
     () =>
-      filtered.map((r) => ({
-        nama: r.nama,
-        tabunganAwal: r.tabunganAwal,
-        hutangAwal: r.hutangAwal,
-        pesanan: r.pesanan,
-        retur: r.retur,
-        pembayaran: r.pembayaran,
-        tarikan: r.tarikan,
-        saldoAkhir: r.saldoAkhir,
-      })),
-    [filtered]
+      filtered.map((r) => {
+        const t = terbuka.agen[r.agenId];
+        return {
+          nama: r.nama,
+          tabunganAwal: r.tabunganAwal,
+          hutangAwal: r.hutangAwal,
+          pesanan: r.pesanan,
+          retur: r.retur,
+          pembayaran: r.pembayaran,
+          tarikan: r.tarikan,
+          saldoAkhir: r.saldoAkhir,
+          statusPiutang: statusPiutangOf(r.agenId),
+          piutangTerbuka: t ? t[0] : null,
+          usiaTerlama: t ? Math.max(0, t[1] + ES_BALOK_JATUH_TEMPO_HARI) : null,
+          lewatJatuhTempo: t ? Math.max(0, t[1]) : null,
+        };
+      }),
+    [filtered, terbuka, statusPiutangOf]
   );
 
   return (
