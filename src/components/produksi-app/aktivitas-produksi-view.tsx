@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimProduksiRoster } from "@/components/produksi-app/tim-produksi-roster";
 import { MesinEventPanel } from "@/components/produksi-app/mesin-event-panel";
+import { KartuCatatMeter } from "@/components/listrik/kartu-catat-meter";
 import { RiwayatAktivitasProduksi } from "@/components/produksi-app/riwayat-aktivitas-produksi";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 import type { MesinEventRow } from "@/lib/queries/produksi-mesin-event";
@@ -296,6 +297,7 @@ export function AktivitasProduksiView({
             onChanged={onChanged}
           />
           <MesinEventPanel mesinList={mesinList} events={mesinEvents} onChanged={onChanged} />
+          <KartuCatatMeter />
           <QtyRecapCard
             qty={qty}
             jumlahHadir={

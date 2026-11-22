@@ -34,6 +34,7 @@ import { LembarAksiRek, type TampilanAwal } from "./lembar-aksi-rek";
 import { singkatVarian } from "../warna-tahap";
 import { PemilihKendaraan } from "./pemilih-kendaraan";
 import { RiwayatSaya, type DataRiwayat } from "./riwayat-saya";
+import { KartuCatatMeter } from "@/components/listrik/kartu-catat-meter";
 
 export type HasilAksi<T> = ActionResult<T> | { success: false; error: string; kodeGalat: KodeGalatProduksi };
 
@@ -350,6 +351,9 @@ export function ProduksiApp({
             {keadaan && daftarBak.length === 0 && (
               <p className="m-3 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{PESAN_DENAH_KOSONG}</p>
             )}
+            <div className="px-3 pt-3">
+              <KartuCatatMeter kode={kode} ringkas />
+            </div>
             {bakAktif && (
               <div className="flex flex-col pb-4">
                 <TabBak daftarBak={daftarBak} bakAktifId={bakAktif.id} onPilih={setBakAktifId} panenPerBak={panenPerBak} />

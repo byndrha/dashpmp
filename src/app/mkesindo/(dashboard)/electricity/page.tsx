@@ -15,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, formatPercent, formatRupiah } from "@/lib/format";
+import { currentEskristalKode } from "@/lib/tenant-request";
+import { HalamanListrik } from "@/components/listrik/halaman-listrik";
 
 export const metadata: Metadata = { title: "Kelistrikan" };
 
@@ -26,7 +28,7 @@ export default async function ElectricityPage({
   await requireModuleAccess("electricity");
   const params = await searchParams;
   const filter = resolveFilter(params);
-  const [entries, sales] = await Promise.all([getElectricityCosts(filter), getDailySales(filter)]);
+  const [entries, sales, kode] = await Promise.all([getElectricityCosts(filter), getDailySales(filter), currentEskristalKode()]);
 
   const totalCost = entries.reduce((sum, e) => sum + e.Debit - e.Credit, 0);
   const totalRevenue = sales.reduce((sum, s) => sum + s.NetSales, 0);
@@ -34,8 +36,16 @@ export default async function ElectricityPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-xl font-semibold">Kelistrikan</h1>
-      <FilterBar />
+      {/* Tahap 1: pencatatan meter PLN (lihat docs/riset/2026-11-22-riset-kelistrikan.md). */}
+      <HalamanListrik kode={kode} />
+
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t pt-6">
+        <div>
+          <h2 className="font-display text-base font-semibold">Biaya listrik di pembukuan</h2>
+          <p className="text-xs text-muted-foreground">Jurnal akun Listrik (tagihan PLN bulanan) dibanding pendapatan periode.</p>
+        </div>
+        <FilterBar />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard label="Total Biaya Listrik" value={formatRupiah(totalCost)} icon={Zap} tone="warning" />
