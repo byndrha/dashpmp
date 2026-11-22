@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useState, useTransition } from "react";
 import { Plus, Trash2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -112,8 +113,8 @@ function RoleCard({ peran, initialMap }: { peran: PeranRow; initialMap: Permissi
     });
   }
 
-  function handleDelete() {
-    if (!confirm(`Hapus peran "${peran.nama}"?`)) return;
+  async function handleDelete() {
+    if (!(await konfirmasi(`Hapus peran "${peran.nama}"?`))) return;
     setError(null);
     startTransition(async () => {
       const result = await deletePeranAction(peran.id);

@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Filter, HandCoins } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, HandCoins, Search, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { KELAS_PANEL_MENEMPEL, usePanelMenempel } from "@/hooks/use-panel-menempel";
 import {
   Select,
   SelectContent,
@@ -27,7 +29,7 @@ import type { AgingRow, PiutangStatus } from "@/lib/queries/aging";
 const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "ID Mitra", key: "businessPartnerId", type: "text", width: 12 },
   { header: "Mitra", key: "customerName", width: 26 },
-  { header: "Tipe", key: "partnerType", width: 12 },
+  { header: "Segmentasi", key: "partnerType", width: 12 },
   { header: "Wilayah", key: "wilayah", width: 16 },
   { header: "Kecamatan", key: "kecamatan", width: 16 },
   { header: "Kontak", key: "kontak", type: "text", width: 16 },
@@ -106,26 +108,38 @@ function groupByMitra(rows: AgingRow[]): MitraAgingGroup[] {
   return [...byPartner.values()];
 }
 
+// Status = hari lewat jatuh tempo invoice TERBURUK mitra (STATUS_CASE di
+// aging.ts: ≤30 Sehat, 31–60 Perhatian, >60 Kritis).
+const LABEL_STATUS_HARI: Record<PiutangStatus, string> = {
+  Sehat: "Sehat · ≤ 30 hari",
+  Perhatian: "Perhatian · 31–60 hari",
+  Kritis: "Kritis · > 60 hari",
+};
+
 function SortToggle({
   label,
   sortKey,
   active,
   direction,
   onSort,
+  penuh = false,
 }: {
   label: string;
   sortKey: SortKey;
   active: boolean;
   direction: "asc" | "desc";
   onSort: (key: SortKey) => void;
+  // Satu baris selebar popup (menu urutan di HP), bukan pil kecil.
+  penuh?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={() => onSort(sortKey)}
       className={cn(
-        "inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:text-foreground",
-        active ? "border-primary/40 text-foreground" : "border-border text-muted-foreground"
+        "inline-flex items-center gap-1 rounded-md px-2 text-xs transition-colors hover:text-foreground",
+        penuh ? "h-8 w-full justify-between text-sm" : "h-6",
+        active ? "bg-primary/10 font-medium text-foreground" : "text-muted-foreground"
       )}
     >
       {label}
@@ -253,7 +267,8 @@ export function AgingTable({ rows, perusahaanId }: { rows: AgingRow[]; perusahaa
   const [sortKey, setSortKey] = useState<SortKey>("DaysOverdue");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const panelAlatRef = useRef<HTMLDivElement>(null);
+  usePanelMenempel(panelAlatRef);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -318,70 +333,137 @@ export function AgingTable({ rows, perusahaanId }: { rows: AgingRow[]; perusahaa
     setPage(1);
   }
 
+  const jumlahFilterAktif = [partnerType !== "all", status !== "all"].filter(Boolean).length;
+
+  // Agen/Outlet/RPA/TakeAway/Lainnya = segmentasi mitra Es Kristal.
+  function pilihSegmentasi(kelas?: string) {
+    return (
+      <Select value={partnerType} onValueChange={(value) => setPartnerType(value ?? "all")}>
+        <SelectTrigger aria-label="Segmentasi" className={kelas}>
+          <SelectValue>{() => (partnerType === "all" ? "Semua Segmentasi" : partnerType)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="w-auto min-w-(--anchor-width)">
+          <SelectItem value="all">Semua Segmentasi</SelectItem>
+          <SelectItem value="Agen">Agen</SelectItem>
+          <SelectItem value="Outlet">Outlet</SelectItem>
+          <SelectItem value="RPA">RPA</SelectItem>
+          <SelectItem value="TakeAway">TakeAway</SelectItem>
+          <SelectItem value="Lainnya">Lainnya</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function pilihStatus(kelas?: string) {
+    return (
+      <Select value={status} onValueChange={(value) => setStatus(value ?? "all")}>
+        <SelectTrigger aria-label="Status" className={kelas}>
+          <SelectValue>{() => (status === "all" ? "Semua Status" : LABEL_STATUS_HARI[status as PiutangStatus])}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="w-auto min-w-(--anchor-width)">
+          <SelectItem value="all">Semua Status</SelectItem>
+          {(["Sehat", "Perhatian", "Kritis"] as PiutangStatus[]).map((st) => (
+            <SelectItem key={st} value={st}>
+              {LABEL_STATUS_HARI[st]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function tombolUrut(penuh: boolean) {
+    return (
+      <>
+        <SortToggle label="Terlama" sortKey="DaysOverdue" active={sortKey === "DaysOverdue"} direction={sortDir} onSort={handleSort} penuh={penuh} />
+        <SortToggle label="Nominal" sortKey="Outstanding" active={sortKey === "Outstanding"} direction={sortDir} onSort={handleSort} penuh={penuh} />
+        <SortToggle label="Jatuh Tempo" sortKey="DueDate" active={sortKey === "DueDate"} direction={sortDir} onSort={handleSort} penuh={penuh} />
+        <SortToggle label="Nama" sortKey="CustomerName" active={sortKey === "CustomerName"} direction={sortDir} onSort={handleSort} penuh={penuh} />
+      </>
+    );
+  }
+
+  const tombolEkspor = (
+    <ExportXlsxButton filename="invoice-outstanding" sheetName="Invoice Outstanding" columns={EXPORT_COLUMNS} rows={exportRows} />
+  );
+
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalInvoices = filtered.reduce((sum, g) => sum + g.invoices.length, 0);
 
   return (
     <div className="flex flex-col gap-3">
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-fit sm:hidden"
-        onClick={() => setMobileFilterOpen((v) => !v)}
-      >
-        <Filter className="size-4" />
-        Filter
-      </Button>
-      <div className={cn("flex-wrap gap-3 sm:flex", mobileFilterOpen ? "flex" : "hidden")}>
-        <Input
-          placeholder="Cari nama mitra..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-64"
-        />
-        <Select value={partnerType} onValueChange={(value) => setPartnerType(value ?? "all")}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Tipe Mitra" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Tipe</SelectItem>
-            <SelectItem value="Agen">Agen</SelectItem>
-            <SelectItem value="Outlet">Outlet</SelectItem>
-            <SelectItem value="RPA">RPA</SelectItem>
-            <SelectItem value="TakeAway">TakeAway</SelectItem>
-            <SelectItem value="Lainnya">Lainnya</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={status} onValueChange={(value) => setStatus(value ?? "all")}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="Sehat">Sehat</SelectItem>
-            <SelectItem value="Perhatian">Perhatian</SelectItem>
-            <SelectItem value="Kritis">Kritis</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="flex flex-1 flex-wrap items-center gap-1.5 sm:justify-end">
-          <SortToggle label="Terbaru" sortKey="DaysOverdue" active={sortKey === "DaysOverdue"} direction={sortDir} onSort={handleSort} />
-          <SortToggle label="Nominal" sortKey="Outstanding" active={sortKey === "Outstanding"} direction={sortDir} onSort={handleSort} />
-          <SortToggle label="Jatuh Tempo" sortKey="DueDate" active={sortKey === "DueDate"} direction={sortDir} onSort={handleSort} />
-          <SortToggle label="Nama" sortKey="CustomerName" active={sortKey === "CustomerName"} direction={sortDir} onSort={handleSort} />
-        </div>
-      </div>
+      {/* Panel alat menempel saat daftar digulir (menggantikan baris judul),
+          sama dengan Rincian per Mitra Es Balok. HP: segmentasi/status & urutan
+          diringkas ke dua ikon supaya panel tetap pendek. */}
+      <div ref={panelAlatRef} className={`${KELAS_PANEL_MENEMPEL} flex flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs`}>
+        <div className="flex items-center gap-2 sm:flex-wrap">
+          <div className="relative min-w-0 flex-1 sm:min-w-48 sm:max-w-72">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Cari nama mitra..."
+              aria-label="Cari nama mitra"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button variant="outline" size="icon" className="relative size-8 shrink-0 sm:hidden" aria-label="Filter" title="Filter" />
+              }
+            >
+              <SlidersHorizontal className="size-4" />
+              {jumlahFilterAktif > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                  {jumlahFilterAktif}
+                </span>
+              )}
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[min(18rem,calc(100vw-2rem))]">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Segmentasi</span>
+                  {pilihSegmentasi("w-full")}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  {pilihStatus("w-full")}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger
+              render={<Button variant="outline" size="icon" className="size-8 shrink-0 sm:hidden" aria-label="Urutkan" title="Urutkan" />}
+            >
+              <ArrowUpDown className="size-4" />
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-56">
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-muted-foreground">Urutkan menurut</span>
+                <div className="flex flex-col gap-0.5">{tombolUrut(true)}</div>
+                <div className="border-t pt-2">{tombolEkspor}</div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <div className="hidden flex-wrap items-center gap-2 sm:flex">
+            {pilihSegmentasi()}
+            {pilihStatus()}
+          </div>
+          <div className="hidden items-center gap-2 sm:ml-auto sm:flex">
+            <div className="flex items-center gap-0.5 rounded-lg border p-0.5" aria-label="Urutkan">
+              {tombolUrut(false)}
+            </div>
+            {tombolEkspor}
+          </div>
+        </div>
         <p className="text-xs text-muted-foreground">
-          Menampilkan {pageRows.length} dari {filtered.length} mitra ({totalInvoices} invoice outstanding).
+          {pageRows.length} dari {filtered.length} mitra · {totalInvoices} invoice belum lunas
         </p>
-        <ExportXlsxButton
-          filename="invoice-outstanding"
-          sheetName="Invoice Outstanding"
-          columns={EXPORT_COLUMNS}
-          rows={exportRows}
-        />
       </div>
 
       <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @4xl:grid-cols-3">

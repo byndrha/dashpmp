@@ -7,5 +7,5 @@ export const metadata: Metadata = { title: "Produksi" };
 
 export default async function PmputraProduksiPage() {
   const session = await requirePmputra();
-  return <ProduksiHalaman kode="pmputra" namaPerusahaan="PT Prima Maesa Putra" user={session.user} />;
+  return <ProduksiHalaman kode="pmputra" user={session.user} />;
 }

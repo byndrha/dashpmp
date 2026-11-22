@@ -188,8 +188,8 @@ function cekKendaraan(v: unknown): KendaraanPilihan {
     jenis: o.jenis,
     kendaraanErpId: teksAtauNull(o.kendaraanErpId, "Kendaraan"),
     plat: o.plat === null || o.plat === undefined ? "" : teks(o.plat, "Plat kendaraan"),
-    agenId: teksAtauNull(o.agenId, "Agen"),
-    agenNama: teksAtauNull(o.agenNama, "Nama agen"),
+    agenId: teksAtauNull(o.agenId, "Mitra"),
+    agenNama: teksAtauNull(o.agenNama, "Nama mitra"),
   };
 }
 

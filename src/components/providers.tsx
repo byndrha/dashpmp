@@ -8,6 +8,7 @@ import { NativeStatusBarSync } from "@/components/native-status-bar-sync";
 import { LocationTrackingBootstrap } from "@/components/location-tracking-bootstrap";
 import { AppVersionGate } from "@/components/app-version-gate";
 import { useEmbedTema } from "@/lib/embed-theme";
+import { PenampilKonfirmasi } from "@/components/konfirmasi";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // /kartu (tautan publik) tidak punya pengaturan tampilan: selalu tema Terang.
@@ -22,6 +23,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <NativeStatusBarSync />
           <LocationTrackingBootstrap />
           <AppVersionGate>{children}</AppVersionGate>
+          {/* Dialog untuk konfirmasi() — pengganti window.confirm(). */}
+          <PenampilKonfirmasi />
         </PaletteProvider>
       </ThemeProvider>
     </SessionProvider>

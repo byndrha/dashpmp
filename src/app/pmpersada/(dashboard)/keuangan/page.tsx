@@ -74,11 +74,12 @@ export default async function PmpersadaKeuanganPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="font-display text-xl font-semibold">Keuangan</h1>
-        <p className="text-sm text-muted-foreground">PT Putra Maesa Persada — Es Balok</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-xl font-semibold">Keuangan</h1>
+        </div>
+        <FilterBar />
       </div>
-      <FilterBar />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Pendapatan" value={formatRupiah(pnl.Pendapatan)} icon={Wallet} />

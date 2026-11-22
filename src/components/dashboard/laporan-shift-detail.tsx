@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useState, useTransition } from "react";
 import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -228,8 +229,8 @@ export function LaporanShiftDetailView() {
     });
   }
 
-  function handleHapusBbm(bbmId: number) {
-    if (!confirm("Hapus catatan BBM ini?")) return;
+  async function handleHapusBbm(bbmId: number) {
+    if (!(await konfirmasi("Hapus catatan BBM ini?"))) return;
     startTransition(async () => {
       const result = await hapusBbmEntryAction(bbmId);
       if (result.success) handleTampilkan();
@@ -255,8 +256,8 @@ export function LaporanShiftDetailView() {
     });
   }
 
-  function handleHapusPengeluaran(pengeluaranId: number) {
-    if (!confirm("Hapus rincian pengeluaran ini?")) return;
+  async function handleHapusPengeluaran(pengeluaranId: number) {
+    if (!(await konfirmasi("Hapus rincian pengeluaran ini?"))) return;
     startTransition(async () => {
       const result = await hapusPengeluaranAction(pengeluaranId);
       if (result.success) handleTampilkan();

@@ -55,7 +55,11 @@ export default function RootLayout({
   return (
     <html
       lang="id"
-      className={`${display.variable} ${body.variable} ${data.variable} h-full antialiased`}
+      // md:has-[...]:bg-sidebar — area pantul (overscroll) di atas/bawah
+      // dokumen mengambil warna <html>; di dashboard berlembaran (sidebar
+      // variant inset) kanvasnya bg-sidebar, jadi tanpa ini muncul pita
+      // berwarna latar halaman saat halaman ditarik melewati batas.
+      className={`${display.variable} ${body.variable} ${data.variable} h-full antialiased md:has-[[data-variant=inset]]:bg-sidebar`}
       suppressHydrationWarning
     >
       <head>

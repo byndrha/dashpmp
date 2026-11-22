@@ -232,7 +232,7 @@ function FormPembeli({
         <Input value={plat} onChange={(e) => setPlat(e.target.value)} placeholder="mis. S 1234 AB" className="h-10 uppercase" autoCapitalize="characters" />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium">Nama agen (opsional)</span>
+        <span className="text-xs font-medium">Nama mitra (opsional)</span>
         <Input
           value={agenNama}
           onChange={(e) => {
@@ -240,7 +240,7 @@ function FormPembeli({
             setAgenId(null);
             if (e.target.value.trim().length < 2) setSaran([]);
           }}
-          placeholder="Ketik untuk mencari agen"
+          placeholder="Ketik untuk mencari mitra"
           className="h-10"
         />
       </label>
@@ -262,7 +262,7 @@ function FormPembeli({
           ))}
         </div>
       )}
-      {agenId && <p className="text-xs text-muted-foreground">Agen terpilih dari daftar ERP.</p>}
+      {agenId && <p className="text-xs text-muted-foreground">Mitra terpilih dari daftar ERP.</p>}
       <Button
         type="button"
         size="lg"

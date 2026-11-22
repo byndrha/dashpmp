@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { AngkaBerjalan } from "@/components/dashboard/angka-berjalan";
 
 const TONE_TEXT: Record<string, string> = {
   default: "text-foreground",
@@ -30,7 +31,7 @@ export function KpiCard({
   tone?: "default" | "positive" | "warning" | "negative";
 }) {
   return (
-    <Card className="gap-3 py-4">
+    <Card className="gap-3 py-4 transition-shadow duration-200 hover:shadow-md">
       <CardHeader className="flex flex-row items-center justify-between gap-2 px-4">
         <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
@@ -42,7 +43,9 @@ export function KpiCard({
         )}
       </CardHeader>
       <CardContent className="px-4">
-        <p className={cn("font-display text-2xl font-semibold tabular-nums", TONE_TEXT[tone])}>{value}</p>
+        <p className={cn("font-display text-2xl font-semibold tabular-nums", TONE_TEXT[tone])}>
+          <AngkaBerjalan teks={value} />
+        </p>
         {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>

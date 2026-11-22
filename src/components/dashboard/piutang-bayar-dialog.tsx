@@ -77,7 +77,7 @@ export function PiutangBayarDialog({
     setLoadingContext(true);
     fetchContext()
       .then(setContext)
-      .catch(() => setError("Gagal memuat data saldo Agen."))
+      .catch(() => setError("Gagal memuat data saldo Mitra."))
       .finally(() => setLoadingContext(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchContext is stable per-agent for the dialog's lifetime
   }, [open]);

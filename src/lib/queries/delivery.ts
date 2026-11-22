@@ -201,6 +201,12 @@ export async function getOpenDeliveries(wilayah?: string): Promise<OpenDelivery[
     LEFT JOIN BusinessPartner bp ON bp.BusinessPartnerID = do.BusinessPartnerID
     WHERE do.IsDeleted = 0
       AND do.IsClosed = 0
+      -- Hanya baris yang MASIH punya sisa kirim. Tanpa ini tab "Pengiriman
+      -- Terbuka" memuat semua DO yang belum di-close di ERP walau sudah
+      -- terkirim penuh: diukur 2026-11-22, 17.047 baris (5,9 MB ke browser)
+      -- padahal hanya 64 baris / 61 DO yang benar-benar bersisa
+      -- (scripts/diag-pengiriman-terbuka-2026-11-22.ts).
+      AND (dod.Qty - dod.Delivered) > 0
       ${wilayah ? "AND bp.NPWPName = @wilayah" : ""}
     ORDER BY do.TransDate DESC
   `);

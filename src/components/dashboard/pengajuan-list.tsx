@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import dynamic from "next/dynamic";
 import { useMemo, useState, useTransition } from "react";
 import { MapPin, Phone, Calendar, Package, Wallet, Trash2, ExternalLink } from "lucide-react";
@@ -200,8 +201,8 @@ export function PengajuanList({
     });
   }
 
-  function handleDelete(row: PengajuanRow) {
-    if (!confirm(`Hapus pengajuan "${row.NamaCalon}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+  async function handleDelete(row: PengajuanRow) {
+    if (!(await konfirmasi(`Hapus pengajuan "${row.NamaCalon}"? Tindakan ini tidak dapat dibatalkan.`))) return;
     startTransition(async () => {
       const result = await deletePengajuanAction(row.PengajuanID);
       if (!result.success) toast.error(result.error);

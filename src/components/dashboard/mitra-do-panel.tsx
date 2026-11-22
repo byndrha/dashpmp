@@ -838,7 +838,7 @@ export function MitraDOPanel({
       {/* Sticky within this div's own bounds (its containing block) — stays
           pinned below the app header while scrolling through the mitra list
           in CardContent, and lets go once this div's bottom comes into view. */}
-      <CardHeader className="sticky top-0 z-20 border-b bg-card pt-3">
+      <CardHeader className="sticky top-(--tinggi-kepala-halaman,0px) z-20 border-b bg-card pt-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <CardTitle className="font-display">Transaksi DO per Mitra — Bulan Berjalan</CardTitle>
           <p className="shrink-0 text-right text-sm font-semibold tabular-nums text-primary">

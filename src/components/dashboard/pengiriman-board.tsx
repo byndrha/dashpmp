@@ -1,10 +1,11 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Plus, Wrench, User, Combine, Share2, ChevronDown, Loader2, Image as ImageIcon, List } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { ChevronLeft, ChevronRight, Plus, User, Combine, Share2, ChevronDown, Loader2, Image as ImageIcon, List, ShoppingBag, Truck, Package, Settings, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,9 +79,26 @@ const MIN_CARD_WIDTH = 92;
 const INFO_COL_WIDTH = 224;
 const DATE_SEGMENT_HEIGHT = 20;
 const HOUR_RULER_HEIGHT = 20;
-const CARD_HEIGHT = 56;
+// Setinggi kolom info armada di kiri (foto + ringkasan), supaya kartu
+// mengisi barisnya dan tidak menyisakan ruang kosong di atas lajur Driver.
+const CARD_HEIGHT = 80;
 const CARD_GAP = 4;
 const ROW_TOP_PADDING = 8;
+// Lajur Driver dulu setinggi satu kartu penuh (64 px) hanya untuk satu nama;
+// kini strip tipis supaya satu armada tidak memakan ruang berlebih.
+const DRIVER_LANE_HEIGHT = 26;
+const DRIVER_BLOCK_HEIGHT = 20;
+// Kartu Takeaway: lebih pendek & lebih lebar dari kartu jadwal supaya nama
+// mitra terbaca dan barisnya tidak menjulang saat banyak yang bertumpuk.
+const TAKEAWAY_CARD_HEIGHT = 36;
+const TAKEAWAY_CARD_WIDTH = 116;
+// Titik status di sudut foto armada (kolom info papan).
+const STATUS_DOT: Record<ArmadaRow["Status"], string> = {
+  Baik: "bg-emerald-500",
+  Rusak: "bg-destructive",
+  Perbaikan: "bg-warning",
+  Tertahan: "bg-muted-foreground",
+};
 
 // Timeline-relative hour (0-24), not the actual wall-clock hour — the axis
 // starts at ROLLOVER_HOUR (14:00 WIB) and wraps to ROLLOVER_HOUR the next
@@ -619,6 +637,32 @@ function computeCardSegments(j: JadwalCardData): CardSegment[] {
   return segments;
 }
 
+// Waktu nyata satu Jadwal untuk kartu papan. Kembali = Cek Datang Satpam
+// (JamKembaliAktual); bila belum ada, perkiraan = berangkat + DurasiMenit
+// (OSRM, diisi saat Berangkat), dengan kembaliPerkiraan = true.
+function waktuKartuJadwal(j: JadwalCardData) {
+  const berangkat = j.JamAktualBerangkat ? new Date(j.JamAktualBerangkat) : null;
+  const telatMenit = berangkat
+    ? Math.max(0, Math.round((berangkat.getTime() - new Date(j.JamJadwal).getTime()) / 60_000))
+    : 0;
+  let kembali: Date | null = null;
+  let kembaliPerkiraan = false;
+  if (j.JamKembaliAktual) {
+    kembali = new Date(j.JamKembaliAktual);
+  } else if (berangkat && j.DurasiMenit != null) {
+    kembali = new Date(berangkat.getTime() + j.DurasiMenit * 60_000);
+    kembaliPerkiraan = true;
+  }
+  return { berangkat, telatMenit, kembali, kembaliPerkiraan };
+}
+
+function formatMenit(menit: number) {
+  if (menit < 60) return `${menit}m`;
+  const j = Math.floor(menit / 60);
+  const m = menit % 60;
+  return m ? `${j}j ${m}m` : `${j}j`;
+}
+
 function DraggableJadwalCard({
   jadwal: j,
   hourWidth,
@@ -642,6 +686,25 @@ function DraggableJadwalCard({
     ? `${j.LokasiTerjauh.Wilayah}${j.LokasiTerjauh.Kecamatan ? ` - ${j.LokasiTerjauh.Kecamatan}` : ""}`
     : null;
   const segments = computeCardSegments(j);
+  const waktu = waktuKartuJadwal(j);
+  const rincian = [
+    `Jadwal ${formatTime(j.JamJadwal)}`,
+    j.JamMulaiMuat
+      ? `Muat ${formatTime(j.JamMulaiMuat)}${j.JamSelesaiMuat ? ` – ${formatTime(j.JamSelesaiMuat)}` : " (berlangsung)"}`
+      : null,
+    waktu.berangkat
+      ? `Berangkat ${formatTime(waktu.berangkat)}${waktu.telatMenit > 0 ? ` (terlambat ${formatMenit(waktu.telatMenit)})` : ""}`
+      : null,
+    waktu.kembali
+      ? `${waktu.kembaliPerkiraan ? "Perkiraan kembali" : "Kembali ke pabrik"} ${formatTime(waktu.kembali)}`
+      : null,
+    waktu.berangkat && waktu.kembali && !waktu.kembaliPerkiraan
+      ? `Lama di jalan ${formatMenit(Math.round((waktu.kembali.getTime() - waktu.berangkat.getTime()) / 60_000))}`
+      : null,
+    lokasiTerjauh ? `Lokasi terjauh: ${lokasiTerjauh}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return (
     <button
@@ -650,7 +713,7 @@ function DraggableJadwalCard({
       {...attributes}
       type="button"
       onClick={() => !isDragging && onCardClick(j.JadwalID)}
-      title={lokasiTerjauh ? `Lokasi pengiriman terjauh: ${lokasiTerjauh}` : undefined}
+      title={rincian}
       className={cn(
         "absolute overflow-hidden rounded-md border text-left shadow-sm",
         isDraft ? "border-dashed border-muted-foreground/40 bg-muted/40" : "border-primary/30",
@@ -686,7 +749,7 @@ function DraggableJadwalCard({
           ))}
         </div>
       )}
-      <div className="relative flex h-full flex-col justify-start gap-0.5 p-1.5">
+      <div className="relative flex h-full flex-col justify-between gap-0.5 px-1.5 py-1.5">
       {j.AdaReturTersedia && (
         <span
           title="Ada retur berkondisi Baik yang masih bisa dijual ulang"
@@ -729,19 +792,40 @@ function DraggableJadwalCard({
                 : "Berangkat"}
         </span>
       </div>
-      <div className="flex flex-col items-center leading-none -mt-2.5">
-        <span className="text-sm font-bold tabular-nums">{j.TotalKantong}</span>
-        <span className="text-[8px] text-muted-foreground">kantong</span>
+      <div className="flex items-baseline gap-1 leading-none">
+        {/* leading-none harus di elemen ini sendiri: text-base Tailwind v4
+            membawa line-height 24px yang tidak mewarisi dari induk, dan
+            dulu mendorong baris "tujuan" keluar dari kartu. */}
+        <span className="text-base leading-none font-bold tabular-nums">{j.TotalKantong}</span>
+        <span className="text-[9px] text-muted-foreground">kantong</span>
       </div>
-      {/* Kept on the SAME line as "N tujuan" (not its own 4th line) — a
-          standalone line at this card's tiny fixed height either clipped
-          silently against overflow-hidden or forced the whole card taller,
-          so this stayed reachable only via the button's title tooltip.
-          One truncated line, always in the DOM whenever there's a farthest
-          stop, is the concise, always-visible fix the user asked for. */}
-      <p className="truncate text-center text-[9px] leading-none tabular-nums text-muted-foreground">
-        {j.TotalStop} tujuan{lokasiTerjauh ? ` · ${lokasiTerjauh}` : ""}
-      </p>
+      <div className="flex flex-col gap-0.5">
+        {/* Waktu sesungguhnya: ↗ berangkat (+ keterlambatan dari jadwal),
+            ↙ kembali ke pabrik dari Cek Datang Satpam — atau perkiraannya
+            (miring, ±) selama Satpam belum mencatat. Rincian lengkap ada di
+            tooltip kartu. */}
+        {waktu.berangkat && (
+          <p className="flex min-w-0 items-center gap-1.5 truncate text-[9px] leading-[11px] font-medium tabular-nums">
+            <span className="inline-flex items-center gap-px">
+              <ArrowUpRight className="size-2.5 text-muted-foreground" />
+              {formatTime(waktu.berangkat)}
+              {waktu.telatMenit > 5 && (
+                <span className="ml-0.5 text-amber-600">+{formatMenit(waktu.telatMenit)}</span>
+              )}
+            </span>
+            {waktu.kembali && (
+              <span className={cn("inline-flex items-center gap-px", waktu.kembaliPerkiraan && "italic opacity-70")}>
+                <ArrowDownLeft className="size-2.5 text-muted-foreground" />
+                {waktu.kembaliPerkiraan ? "±" : ""}
+                {formatTime(waktu.kembali)}
+              </span>
+            )}
+          </p>
+        )}
+        <p className="truncate text-[9px] leading-[11px] tabular-nums text-muted-foreground">
+          {j.TotalStop} tujuan{lokasiTerjauh ? ` · ${lokasiTerjauh}` : ""}
+        </p>
+      </div>
       </div>
     </button>
   );
@@ -849,31 +933,41 @@ function TakeawayCard({ order, hourWidth, top }: { order: TakeawayOrder; hourWid
   return (
     <div
       title={`${order.VoucherNo} — ${order.CustomerName} (${order.TotalKantong} kantong) — Takeaway`}
-      className="absolute flex flex-col justify-center overflow-hidden rounded-md border border-primary/30 bg-primary/10 px-1.5 py-1 text-left text-[9px] text-primary"
-      style={{ left: hourFractionNaiveWib(order.TransDate) * hourWidth, top, width: EXTERNAL_DO_WIDTH, height: CARD_HEIGHT }}
+      className="absolute flex flex-col justify-center gap-0.5 overflow-hidden rounded-md border border-primary/30 bg-primary/10 px-1.5 text-left text-[10px] leading-none text-primary transition-colors hover:bg-primary/15"
+      style={{ left: hourFractionNaiveWib(order.TransDate) * hourWidth, top, width: TAKEAWAY_CARD_WIDTH, height: TAKEAWAY_CARD_HEIGHT }}
     >
       <span className="truncate font-semibold">{order.CustomerName}</span>
       <span className="truncate tabular-nums opacity-80">
         {formatTimeWib(order.TransDate)} &middot; {order.TotalKantong} kantong
       </span>
-      <span className="truncate opacity-70">Takeaway</span>
     </div>
   );
 }
 
 function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrder[]; hourWidth: number; dayWidth: number }) {
   const blocks = useMemo(
-    () => orders.map((o) => ({ key: o.DeliveryOrderID, left: hourFractionNaiveWib(o.TransDate) * hourWidth, width: EXTERNAL_DO_WIDTH })),
+    () => orders.map((o) => ({ key: o.DeliveryOrderID, left: hourFractionNaiveWib(o.TransDate) * hourWidth, width: TAKEAWAY_CARD_WIDTH })),
     [orders, hourWidth]
   );
   const { laneOf, laneCount } = useMemo(() => assignLanes(blocks), [blocks]);
-  const rowHeight = ROW_TOP_PADDING + Math.max(1, laneCount) * (CARD_HEIGHT + CARD_GAP);
+  const rowHeight = ROW_TOP_PADDING + Math.max(1, laneCount) * (TAKEAWAY_CARD_HEIGHT + CARD_GAP);
+  const totalKantong = orders.reduce((t, o) => t + o.TotalKantong, 0);
 
   if (orders.length === 0) return null;
 
   return (
     <div className="flex items-stretch">
-      <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center bg-card py-1 pr-3 text-xs font-medium">Takeaway</div>
+      <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center gap-2 bg-card py-2 pr-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <ShoppingBag className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Takeaway</p>
+          <p className="text-[11px] text-muted-foreground">
+            {orders.length} ambil sendiri &middot; {totalKantong.toLocaleString("id-ID")} kantong
+          </p>
+        </div>
+      </div>
       <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
@@ -883,10 +977,33 @@ function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrd
             key={o.DeliveryOrderID}
             order={o}
             hourWidth={hourWidth}
-            top={ROW_TOP_PADDING + (laneOf.get(o.DeliveryOrderID) ?? 0) * (CARD_HEIGHT + CARD_GAP)}
+            top={ROW_TOP_PADDING + (laneOf.get(o.DeliveryOrderID) ?? 0) * (TAKEAWAY_CARD_HEIGHT + CARD_GAP)}
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+// Garis vertikal "sekarang" melintasi semua baris saat papan menampilkan
+// tanggal bisnis hari ini. Menit diambil lewat useSyncExternalStore (bukan
+// Date.now() saat render) — server snapshot null, jadi tidak ada hydration
+// mismatch; diperbarui tiap 30 detik.
+function berlanggananMenit(cb: () => void) {
+  const id = setInterval(cb, 30_000);
+  return () => clearInterval(id);
+}
+function GarisSekarang({ hourWidth }: { hourWidth: number }) {
+  const menit = useSyncExternalStore(
+    berlanggananMenit,
+    () => Math.floor(Date.now() / 60_000),
+    () => null
+  );
+  if (menit == null) return null;
+  const kiri = 224 + hourFraction(new Date(menit * 60_000)) * hourWidth; // 224 = w-56 kolom info
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-y-0 z-[15] w-px bg-destructive/70" style={{ left: kiri }}>
+      <span className="absolute -top-0.5 -left-[3px] size-[7px] rounded-full bg-destructive" />
     </div>
   );
 }
@@ -899,8 +1016,8 @@ function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrd
 function DriverBlock({ name, left, width, top }: { name: string; left: number; width: number; top: number }) {
   return (
     <div
-      className="absolute flex items-center gap-1 overflow-hidden rounded-md border border-primary/20 bg-primary/5 px-1.5 text-[9px] text-primary"
-      style={{ left, width, top, height: CARD_HEIGHT }}
+      className="absolute flex items-center gap-1 overflow-hidden rounded-full border border-primary/20 bg-primary/5 px-2 text-[10px] text-primary"
+      style={{ left, width, top, height: DRIVER_BLOCK_HEIGHT }}
     >
       <User className="size-3 shrink-0" />
       <span className="truncate font-medium">{name}</span>
@@ -979,9 +1096,9 @@ function ArmadaActivityFormDialog({
     });
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!editing) return;
-    if (!confirm(`Hapus aktivitas ${ARMADA_ACTIVITY_LABEL[editing.ActivityType]}?`)) return;
+    if (!(await konfirmasi(`Hapus aktivitas ${ARMADA_ACTIVITY_LABEL[editing.ActivityType]}?`))) return;
     setError(null);
     startTransition(async () => {
       const result = await deleteArmadaActivityAction(editing.ActivityID);
@@ -1188,7 +1305,7 @@ function ArmadaRowBoard({
   }, [dragStart, externalDeliveries, hourWidth, laneOf]);
 
   const laneCountSafe = Math.max(1, laneCount);
-  const rowHeight = ROW_TOP_PADDING + laneCountSafe * CARD_HEIGHT + Math.max(0, laneCountSafe - 1) * CARD_GAP;
+  const rowHeight = 2 * ROW_TOP_PADDING + laneCountSafe * CARD_HEIGHT + Math.max(0, laneCountSafe - 1) * CARD_GAP;
   const totalKantongHariIni =
     jadwal.reduce((sum, j) => sum + j.TotalKantong, 0) + externalDeliveries.reduce((sum, d) => sum + d.TotalKantong, 0);
   // "telah ditempuh" (already traveled) — only Jadwal that actually
@@ -1245,71 +1362,101 @@ function ArmadaRowBoard({
             setEditing(true);
           }
         }}
-        className="sticky left-0 z-10 flex w-56 shrink-0 cursor-pointer flex-col gap-1.5 bg-card py-3 pr-3 text-left transition-colors hover:bg-muted/30"
+        className="group/armada sticky left-0 z-10 flex w-56 shrink-0 cursor-pointer flex-col justify-center gap-1.5 bg-card py-2 pr-3 text-left transition-colors hover:bg-muted/30"
       >
-        <div className="flex items-center gap-2">
-          {armada.FotoPath ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={armada.FotoPath} alt={armada.Nama} className="size-10 shrink-0 rounded-lg object-cover" />
-          ) : (
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-[10px] text-muted-foreground">
-              Foto
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-1">
-              <p className="truncate text-sm font-medium">{armada.Nama}</p>
-              <Badge className={cn("h-5 shrink-0 px-1.5 text-[10px]", STATUS_BADGE[armada.Status])}>
-                {armada.Status}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-evenly gap-1">
-              <p className="truncate text-xs text-muted-foreground">{armada.PlatNomor ?? "-"}</p>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-6"
-                disabled={armada.Status !== "Baik"}
-                title="Aktivitas Armada"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCreateActivityClick(armada.ArmadaID);
-                }}
+        <div className="flex items-stretch gap-2.5">
+          {/* Foto besar setinggi seluruh kolom info + titik status di
+              sudutnya. Status selain "Baik" juga dieja di bawah nama. */}
+          <div className="relative size-20 shrink-0">
+            {armada.FotoPath ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={armada.FotoPath}
+                alt={armada.Nama}
+                className="size-full rounded-xl object-cover ring-1 ring-border"
+              />
+            ) : (
+              <div className="flex size-full items-center justify-center rounded-xl bg-muted ring-1 ring-border">
+                <Truck className="size-7 text-muted-foreground" />
+              </div>
+            )}
+            {/* Plat nomor menguasai tepi bawah foto; titik status di pojok
+                kanan atas. */}
+            <span className="absolute inset-x-0.5 -bottom-1.5 truncate rounded-[4px] border border-foreground/30 bg-background/90 px-0.5 text-center font-mono text-[10px] leading-4 font-semibold tracking-tight whitespace-nowrap shadow-sm backdrop-blur-sm">
+              {armada.PlatNomor ?? "—"}
+            </span>
+            {/* Indikator status sekaligus tombol Aktivitas Armada (ikon
+                gir, berdenyut). Nonaktif untuk armada yang tidak "Baik",
+                sama seperti tombol Aktivitas sebelumnya. */}
+            <button
+              type="button"
+              disabled={armada.Status !== "Baik"}
+              title={`Status: ${armada.Status} · Aktivitas Armada`}
+              aria-label={`Aktivitas Armada ${armada.Nama} (status ${armada.Status})`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCreateActivityClick(armada.ArmadaID);
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="group/status absolute -top-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full disabled:cursor-not-allowed"
+            >
+              <span
+                className={cn("absolute inset-0 animate-ping rounded-full opacity-50", STATUS_DOT[armada.Status])}
+              />
+              <span
+                className={cn(
+                  "relative flex size-6 items-center justify-center rounded-full text-white shadow-sm ring-2 ring-card transition-transform group-enabled/status:group-hover/status:scale-110",
+                  STATUS_DOT[armada.Status]
+                )}
               >
-                <Wrench className="size-3.5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-6"
-                disabled={armada.Status !== "Baik"}
-                title="Pengiriman Baru"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCreateClick(armada.ArmadaID);
-                }}
+                <Settings className="size-3.5" />
+              </span>
+            </button>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col items-start justify-between gap-1">
+            <p className="w-full truncate text-sm leading-tight font-semibold">{armada.Nama}</p>
+            <div className="flex items-center gap-1">
+              <span
+                title={`Kapasitas maksimal ${armada.KapasitasMaks ?? "-"} kantong per keberangkatan`}
+                className="inline-flex items-center gap-0.5 rounded-[4px] bg-muted px-1 text-[10px] leading-4 font-semibold tabular-nums"
               >
-                <Plus className="size-3.5" />
-              </Button>
+                <Package className="size-2.5 text-muted-foreground" />
+                <span className="font-normal text-muted-foreground">Kapasitas</span>
+                {armada.KapasitasMaks?.toLocaleString("id-ID") ?? "—"}
+              </span>
+              {armada.Status !== "Baik" && (
+                <Badge className={cn("h-4 px-1.5 text-[10px]", STATUS_BADGE[armada.Status])}>{armada.Status}</Badge>
+              )}
             </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-1 rounded-md border bg-muted/20 px-1.5 py-1 text-center">
-          <div>
-            <p className="text-[9px] text-muted-foreground">Kapasitas</p>
-            <p className="text-xs font-medium tabular-nums">{armada.KapasitasMaks ?? "-"}</p>
-          </div>
-          <div>
-            <p className="text-[9px] text-muted-foreground">Kantong</p>
-            <p className="text-xs font-medium tabular-nums">{totalKantongHariIni}</p>
-          </div>
-          <div>
-            <p className="text-[9px] text-muted-foreground">Jarak</p>
-            <p className="text-xs font-medium tabular-nums">
-              {totalJarakHariIni.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km
+            <p className="text-[11px] leading-tight text-muted-foreground tabular-nums">
+              <span className="font-semibold text-foreground">{totalKantongHariIni.toLocaleString("id-ID")}</span>{" "}
+              kantong
+            </p>
+            <p className="text-[11px] leading-tight text-muted-foreground tabular-nums">
+              <span className="font-semibold text-foreground">
+                {totalJarakHariIni.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+              </span>{" "}
+              km
             </p>
           </div>
         </div>
+        {/* Tombol Keberangkatan Baru duduk tepat di persimpangan batas kolom
+            armada | garis waktu dan batas baris | lajur Driver. Aktivitas
+            Armada lewat indikator status di foto. */}
+        <Button
+          size="icon"
+          className="absolute -right-3 -bottom-3 z-20 size-6 rounded-full shadow-sm ring-2 ring-card"
+          disabled={armada.Status !== "Baik"}
+          title="Keberangkatan Baru"
+          aria-label={`Keberangkatan Baru ${armada.Nama}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCreateClick(armada.ArmadaID);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Plus className="size-3.5" />
+        </Button>
         {selectedExternal.size > 0 && (
           <Button
             size="sm"
@@ -1403,10 +1550,12 @@ function ArmadaRowBoard({
         needs more than one lane — no independent driver-schedule data
         model backs this (see driver-manager.tsx). */}
     <div className="flex items-stretch self-start border-t border-dashed">
-      <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center bg-card py-1 pr-3 text-[10px] text-muted-foreground">
-        Driver
+      {/* z-[9], satu di bawah kolom info (z-10), supaya tombol Keberangkatan
+          Baru di persimpangan batas tidak tertutup label ini. */}
+      <div className="sticky left-0 z-[9] flex w-56 shrink-0 items-center gap-1 bg-card pr-3 text-[10px] text-muted-foreground">
+        <User className="size-3" /> Driver
       </div>
-      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: ROW_TOP_PADDING + CARD_HEIGHT }}>
+      <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: DRIVER_LANE_HEIGHT }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
         ))}
@@ -1418,7 +1567,7 @@ function ArmadaRowBoard({
               name={j.DriverName as string}
               left={hourFraction(j.JamJadwal) * hourWidth}
               width={cardWidthFor(j)}
-              top={ROW_TOP_PADDING}
+              top={(DRIVER_LANE_HEIGHT - DRIVER_BLOCK_HEIGHT) / 2}
             />
           ))}
       </div>
@@ -1743,8 +1892,13 @@ export function PengirimanBoard({
   }
 
   return (
-    <Card className="relative overflow-visible">
-      <div ref={cardHeaderRef} className="sticky top-0 z-30 border-b bg-card">
+    // Jarak atas dipindah dari Card (pt-0) ke kepala sticky sendiri (pt-4):
+    // padding Card tertinggal saat menggulir, jadi tombol menempel ke header.
+    <Card className="relative overflow-visible pt-0">
+      <div
+        ref={cardHeaderRef}
+        className="sticky top-(--tinggi-kepala-halaman,0px) z-30 rounded-t-xl border-b bg-card pt-4 pb-3"
+      >
         {isPending && (
           <div className="absolute inset-x-0 bottom-0 z-10 h-0.5 overflow-hidden bg-primary/15">
             <div className="h-full w-1/3 animate-indeterminate rounded-full bg-primary" />
@@ -1876,13 +2030,14 @@ export function PengirimanBoard({
               </div>
             </div>
             <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-              <div ref={containerRef} onScroll={handleContainerScroll} className="overflow-x-auto">
+              <div ref={containerRef} onScroll={handleContainerScroll} className="relative overflow-x-auto">
                 {/* gap-y-3 separates one armada's whole block (its own
                     timeline + its driver row underneath) from the next
                     armada's block, so they don't visually stick together —
                     the tight spacing WITHIN one armada's block (timeline to
                     its own driver row, just a dashed border-t) is untouched. */}
-                <div className="flex flex-col divide-y gap-y-3">
+                <div className="relative flex flex-col divide-y gap-y-3">
+                  {businessDate === todayISO && <GarisSekarang hourWidth={hourWidth} />}
                   <TakeawayRowBoard orders={takeawayOrders} hourWidth={hourWidth} dayWidth={dayWidth} />
                   {sortedArmada.map((a) => (
                     <ArmadaRowBoard

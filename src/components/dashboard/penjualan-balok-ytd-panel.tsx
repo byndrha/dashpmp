@@ -32,10 +32,10 @@ export function PenjualanBalokYtdPanel({ ytd }: { ytd: PenjualanBalokYtd }) {
               <TooltipTrigger className="flex items-center gap-1.5">
                 <Users className="size-4 text-muted-foreground" />
                 <span className="font-display text-sm font-semibold tabular-nums">
-                  {ytd.agen.toLocaleString("id-ID")} agen
+                  {ytd.agen.toLocaleString("id-ID")} mitra
                 </span>
               </TooltipTrigger>
-              <TooltipContent>Agen yang membeli tahun ini</TooltipContent>
+              <TooltipContent>Mitra yang membeli tahun ini</TooltipContent>
             </Tooltip>
           </div>
           <div className="flex flex-wrap gap-1.5">

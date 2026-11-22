@@ -209,8 +209,12 @@ export function AgenLocationsMap({
   points,
   growthRows = [],
   centerFallback = [-7.8462825, 111.4759937],
+  kontrolTurun = false,
 }: {
   points: AgenLocationPoint[];
+  // Kontrol zoom digeser ke bawah — ada tombol halaman di pojok kiri atas peta
+  // (sama dengan MitraLocationsMap Es Kristal).
+  kontrolTurun?: boolean;
   growthRows?: MitraGrowthRow[];
   // Used only when there are no points to center on -- each company's own
   // Pabrik location (DashboardPerusahaan.PabrikLatitude/Longitude, see
@@ -246,7 +250,7 @@ export function AgenLocationsMap({
         style={{ height: 320, width: "100%" }}
       >
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
-        <MapZoomControl className="top-2 left-2" />
+        <MapZoomControl className={kontrolTurun ? "top-14 left-2" : "top-2 left-2"} />
         {points.map((p) => (
           <Marker
             key={p.kunci}

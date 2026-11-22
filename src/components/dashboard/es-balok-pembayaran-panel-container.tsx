@@ -1,4 +1,5 @@
-// src/app/pmputra/piutang/pembayaran-panel-container.tsx
+// Dipindahkan dari src/app/{pmputra,pmpersada,pmpakis}/(dashboard)/piutang/ (tiga salinan identik)
+// ke sini 2026-11-22, dipakai HalamanPiutangEsBalok.
 "use client";
 
 import { useState } from "react";

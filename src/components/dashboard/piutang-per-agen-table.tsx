@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Banknote, ChevronDown, Clock, Copy, CreditCard, Download, FileText, MapPin, Package, Share2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Banknote, ChevronDown, Clock, Copy, CreditCard, Download, FileText, Info, MapPin, Package, Search, Share2, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -14,21 +14,25 @@ import { Pagination } from "@/components/dashboard/pagination";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { PiutangBayarDialog } from "@/components/dashboard/piutang-bayar-dialog";
 import { formatRupiah } from "@/lib/format";
+import { usePanelMenempel } from "@/hooks/use-panel-menempel";
+import { Petunjuk } from "@/components/ui/petunjuk";
 import { utcInstantToWibDisplay } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import { SEGMENTASI_OPTIONS } from "@/lib/segmentasi-mitra";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { PiutangPerAgenRow, PiutangTransaksiRow } from "@/lib/queries/penjualan-piutang";
 import type { PiutangBayarContext, PiutangTarikContext, BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
+import type { KomponenSelisih } from "@/lib/queries/piutang-invoice-outstanding";
 import {
   esBalokStatus,
   ES_BALOK_JATUH_TEMPO_HARI,
   type EsBalokPiutangStatus,
+  type PiutangTerbukaRingkas,
   type RingkasanPiutangTerbuka,
 } from "@/lib/piutang-es-balok-status";
 
 const EXPORT_COLUMNS: XlsxColumn[] = [
-  { header: "Agen", key: "nama", width: 26 },
+  { header: "Mitra", key: "nama", width: 26 },
   { header: "Tabungan Awal", key: "tabunganAwal", type: "number", width: 16 },
   { header: "Hutang Awal", key: "hutangAwal", type: "number", width: 16 },
   { header: "Pesanan", key: "pesanan", type: "number", width: 16 },
@@ -97,20 +101,24 @@ function SortToggle({
   active,
   direction,
   onSort,
+  penuh = false,
 }: {
   label: string;
   sortKey: SortKey;
   active: boolean;
   direction: "asc" | "desc";
   onSort: (key: SortKey) => void;
+  // Satu baris selebar popup (menu urutan di HP), bukan pil kecil.
+  penuh?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={() => onSort(sortKey)}
       className={cn(
-        "inline-flex items-center gap-1 rounded border px-2 py-1 text-xs hover:text-foreground",
-        active ? "border-primary/40 text-foreground" : "border-border text-muted-foreground"
+        "inline-flex items-center gap-1 rounded-md px-2 text-xs transition-colors hover:text-foreground",
+        penuh ? "h-8 w-full justify-between text-sm" : "h-6",
+        active ? "bg-primary/10 font-medium text-foreground" : "text-muted-foreground"
       )}
     >
       {label}
@@ -159,7 +167,7 @@ interface PiutangTerbuka {
   maxDaysOverdue: number;
 }
 
-function bacaTerbuka(v: [number, number] | undefined): PiutangTerbuka | undefined {
+function bacaTerbuka(v: PiutangTerbukaRingkas | undefined): PiutangTerbuka | undefined {
   return v ? { outstanding: v[0], maxDaysOverdue: v[1] } : undefined;
 }
 
@@ -187,12 +195,13 @@ function jatuhTempoISO(tanggalISO: string): string {
 function UmurChip({ item, terbuka }: { item: PiutangTransaksiRow; terbuka: PiutangTerbuka | undefined }) {
   if (!terbuka) {
     return (
-      <span
-        className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground"
-        title="Sudah tertutup pembayaran (alokasi FIFO, pesanan terlama dulu)"
+      <Petunjuk
+        render={<span className="shrink-0 cursor-help rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground" />}
+        judul="Lunas"
+        isi="Sudah tertutup pembayaran (alokasi FIFO, pesanan terlama dulu)."
       >
         Lunas
-      </span>
+      </Petunjuk>
     );
   }
   const usiaHari = Math.max(0, terbuka.maxDaysOverdue + ES_BALOK_JATUH_TEMPO_HARI);
@@ -202,12 +211,13 @@ function UmurChip({ item, terbuka }: { item: PiutangTransaksiRow; terbuka: Piuta
       ? `lewat ${terbuka.maxDaysOverdue} hari dari jatuh tempo`
       : `jatuh tempo ${formatTanggalPendek(jatuhTempoISO(item.tanggal))}`;
   return (
-    <span
-      className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", UMUR_CHIP_CLASS[status])}
-      title={`Belum lunas ${formatRupiah(terbuka.outstanding)} — ${keterangan} (jatuh tempo = tanggal + ${ES_BALOK_JATUH_TEMPO_HARI} hari)`}
+    <Petunjuk
+      render={<span className={cn("shrink-0 cursor-help rounded px-1.5 py-0.5 text-[10px] font-semibold", UMUR_CHIP_CLASS[status])} />}
+      judul={`Belum lunas ${formatRupiah(terbuka.outstanding)}`}
+      isi={`Umur pesanan ${usiaHari} hari — ${keterangan} (jatuh tempo = tanggal + ${ES_BALOK_JATUH_TEMPO_HARI} hari).`}
     >
       {usiaHari} hari
-    </span>
+    </Petunjuk>
   );
 }
 
@@ -254,12 +264,142 @@ function TransaksiRow({ item, terbuka }: { item: PiutangTransaksiRow; terbuka: P
   );
 }
 
+// Satu pesanan yang masih punya sisa piutang (alokasi FIFO, semua periode) —
+// dipakai mode "Semua belum lunas". Hanya data dari ringkasan piutang terbuka
+// (NoDokumen, tanggal, sisa, umur); qty tidak tersedia di ringkasan itu.
+export interface PesananBelumLunas {
+  noDokumen: string;
+  tanggal: string | null;
+  terbuka: PiutangTerbuka;
+}
+
+function BelumLunasRow({ item }: { item: PesananBelumLunas }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border px-2 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1">
+          <FileText className="size-3 shrink-0 text-muted-foreground" />
+          <span className="font-data truncate text-[10px] text-muted-foreground">{item.noDokumen}</span>
+        </span>
+        <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary">Pemesanan</span>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-foreground">
+          <span className="shrink-0">{item.tanggal ? formatTanggalPendek(item.tanggal) : "—"}</span>
+          {item.tanggal && (
+            <UmurChip
+              item={{ tanggal: item.tanggal } as PiutangTransaksiRow}
+              terbuka={item.terbuka}
+            />
+          )}
+        </span>
+        <Petunjuk
+          render={<span className="font-data shrink-0 cursor-help text-xs font-semibold tabular-nums text-foreground" />}
+          isi="Sisa belum lunas pesanan ini"
+        >
+          {formatRupiah(item.terbuka.outstanding)}
+        </Petunjuk>
+      </div>
+    </div>
+  );
+}
+
+// Asal selisih Sisa Hutang vs total pesanan belum lunas, per komponen
+// (getKomponenSelisihPiutang). Dimuat saat dibuka supaya tidak menambah
+// query untuk setiap kartu. Komponen yang tidak terurai (mis. beda filter
+// cabang) ditampilkan sebagai "Lainnya" agar jumlahnya selalu tepat.
+function RincianSelisih({
+  selisih,
+  totalBelumLunas,
+  sisaHutang,
+  muat,
+}: {
+  selisih: number;
+  totalBelumLunas: number;
+  sisaHutang: number;
+  muat: () => Promise<KomponenSelisih[]>;
+}) {
+  const [buka, setBuka] = useState(false);
+  const [komponen, setKomponen] = useState<KomponenSelisih[] | null>(null);
+  const [galat, setGalat] = useState(false);
+  const [memuat, setMemuat] = useState(false);
+
+  function alihkan() {
+    const berikut = !buka;
+    setBuka(berikut);
+    if (berikut && !komponen && !memuat) {
+      setMemuat(true);
+      setGalat(false);
+      muat()
+        .then(setKomponen)
+        .catch(() => setGalat(true))
+        .finally(() => setMemuat(false));
+    }
+  }
+
+  const lainnya = komponen ? selisih - komponen.reduce((t, k) => t + k.nilai, 0) : 0;
+  const baris = komponen
+    ? [...komponen, ...(Math.abs(lainnya) >= 1 ? [{ label: "Lainnya", nilai: Math.round(lainnya), keterangan: "Selisih kecil di luar komponen di atas (mis. beda filter cabang)" }] : [])]
+    : [];
+  const tanda = (n: number) => `${n < 0 ? "−" : "+"}${formatRupiah(Math.abs(n))}`;
+
+  return (
+    <div className="flex flex-col gap-1 px-1">
+      <button
+        type="button"
+        onClick={alihkan}
+        aria-expanded={buka}
+        className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground hover:text-foreground"
+      >
+        <span className="inline-flex items-center gap-1">
+          <ChevronDown className={cn("size-3 transition-transform", !buka && "-rotate-90")} />
+          Selisih ke Sisa Hutang
+        </span>
+        <span className="font-data font-semibold tabular-nums text-foreground">{tanda(selisih)}</span>
+      </button>
+      {buka && (
+        <div className="flex flex-col gap-0.5 rounded-md bg-muted/50 px-2 py-1.5 text-[11px]">
+          {memuat && <p className="text-muted-foreground">Memuat rincian…</p>}
+          {galat && <p className="text-destructive">Gagal memuat rincian selisih.</p>}
+          {baris.map((k) => (
+            <Petunjuk
+              key={k.label}
+              render={<div className="flex cursor-help items-start justify-between gap-2" />}
+              judul={k.label}
+              isi={k.keterangan}
+            >
+              <span className="min-w-0 text-muted-foreground">{k.label}</span>
+              <span className={cn("font-data shrink-0 tabular-nums", k.nilai < 0 ? "text-primary" : "text-foreground")}>
+                {tanda(k.nilai)}
+              </span>
+            </Petunjuk>
+          ))}
+          {komponen && (
+            <div className="mt-0.5 flex items-center justify-between gap-2 border-t pt-1 text-[10px] text-muted-foreground">
+              <span>
+                {formatRupiah(totalBelumLunas)} {selisih < 0 ? "−" : "+"} {formatRupiah(Math.abs(selisih))}
+              </span>
+              <span>
+                = Sisa {sisaHutang >= 0 ? "Hutang" : "Tabungan"}{" "}
+                <span className="font-data font-semibold text-foreground">{formatRupiah(Math.abs(sisaHutang))}</span>
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgenCard({
   row,
   terbukaAgen,
   terbukaDokumen,
   periodeLabel,
   lastUpdated,
+  belumLunas,
+  onLihatBelumLunas,
+  fetchKomponenSelisih,
   fetchBayarContext,
   submitBayar,
   fetchTarikContext,
@@ -270,6 +410,11 @@ function AgenCard({
   terbukaDokumen: RingkasanPiutangTerbuka["dokumen"];
   periodeLabel: string;
   lastUpdated: Date;
+  // Diisi saat mode "Semua belum lunas" aktif: pesanan terbuka Agen ini dari
+  // SEMUA periode (menggantikan daftar transaksi rentang tanggal).
+  belumLunas: PesananBelumLunas[] | null;
+  onLihatBelumLunas: () => void;
+  fetchKomponenSelisih: (agenId: string) => Promise<KomponenSelisih[]>;
   fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
   submitBayar: (
     agenId: string,
@@ -293,8 +438,11 @@ function AgenCard({
   const [bayarOpen, setBayarOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const captureRef = useRef<HTMLDivElement>(null);
-  const hasMore = row.transaksi.length > COLLAPSED_PREVIEW_COUNT;
+  const jumlahDaftar = belumLunas ? belumLunas.length : row.transaksi.length;
+  const hasMore = jumlahDaftar > COLLAPSED_PREVIEW_COUNT;
   const visibleTransaksi = expanded ? row.transaksi : row.transaksi.slice(0, COLLAPSED_PREVIEW_COUNT);
+  const visibleBelumLunas = belumLunas ? (expanded ? belumLunas : belumLunas.slice(0, COLLAPSED_PREVIEW_COUNT)) : [];
+  const totalBelumLunas = belumLunas ? belumLunas.reduce((jumlah, b) => jumlah + b.terbuka.outstanding, 0) : 0;
   const segLabel = segmentasiLabel(row.segmentasi);
   const hasPin = row.latitude != null && row.longitude != null;
 
@@ -432,20 +580,22 @@ function AgenCard({
                   />
                   {status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}
                 </Badge>
-                <Badge
-                  variant="outline"
-                  className={cn("h-5 gap-1 px-1.5 text-[10px]", STATUS_PIUTANG_CLASS[statusPiutang].badge)}
-                  title={
+                <Petunjuk
+                  render={<span className="inline-flex cursor-help" />}
+                  judul={`Status ${statusPiutang}`}
+                  isi={
                     terbukaAgen
                       ? `Piutang terbuka ${formatRupiah(terbukaAgen.outstanding)}; terlama ${
                           terbukaAgen.maxDaysOverdue > 0 ? `lewat ${terbukaAgen.maxDaysOverdue} hari dari jatuh tempo` : "belum jatuh tempo"
-                        }`
-                      : "Tidak ada piutang terbuka"
+                        }.`
+                      : "Tidak ada piutang terbuka."
                   }
                 >
-                  <span className={cn("size-1.5 rounded-full", STATUS_PIUTANG_CLASS[statusPiutang].dot)} />
-                  {statusPiutang}
-                </Badge>
+                  <Badge variant="outline" className={cn("h-5 gap-1 px-1.5 text-[10px]", STATUS_PIUTANG_CLASS[statusPiutang].badge)}>
+                    <span className={cn("size-1.5 rounded-full", STATUS_PIUTANG_CLASS[statusPiutang].dot)} />
+                    {statusPiutang}
+                  </Badge>
+                </Petunjuk>
                 {hasPin && (
                   <Button
                     variant="ghost"
@@ -470,7 +620,74 @@ function AgenCard({
           </div>
         </div>
 
-        {row.transaksi.length > 0 && (
+        {belumLunas && (
+          <div className="-mx-4 border-t px-2 pt-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
+              <p className="min-w-0 truncate whitespace-nowrap text-[10px] font-semibold uppercase text-muted-foreground">
+                {belumLunas.length} Pemesanan belum lunas
+              </p>
+              <p className="shrink-0 text-muted-foreground">Semua periode</p>
+            </div>
+            {belumLunas.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {visibleBelumLunas.map((item) => (
+                  <BelumLunasRow key={item.noDokumen} item={item} />
+                ))}
+                <div className="flex items-center justify-between gap-2 px-1 pt-0.5 text-[11px]">
+                  <span className="text-muted-foreground">Total sisa pesanan</span>
+                  <span className="font-data font-semibold tabular-nums">{formatRupiah(totalBelumLunas)}</span>
+                </div>
+                {/* Total pesanan belum lunas (FIFO) bisa berbeda dari Sisa Hutang
+                    di bawah — rinciannya (tarikan, saldo awal ERP, kelebihan
+                    bayar, saldo database lain) dihitung tepat di
+                    getKomponenSelisihPiutang dan dimuat saat diminta. */}
+                {Math.abs(row.saldoAkhir - totalBelumLunas) >= 1 && (
+                  <RincianSelisih
+                    key={`${row.agenId}|${row.saldoAkhir}|${totalBelumLunas}`}
+                    selisih={row.saldoAkhir - totalBelumLunas}
+                    totalBelumLunas={totalBelumLunas}
+                    sisaHutang={row.saldoAkhir}
+                    muat={() => fetchKomponenSelisih(row.agenId)}
+                  />
+                )}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed px-2.5 py-2 text-[11px] text-muted-foreground">
+                Tidak ada pemesanan yang belum lunas.
+                {row.saldoAkhir > 0 && " Sisa hutangnya tidak terikat ke pesanan tertentu (mis. tarikan tabungan)."}
+              </p>
+            )}
+          </div>
+        )}
+        {!belumLunas && row.transaksi.length === 0 && row.saldoAkhir > 0 && (
+          // Periode terpilih tanpa transaksi sama sekali, padahal masih ada
+          // hutang: hutangnya dari periode sebelumnya — beri tahu caranya
+          // melihat rincian, alih-alih kartu yang tampak kosong.
+          // Ringkas: satu kalimat + tautan; penjelasan lengkap di petunjuk ikon ⓘ.
+          <div
+            className="-mx-2 flex items-start gap-2 rounded-lg border border-dashed bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground"
+            data-capture-hide="true"
+          >
+            <Petunjuk
+              render={<span className="mt-0.5 shrink-0 cursor-help" />}
+              judul="Hutang dari periode sebelumnya"
+              isi="Mundurkan Tanggal Awal untuk melihat rinciannya, atau tampilkan semua pesanan yang belum lunas."
+            >
+              <Info className="size-3.5" />
+            </Petunjuk>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <p>Tidak ada transaksi di {periodeLabel}; hutang dari periode lalu.</p>
+              <button
+                type="button"
+                onClick={onLihatBelumLunas}
+                className="w-fit font-medium text-primary hover:underline"
+              >
+                Lihat pesanan belum lunas →
+              </button>
+            </div>
+          </div>
+        )}
+        {!belumLunas && row.transaksi.length > 0 && (
           // -mx-4 cancels CardContent's own px-4 so these boxes sit snug
           // against the card's edge, then px-2 re-adds just enough inset to
           // avoid touching the border outright.
@@ -499,7 +716,9 @@ function AgenCard({
             className="flex items-center justify-center gap-1 pt-0.5 text-[11px] text-muted-foreground hover:text-foreground"
             data-capture-hide="true"
           >
-            {expanded ? "Sembunyikan" : `+${row.transaksi.length - COLLAPSED_PREVIEW_COUNT} transaksi lainnya`}
+            {expanded
+              ? "Sembunyikan"
+              : `+${jumlahDaftar - COLLAPSED_PREVIEW_COUNT} ${belumLunas ? "pesanan" : "transaksi"} lainnya`}
             <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
           </button>
         )}
@@ -594,15 +813,6 @@ function AgenCard({
   );
 }
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function monthStartISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
 // Per-Agen breakdown matching the "Rekening Agen Gabungan" ERP export
 // (Tabungan Awal / Hutang Awal / Pesanan / Retur / Pembayaran / Tarikan /
 // Saldo Akhir per Agen), with a caller-adjustable date range -- same
@@ -613,7 +823,10 @@ function monthStartISO(): string {
 export function PiutangPerAgenTable({
   initialRows,
   initialTerbuka,
+  awalISO,
+  akhirISO,
   fetchTerbuka,
+  fetchKomponenSelisih,
   fetchAction,
   fetchBayarContext,
   submitBayar,
@@ -625,7 +838,14 @@ export function PiutangPerAgenTable({
   // Kritis per Agen dan indikator umur per transaksi. Tidak bergantung pada
   // rentang tanggal; dimuat ulang hanya setelah Bayar/Tarik.
   initialTerbuka: RingkasanPiutangTerbuka;
+  // Periode yang dipakai server untuk initialRows (WIB, inklusif) — isian
+  // tanggal diawali dari sini supaya selalu cocok dengan data awal.
+  awalISO: string;
+  akhirISO: string;
   fetchTerbuka: () => Promise<RingkasanPiutangTerbuka>;
+  // Asal selisih Sisa Hutang vs pesanan belum lunas untuk satu Agen, dihitung
+  // sampai tanggal akhir periode yang sedang diterapkan.
+  fetchKomponenSelisih: (agenId: string, endDate: string) => Promise<KomponenSelisih[]>;
   fetchAction: (startDate: string, endDate: string) => Promise<PiutangPerAgenRow[]>;
   fetchBayarContext: (agenId: string) => Promise<PiutangBayarContext>;
   submitBayar: (
@@ -642,9 +862,15 @@ export function PiutangPerAgenTable({
     catatan: string | null
   ) => Promise<BayarPiutangResult[]>;
 }) {
-  const [startDate, setStartDate] = useState(monthStartISO());
-  const [endDate, setEndDate] = useState(todayISO());
+  const [startDate, setStartDate] = useState(awalISO);
+  const [endDate, setEndDate] = useState(akhirISO);
+  const panelAlatRef = useRef<HTMLDivElement>(null);
+  const [filterHpBuka, setFilterHpBuka] = useState(false);
+  usePanelMenempel(panelAlatRef);
   const [rows, setRows] = useState(initialRows);
+  // Tanggal akhir yang benar-benar dipakai data `rows` (bukan isian yang
+  // mungkin sudah diubah tetapi belum diterapkan).
+  const [akhirDiterapkan, setAkhirDiterapkan] = useState(endDate);
   const [terbuka, setTerbuka] = useState(initialTerbuka);
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const [pending, startTransition] = useTransition();
@@ -656,12 +882,38 @@ export function PiutangPerAgenTable({
   const [sortKey, setSortKey] = useState<SortKey>("SaldoAkhir");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
+  // Mode "Semua belum lunas": tiap kartu menampilkan pesanan terbuka dari
+  // SEMUA periode (bukan hanya rentang tanggal), dan hanya Agen yang masih
+  // punya pesanan belum lunas yang ditampilkan.
+  // Bawaan NYALA — kartu langsung menunjukkan pesanan yang masih terbuka,
+  // tidak tampak kosong untuk Agen yang tak bertransaksi di periode ini.
+  const [semuaBelumLunas, setSemuaBelumLunas] = useState(true);
+  // Denyut (pulse) di sakelar sampai pengguna menyentuhnya sekali, supaya
+  // fitur ini terlihat dan dicoba.
+  const [sakelarDisentuh, setSakelarDisentuh] = useState(false);
+  const [segmentasi, setSegmentasi] = useState<string>("all");
+
+  // Pesanan terbuka per Agen dari ringkasan FIFO (sudah lintas periode),
+  // diurutkan dari yang terlama.
+  const belumLunasPerAgen = useMemo(() => {
+    const peta = new Map<string, PesananBelumLunas[]>();
+    for (const [kunci, nilai] of Object.entries(terbuka.dokumen)) {
+      const pisah = kunci.indexOf("|");
+      const agenId = kunci.slice(0, pisah);
+      const daftar = peta.get(agenId) ?? [];
+      daftar.push({ noDokumen: kunci.slice(pisah + 1), tanggal: nilai[2] ?? null, terbuka: { outstanding: nilai[0], maxDaysOverdue: nilai[1] } });
+      peta.set(agenId, daftar);
+    }
+    for (const daftar of peta.values()) daftar.sort((a, b) => (a.tanggal ?? "").localeCompare(b.tanggal ?? ""));
+    return peta;
+  }, [terbuka]);
 
   function applyRange() {
     setError(null);
     startTransition(async () => {
       try {
         setRows(await fetchAction(startDate, endDate));
+        setAkhirDiterapkan(endDate);
         setLastUpdated(new Date());
         setPage(1);
       } catch {
@@ -724,8 +976,10 @@ export function PiutangPerAgenTable({
 
   const filtered = useMemo(() => {
     let result = rows.filter((r) => {
+      if (segmentasi === "none" ? r.segmentasi != null : segmentasi !== "all" && r.segmentasi !== segmentasi) return false;
       if (status !== "all" && statusOf(r) !== status) return false;
       if (statusPiutang !== "all" && statusPiutangOf(r.agenId) !== statusPiutang) return false;
+      if (semuaBelumLunas && !belumLunasPerAgen.has(r.agenId)) return false;
       if (search && !r.nama.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
@@ -736,9 +990,9 @@ export function PiutangPerAgenTable({
       return dir * (a.saldoAkhir - b.saldoAkhir);
     });
     return result;
-  }, [rows, search, status, statusPiutang, statusPiutangOf, sortKey, sortDir]);
+  }, [rows, search, segmentasi, status, statusPiutang, statusPiutangOf, sortKey, sortDir, semuaBelumLunas, belumLunasPerAgen]);
 
-  const filterKey = `${search}|${status}|${statusPiutang}`;
+  const filterKey = `${search}|${segmentasi}|${status}|${statusPiutang}|${semuaBelumLunas}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
@@ -771,69 +1025,258 @@ export function PiutangPerAgenTable({
     [filtered, terbuka, statusPiutangOf]
   );
 
+  const jumlahFilterAktif = [segmentasi !== "all", status !== "all", statusPiutang !== "all"].filter(Boolean).length;
+
+  function pilihSegmentasi(kelas?: string) {
+    return (
+      <Select value={segmentasi} onValueChange={(v) => setSegmentasi(v ?? "all")}>
+        <SelectTrigger aria-label="Segmentasi" className={kelas}>
+          <SelectValue>
+            {() =>
+              segmentasi === "all"
+                ? "Semua Segmentasi"
+                : segmentasi === "none"
+                  ? "Belum Ditentukan"
+                  : (SEGMENTASI_OPTIONS.find((o) => o.value === segmentasi)?.label ?? "Segmentasi")
+            }
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className="w-auto min-w-(--anchor-width)">
+          <SelectItem value="all">Semua Segmentasi</SelectItem>
+          {SEGMENTASI_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+          <SelectItem value="none">Belum Ditentukan</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function pilihJenis(kelas?: string) {
+    return (
+      <Select value={status} onValueChange={(v) => setStatus((v as StatusFilter) ?? "all")}>
+        <SelectTrigger aria-label="Jenis" className={kelas}>
+          <SelectValue>
+            {() => (status === "all" ? "Semua Jenis" : status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas")}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className="w-auto min-w-(--anchor-width)">
+          <SelectItem value="all">Semua Jenis</SelectItem>
+          <SelectItem value="hutang">Hutang</SelectItem>
+          <SelectItem value="tabungan">Tabungan</SelectItem>
+          <SelectItem value="lunas">Lunas</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function pilihStatus(kelas?: string) {
+    return (
+      <Select value={statusPiutang} onValueChange={(v) => setStatusPiutang((v as StatusPiutangFilter) ?? "all")}>
+        <SelectTrigger aria-label="Status" className={kelas}>
+          <SelectValue>{() => (statusPiutang === "all" ? "Semua Status" : statusPiutang)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="w-auto min-w-(--anchor-width)">
+          <SelectItem value="all">Semua Status</SelectItem>
+          <SelectItem value="Sehat">Sehat</SelectItem>
+          <SelectItem value="Perhatian">Perhatian</SelectItem>
+          <SelectItem value="Kritis">Kritis</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="piutang-start" className="text-xs">
-            Tanggal Awal
-          </Label>
-          <Input id="piutang-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="piutang-end" className="text-xs">
-            Tanggal Akhir
-          </Label>
-          <Input id="piutang-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
-        </div>
-        <Button onClick={applyRange} disabled={pending}>
-          {pending ? "Memuat..." : "Terapkan"}
-        </Button>
-      </div>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {/* Satu panel alat, dua baris:
+          1) cari + filter jenis/status | rentang tanggal + Terapkan
+          2) sakelar Semua belum lunas + jumlah | urutan + ekspor */}
+      <div
+        ref={panelAlatRef}
+        className="sticky top-3 z-[25] flex flex-col gap-2.5 rounded-xl border bg-card p-3 shadow-xs transition-[margin,box-shadow] duration-200 before:pointer-events-none before:absolute before:-inset-x-4 before:-top-4 before:-bottom-2 before:-z-10 before:hidden before:bg-background before:content-[''] data-menempel:ml-(--ruang-tombol) data-menempel:shadow-md data-menempel:before:block data-menempel:before:-left-[calc(1rem+var(--ruang-tombol))]"
+      >
+        <div className="flex items-center gap-2 sm:flex-wrap">
+          <div className="relative min-w-0 flex-1 sm:min-w-48 sm:max-w-72">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Cari nama Mitra..."
+              aria-label="Cari nama Mitra"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input placeholder="Cari nama Agen..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
-        <Select value={status} onValueChange={(v) => setStatus((v as StatusFilter) ?? "all")}>
-          <SelectTrigger className="w-36" aria-label="Jenis">
-            <SelectValue>
-              {() => (status === "all" ? "Semua Jenis" : status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas")}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Jenis</SelectItem>
-            <SelectItem value="hutang">Hutang</SelectItem>
-            <SelectItem value="tabungan">Tabungan</SelectItem>
-            <SelectItem value="lunas">Lunas</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={statusPiutang}
-          onValueChange={(v) => setStatusPiutang((v as StatusPiutangFilter) ?? "all")}
-        >
-          <SelectTrigger className="w-36" aria-label="Status">
-            <SelectValue>{() => (statusPiutang === "all" ? "Semua Status" : statusPiutang)}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="Sehat">Sehat</SelectItem>
-            <SelectItem value="Perhatian">Perhatian</SelectItem>
-            <SelectItem value="Kritis">Kritis</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="flex flex-1 flex-wrap items-center gap-1.5 sm:justify-end">
-          <SortToggle label="Saldo Akhir" sortKey="SaldoAkhir" active={sortKey === "SaldoAkhir"} direction={sortDir} onSort={handleSort} />
-          <SortToggle label="Pesanan" sortKey="Pesanan" active={sortKey === "Pesanan"} direction={sortDir} onSort={handleSort} />
-          <SortToggle label="Nama" sortKey="Nama" active={sortKey === "Nama"} direction={sortDir} onSort={handleSort} />
+          {/* HP: filter & urutan diringkas ke dua ikon (popup), supaya panel
+              yang menempel tetap pendek. Layar sm+: semua isian tampil. */}
+          <Popover open={filterHpBuka} onOpenChange={setFilterHpBuka}>
+            <PopoverTrigger
+              render={
+                <Button variant="outline" size="icon" className="relative size-8 shrink-0 sm:hidden" aria-label="Filter" title="Filter" />
+              }
+            >
+              <SlidersHorizontal className="size-4" />
+              {jumlahFilterAktif > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                  {jumlahFilterAktif}
+                </span>
+              )}
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[min(18rem,calc(100vw-2rem))]">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Segmentasi</span>
+                  {pilihSegmentasi("w-full")}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Jenis</span>
+                  {pilihJenis("w-full")}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  {pilihStatus("w-full")}
+                </div>
+                <div className="grid grid-cols-2 gap-2 border-t pt-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Tanggal awal</span>
+                    <Input type="date" aria-label="Tanggal Awal" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Tanggal akhir</span>
+                    <Input type="date" aria-label="Tanggal Akhir" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  </div>
+                </div>
+                <Button
+                  onClick={() => {
+                    applyRange();
+                    setFilterHpBuka(false);
+                  }}
+                  disabled={pending}
+                >
+                  {pending ? "Memuat..." : "Terapkan tanggal"}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button variant="outline" size="icon" className="size-8 shrink-0 sm:hidden" aria-label="Urutkan" title="Urutkan" />
+              }
+            >
+              <ArrowUpDown className="size-4" />
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-56">
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-muted-foreground">Urutkan menurut</span>
+                <div className="flex flex-col gap-0.5">
+                  <SortToggle label="Saldo Akhir" sortKey="SaldoAkhir" active={sortKey === "SaldoAkhir"} direction={sortDir} onSort={handleSort} penuh />
+                  <SortToggle label="Pesanan" sortKey="Pesanan" active={sortKey === "Pesanan"} direction={sortDir} onSort={handleSort} penuh />
+                  <SortToggle label="Nama" sortKey="Nama" active={sortKey === "Nama"} direction={sortDir} onSort={handleSort} penuh />
+                </div>
+                <div className="border-t pt-2">
+                  <ExportXlsxButton filename="rekening-mitra-gabungan" sheetName="Rekening Mitra" columns={EXPORT_COLUMNS} rows={exportRows} />
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <div className="hidden flex-wrap items-center gap-2 sm:flex">
+            {pilihSegmentasi()}
+            {pilihJenis()}
+            {pilihStatus()}
+          </div>
+
+          <div className="hidden flex-wrap items-center gap-2 sm:flex lg:ml-auto">
+            {/* Rentang tanggal sebagai satu kotak "awal – akhir". */}
+            <div className="flex h-8 items-center rounded-lg border border-input bg-background dark:bg-input/30">
+              <Input
+                id="piutang-start"
+                type="date"
+                aria-label="Tanggal Awal"
+                title="Tanggal Awal"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-full w-[8.5rem] border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+              />
+              <span className="px-0.5 text-muted-foreground">–</span>
+              <Input
+                id="piutang-end"
+                type="date"
+                aria-label="Tanggal Akhir"
+                title="Tanggal Akhir"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-full w-[8.5rem] border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+              />
+            </div>
+            <Button onClick={applyRange} disabled={pending}>
+              {pending ? "Memuat..." : "Terapkan"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-2.5">
+          {/* Sakelar (switch), bukan tombol biasa: statusnya nyala/mati jelas
+              terlihat dari posisi kenop. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={semuaBelumLunas}
+            onClick={() => {
+              setSemuaBelumLunas((v) => !v);
+              setSakelarDisentuh(true);
+            }}
+            className="group/sakelar inline-flex items-center gap-2 rounded-md text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "relative h-4 w-7 shrink-0 rounded-full transition-colors",
+                // Cincin denyut di belakang track (motion-safe) sampai disentuh.
+                !sakelarDisentuh &&
+                  "motion-safe:before:absolute motion-safe:before:inset-0 motion-safe:before:animate-ping motion-safe:before:rounded-full motion-safe:before:bg-primary/40 motion-safe:before:content-['']",
+                semuaBelumLunas ? "bg-primary" : "bg-muted-foreground/30 group-hover/sakelar:bg-muted-foreground/45"
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 left-0.5 size-3 rounded-full bg-white shadow-sm transition-transform duration-200",
+                  semuaBelumLunas && "translate-x-3"
+                )}
+              />
+            </span>
+            <span className={semuaBelumLunas ? "font-medium text-foreground" : "text-muted-foreground group-hover/sakelar:text-foreground"}>
+              Semua belum lunas
+            </span>
+          </button>
+          <span className="hidden h-4 w-px bg-border sm:block" aria-hidden />
+          <p className="ml-auto text-xs text-muted-foreground sm:ml-0">
+            {pageRows.length} dari {filtered.length} Mitra
+          </p>
+
+          <div className="hidden flex-wrap items-center gap-2 sm:ml-auto sm:flex">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Urutkan</span>
+              <div className="flex items-center gap-0.5 rounded-lg border p-0.5">
+                <SortToggle label="Saldo Akhir" sortKey="SaldoAkhir" active={sortKey === "SaldoAkhir"} direction={sortDir} onSort={handleSort} />
+                <SortToggle label="Pesanan" sortKey="Pesanan" active={sortKey === "Pesanan"} direction={sortDir} onSort={handleSort} />
+                <SortToggle label="Nama" sortKey="Nama" active={sortKey === "Nama"} direction={sortDir} onSort={handleSort} />
+              </div>
+            </div>
+            <ExportXlsxButton filename="rekening-mitra-gabungan" sheetName="Rekening Mitra" columns={EXPORT_COLUMNS} rows={exportRows} />
+          </div>
         </div>
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {semuaBelumLunas && (
         <p className="text-xs text-muted-foreground">
-          Menampilkan {pageRows.length} dari {filtered.length} Agen.
+          Menampilkan semua pemesanan yang belum lunas dari periode mana pun (pesanan terlama dulu). Angka ringkasan di
+          kartu tetap mengikuti periode {periodeLabel}.
         </p>
-        <ExportXlsxButton filename="rekening-agen-gabungan" sheetName="Rekening Agen" columns={EXPORT_COLUMNS} rows={exportRows} />
-      </div>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {pageRows.map((r) => (
@@ -844,6 +1287,9 @@ export function PiutangPerAgenTable({
             terbukaDokumen={terbuka.dokumen}
             periodeLabel={periodeLabel}
             lastUpdated={lastUpdated}
+            belumLunas={semuaBelumLunas ? (belumLunasPerAgen.get(r.agenId) ?? []) : null}
+            onLihatBelumLunas={() => setSemuaBelumLunas(true)}
+            fetchKomponenSelisih={(agenId) => fetchKomponenSelisih(agenId, akhirDiterapkan)}
             fetchBayarContext={fetchBayarContext}
             submitBayar={handleBayar}
             fetchTarikContext={fetchTarikContext}

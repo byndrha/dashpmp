@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useState, type ReactNode } from "react";
 import { MapPin, Plus, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -183,13 +184,13 @@ export function LokasiPengirimanSection({
   // true selagi data alamat segar belum termuat dari server.
   disabled?: boolean;
 }) {
-  function ubahCentang(dicentang: boolean) {
+  async function ubahCentang(dicentang: boolean) {
     if (dicentang) {
       onChange((v) => ({ ...v, lokasiBerbeda: true, lokasiUtama: { ...v.alamatMitra }, lokasiTambahan: [] }));
       return;
     }
     const n = value.lokasiTambahan.length;
-    if (n > 0 && !confirm(`${n} lokasi tambahan akan dihapus, alamat mitra akan disamakan dengan Lokasi Utama.`)) return;
+    if (n > 0 && !(await konfirmasi(`${n} lokasi tambahan akan dihapus, alamat mitra akan disamakan dengan Lokasi Utama.`))) return;
     onChange((v) => ({
       ...v,
       lokasiBerbeda: false,
@@ -211,10 +212,10 @@ export function LokasiPengirimanSection({
     }));
   }
 
-  function hapus(i: number) {
+  async function hapus(i: number) {
     const l = value.lokasiTambahan[i];
     const nama = l.label?.trim() || `Lokasi ${i + 2}`;
-    if (!confirm(`Hapus ${nama}? Perubahan berlaku saat form disimpan.`)) return;
+    if (!(await konfirmasi(`Hapus ${nama}? Perubahan berlaku saat form disimpan.`))) return;
     onChange((v) => ({
       ...v,
       lokasiTambahan: v.lokasiTambahan.filter((_, j) => j !== i),

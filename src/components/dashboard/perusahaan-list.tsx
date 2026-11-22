@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+import { konfirmasi } from "@/components/konfirmasi";
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus, Pencil, Trash2, MapPin, Building2, Wallet, Satellite } from "lucide-react";
@@ -92,22 +94,22 @@ export function PerusahaanList({
     });
   }
 
-  function handleDelete(row: PerusahaanRow) {
-    if (!confirm(`Hapus PT "${row.Nama}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+  async function handleDelete(row: PerusahaanRow) {
+    if (!(await konfirmasi(`Hapus PT "${row.Nama}"? Tindakan ini tidak dapat dibatalkan.`))) return;
     startTransition(async () => {
       const result = await deletePerusahaanAction(row.PerusahaanID);
       if (!result.success) {
-        alert(result.error);
+        toast.error(result.error);
       }
     });
   }
 
-  function handleDisconnectGDrive(perusahaanId: number) {
-    if (!confirm("Putuskan koneksi Google Drive? Upload/baca file untuk PT ini akan berhenti sampai dihubungkan ulang.")) return;
+  async function handleDisconnectGDrive(perusahaanId: number) {
+    if (!(await konfirmasi("Putuskan koneksi Google Drive? Upload/baca file untuk PT ini akan berhenti sampai dihubungkan ulang."))) return;
     startTransition(async () => {
       const result = await disconnectGDriveAction(perusahaanId);
       if (!result.success) {
-        alert(result.error);
+        toast.error(result.error);
       }
     });
   }

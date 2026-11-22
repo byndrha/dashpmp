@@ -281,7 +281,7 @@ export function TabPencocokan({ kode }: { kode: KodeProduksi }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Plat</TableHead>
-                <TableHead>Agen</TableHead>
+                <TableHead>Mitra</TableHead>
                 <TableHead className="text-right">K</TableHead>
                 <TableHead className="text-right">B</TableHead>
               </TableRow>

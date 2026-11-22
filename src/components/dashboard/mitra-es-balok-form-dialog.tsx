@@ -1,6 +1,7 @@
 // src/components/dashboard/mitra-es-balok-form-dialog.tsx
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
@@ -288,7 +289,7 @@ export function MitraEsBalokFormDialog({
     });
   }
 
-  function handleJadikanUtama(l: LokasiTambahanInput) {
+  async function handleJadikanUtama(l: LokasiTambahanInput) {
     if (!agenId || l.lokasiPengirimanId == null) return;
     const lokasiId = l.lokasiPengirimanId;
     const wLama = alamat.lokasiUtama.wilayah;
@@ -302,7 +303,7 @@ export function MitraEsBalokFormDialog({
         ? `\n\nPERINGATAN: Wilayah utama berubah dari "${adaptorWilayah.keNama(wLama) ?? "-"}" ke "${adaptorWilayah.keNama(wBaru) ?? "-"}". ` +
           `Laporan per wilayah untuk mitra ini ikut pindah.`
         : "");
-    if (!confirm(pesan)) return;
+    if (!(await konfirmasi(pesan))) return;
     setError(null);
     startJadikan(async () => {
       const r = await aksi.jadikanUtama(sumber, agenId, agenDetailId, lokasiId);
@@ -389,8 +390,8 @@ export function MitraEsBalokFormDialog({
 
           {jumlahKartuAgen > 1 && (
             <p className="col-span-full rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Agen ini punya {jumlahKartuAgen} alamat ERP (tampil sebagai {jumlahKartuAgen} kartu). Alamat & Wilayah lokasi utama di
-              form ini hanya mengubah kartu ini. Kontak, pin, identitas, lokasi tambahan, dan kompetitor dipakai bersama semua kartu Agen ini.
+              Mitra ini punya {jumlahKartuAgen} alamat ERP (tampil sebagai {jumlahKartuAgen} kartu). Alamat & Wilayah lokasi utama di
+              form ini hanya mengubah kartu ini. Kontak, pin, identitas, lokasi tambahan, dan kompetitor dipakai bersama semua kartu Mitra ini.
             </p>
           )}
 

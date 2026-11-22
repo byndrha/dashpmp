@@ -10,31 +10,27 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PenagihanByChatPanel } from "@/components/dashboard/penagihan-bychat-panel";
 import { PiutangTabs } from "@/components/dashboard/piutang-tabs";
 import {
-  PiutangKpiRowPeriode,
-  PiutangKpiRowAging,
+  PiutangRingkasanEsKristal,
+  PiutangTrenEsKristal,
   PiutangInvoiceTablePanel,
-  PiutangStatusSection,
   PiutangPrioritasPanel,
   PiutangPembayaranPanel,
 } from "@/components/dashboard/piutang-sections";
 
 export const metadata: Metadata = { title: "Piutang" };
 
-// 3 boks berdampingan -- dipakai sebagai fallback Suspense untuk setiap
-// baris KPI, meniru bentuk KpiCard (Card + judul + angka besar) supaya
-// tidak ada "lompatan" tinggi begitu kontennya siap.
-function KpiRowSkeleton() {
+// Bentuk sama dengan RingkasanPiutang (kartu posisi + alur, lalu umur)
+// supaya tidak ada "lompatan" tinggi begitu kontennya siap.
+function RingkasanSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      {[0, 1, 2].map((i) => (
-        <Skeleton key={i} className="h-[104px] w-full rounded-lg" />
-      ))}
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Skeleton className="h-[150px] w-full rounded-xl" />
+        <Skeleton className="h-[150px] w-full rounded-xl lg:col-span-2" />
+      </div>
+      <Skeleton className="h-[220px] w-full rounded-xl" />
     </div>
   );
-}
-
-function PanelSkeleton() {
-  return <Skeleton className="h-32 w-full rounded-lg" />;
 }
 
 function TableSkeleton() {
@@ -75,24 +71,15 @@ export default async function AgingPage({
         <FilterBar wilayahList={wilayahList} />
       </div>
 
-      {/* Boks "Periode" (Saldo Awal/Pembayaran/Rasio) ditaruh PALING ATAS --
-          hanya bergantung pada getPiutangPeriodSummary, query agregat ringan
-          tanpa join per-invoice, jadi ini yang paling cepat tampil.
-          Boks "Aging" (Total Outstanding/Overdue/Kritis) di bawahnya berbagi
-          query yang sama (getAgingReceivables, di-cache()) dengan tabel
-          Invoice Outstanding di tab pertama -- keduanya baru bisa tampil
-          begitu query terberat itu selesai, jadi sengaja ditaruh setelah
-          boks Periode, bukan lagi di atas seperti sebelumnya. */}
-      <Suspense fallback={<KpiRowSkeleton />}>
-        <PiutangKpiRowPeriode filter={filter} />
+      {/* Ringkasan (posisi, pergerakan periode, umur & status) — satu
+          Suspense karena posisi/umur dan pergerakan sama-sama dibutuhkan.
+          Tren bulanan menyusul sendiri (query agregat ringan). */}
+      <Suspense fallback={<RingkasanSkeleton />}>
+        <PiutangRingkasanEsKristal filter={filter} wilayah={wilayah} />
       </Suspense>
 
-      <Suspense fallback={<KpiRowSkeleton />}>
-        <PiutangKpiRowAging wilayah={wilayah} />
-      </Suspense>
-
-      <Suspense fallback={<PanelSkeleton />}>
-        <PiutangStatusSection />
+      <Suspense fallback={<Skeleton className="h-[260px] w-full rounded-xl" />}>
+        <PiutangTrenEsKristal bulanBerjalan={todayISO.slice(0, 7)} />
       </Suspense>
 
       <PiutangTabs

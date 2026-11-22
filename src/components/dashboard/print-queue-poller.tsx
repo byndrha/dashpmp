@@ -205,9 +205,12 @@ export function PrintQueuePoller() {
     };
   }, [drainQueue]);
 
+  // Satu "pil" status setinggi tombol di sebelahnya (header Pengiriman):
+  // titik hijau = tersambung, abu-abu = belum (klik untuk pilih Bluetooth/USB).
   if (status === "connected") {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="flex h-8 items-center gap-1.5 rounded-lg border bg-card px-2.5 text-xs text-muted-foreground">
+        <span className="size-2 rounded-full bg-primary" aria-hidden />
         <Printer className="size-3.5 text-primary" /> Printer tersambung
       </div>
     );
@@ -216,9 +219,12 @@ export function PrintQueuePoller() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button size="sm" variant="ghost" className="h-auto gap-1 px-1 text-xs text-muted-foreground" disabled={status === "connecting"} />}
+        render={
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground" disabled={status === "connecting"} />
+        }
       >
-        {status === "connecting" ? "Menyambungkan printer..." : "Printer belum tersambung"}
+        <span className={status === "connecting" ? "size-2 animate-pulse rounded-full bg-warning" : "size-2 rounded-full bg-muted-foreground/40"} aria-hidden />
+        {status === "connecting" ? "Menyambungkan printer..." : "Sambungkan printer"}
         <ChevronDown className="size-3 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

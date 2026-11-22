@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useState, useTransition } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -223,8 +224,8 @@ export function PrintManagementView({
     });
   }
 
-  function handleCancel(printQueueId: number) {
-    if (!confirm("Batalkan cetak SI ini?")) return;
+  async function handleCancel(printQueueId: number) {
+    if (!(await konfirmasi("Batalkan cetak SI ini?"))) return;
     setBusyId(printQueueId);
     startTransition(async () => {
       const result = await cancelPrintQueueJobAction(printQueueId);

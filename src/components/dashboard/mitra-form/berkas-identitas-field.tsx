@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useRef, useState } from "react";
 import { Eye, Loader2, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -90,7 +91,7 @@ export function BerkasIdentitasField({
   }
 
   async function hapus() {
-    if (!confirm(`Hapus ${LABEL[jenis]}? Berkas akan dihapus permanen dari Google Drive.`)) return;
+    if (!(await konfirmasi(`Hapus ${LABEL[jenis]}? Berkas akan dihapus permanen dari Google Drive.`))) return;
     setGalat(null);
     setProses("hapus");
     try {

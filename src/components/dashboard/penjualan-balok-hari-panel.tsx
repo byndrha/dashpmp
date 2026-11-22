@@ -147,7 +147,7 @@ export function PenjualanBalokHariPanel({
               <span className="justify-self-end">
                 <BalokChip label="Balok Kecil" value={data.qtyKecil} />
               </span>
-              <DocChip icon={Users} label="Agen" value={data.agen} />
+              <DocChip icon={Users} label="Mitra" value={data.agen} />
               <span className="justify-self-end">
                 <BalokChip label="Balok Besar" value={data.qtyBesar} />
               </span>

@@ -3,6 +3,10 @@ import type { DateRangeFilter } from "@/types/dashboard";
 
 export interface PiutangPeriodSummary {
   SaldoAwalPeriode: number;
+  // Rumus sama dengan SaldoAwalPeriode, batasnya tanggal akhir (eksklusif):
+  // saldo awal + penjualan − pembayaran periode = saldo akhir (dicek
+  // 2026-11-22 untuk Jun–Nov 2026, selisih 0).
+  SaldoAkhirPeriode: number;
   TotalPembayaranPeriode: number;
   TotalPenjualanPeriode: number;
   RatioPiutangOmzetPct: number;
@@ -18,10 +22,11 @@ export interface PiutangPeriodSummary {
 export async function getPiutangPeriodSummary(filter: DateRangeFilter): Promise<PiutangPeriodSummary> {
   const pool = await getPool();
 
-  const saldoAwalResult = await pool
-    .request()
-    .input("cutoff", sql.Date, filter.startDate)
-    .query(`
+  const saldoPada = (cutoff: string) =>
+    pool
+      .request()
+      .input("cutoff", sql.Date, cutoff)
+      .query(`
       WITH BalanceAsOf AS (
         SELECT SalesInvoiceID,
                SUM(Netto) AS Netto, SUM(Deposit) AS Deposit,
@@ -37,6 +42,7 @@ export async function getPiutangPeriodSummary(filter: DateRangeFilter): Promise<
       ) v
       WHERE v.Outstanding > 0
     `);
+  const [saldoAwalResult, saldoAkhirResult] = await Promise.all([saldoPada(filter.startDate), saldoPada(filter.endDate)]);
 
   const paymentResult = await pool
     .request()
@@ -77,12 +83,14 @@ export async function getPiutangPeriodSummary(filter: DateRangeFilter): Promise<
   `);
 
   const saldoAwal = saldoAwalResult.recordset[0]?.SaldoAwal ?? 0;
+  const saldoAkhir = saldoAkhirResult.recordset[0]?.SaldoAwal ?? 0;
   const totalPembayaran = paymentResult.recordset[0]?.TotalPembayaran ?? 0;
   const totalPenjualan = salesResult.recordset[0]?.TotalPenjualan ?? 0;
   const totalOutstanding = outstandingResult.recordset[0]?.TotalOutstanding ?? 0;
 
   return {
     SaldoAwalPeriode: saldoAwal,
+    SaldoAkhirPeriode: saldoAkhir,
     TotalPembayaranPeriode: totalPembayaran,
     TotalPenjualanPeriode: totalPenjualan,
     RatioPiutangOmzetPct: totalPenjualan !== 0 ? (totalOutstanding / totalPenjualan) * 100 : 0,

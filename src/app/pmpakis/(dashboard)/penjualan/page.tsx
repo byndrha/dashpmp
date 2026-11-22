@@ -12,7 +12,6 @@ export default async function PmpakisPenjualanPage({ searchParams }: { searchPar
   return (
     <PenjualanEsBalokView
       kode="pmpakis"
-      namaPt="PT Panen Mutiara Pakis"
       searchParams={await searchParams}
       actions={{
         loadHari: loadHariAction,

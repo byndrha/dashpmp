@@ -100,62 +100,216 @@ export function KakiSidebar({
 // Tombol di pojok kiri atas area halaman (top bar sudah dihapus):
 // ☰ ciut/buka sidebar, plus lonceng notifikasi KHUSUS HP (di desktop lonceng
 // ada di KakiSidebar — hanya satu lonceng terpasang pada satu waktu).
-// Posisinya absolut; judul pertama halaman diberi ruang di kirinya lewat
+// Tombol ikut menempel saat digulir; judul pertama halaman diberi ruang di kirinya lewat
 // KELAS_HALAMAN (lib/kelas-halaman.ts, dipasang di <main>) — halaman tidak perlu
 // diubah satu per satu. Halaman yang baris pertamanya bukan <h1> menandai
 // barisnya dengan atribut data-awal-halaman.
 const TOMBOL_HALAMAN = "size-8 rounded-lg border bg-card text-muted-foreground shadow-xs hover:text-foreground";
 
-// Tengah baris pertama judul halaman, relatif terhadap <main> — dipakai
-// untuk menyejajarkan tombol secara vertikal (baris judul bisa lebih tinggi
-// karena ada filter/tombol di sampingnya, atau judul baru muncul setelah
-// data dimuat). Ditulis langsung ke DOM (tanpa state) seperti useStickyBelow.
-function useSejajarkanDenganJudul(ref: React.RefObject<HTMLDivElement | null>, kunci: string) {
-  useEffect(() => {
-    const box = ref.current;
-    const main = box?.parentElement;
-    if (!box || !main) return;
-    function sync() {
-      if (!box || !main) return;
-      const judul =
-        main.querySelector<HTMLElement>("[data-awal-halaman]") ??
-        [...main.querySelectorAll<HTMLElement>("h1")].find((h) => !h.classList.contains("sr-only"));
-      const rm = main.getBoundingClientRect();
-      if (!judul) {
-        // Tanpa judul: bila ada elemen data-tanpa-ruang (mis. peta Mitra),
-        // tombol diletakkan di dalam pojok kiri atasnya; selain itu bawaan.
-        const latar = main.querySelector<HTMLElement>("[data-tanpa-ruang]");
-        const rl = latar?.getBoundingClientRect();
-        box.style.top = rl ? `${Math.round(rl.top - rm.top + 10)}px` : "";
-        box.style.left = rl ? `${Math.round(rl.left - rm.left + 10)}px` : "";
-        return;
-      }
-      box.style.left = "";
-      const rj = judul.getBoundingClientRect();
-      const lh = parseFloat(getComputedStyle(judul).lineHeight);
-      const tengah = judul.hasAttribute("data-awal-halaman") || !Number.isFinite(lh) ? rj.height / 2 : Math.min(lh, rj.height) / 2;
-      const top = rj.top - rm.top + tengah - box.offsetHeight / 2;
-      box.style.top = `${Math.max(8, Math.round(top))}px`;
+// Jarak kepala halaman yang menempel dari tepi atas layar (= top-3 pada
+// [data-kepala-halaman] di KELAS_HALAMAN).
+const JARAK_MENEMPEL = 12;
+
+// Baris kepala halaman = leluhur judul yang menjadi anak langsung kontainer
+// kolom halaman (div flex-col teratas). Contoh: <div flex-col> › <div baris>
+// › (<h1> + filter) → yang menempel adalah <div baris>, sehingga filter di
+// samping judul ikut menempel. Dicari otomatis supaya puluhan halaman tidak
+// perlu diubah satu per satu.
+// React menandai node DOM yang sudah terhidrasi dengan properti
+// "__reactFiber$…". Bila <main> (yang pasti sudah terhidrasi saat efek ini
+// jalan) tidak punya penanda itu, berarti internal React berubah — anggap
+// semua sudah terhidrasi supaya fitur tetap jalan.
+function punyaFiber(el: Element): boolean {
+  return Object.keys(el).some((k) => k.startsWith("__reactFiber$"));
+}
+function sudahTerhidrasi(main: HTMLElement, el: HTMLElement): boolean {
+  return !punyaFiber(main) || punyaFiber(el);
+}
+
+function cariBarisKepala(
+  main: HTMLElement,
+  judul: HTMLElement
+): HTMLElement | null {
+  let el: HTMLElement = judul;
+  while (el.parentElement && el.parentElement !== main) {
+    let induk: HTMLElement = el.parentElement;
+    // Pembungkus `display: contents` (mis. panel ringkasan Piutang Es Balok)
+    // tidak membentuk kotak — baris di dalamnya secara tata letak adalah anak
+    // langsung induk di atasnya, dan sticky-nya berlaku sepanjang induk itu.
+    while (getComputedStyle(induk).display === "contents" && induk.parentElement && induk.parentElement !== main) {
+      induk = induk.parentElement;
     }
-    sync();
-    const ro = new ResizeObserver(sync);
-    ro.observe(main);
-    window.addEventListener("resize", sync);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", sync);
-    };
+    const cs = getComputedStyle(induk);
+    if (
+      cs.display.includes("flex") &&
+      cs.flexDirection.startsWith("column") &&
+      induk.children.length > 1
+    )
+      return el;
+    el = induk;
+  }
+  return null;
+}
+
+// Menyejajarkan tombol dengan tengah baris pertama judul halaman (baris judul
+// bisa lebih tinggi karena ada filter di sampingnya, atau judul baru muncul
+// setelah data dimuat), menandai baris kepala agar menempel saat digulir, dan
+// menyiarkan tingginya lewat --tinggi-kepala-halaman di <html> supaya elemen
+// sticky lain di halaman (mis. kepala papan Pengiriman) menempel DI BAWAHNYA.
+// Ditulis langsung ke DOM (tanpa state) seperti useStickyBelow.
+// Fungsi biasa (bukan hook) — seluruh kerja DOM imperatif ada di sini;
+// mengembalikan fungsi pembersih.
+function pasangKepalaHalaman(isi: HTMLElement): (() => void) | undefined {
+  const penahan = isi.parentElement;
+  const main = penahan?.parentElement;
+  if (!penahan || !main) return;
+  let baris: HTMLElement | null = null;
+  let frame = 0;
+  let ulang = 0;
+
+  function lepasBaris() {
+    baris?.removeAttribute("data-kepala-halaman");
+    baris?.removeAttribute("data-menempel");
+    baris = null;
+  }
+
+  function tandaiMenempel() {
+    if (!baris) return;
+    const menempel =
+      window.scrollY > 0 &&
+      baris.getBoundingClientRect().top <= JARAK_MENEMPEL + 0.5;
+    baris.toggleAttribute("data-menempel", menempel);
+  }
+
+  function sync() {
+    if (!penahan || !main) return;
+    const judul =
+      main.querySelector<HTMLElement>("[data-awal-halaman]") ??
+      [...main.querySelectorAll<HTMLElement>("h1")].find(
+        (h) => !h.classList.contains("sr-only")
+      );
+    let barisBaru = judul ? cariBarisKepala(main, judul) : null;
+    // Atribut baru boleh dipasang hanya setelah React menghidrasi baris itu:
+    // HTML halaman yang di-stream bisa sudah ada di DOM sebelum terhidrasi,
+    // dan atribut tambahan saat itu memicu peringatan hydration mismatch.
+    // Belum terhidrasi → coba lagi sebentar lagi.
+    if (barisBaru && !sudahTerhidrasi(main, barisBaru)) {
+      barisBaru = null;
+      clearTimeout(ulang);
+      ulang = window.setTimeout(sync, 150);
+    }
+    if (barisBaru !== baris) {
+      lepasBaris();
+      baris = barisBaru;
+      baris?.setAttribute("data-kepala-halaman", "");
+    }
+    const rp = penahan.getBoundingClientRect();
+    if (!judul) {
+      // Tanpa judul: hanya tombol yang menempel. Bila ada elemen
+      // data-tanpa-ruang (mis. peta Mitra), tombol diletakkan di dalam pojok
+      // kiri atasnya; selain itu di pojok kiri atas halaman.
+      const latar = main.querySelector<HTMLElement>("[data-tanpa-ruang]");
+      const rl = latar?.getBoundingClientRect();
+      penahan.style.top = `${JARAK_MENEMPEL}px`;
+      // Diukur terhadap <main> (tidak menempel), bukan penahan — penahan
+      // bisa sedang tertempel saat sync dipicu di tengah guliran (mis. baris
+      // daftar yang dimuat bertahap), yang membuat selisihnya salah.
+      const rm = main.getBoundingClientRect();
+      const padAtas = parseFloat(getComputedStyle(main).paddingTop) || 0;
+      isi.style.top = rl ? `${Math.round(rl.top - rm.top - padAtas + 10)}px` : "0px";
+      isi.style.left = rl ? `${Math.round(rl.left - rp.left + 10)}px` : "0px";
+      document.documentElement.style.removeProperty("--tinggi-kepala-halaman");
+      return;
+    }
+    isi.style.left = "0px";
+    const rj = judul.getBoundingClientRect();
+    const lh = parseFloat(getComputedStyle(judul).lineHeight);
+    const tengah =
+      judul.hasAttribute("data-awal-halaman") || !Number.isFinite(lh)
+        ? rj.height / 2
+        : Math.min(lh, rj.height) / 2;
+    isi.style.top = `${Math.round(
+      rj.top - rp.top + tengah - isi.offsetHeight / 2
+    )}px`;
+    if (baris) {
+      // Penahan tombol & baris kepala harus mulai menempel pada posisi
+      // gulir yang sama: bila baris tidak tepat di puncak halaman (jarak
+      // d dari penahan), penahan menempel d piksel lebih tinggi.
+      const rb = baris.getBoundingClientRect();
+      penahan.style.top = `${Math.round(JARAK_MENEMPEL - (rb.top - rp.top))}px`;
+      document.documentElement.style.setProperty(
+        "--tinggi-kepala-halaman",
+        `${Math.round(JARAK_MENEMPEL + rb.height + 12)}px`
+      );
+    } else {
+      penahan.style.top = `${JARAK_MENEMPEL}px`;
+      document.documentElement.style.removeProperty("--tinggi-kepala-halaman");
+    }
+    tandaiMenempel();
+  }
+
+  function onScroll() {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(tandaiMenempel);
+  }
+
+  sync();
+  const ro = new ResizeObserver(sync);
+  ro.observe(main);
+  // Judul yang baru muncul setelah data dimuat (atau halaman berganti
+  // lewat navigasi klien tanpa perubahan ukuran) juga harus terdeteksi.
+  const mo = new MutationObserver(() => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(sync);
+  });
+  mo.observe(main, { childList: true, subtree: true });
+  window.addEventListener("resize", sync);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  return () => {
+    cancelAnimationFrame(frame);
+    clearTimeout(ulang);
+    ro.disconnect();
+    mo.disconnect();
+    window.removeEventListener("resize", sync);
+    window.removeEventListener("scroll", onScroll);
+    lepasBaris();
+    document.documentElement.style.removeProperty("--tinggi-kepala-halaman");
+  };
+}
+
+function useKepalaHalaman(
+  ref: React.RefObject<HTMLDivElement | null>,
+  kunci: string
+) {
+  useEffect(() => {
+    const isi = ref.current;
+    if (!isi) return;
+    return pasangKepalaHalaman(isi);
   }, [ref, kunci]);
 }
 
-export function TombolHalaman({ notifikasi = false }: { notifikasi?: boolean }) {
+export function TombolHalaman({
+  notifikasi = false,
+}: {
+  notifikasi?: boolean;
+}) {
   const { isMobile } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
-  useSejajarkanDenganJudul(ref, usePathname() ?? "");
+  useKepalaHalaman(ref, usePathname() ?? "");
+  // Penahan setinggi 0 yang sticky (bukan absolute) supaya tombol tetap
+  // terlihat saat halaman digulir; -mb-4 meniadakan gap-4 <main> yang
+  // ditambahkannya. Posisi top penahan & tombol diatur useKepalaHalaman.
   return (
-    <div ref={ref} className="absolute left-4 top-4 z-30 flex items-center gap-1.5">
-      <SidebarTrigger className={TOMBOL_HALAMAN} />
-      {notifikasi && isMobile && <NotificationBell triggerClassName={TOMBOL_HALAMAN} align="start" />}
+    <div className="pointer-events-none sticky top-3 z-30 -mb-4 h-0">
+      <div
+        ref={ref}
+        className="pointer-events-auto absolute left-0 top-0 flex items-center gap-1.5"
+      >
+        <SidebarTrigger className={TOMBOL_HALAMAN} />
+        {notifikasi && isMobile && (
+          <NotificationBell triggerClassName={TOMBOL_HALAMAN} align="start" />
+        )}
+      </div>
     </div>
   );
 }

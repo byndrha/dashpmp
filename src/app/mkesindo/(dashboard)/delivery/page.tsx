@@ -8,11 +8,9 @@ import { getKendalaReports } from "@/lib/queries/driver-kendala";
 import { getArmadaActivities } from "@/lib/queries/armada-activity";
 import { getDriverProfiles } from "@/lib/queries/driver-profile";
 import { getExpeditionVehicleOptions } from "@/lib/queries/expedition";
-import { getWilayahList } from "@/lib/queries/wilayah";
 import { getLatestVehiclePositions } from "@/lib/queries/armada-gps";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { Button } from "@/components/ui/button";
-import { FilterBar } from "@/components/dashboard/filter-bar";
 import { OpenDeliveriesPanel } from "@/components/dashboard/open-deliveries-panel";
 import { PengirimanBoard } from "@/components/dashboard/pengiriman-board";
 import { PengirimanTabs } from "@/components/dashboard/pengiriman-tabs";
@@ -33,14 +31,13 @@ export const metadata: Metadata = { title: "Pengiriman" };
 export default async function DeliveryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ wilayah?: string; pengirimanDate?: string }>;
+  searchParams: Promise<{ pengirimanDate?: string }>;
 }) {
   await requireModuleAccess("delivery");
   const params = await searchParams;
-  // Wilayah only filters the "Pengiriman Terbuka" tab (getOpenDeliveries) —
-  // the board is date-scoped instead and intentionally shows every wilayah
-  // for that date.
-  const wilayah = params.wilayah || undefined;
+  // Filter wilayah kini ada DI DALAM tab "Pengiriman Terbuka" (client-side,
+  // OpenDeliveriesPanel) — dulu di header halaman padahal hanya berlaku
+  // untuk tab itu; papan memang selalu menampilkan semua wilayah.
 
   const todayISO = getBusinessDateISO();
   const boardDate =
@@ -48,7 +45,6 @@ export default async function DeliveryPage({
 
   const [
     rows,
-    wilayahList,
     board,
     drivers,
     activities,
@@ -57,8 +53,7 @@ export default async function DeliveryPage({
     kendalaReports,
     vehiclePositions,
   ] = await Promise.all([
-    getOpenDeliveries(wilayah),
-    getWilayahList(),
+    getOpenDeliveries(),
     getPengirimanBoard(boardDate),
     getDriverOptions(),
     getArmadaActivities(boardDate),
@@ -85,18 +80,15 @@ export default async function DeliveryPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-xl font-semibold">Pengiriman</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-col items-end gap-1">
-            <PrintQueuePoller />
-            <Button variant="outline" size="sm" className="gap-1.5" render={<Link href="/mkesindo/delivery/cetak" />}>
-              <Printer className="size-3.5" /> Manajemen Cetak
-            </Button>
-          </div>
-          <FilterBar wilayahList={wilayahList} showDateRange={false} />
+          <PrintQueuePoller />
+          <Button variant="outline" size="sm" className="h-8 gap-1.5" render={<Link href="/mkesindo/delivery/cetak" />}>
+            <Printer className="size-3.5" /> Manajemen Cetak
+          </Button>
         </div>
       </div>
 
       <PengirimanTabs
-        terbukaPanel={<OpenDeliveriesPanel rows={rows} />}
+        terbukaPanel={<OpenDeliveriesPanel rows={rows} sekarangMs={new Date(`${todayISO}T00:00:00Z`).getTime()} />}
         kendalaPanel={<KendalaReportPanel rows={kendalaReports} />}
         gpsPanel={<VehicleGpsPanelLoader initialPositions={vehiclePositions} initialArmadaStatuses={armadaStatuses} />}
         papanPanel={

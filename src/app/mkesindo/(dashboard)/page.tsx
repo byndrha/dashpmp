@@ -98,8 +98,8 @@ export default async function BerandaPage() {
 
         <div className="flex flex-col gap-3">
           {MODULE_LINKS.map((m) => (
-            <Link key={m.href} href={m.href}>
-              <Card className="transition-colors hover:border-primary/40 hover:bg-primary/5 py-3.5">
+            <Link key={m.href} href={m.href} className="group/pintasan rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Card className="py-3.5 transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/40 hover:bg-primary/5 hover:shadow-md motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0">
                 <CardContent className="flex items-center gap-3 px-4">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary text-primary">
                     <m.icon className="size-4" />
@@ -108,7 +108,7 @@ export default async function BerandaPage() {
                     <p className="text-sm font-medium">{m.label}</p>
                     <p className="truncate text-xs text-muted-foreground">{m.desc}</p>
                   </div>
-                  <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                  <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover/pintasan:text-primary motion-safe:group-hover/pintasan:translate-x-0.5" />
                 </CardContent>
               </Card>
             </Link>

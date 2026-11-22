@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -34,7 +35,7 @@ export function MitraEsBalokHalaman({ kode, cards, aksi }: { kode: string; cards
   }, [cards]);
   const terpilih = kunciTerpilih ? (perKunci.get(kunciTerpilih) ?? null) : null;
 
-  function bukaForm(card: MitraCard | null) {
+  async function bukaForm(card: MitraCard | null) {
     setDetailOpen(false);
     setForm((f) => ({ card, seri: (f?.seri ?? 0) + 1 }));
   }
@@ -49,7 +50,7 @@ export function MitraEsBalokHalaman({ kode, cards, aksi }: { kode: string; cards
   }
 
   async function handleDelete(card: MitraCard) {
-    if (!confirm(`Hapus Mitra "${card.nama}"? Tindakan ini tidak bisa dibatalkan lewat aplikasi ini.`)) return;
+    if (!(await konfirmasi(`Hapus Mitra "${card.nama}"? Tindakan ini tidak bisa dibatalkan lewat aplikasi ini.`))) return;
     try {
       await aksi.hapus(card.sumber, card.agenId);
       router.refresh();

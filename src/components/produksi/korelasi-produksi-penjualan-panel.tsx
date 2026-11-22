@@ -136,33 +136,30 @@ export function KorelasiProduksiPenjualanPanel({ tanggalUsahaAwal }: { tanggalUs
                 value: formatRupiah(costEstimasi),
                 // Kotak "kartu rumus" (rate x kantong = cost) menggantikan
                 // tooltip satu paragraf panjang sesuai permintaan user
-                // 2026-09-19 -- warna teks pakai opacity dari text-background
-                // (bukan text-muted-foreground/text-primary biasa) karena
-                // TooltipContent memakai skema warna terbalik (bg-foreground
-                // text-background), bukan warna halaman biasa.
+                // 2026-09-19 (tooltip kini berlatar popover, 2026-11-22: warna teks biasa)
                 tooltip: (
                   <div className="flex w-64 flex-col gap-2 text-left">
                     <p className="text-[11px] font-semibold">Estimasi Cost Produksi</p>
-                    <div className="flex items-center justify-between gap-1.5 rounded-md bg-background/10 p-2">
+                    <div className="flex items-center justify-between gap-1.5 rounded-md bg-muted/60 p-2">
                       <div className="flex flex-col items-center gap-1">
                         <Coins className="size-4" />
                         <span className="text-xs font-semibold tabular-nums">{formatRupiah(data.hppBersihRatePerKantong)}</span>
-                        <span className="text-center text-[9px] leading-tight text-background/70">Rate HPP Bersih/kantong</span>
+                        <span className="text-center text-[9px] leading-tight text-muted-foreground">Rate HPP Bersih/kantong</span>
                       </div>
-                      <span className="text-background/50">&times;</span>
+                      <span className="text-muted-foreground/70">&times;</span>
                       <div className="flex flex-col items-center gap-1">
                         <Package className="size-4" />
                         <span className="text-xs font-semibold tabular-nums">{formatQty(totalProduksi)}</span>
-                        <span className="text-center text-[9px] leading-tight text-background/70">Kantong Produksi</span>
+                        <span className="text-center text-[9px] leading-tight text-muted-foreground">Kantong Produksi</span>
                       </div>
-                      <span className="text-background/50">=</span>
+                      <span className="text-muted-foreground/70">=</span>
                       <div className="flex flex-col items-center gap-1">
                         <Wallet className="size-4" />
                         <span className="text-xs font-semibold tabular-nums">{formatRupiah(costEstimasi)}</span>
-                        <span className="text-center text-[9px] leading-tight text-background/70">Estimasi Cost</span>
+                        <span className="text-center text-[9px] leading-tight text-muted-foreground">Estimasi Cost</span>
                       </div>
                     </div>
-                    <p className="text-[10px] leading-snug text-background/70">
+                    <p className="text-[10px] leading-snug text-muted-foreground">
                       Estimasi, bukan biaya riil periode ini. Rate HPP Bersih bulan {formatDate(tanggalUsaha)} adalah rata-rata bulanan seluruh
                       perusahaan (sewa, listrik, gaji, dll), tidak bisa dipecah per-shift secara akurat.
                     </p>

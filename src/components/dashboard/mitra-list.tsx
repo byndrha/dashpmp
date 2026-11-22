@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
@@ -39,6 +40,7 @@ import type { BerkasIdentitasNilai } from "@/components/dashboard/mitra-form/ber
 import type { MitraLocationPoint } from "@/components/dashboard/mitra-locations-map";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { KepalaKolomUrut, urutanBerikutnya, urutkan, type Urutan } from "@/components/dashboard/kepala-kolom-urut";
 import { PESAN_SIMPAN_SEBAGIAN, type LokasiTambahanInput, type MitraAlamatForm } from "@/lib/mitra-lokasi";
 import { mitraKeAlamatForm } from "@/lib/mitra-form";
 import type { MitraRow, TermOfPaymentOption, PriceLevelOption } from "@/lib/queries/mitra";
@@ -272,7 +274,7 @@ export function MitraFormDialog({
     });
   }
 
-  function handleJadikanUtama(l: LokasiTambahanInput) {
+  async function handleJadikanUtama(l: LokasiTambahanInput) {
     if (!bpId || l.lokasiPengirimanId == null) return;
     const lokasiId = l.lokasiPengirimanId;
     const wilayahLama = alamat.lokasiUtama.wilayah?.trim() || null;
@@ -286,7 +288,7 @@ export function MitraFormDialog({
         ? `\n\nPERINGATAN: Wilayah utama berubah dari "${wilayahLama ?? "-"}" ke "${wilayahBaru ?? "-"}". ` +
           `Marketing penanggung jawab dan laporan per wilayah untuk mitra ini ikut pindah.`
         : "");
-    if (!confirm(pesan)) return;
+    if (!(await konfirmasi(pesan))) return;
     setError(null);
     startJadikan(async () => {
       const r = await jadikanLokasiUtamaAction(bpId, lokasiId);
@@ -526,6 +528,226 @@ const STATUS_OPTIONS = [
   { value: "suspended", label: "Nonaktif" },
 ] as const;
 
+// Mode "baris" — tabel berkolom sejajar (bukan deretan teks yang meloncat
+// lebarnya per baris). Di kontainer lebar (@5xl) tiap atribut punya kolom
+// tetap + kepala kolom; di kontainer sempit tiap mitra jadi baris ringkas
+// dua tingkat (nama + lencana, lalu kontak/lokasi/harga/kapasitas).
+const KOLOM_BARIS =
+  "@5xl/dashboard-main:grid @5xl/dashboard-main:grid-cols-[minmax(0,2.3fr)_minmax(0,1.15fr)_minmax(0,1.5fr)_minmax(0,1fr)_6.5rem_5.5rem_7.5rem_6.5rem] @5xl/dashboard-main:items-center @5xl/dashboard-main:gap-x-4";
+
+type KolomUrutMitra = "nama" | "kontak" | "wilayah" | "marketing" | "harga" | "tenggat" | "kapasitas";
+
+function nilaiUrutMitra(m: MitraRow, kolom: KolomUrutMitra, priceByLevel: Map<number, number>) {
+  switch (kolom) {
+    case "nama":
+      return m.Name;
+    case "kontak":
+      return m.Kontak;
+    case "wilayah":
+      return [m.Wilayah, m.Kecamatan].filter(Boolean).join(" ");
+    case "marketing":
+      return m.MarketingNama;
+    case "harga":
+      return m.PriceLevel != null ? (priceByLevel.get(m.PriceLevel) ?? null) : null;
+    case "tenggat":
+      return m.TermOfPaymentDays;
+    case "kapasitas":
+      return m.Capacity;
+  }
+}
+
+function inisial(nama: string): string {
+  const kata = nama.replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/).filter(Boolean);
+  if (kata.length === 0) return "?";
+  return (kata[0][0] + (kata[1]?.[0] ?? "")).toUpperCase();
+}
+
+const WARNA_TIPE: Record<string, string> = {
+  Agen: "bg-primary/12 text-primary",
+  Outlet: "bg-chart-2/15 text-chart-2",
+};
+
+function DaftarMitraBaris({
+  rows,
+  priceByLevel,
+  onEdit,
+  onToggleSuspend,
+  onDelete,
+  urut,
+  onUrut,
+}: {
+  rows: MitraRow[];
+  priceByLevel: Map<number, number>;
+  urut: Urutan<KolomUrutMitra> | null;
+  onUrut: (kolom: KolomUrutMitra) => void;
+  onEdit: (m: MitraRow) => void;
+  onToggleSuspend: (m: MitraRow) => void;
+  onDelete: (m: MitraRow) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+      <div
+        className={`${KOLOM_BARIS} ${cn(
+          "hidden border-b bg-muted/40 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+        )}`}
+      >
+        <KepalaKolomUrut label="Mitra" kolom="nama" urut={urut} onUrut={onUrut} />
+        <KepalaKolomUrut label="Kontak" kolom="kontak" urut={urut} onUrut={onUrut} />
+        <KepalaKolomUrut label="Wilayah" kolom="wilayah" urut={urut} onUrut={onUrut} />
+        <KepalaKolomUrut label="Marketing" kolom="marketing" urut={urut} onUrut={onUrut} />
+        <KepalaKolomUrut label="Harga" kolom="harga" urut={urut} onUrut={onUrut} kanan />
+        <KepalaKolomUrut label="Tenggat" kolom="tenggat" urut={urut} onUrut={onUrut} />
+        <KepalaKolomUrut label="Kapasitas" kolom="kapasitas" urut={urut} onUrut={onUrut} kanan />
+        <span className="sr-only">Aksi</span>
+      </div>
+      <ul className="divide-y">
+        {rows.map((m) => {
+          const harga =
+            m.PriceLevel != null && priceByLevel.has(m.PriceLevel) ? formatRupiah(priceByLevel.get(m.PriceLevel)!) : null;
+          const lokasi = [m.Wilayah, m.Kecamatan].filter(Boolean).join(" · ");
+          return (
+            <li
+              key={m.BusinessPartnerID}
+              className={`${KOLOM_BARIS} ${cn(
+                "flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm transition-colors hover:bg-muted/40",
+                m.IsSuspended && "bg-muted/30"
+              )}`}
+            >
+              {/* Mitra: avatar inisial + nama + lencana */}
+              <div className="flex min-w-0 flex-1 basis-full items-center gap-3 @5xl/dashboard-main:basis-auto">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    m.IsSuspended
+                      ? "bg-muted text-muted-foreground"
+                      : (WARNA_TIPE[m.PartnerType] ?? "bg-secondary text-secondary-foreground")
+                  )}
+                >
+                  {inisial(m.Name ?? "")}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(m)}
+                    className={cn(
+                      "block max-w-full truncate rounded-sm text-left font-medium hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      m.IsSuspended && "text-muted-foreground"
+                    )}
+                    title={`Ubah ${m.Name}`}
+                  >
+                    {m.Name}
+                  </button>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                    <Badge variant="outline" className="h-[18px] px-1.5 text-[10px]">
+                      {m.PartnerType}
+                    </Badge>
+                    {m.LokasiTambahan.length > 0 && (
+                      <Badge variant="outline" className="h-[18px] px-1.5 text-[10px]" title="Jumlah lokasi pengiriman">
+                        {m.LokasiTambahan.length + 1} lokasi
+                      </Badge>
+                    )}
+                    {m.IsSuspended && (
+                      <Badge variant="destructive" className="h-[18px] px-1.5 text-[10px]">
+                        Nonaktif
+                      </Badge>
+                    )}
+                    {/* Di layar sempit Marketing ikut lencana (kolomnya sendiri hanya di layar lebar). */}
+                    <Badge
+                      variant={m.MarketingNama ? "secondary" : "outline"}
+                      className="h-[18px] px-1.5 text-[10px] @5xl/dashboard-main:hidden"
+                    >
+                      {m.MarketingNama ?? "Belum Ditentukan"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <span className="inline-flex min-w-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
+                <Phone className="size-3 shrink-0" />
+                {m.Kontak ? (
+                  <a href={`tel:${m.Kontak.replace(/[^\d+]/g, "")}`} className="truncate hover:text-foreground hover:underline">
+                    {m.Kontak}
+                  </a>
+                ) : (
+                  <span>—</span>
+                )}
+              </span>
+
+              <span className="inline-flex min-w-0 items-start gap-1.5 text-xs" title={m.Alamat ?? undefined}>
+                <MapPin className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+                <span className="min-w-0">
+                  <span className={cn("block truncate", !lokasi && "text-muted-foreground")}>
+                    {lokasi || "Wilayah belum diisi"}
+                  </span>
+                  {m.Alamat && (
+                    <span className="hidden truncate text-[11px] text-muted-foreground @5xl/dashboard-main:block">
+                      {m.Alamat}
+                    </span>
+                  )}
+                </span>
+              </span>
+
+              <span className="hidden min-w-0 truncate text-xs @5xl/dashboard-main:block">
+                {m.MarketingNama ?? <span className="text-muted-foreground">Belum ditentukan</span>}
+              </span>
+
+              <span className="text-xs tabular-nums @5xl/dashboard-main:text-right">
+                <span className="text-muted-foreground @5xl/dashboard-main:hidden">Harga </span>
+                {harga ?? <span className="text-muted-foreground">—</span>}
+              </span>
+
+              <span className="text-xs">
+                <span className="text-muted-foreground @5xl/dashboard-main:hidden">Tenggat </span>
+                {m.TermOfPaymentName ?? <span className="text-muted-foreground">—</span>}
+              </span>
+
+              <span className="inline-flex items-center gap-1 text-xs tabular-nums @5xl/dashboard-main:justify-end">
+                <Package className="size-3 text-muted-foreground @5xl/dashboard-main:hidden" />
+                {m.Capacity != null ? (
+                  <>
+                    <span className="font-medium">{m.Capacity.toLocaleString("id-ID")}</span>
+                    <span className="text-muted-foreground">kantong/hari</span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">Kapasitas belum diisi</span>
+                )}
+              </span>
+
+              <div className="ml-auto flex shrink-0 items-center justify-end gap-0.5 @5xl/dashboard-main:ml-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  title={m.IsSuspended ? "Aktifkan" : "Nonaktifkan"}
+                  aria-label={m.IsSuspended ? `Aktifkan ${m.Name}` : `Nonaktifkan ${m.Name}`}
+                  onClick={() => onToggleSuspend(m)}
+                >
+                  {m.IsSuspended ? <RotateCcw className="size-3.5" /> : <Ban className="size-3.5 text-muted-foreground" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="size-7" title="Ubah" aria-label={`Ubah ${m.Name}`} onClick={() => onEdit(m)}>
+                  <Pencil className="size-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  title="Hapus"
+                  aria-label={`Hapus ${m.Name}`}
+                  onClick={() => onDelete(m)}
+                >
+                  <Trash2 className="size-3.5 text-destructive" />
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {rows.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada mitra ditemukan.</p>}
+    </div>
+  );
+}
+
 export function MitraList({
   mitra,
   termOptions,
@@ -605,14 +827,21 @@ export function MitraList({
     });
   }, [mitra, search, tipe, wilayah, kecamatan, harga, kapasitas, pin, status]);
 
-  const filterKey = `${search}|${tipe}|${wilayah}|${kecamatan}|${harga}|${kapasitas}|${pin}|${status}`;
+  // Urutan dari kepala kolom mode daftar; berlaku juga di mode grid.
+  const [urut, setUrut] = useState<Urutan<KolomUrutMitra> | null>(null);
+  const filterKey = `${search}|${tipe}|${wilayah}|${kecamatan}|${harga}|${kapasitas}|${pin}|${status}|${urut?.kolom ?? ""}:${urut?.arah ?? ""}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
     setVisibleCount(BATCH_SIZE);
   }
 
-  const visibleRows = filtered.slice(0, visibleCount);
+  const sorted = useMemo(
+    () => urutkan(filtered, urut, (m, k) => nilaiUrutMitra(m, k, priceByLevel)),
+    [filtered, urut, priceByLevel]
+  );
+
+  const visibleRows = sorted.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
 
   // Lazy-load sentinel: an empty div at the bottom of the list. Once it
@@ -650,8 +879,8 @@ export function MitraList({
     return () => clearInterval(timer);
   }, [hasMore, filtered.length]);
 
-  function handleDelete(row: MitraRow) {
-    if (!confirm(`Hapus mitra "${row.Name}"? Data akan disembunyikan (bisa dipulihkan lewat database).`)) return;
+  async function handleDelete(row: MitraRow) {
+    if (!(await konfirmasi(`Hapus mitra "${row.Name}"? Data akan disembunyikan (bisa dipulihkan lewat database).`))) return;
     setListError(null);
     startTransition(async () => {
       const result = await deleteMitraAction(row.BusinessPartnerID);
@@ -659,11 +888,11 @@ export function MitraList({
     });
   }
 
-  function handleToggleSuspend(row: MitraRow) {
+  async function handleToggleSuspend(row: MitraRow) {
     const next = !row.IsSuspended;
     if (
       next &&
-      !confirm(`Nonaktifkan mitra "${row.Name}"? Mitra ini tidak akan bisa dipilih untuk Pemesanan baru sampai diaktifkan kembali.`)
+      !(await konfirmasi(`Nonaktifkan mitra "${row.Name}"? Mitra ini tidak akan bisa dipilih untuk Pemesanan baru sampai diaktifkan kembali.`))
     )
       return;
     setListError(null);
@@ -691,15 +920,15 @@ export function MitraList({
             placeholder="Cari nama mitra..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-56"
+            className="w-44"
           />
           <Select value={tipe} onValueChange={(v) => setTipe(v ?? "all")}>
-            <SelectTrigger className="w-28">
+            <SelectTrigger className="max-w-44">
               <SelectValue placeholder="Tipe Mitra">
                 {(v: string) => (v === "all" ? "Tipe" : v)}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               <SelectItem value="all">Tipe</SelectItem>
               {PARTNER_TYPES.map((t) => (
                 <SelectItem key={t} value={t}>
@@ -709,12 +938,12 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={wilayah} onValueChange={(v) => { setWilayah(v ?? "all"); setKecamatan("all"); }}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="max-w-44">
               <SelectValue placeholder="Wilayah">
                 {(v: string) => (v === "all" ? "Wilayah" : v === WILAYAH_UNKNOWN ? "Tidak Diketahui" : v)}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               <SelectItem value="all">Wilayah</SelectItem>
               <SelectItem value={WILAYAH_UNKNOWN}>Tidak Diketahui</SelectItem>
               {wilayahOptions.map((w) => (
@@ -725,12 +954,12 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={kecamatan} onValueChange={(v) => setKecamatan(v ?? "all")}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="max-w-44">
               <SelectValue placeholder="Kecamatan">
                 {(v: string) => (v === "all" ? "Kecamatan" : v)}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               <SelectItem value="all">Kecamatan</SelectItem>
               {kecamatanOptions.map((k) => (
                 <SelectItem key={k} value={k}>
@@ -740,7 +969,7 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={harga} onValueChange={(v) => setHarga(v ?? "all")}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="max-w-44">
               <SelectValue placeholder="Harga">
                 {(v: string) => {
                   if (v === "all") return "Harga";
@@ -749,7 +978,7 @@ export function MitraList({
                 }}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               <SelectItem value="all">Harga</SelectItem>
               {priceLevels.map((p) => (
                 <SelectItem key={p.Level} value={String(p.Level)}>
@@ -759,12 +988,12 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={kapasitas} onValueChange={(v) => setKapasitas(v ?? "all")}>
-            <SelectTrigger className="w-36">
+            <SelectTrigger className="max-w-44">
               <SelectValue placeholder="Kapasitas">
                 {(v: string) => CAPACITY_BUCKETS.find((b) => b.value === v)?.label ?? "Kapasitas"}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               {CAPACITY_BUCKETS.map((b) => (
                 <SelectItem key={b.value} value={b.value}>
                   {b.label}
@@ -773,12 +1002,12 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={pin} onValueChange={(v) => setPin(v ?? "all")}>
-            <SelectTrigger className="w-28">
+            <SelectTrigger className="max-w-44">
               <SelectValue placeholder="Pin">
                 {(v: string) => PIN_OPTIONS.find((p) => p.value === v)?.label ?? "Pin"}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               {PIN_OPTIONS.map((p) => (
                 <SelectItem key={p.value} value={p.value}>
                   {p.label}
@@ -787,12 +1016,12 @@ export function MitraList({
             </SelectContent>
           </Select>
           <Select value={status} onValueChange={(v) => setStatus(v ?? "all")}>
-            <SelectTrigger className="w-28">
+            <SelectTrigger className="max-w-44">
               <SelectValue placeholder="Status">
                 {(v: string) => STATUS_OPTIONS.find((s) => s.value === v)?.label ?? "Status"}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               {STATUS_OPTIONS.map((s) => (
                 <SelectItem key={s.value} value={s.value}>
                   {s.label}
@@ -930,88 +1159,15 @@ export function MitraList({
         )}
       </div>
       ) : (
-      <div className="flex flex-col divide-y rounded-lg border">
-        {visibleRows.map((m) => (
-          <div
-            key={m.BusinessPartnerID}
-            className={cn("flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm", m.IsSuspended && "opacity-60")}
-          >
-            <div className="min-w-40 flex-1">
-              <p className="truncate font-medium">{m.Name}</p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                  {m.PartnerType}
-                </Badge>
-                {m.LokasiTambahan.length > 0 && (
-                  <Badge variant="outline" className="h-5 px-1.5 text-[10px]" title="Jumlah lokasi pengiriman">
-                    {m.LokasiTambahan.length + 1} lokasi
-                  </Badge>
-                )}
-                <Badge variant={m.MarketingNama ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
-                  {m.MarketingNama ?? "Belum Ditentukan"}
-                </Badge>
-                {m.IsSuspended && (
-                  <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
-                    Nonaktif
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <Phone className="size-3" /> {m.Kontak || "-"}
-            </span>
-            <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <MapPin className="size-3" />
-              {m.Wilayah || "-"}
-              {m.Kecamatan ? ` | ${m.Kecamatan}` : ""}
-            </span>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              Harga:{" "}
-              <span className="text-foreground">
-                {m.PriceLevel != null && priceByLevel.has(m.PriceLevel)
-                  ? formatRupiah(priceByLevel.get(m.PriceLevel)!)
-                  : "-"}
-              </span>
-            </span>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              Tenggat: <span className="text-foreground">{m.TermOfPaymentName ?? "-"}</span>
-            </span>
-            <span className={cn("inline-flex shrink-0 items-center gap-1 text-xs", m.Capacity == null && "text-muted-foreground")}>
-              <Package className="size-3" />
-              {m.Capacity != null ? `${m.Capacity.toLocaleString("id-ID")} kantong/hari` : "Kapasitas belum diisi"}
-            </span>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                title={m.IsSuspended ? "Aktifkan" : "Nonaktifkan"}
-                onClick={() => handleToggleSuspend(m)}
-              >
-                {m.IsSuspended ? (
-                  <RotateCcw className="size-3.5" />
-                ) : (
-                  <Ban className="size-3.5 text-muted-foreground" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={() => setEditing(m)}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="size-7" onClick={() => handleDelete(m)}>
-                <Trash2 className="size-3.5 text-destructive" />
-              </Button>
-            </div>
-          </div>
-        ))}
-        {visibleRows.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada mitra ditemukan.</p>
-        )}
-      </div>
+      <DaftarMitraBaris
+        rows={visibleRows}
+        priceByLevel={priceByLevel}
+        onEdit={setEditing}
+        onToggleSuspend={handleToggleSuspend}
+        onDelete={handleDelete}
+        urut={urut}
+        onUrut={(k) => setUrut((u) => urutanBerikutnya(u, k))}
+      />
       )}
 
       <div ref={sentinelRef} className="h-1" />

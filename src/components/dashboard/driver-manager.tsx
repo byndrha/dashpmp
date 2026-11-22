@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useRef, useState, useTransition } from "react";
 import { Pencil, X, EyeOff, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -282,8 +283,8 @@ export function DriverManager({ drivers }: { drivers: DriverProfileRow[] }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function handleDelete(driver: DriverProfileRow) {
-    if (!confirm(`Hapus data profil dashboard untuk "${driver.Name}"? Data Salesman ERP asli tidak akan terhapus.`)) return;
+  async function handleDelete(driver: DriverProfileRow) {
+    if (!(await konfirmasi(`Hapus data profil dashboard untuk "${driver.Name}"? Data Salesman ERP asli tidak akan terhapus.`))) return;
     setError(null);
     setDeletingId(driver.SalesmanID);
     deleteDriverProfileAction(driver.SalesmanID)

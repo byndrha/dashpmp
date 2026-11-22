@@ -32,7 +32,7 @@ const PAGE_SIZE = 9;
 // rest's pages), not a user filter, so nothing needs to be honored/ignored
 // here the way Kartu Transaksi's own search filter does.
 const EXPORT_COLUMNS: XlsxColumn[] = [
-  { header: "Agen", key: "agenNama", width: 26 },
+  { header: "Mitra", key: "agenNama", width: 26 },
   { header: "Segmentasi", key: "segmentasi", width: 16 },
   { header: "Piutang Berjalan", key: "piutangBerjalan", type: "number", width: 14 },
   { header: "Hari Terlambat Maks", key: "maxDaysOverdue", type: "number", width: 14 },
@@ -230,9 +230,9 @@ export function EsBalokCollectionPriorityTable({
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
-          <CardTitle className="font-display">Prioritas Pemulihan Agen</CardTitle>
+          <CardTitle className="font-display">Prioritas Pemulihan Mitra</CardTitle>
           <CardDescription>
-            Target dari manajemen, ditambah Agen dengan piutang terbesar berstatus Perhatian/Kritis.
+            Target dari manajemen, ditambah Mitra dengan piutang terbesar berstatus Perhatian/Kritis.
           </CardDescription>
         </div>
         <ExportXlsxButton
@@ -256,7 +256,7 @@ export function EsBalokCollectionPriorityTable({
 
         {rest.length > 0 && (
           <>
-            <p className="text-xs font-medium text-muted-foreground">Agen lainnya dengan piutang berjalan</p>
+            <p className="text-xs font-medium text-muted-foreground">Mitra lainnya dengan piutang berjalan</p>
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               {pageRows.map((r) => (
                 <PriorityCard key={r.agenId} row={r} onEdit={openEditor} />
@@ -272,7 +272,7 @@ export function EsBalokCollectionPriorityTable({
           <DialogHeader>
             <DialogTitle>Target Pelunasan &mdash; {editing?.agenNama}</DialogTitle>
             <DialogDescription>
-              Tandai Agen ini sebagai target pemulihan piutang dari manajemen.
+              Tandai Mitra ini sebagai target pemulihan piutang dari manajemen.
             </DialogDescription>
           </DialogHeader>
           <form action={handleSubmit} className="flex flex-col gap-4">

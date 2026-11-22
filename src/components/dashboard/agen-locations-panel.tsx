@@ -35,8 +35,11 @@ export function AgenLocationsPanel({
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 shadow-md">
-      <div className="relative">
-        <AgenLocationsMap points={points} growthRows={growthRows} centerFallback={centerFallback} />
+      {/* data-tanpa-ruang: tombol ☰ halaman (TombolHalaman) melayang di pojok
+          kiri atas peta ini, jadi kontrol zoom peta digeser ke bawahnya —
+          sama dengan halaman Mitra Es Kristal. */}
+      <div className="relative" data-tanpa-ruang>
+        <AgenLocationsMap points={points} growthRows={growthRows} centerFallback={centerFallback} kontrolTurun />
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <span className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-foreground shadow backdrop-blur">
             {jumlahMitra} Mitra dengan lokasi tersimpan

@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { getCompanyPool } from "@/lib/db-company";
 import { resolveAgenKoneksi, type SumberAgen } from "@/lib/queries/mitra-es-balok";
 import { branchFilterFor } from "@/lib/queries/piutang-pembayaran";
+import { ownBranchFilter } from "@/lib/queries/penjualan-piutang";
 import {
   getAgenBaselineNet,
   getAgenRoster,
@@ -286,25 +287,50 @@ export async function getEsBalokInvoiceOutstanding(kode: string): Promise<EsBalo
 // getPiutangSummary's totalPiutangSaatIni directly instead.
 export interface EsBalokPeriodSummary {
   saldoAwalPeriode: number;
+  // Hutang (jumlah saldo bersih positif per Agen) di akhir periode — dasar
+  // yang sama dengan saldoAwalPeriode & Total Piutang.
+  saldoAkhirPeriode: number;
   totalPembayaranPeriode: number;
+  totalTarikanPeriode: number;
   totalPenjualanPeriode: number;
   sudahJatuhTempo: number;
   kritisNominal: number;
 }
 
-async function getPembayaranPeriodTotal(kode: string, sumber: SumberAgen, start: Date, end: Date): Promise<number> {
+// Pembayaran periode = PMP_Pembayaran.Pembayaran + PMP_Pemesanan.Pembayaran —
+// rumus yang sama dengan kolom "Pembayaran" tabel Tren Pergerakan Piutang
+// Bulanan (getPiutangSummary, dikonfirmasi benar 2026-11-22). Versi lama
+// hanya membaca PMP_Pembayaran, sehingga lebih kecil dari tabel tren.
+async function getPembayaranPeriodTotal(
+  kode: string,
+  sumber: SumberAgen,
+  start: Date,
+  end: Date
+): Promise<{ pembayaran: number; tarikan: number }> {
   const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
   const pool = await getCompanyPool(physKode, label);
-  const branchId = branchFilterFor(kode, sumber);
-  const request = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
-  if (branchId) request.input("branchId", sql.VarChar(16), branchId);
-  const result = await request.query(`
-    SELECT SUM(ISNULL(Pembayaran,0)) AS Total
-    FROM PMP_Pembayaran
-    WHERE IsDeleted = 0 AND Tanggal >= @start AND Tanggal < @end
-      ${branchId ? "AND BranchID = @branchId" : ""}
-  `);
-  return (result.recordset[0] as { Total: number | null }).Total ?? 0;
+  const branchId = ownBranchFilter(kode, sumber);
+  const req = () => {
+    const r = pool.request().input("start", sql.DateTime, start).input("end", sql.DateTime, end);
+    if (branchId) r.input("branchId", sql.VarChar(16), branchId);
+    return r;
+  };
+  const filterCabang = branchId ? "AND BranchID = @branchId" : "";
+  const [bayar, pesanan] = await Promise.all([
+    req().query(`
+      SELECT SUM(ISNULL(Pembayaran,0)) AS Pembayaran, SUM(ISNULL(Tarikan,0)) AS Tarikan
+      FROM PMP_Pembayaran
+      WHERE IsDeleted = 0 AND Tanggal >= @start AND Tanggal < @end ${filterCabang}
+    `),
+    req().query(`
+      SELECT SUM(ISNULL(Pembayaran,0)) AS Pembayaran
+      FROM PMP_Pemesanan
+      WHERE IsDeleted = 0 AND Tanggal >= @start AND Tanggal < @end ${filterCabang}
+    `),
+  ]);
+  const b = bayar.recordset[0] as { Pembayaran: number | null; Tarikan: number | null };
+  const p = pesanan.recordset[0] as { Pembayaran: number | null };
+  return { pembayaran: (b.Pembayaran ?? 0) + (p.Pembayaran ?? 0), tarikan: b.Tarikan ?? 0 };
 }
 
 async function getPenjualanPeriodTotal(kode: string, sumber: SumberAgen, start: Date, end: Date): Promise<number> {
@@ -333,13 +359,23 @@ export async function getEsBalokPiutangPeriodSummary(
 ): Promise<EsBalokPeriodSummary> {
   const sources: SumberAgen[] = ["utama", "logistik"];
 
-  const [baselineBySource, pemesananBeforeBySource, pembayaranBeforeBySource, pembayaranPeriodBySource, penjualanPeriodBySource] =
+  const [
+    baselineBySource,
+    pemesananBeforeBySource,
+    pembayaranBeforeBySource,
+    pembayaranPeriodBySource,
+    penjualanPeriodBySource,
+    pemesananSebelumAkhir,
+    pembayaranSebelumAkhir,
+  ] =
     await Promise.all([
       Promise.all(sources.map((s) => getAgenBaselineNet(kode, s))),
       Promise.all(sources.map((s) => getPemesananNetByAgenBefore(kode, s, start))),
       Promise.all(sources.map((s) => getPembayaranNetByAgenBefore(kode, s, start))),
       Promise.all(sources.map((s) => getPembayaranPeriodTotal(kode, s, start, end))),
       Promise.all(sources.map((s) => getPenjualanPeriodTotal(kode, s, start, end))),
+      Promise.all(sources.map((s) => getPemesananNetByAgenBefore(kode, s, end))),
+      Promise.all(sources.map((s) => getPembayaranNetByAgenBefore(kode, s, end))),
     ]);
 
   // Saldo Awal Periode: same baseline+net-before-cutoff pattern as
@@ -359,7 +395,15 @@ export async function getEsBalokPiutangPeriodSummary(
     if (net >= 0) saldoAwalPeriode += net;
   }
 
-  const totalPembayaranPeriode = pembayaranPeriodBySource.reduce((s, v) => s + v, 0);
+  const netAkhir = new Map<string, number>();
+  for (const rows of [...baselineBySource, ...pemesananSebelumAkhir, ...pembayaranSebelumAkhir] as AgenNetRow[][]) {
+    for (const r of rows) netAkhir.set(r.AgenID, (netAkhir.get(r.AgenID) ?? 0) + r.Net);
+  }
+  let saldoAkhirPeriode = 0;
+  for (const net of netAkhir.values()) if (net > 0) saldoAkhirPeriode += net;
+
+  const totalPembayaranPeriode = pembayaranPeriodBySource.reduce((s, v) => s + v.pembayaran, 0);
+  const totalTarikanPeriode = pembayaranPeriodBySource.reduce((s, v) => s + v.tarikan, 0);
   const totalPenjualanPeriode = penjualanPeriodBySource.reduce((s, v) => s + v, 0);
 
   // sudahJatuhTempo/kritisNominal are FIFO-derived subtotals of
@@ -374,7 +418,9 @@ export async function getEsBalokPiutangPeriodSummary(
 
   return {
     saldoAwalPeriode,
+    saldoAkhirPeriode,
     totalPembayaranPeriode,
+    totalTarikanPeriode,
     totalPenjualanPeriode,
     sudahJatuhTempo,
     kritisNominal,
@@ -414,4 +460,102 @@ export function getEsBalokStatusOverview(rows: EsBalokInvoiceRow[]): EsBalokStat
       outstanding: matching.reduce((s, a) => s + a.outstanding, 0),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Rincian selisih Sisa Hutang (kartu per Agen) vs total pesanan belum lunas
+// (FIFO di atas). Selisih itu BUKAN galat: Sisa Hutang = saldo awal ERP +
+// pesanan bersih − pembayaran + tarikan (dijumlah utama+logistik, sampai
+// tanggal akhir periode), sedangkan FIFO hanya mengalokasikan pembayaran ke
+// pesanan bernilai positif, per sumber, sepanjang masa. Per sumber s yang
+// ikut FIFO berlaku identitas:
+//   Net_s − FIFO_s = SaldoAwal_s + Tarikan_s + (P_s − P⁺_s) − max(0, Bayar_s − P⁺_s)
+// (P = nilai bersih semua pesanan, P⁺ = hanya yang bernilai positif, Bayar =
+// Pemesanan.Pembayaran + PMP_Pembayaran.Pembayaran). Sumber yang saldonya
+// tidak positif tidak ikut FIFO sama sekali, jadi seluruh saldonya masuk
+// selisih. Transaksi bertanggal >= akhir periode ada di FIFO tetapi tidak
+// di Sisa Hutang kartu. Sisa yang tak terurai (mis. beda filter cabang)
+// dihitung di klien sebagai "Lainnya".
+export interface KomponenSelisih {
+  label: string;
+  nilai: number; // + menambah Sisa Hutang di atas total pesanan belum lunas
+  keterangan?: string;
+}
+
+const LABEL_SUMBER: Record<SumberAgen, string> = { utama: "utama", logistik: "logistik" };
+
+export async function getKomponenSelisihPiutang(kode: string, agenId: string, akhirEksklusif: Date): Promise<KomponenSelisih[]> {
+  const sources: SumberAgen[] = ["utama", "logistik"];
+  const perSumber = await Promise.all(
+    sources.map(async (sumber) => {
+      const { kode: physKode, label } = resolveAgenKoneksi(kode, sumber);
+      const pool = await getCompanyPool(physKode, label);
+      const branchId = branchFilterFor(kode, sumber);
+      const req = () => {
+        const r = pool.request().input("agen", sql.VarChar(16), agenId).input("akhir", sql.DateTime, akhirEksklusif);
+        if (branchId) r.input("branchId", sql.VarChar(16), branchId);
+        return r;
+      };
+      const filterCabang = branchId ? "AND BranchID = @branchId" : "";
+      const [awal, pesanan, bayar] = await Promise.all([
+        req().query(`SELECT SUM(PiutangSaldoAwal - TabunganSaldoAwal) AS Net FROM PMP_Agen WHERE IsDeleted = 0 AND AgenID = @agen`),
+        req().query(`
+          SELECT SUM(NetValue) AS P,
+                 SUM(CASE WHEN NetValue > 0 THEN NetValue ELSE 0 END) AS PPlus,
+                 SUM(ISNULL(Pembayaran,0)) AS Bayar,
+                 SUM(CASE WHEN Tanggal >= @akhir THEN NetValue - ISNULL(Pembayaran,0) ELSE 0 END) AS SetelahAkhir
+          FROM (
+            SELECT Tanggal, Pembayaran,
+              (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
+                + (BalokBesarRealisasi - ISNULL(BalokBesarRetur,0)) * BalokBesarHarga AS NetValue
+            FROM PMP_Pemesanan WHERE IsDeleted = 0 AND AgenID = @agen ${filterCabang}
+          ) x`),
+        req().query(`
+          SELECT SUM(ISNULL(Pembayaran,0)) AS Bayar, SUM(ISNULL(Tarikan,0)) AS Tarikan,
+                 SUM(CASE WHEN Tanggal >= @akhir THEN ISNULL(Tarikan,0) - ISNULL(Pembayaran,0) ELSE 0 END) AS SetelahAkhir
+          FROM PMP_Pembayaran WHERE IsDeleted = 0 AND AgenID = @agen ${filterCabang}`),
+      ]);
+      const n = (v: unknown) => Number(v ?? 0) || 0;
+      const a = awal.recordset[0] ?? {};
+      const p = pesanan.recordset[0] ?? {};
+      const b = bayar.recordset[0] ?? {};
+      const saldoAwal = n(a.Net);
+      const P = n(p.P);
+      const PPlus = n(p.PPlus);
+      const totalBayar = n(p.Bayar) + n(b.Bayar);
+      const tarikan = n(b.Tarikan);
+      const net = saldoAwal + P - totalBayar + tarikan;
+      return { sumber, saldoAwal, P, PPlus, totalBayar, tarikan, net, setelahAkhir: n(p.SetelahAkhir) + n(b.SetelahAkhir) };
+    })
+  );
+
+  const komponen: KomponenSelisih[] = [];
+  const tambah = (label: string, nilai: number, keterangan?: string) => {
+    if (Math.abs(nilai) >= 1) komponen.push({ label, nilai: Math.round(nilai), keterangan });
+  };
+  for (const s of perSumber) {
+    const nama = LABEL_SUMBER[s.sumber];
+    const adaData = s.saldoAwal !== 0 || s.P !== 0 || s.totalBayar !== 0 || s.tarikan !== 0;
+    if (!adaData) continue;
+    if (s.net <= 0) {
+      // Tidak ikut FIFO: seluruh saldo sumber ini (biasanya tabungan) masuk selisih.
+      tambah(
+        `Saldo ${nama} (tidak dialokasikan ke pesanan)`,
+        s.net,
+        s.net < 0 ? "Tabungan/kelebihan bayar di database ini mengurangi Sisa Hutang gabungan" : undefined
+      );
+      continue;
+    }
+    tambah(`Saldo awal ERP (${nama})`, s.saldoAwal, "Piutang/tabungan awal yang dicatat di data Agen, bukan dari pesanan");
+    tambah(`Tarikan tabungan (${nama})`, s.tarikan, "Tarikan menambah hutang tetapi tidak terikat ke pesanan");
+    tambah(`Retur melebihi pesanan (${nama})`, s.P - s.PPlus, "Pesanan yang nilai bersihnya negatif setelah retur");
+    tambah(
+      `Kelebihan bayar (${nama})`,
+      -Math.max(0, s.totalBayar - s.PPlus),
+      "Pembayaran melebihi seluruh pesanan, jadi tidak ada pesanan yang menampungnya"
+    );
+  }
+  const setelahAkhir = perSumber.reduce((t, s) => t + (s.net > 0 ? s.setelahAkhir : 0), 0);
+  tambah("Transaksi setelah tanggal akhir periode", -setelahAkhir, "Sudah masuk daftar pesanan belum lunas, belum masuk Sisa Hutang periode ini");
+  return komponen;
 }

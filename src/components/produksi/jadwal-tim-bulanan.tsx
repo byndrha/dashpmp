@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Plus, BarChart3, Share2, Loader2 } from "lucide-react";
 import { DndContext, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
@@ -299,8 +300,8 @@ function AnggotaCard({
     });
   }
 
-  function handleNonaktifkan() {
-    if (!confirm(`Nonaktifkan ${anggota.nama}? Tindakan ini tidak bisa dibatalkan dari sini.`)) return;
+  async function handleNonaktifkan() {
+    if (!(await konfirmasi(`Nonaktifkan ${anggota.nama}? Tindakan ini tidak bisa dibatalkan dari sini.`))) return;
     setError(null);
     startTransition(async () => {
       const result = await hapusAnggotaTimAction(anggota.anggotaId);

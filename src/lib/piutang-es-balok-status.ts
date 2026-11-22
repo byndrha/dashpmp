@@ -33,7 +33,10 @@ export function esBalokStatus(daysOverdue: number | null): EsBalokPiutangStatus 
 // pengganti ribuan baris EsBalokInvoiceRow (~1 MB untuk PMPutra). Nilai =
 // [sisa outstanding (dibulatkan), hari lewat jatuh tempo terburuk]. utama &
 // logistik digabung: outstanding dijumlah, umur diambil yang terburuk.
-export type PiutangTerbukaRingkas = [outstanding: number, maxDaysOverdue: number];
+// Entri `dokumen` juga membawa tanggal pesanan (yyyy-MM-dd) — dipakai tampilan
+// "Semua belum lunas" di kartu per Agen, yang menampilkan pesanan terbuka di
+// luar rentang tanggal yang sedang dipilih.
+export type PiutangTerbukaRingkas = [outstanding: number, maxDaysOverdue: number, tanggal?: string];
 
 export interface RingkasanPiutangTerbuka {
   agen: Record<string, PiutangTerbukaRingkas>; // key: AgenID
@@ -41,17 +44,25 @@ export interface RingkasanPiutangTerbuka {
 }
 
 export function ringkasPiutangTerbuka(
-  rows: { agenId: string; noDokumen: string; outstanding: number; daysOverdue: number }[]
+  rows: { agenId: string; noDokumen: string; outstanding: number; daysOverdue: number; tanggal?: string }[]
 ): RingkasanPiutangTerbuka {
   const agen: Record<string, PiutangTerbukaRingkas> = {};
   const dokumen: Record<string, PiutangTerbukaRingkas> = {};
   const add = (map: Record<string, PiutangTerbukaRingkas>, key: string, outstanding: number, days: number) => {
     const cur = map[key];
-    map[key] = cur ? [cur[0] + outstanding, Math.max(cur[1], days)] : [outstanding, days];
+    // Diperbarui di tempat (bukan tuple baru) supaya tanggal di indeks 2 tetap ada.
+    if (cur) {
+      cur[0] += outstanding;
+      cur[1] = Math.max(cur[1], days);
+    } else map[key] = [outstanding, days];
   };
   for (const r of rows) {
     add(agen, r.agenId, r.outstanding, r.daysOverdue);
-    add(dokumen, `${r.agenId}|${r.noDokumen}`, r.outstanding, r.daysOverdue);
+    const kunci = `${r.agenId}|${r.noDokumen}`;
+    add(dokumen, kunci, r.outstanding, r.daysOverdue);
+    // Tanggal terlama bila satu NoDokumen muncul di utama & logistik.
+    const tgl = dokumen[kunci][2];
+    if (r.tanggal && (!tgl || r.tanggal < tgl)) dokumen[kunci][2] = r.tanggal;
   }
   for (const map of [agen, dokumen]) for (const k in map) map[k][0] = Math.round(map[k][0]);
   return { agen, dokumen };

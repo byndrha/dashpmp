@@ -14,6 +14,7 @@ import {
 import { formatRupiah } from "@/lib/format";
 import { useNarrowContainer } from "@/hooks/use-narrow-container";
 import type { SalesTrendMonthPoint } from "@/lib/queries/sales";
+import { LabelChip } from "@/components/charts/label-chip";
 
 // Below this rendered width (not viewport width — see useNarrowContainer),
 // the desktop dual-axis layout has no room left for its own X-axis tick
@@ -74,6 +75,8 @@ function seriesElements(chartData: ChartDatum[], skipLabelStep: number) {
   return [
     <Bar key="netto" yAxisId="nominal" dataKey="Netto" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />,
     <Line key="so" yAxisId="docs" type="monotone" dataKey="SO" stroke="var(--chart-3)" strokeWidth={3} dot={false} />,
+    // SI digambar sebelum DO supaya chip label DO tidak tertimpa garis SI.
+    <Line key="si" yAxisId="docs" type="monotone" dataKey="SI" stroke="var(--chart-4)" strokeWidth={3} dot={false} />,
     <Line
       key="do"
       yAxisId="docs"
@@ -88,13 +91,10 @@ function seriesElements(chartData: ChartDatum[], skipLabelStep: number) {
         if (skipLabelStep > 1 && index % skipLabelStep !== 0) return <g />;
         const qty = chartData[index]?.DOQty ?? 0;
         return (
-          <text x={Number(x)} y={Number(y) - 8} textAnchor="middle" fontSize={9} fill={DO_LINE_COLOR}>
-            {qty.toLocaleString("id-ID")}
-          </text>
+          <LabelChip x={Number(x)} y={Number(y)} teks={qty.toLocaleString("id-ID")} warna={DO_LINE_COLOR} />
         );
       }}
     />,
-    <Line key="si" yAxisId="docs" type="monotone" dataKey="SI" stroke="var(--chart-4)" strokeWidth={3} dot={false} />,
   ];
 }
 
@@ -131,7 +131,7 @@ export function SalesTrendChartMonthly({ data }: { data: SalesTrendMonthPoint[] 
         <div className="-mx-2 overflow-x-auto px-2">
           <div style={{ width: narrowWidth }}>
             <ResponsiveContainer width="100%" height={220}>
-              <ComposedChart data={chartData} margin={{ top: 20, right: 4, left: -20, bottom: 0 }}>
+              <ComposedChart data={chartData} margin={{ top: 28, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                 <XAxis dataKey="mobileName" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} interval={0} />
                 <YAxis
@@ -156,7 +156,7 @@ export function SalesTrendChartMonthly({ data }: { data: SalesTrendMonthPoint[] 
   return (
     <div ref={containerRef}>
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={chartData} margin={{ top: 20, right: 8, left: 8, bottom: 8 }}>
+        <ComposedChart data={chartData} margin={{ top: 28, right: 8, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
           <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
           <YAxis

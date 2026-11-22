@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Phone, MapPin, Package, Ban, MoreVertical, Pencil, RotateCcw, Trash2, LayoutGrid, List } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,14 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Pagination } from "@/components/dashboard/pagination";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { MitraCard, SumberAgen } from "@/lib/queries/mitra-es-balok";
 import { SEGMENTASI_OPTIONS, type Segmentasi } from "@/lib/segmentasi-mitra";
 import { kunciKartu } from "@/lib/mitra-es-balok-form";
+import { KepalaKolomUrut, urutanBerikutnya, urutkan, type Urutan } from "@/components/dashboard/kepala-kolom-urut";
 
-const PAGE_SIZE = 12;
+// Lazy load (sama dengan daftar Mitra Es Kristal): tampil BATCH_SIZE dulu,
+// tambah satu batch tiap kali penanda di bawah daftar mendekati layar.
+const BATCH_SIZE = 36;
 
 // Per-browser only (not synced anywhere), same pattern as MKEsindo's own
 // mitra-list.tsx VIEW_MODE_STORAGE_KEY.
@@ -40,6 +42,39 @@ const CAPACITY_BUCKETS = [
   { value: "250-500", label: "251 - 500 /hari" },
   { value: "500-999999", label: "> 500 /hari" },
 ] as const;
+
+// Mode baris — tabel berkolom sejajar di kontainer lebar (@5xl), baris
+// ringkas dua tingkat di kontainer sempit; sama dengan daftar Mitra Es Kristal
+// (DaftarMitraBaris di mitra-list.tsx). PMPakis hanya menjual balok kecil.
+const KOLOM_BALOK_DASAR =
+  "@5xl/dashboard-main:grid @5xl/dashboard-main:items-center @5xl/dashboard-main:gap-x-4";
+const KOLOM_BALOK_DUA = `${KOLOM_BALOK_DASAR} @5xl/dashboard-main:grid-cols-[minmax(0,2.4fr)_minmax(0,1.1fr)_minmax(0,1.6fr)_7.5rem_7.5rem_7rem_2rem]`;
+const KOLOM_BALOK_SATU = `${KOLOM_BALOK_DASAR} @5xl/dashboard-main:grid-cols-[minmax(0,2.4fr)_minmax(0,1.1fr)_minmax(0,1.6fr)_7.5rem_7rem_2rem]`;
+
+type KolomUrutBalok = "nama" | "kontak" | "wilayah" | "kecil" | "besar" | "hutang";
+
+function nilaiUrutBalok(c: MitraCard, kolom: KolomUrutBalok) {
+  switch (kolom) {
+    case "nama":
+      return c.nama;
+    case "kontak":
+      return c.telepon;
+    case "wilayah":
+      return c.wilayah;
+    case "kecil":
+      return c.hargaBalokKecil;
+    case "besar":
+      return c.hargaBalokBesar;
+    case "hutang":
+      return c.maksimumHutang > 0 ? c.maksimumHutang : null;
+  }
+}
+
+function inisialNama(nama: string): string {
+  const kata = nama.replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/).filter(Boolean);
+  if (kata.length === 0) return "?";
+  return (kata[0][0] + (kata[1]?.[0] ?? "")).toUpperCase();
+}
 
 function matchesCapacityBucket(totalCapacity: number | null, bucket: string): boolean {
   if (bucket === "all") return true;
@@ -88,7 +123,7 @@ export function MitraEsBalokList({
   const [segmentasiFilter, setSegmentasiFilter] = useState<"all" | Segmentasi>("all");
   const [kapasitasFilter, setKapasitasFilter] = useState("all");
   const [pinFilter, setPinFilter] = useState<"all" | "yes" | "no">("all");
-  const [page, setPage] = useState(1);
+  const [jumlahTampil, setJumlahTampil] = useState(BATCH_SIZE);
   // Starts "grid" for SSR/first render (avoids hydration mismatch), then
   // reads the stored per-viewer preference once on mount -- same reasoning
   // as MKEsindo's mitra-list.tsx.
@@ -140,8 +175,34 @@ export function MitraEsBalokList({
     });
   }, [cards, search, sumberFilter, statusFilter, wilayahFilter, segmentasiFilter, kapasitasFilter, pinFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Urutan dari kepala kolom mode daftar; berlaku juga di mode grid.
+  const [urut, setUrut] = useState<Urutan<KolomUrutBalok> | null>(null);
+  const sorted = useMemo(() => urutkan(filtered, urut, nilaiUrutBalok), [filtered, urut]);
+  function gantiUrut(kolom: KolomUrutBalok) {
+    setUrut((u) => urutanBerikutnya(u, kolom));
+    setJumlahTampil(BATCH_SIZE);
+  }
+
+  const visible = sorted.slice(0, jumlahTampil);
+  const masihAda = jumlahTampil < sorted.length;
+
+  // Penanda kosong di bawah daftar: begitu mendekati layar (rootMargin
+  // 200px), batch berikutnya ditampilkan — berulang sampai semua tampil.
+  // Observer dibuat ulang tiap batch supaya penanda yang masih terlihat
+  // setelah batch dimuat langsung memicu batch berikutnya.
+  const penandaRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = penandaRef.current;
+    if (!el || !masihAda) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setJumlahTampil((n) => Math.min(n + BATCH_SIZE, sorted.length));
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [masihAda, sorted.length, jumlahTampil]);
   const showSumberFilter = kode !== "pmputra";
   // PMPakis only sells Balok Kecil -- Balok Besar is never shown here.
   // User decision 2026-09-24.
@@ -154,7 +215,7 @@ export function MitraEsBalokList({
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
-            setPage(1);
+            setJumlahTampil(BATCH_SIZE);
           }}
           placeholder="Cari nama Mitra..."
           className="max-w-64"
@@ -164,15 +225,15 @@ export function MitraEsBalokList({
             value={sumberFilter}
             onValueChange={(v) => {
               setSumberFilter(v as "all" | SumberAgen);
-              setPage(1);
+              setJumlahTampil(BATCH_SIZE);
             }}
           >
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="max-w-44">
               <SelectValue>
                 {() => (sumberFilter === "all" ? "Semua Sumber" : sumberFilter === "utama" ? "Utama" : "Logistik (Bersama)")}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="w-auto min-w-(--anchor-width)">
               <SelectItem value="all">Semua Sumber</SelectItem>
               <SelectItem value="utama">Utama</SelectItem>
               <SelectItem value="logistik">Logistik (Bersama)</SelectItem>
@@ -183,15 +244,15 @@ export function MitraEsBalokList({
           value={statusFilter}
           onValueChange={(v) => {
             setStatusFilter(v as "all" | "aktif" | "nonaktif");
-            setPage(1);
+            setJumlahTampil(BATCH_SIZE);
           }}
         >
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="max-w-44">
             <SelectValue>
               {() => (statusFilter === "all" ? "Semua Status" : statusFilter === "aktif" ? "Aktif" : "Nonaktif")}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="w-auto min-w-(--anchor-width)">
             <SelectItem value="all">Semua Status</SelectItem>
             <SelectItem value="aktif">Aktif</SelectItem>
             <SelectItem value="nonaktif">Nonaktif</SelectItem>
@@ -201,13 +262,13 @@ export function MitraEsBalokList({
           value={wilayahFilter}
           onValueChange={(v) => {
             setWilayahFilter(v ?? "all");
-            setPage(1);
+            setJumlahTampil(BATCH_SIZE);
           }}
         >
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="max-w-44">
             <SelectValue>{() => (wilayahFilter === "all" ? "Semua Wilayah" : wilayahFilter)}</SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="w-auto min-w-(--anchor-width)">
             <SelectItem value="all">Semua Wilayah</SelectItem>
             {wilayahOptionsFromCards.map((w) => (
               <SelectItem key={w} value={w}>
@@ -220,15 +281,15 @@ export function MitraEsBalokList({
           value={segmentasiFilter}
           onValueChange={(v) => {
             setSegmentasiFilter(v as "all" | Segmentasi);
-            setPage(1);
+            setJumlahTampil(BATCH_SIZE);
           }}
         >
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="max-w-44">
             <SelectValue>
               {() => (segmentasiFilter === "all" ? "Segmentasi" : SEGMENTASI_OPTIONS.find((s) => s.value === segmentasiFilter)?.label)}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="w-auto min-w-(--anchor-width)">
             <SelectItem value="all">Segmentasi</SelectItem>
             {SEGMENTASI_OPTIONS.map((s) => (
               <SelectItem key={s.value} value={s.value}>
@@ -241,13 +302,13 @@ export function MitraEsBalokList({
           value={kapasitasFilter}
           onValueChange={(v) => {
             setKapasitasFilter(v ?? "all");
-            setPage(1);
+            setJumlahTampil(BATCH_SIZE);
           }}
         >
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="max-w-44">
             <SelectValue>{() => CAPACITY_BUCKETS.find((b) => b.value === kapasitasFilter)?.label ?? "Kapasitas"}</SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="w-auto min-w-(--anchor-width)">
             {CAPACITY_BUCKETS.map((b) => (
               <SelectItem key={b.value} value={b.value}>
                 {b.label}
@@ -259,13 +320,13 @@ export function MitraEsBalokList({
           value={pinFilter}
           onValueChange={(v) => {
             setPinFilter(v as "all" | "yes" | "no");
-            setPage(1);
+            setJumlahTampil(BATCH_SIZE);
           }}
         >
-          <SelectTrigger className="w-28">
+          <SelectTrigger className="max-w-44">
             <SelectValue>{() => PIN_OPTIONS.find((p) => p.value === pinFilter)?.label ?? "Pin"}</SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="w-auto min-w-(--anchor-width)">
             {PIN_OPTIONS.map((p) => (
               <SelectItem key={p.value} value={p.value}>
                 {p.label}
@@ -385,63 +446,117 @@ export function MitraEsBalokList({
           )}
         </div>
       ) : (
-        <div className="flex flex-col divide-y rounded-lg border">
-          {visible.map((c) => (
-            <div
-              key={kunciKartu(c)}
-              className={cn(
-                "flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm hover:bg-accent/50",
-                !c.isActive && "opacity-60"
-              )}
-              onClick={() => onSelect(c)}
-            >
-              <div className="min-w-40 flex-1">
-                <p className="truncate font-medium">{c.nama}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                  {sumberLabel(c.sumber, kode) && (
-                    <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                      {sumberLabel(c.sumber, kode)}
-                    </Badge>
-                  )}
-                  <Badge variant={c.segmentasi ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
-                    {segmentasiLabel(c.segmentasi) ?? "Belum Ditentukan"}
-                  </Badge>
-                  {c.lokasiTambahan.length > 0 && (
-                    <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                      {c.lokasiTambahan.length + 1} lokasi
-                    </Badge>
-                  )}
-                  {!c.isActive && (
-                    <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
-                      Nonaktif
-                    </Badge>
-                  )}
+        <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+          <div
+            className={`${isPmpakis ? KOLOM_BALOK_SATU : KOLOM_BALOK_DUA} hidden border-b bg-muted/40 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground`}
+          >
+            <KepalaKolomUrut label="Mitra" kolom="nama" urut={urut} onUrut={gantiUrut} />
+            <KepalaKolomUrut label="Kontak" kolom="kontak" urut={urut} onUrut={gantiUrut} />
+            <KepalaKolomUrut label="Wilayah" kolom="wilayah" urut={urut} onUrut={gantiUrut} />
+            <KepalaKolomUrut label="Balok Kecil" kolom="kecil" urut={urut} onUrut={gantiUrut} kanan />
+            {!isPmpakis && <KepalaKolomUrut label="Balok Besar" kolom="besar" urut={urut} onUrut={gantiUrut} kanan />}
+            <KepalaKolomUrut label="Maks. Hutang" kolom="hutang" urut={urut} onUrut={gantiUrut} kanan />
+            <span className="sr-only">Aksi</span>
+          </div>
+          <ul className="divide-y">
+            {visible.map((c) => (
+              <li
+                key={kunciKartu(c)}
+                className={`${isPmpakis ? KOLOM_BALOK_SATU : KOLOM_BALOK_DUA} ${cn(
+                  "flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 text-sm transition-colors hover:bg-muted/40",
+                  !c.isActive && "bg-muted/30"
+                )}`}
+                onClick={() => onSelect(c)}
+              >
+                <div className="flex min-w-0 flex-1 basis-full items-center gap-3 @5xl/dashboard-main:basis-auto">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                      c.isActive ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {inisialNama(c.nama)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("truncate font-medium", !c.isActive && "text-muted-foreground")}>{c.nama}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                      {sumberLabel(c.sumber, kode) && (
+                        <Badge variant="outline" className="h-[18px] px-1.5 text-[10px]">
+                          {sumberLabel(c.sumber, kode)}
+                        </Badge>
+                      )}
+                      <Badge variant={c.segmentasi ? "secondary" : "outline"} className="h-[18px] px-1.5 text-[10px]">
+                        {segmentasiLabel(c.segmentasi) ?? "Belum Ditentukan"}
+                      </Badge>
+                      {c.lokasiTambahan.length > 0 && (
+                        <Badge variant="outline" className="h-[18px] px-1.5 text-[10px]">
+                          {c.lokasiTambahan.length + 1} lokasi
+                        </Badge>
+                      )}
+                      {!c.isActive && (
+                        <Badge variant="destructive" className="h-[18px] px-1.5 text-[10px]">
+                          Nonaktif
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <Phone className="size-3" /> {c.telepon || "-"}
-              </span>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <MapPin className="size-3" /> {c.wilayah || "-"}
-              </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                Balok Kecil: <span className="text-foreground">{formatRupiah(c.hargaBalokKecil)}</span>
-              </span>
-              {!isPmpakis && (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  Balok Besar: <span className="text-foreground">{formatRupiah(c.hargaBalokBesar)}</span>
+
+                <span className="inline-flex min-w-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
+                  <Phone className="size-3 shrink-0" />
+                  <span className="truncate">{c.telepon || "—"}</span>
                 </span>
-              )}
-              <div className="ml-auto flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                <MitraActionsMenu card={c} onEdit={onEdit} onSuspendToggle={onSuspendToggle} onDelete={onDelete} />
-              </div>
-            </div>
-          ))}
+
+                <span className="inline-flex min-w-0 items-start gap-1.5 text-xs" title={c.alamat ?? undefined}>
+                  <MapPin className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className={cn("block truncate", !c.wilayah && "text-muted-foreground")}>
+                      {c.wilayah || "Wilayah belum diisi"}
+                    </span>
+                    {c.alamat && (
+                      <span className="hidden truncate text-[11px] text-muted-foreground @5xl/dashboard-main:block">
+                        {c.alamat}
+                      </span>
+                    )}
+                  </span>
+                </span>
+
+                <span className="text-xs tabular-nums @5xl/dashboard-main:text-right">
+                  <span className="text-muted-foreground @5xl/dashboard-main:hidden">Kecil </span>
+                  <span className="font-medium">{formatRupiah(c.hargaBalokKecil)}</span>
+                  <span className="block text-[11px] text-muted-foreground">{formatKapasitas(c.kapasitasBalokKecil)}</span>
+                </span>
+
+                {!isPmpakis && (
+                  <span className="text-xs tabular-nums @5xl/dashboard-main:text-right">
+                    <span className="text-muted-foreground @5xl/dashboard-main:hidden">Besar </span>
+                    <span className="font-medium">{formatRupiah(c.hargaBalokBesar)}</span>
+                    <span className="block text-[11px] text-muted-foreground">{formatKapasitas(c.kapasitasBalokBesar)}</span>
+                  </span>
+                )}
+
+                <span
+                  className={`text-xs tabular-nums @5xl/dashboard-main:text-right ${
+                    c.maksimumHutang > 0 ? "" : "hidden @5xl/dashboard-main:block"
+                  }`}
+                >
+                  <span className="text-muted-foreground @5xl/dashboard-main:hidden">Maks. hutang </span>
+                  {c.maksimumHutang > 0 ? formatRupiah(c.maksimumHutang) : <span className="text-muted-foreground">—</span>}
+                </span>
+
+                <div className="ml-auto flex shrink-0 items-center justify-end @5xl/dashboard-main:ml-0" onClick={(e) => e.stopPropagation()}>
+                  <MitraActionsMenu card={c} onEdit={onEdit} onSuspendToggle={onSuspendToggle} onDelete={onDelete} />
+                </div>
+              </li>
+            ))}
+          </ul>
           {visible.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada Mitra yang cocok.</p>}
         </div>
       )}
 
-      <Pagination page={page} pageCount={pageCount} onChange={setPage} />
+      <div ref={penandaRef} className="h-1" />
+      {masihAda && <p className="py-2 text-center text-xs text-muted-foreground">Memuat lagi...</p>}
     </div>
   );
 }

@@ -12,7 +12,6 @@ export default async function PmputraPenjualanPage({ searchParams }: { searchPar
   return (
     <PenjualanEsBalokView
       kode="pmputra"
-      namaPt="PT Prima Maesa Putra"
       searchParams={await searchParams}
       actions={{
         loadHari: loadHariAction,

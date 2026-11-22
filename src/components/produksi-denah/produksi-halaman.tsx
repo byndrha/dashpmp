@@ -47,7 +47,7 @@ async function namaPengubah(id: string | null): Promise<string> {
   }
 }
 
-export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: KodeProduksi; namaPerusahaan: string; user: Session["user"] }) {
+export async function ProduksiHalaman({ kode, user }: { kode: KodeProduksi; user: Session["user"] }) {
   const denah = await getDenah(kode);
   if (denah?.rusak) return <PesanDenahRusak />;
   const bolehEdit = bolehEditDenah(user);
@@ -60,7 +60,6 @@ export async function ProduksiHalaman({ kode, namaPerusahaan, user }: { kode: Ko
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-xl font-semibold">Produksi</h1>
-          <p className="text-sm text-muted-foreground">{namaPerusahaan} — Es Balok</p>
         </div>
         {ada && bolehEdit && (
           <Button variant="outline" nativeButton={false} render={<Link href={hrefEdit} />}>

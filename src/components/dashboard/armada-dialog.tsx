@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+import { konfirmasi } from "@/components/konfirmasi";
 import { useRef, useState, useTransition } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -482,12 +484,12 @@ export function ArmadaManager({ armada, expeditionOptions }: { armada: ArmadaRow
     });
   }
 
-  function handleDelete(row: ArmadaRow) {
-    if (!confirm(`Hapus armada "${row.Nama}"?`)) return;
+  async function handleDelete(row: ArmadaRow) {
+    if (!(await konfirmasi(`Hapus armada "${row.Nama}"?`))) return;
     startTransition(async () => {
       const result = await deleteArmadaAction(row.ArmadaID);
       if (!result.success) {
-        alert(result.error);
+        toast.error(result.error);
       }
     });
   }

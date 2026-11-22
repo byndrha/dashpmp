@@ -34,12 +34,10 @@ export interface PenjualanEsBalokActions {
 
 export async function PenjualanEsBalokView({
   kode,
-  namaPt,
   searchParams,
   actions,
 }: {
   kode: string;
-  namaPt: string;
   searchParams: DashboardSearchParams;
   actions: PenjualanEsBalokActions;
 }) {
@@ -73,7 +71,6 @@ export async function PenjualanEsBalokView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-xl font-semibold">Penjualan</h1>
-          <p className="text-sm text-muted-foreground">{namaPt} — Es Balok</p>
         </div>
         <FilterBar wilayahList={wilayahList} />
       </div>

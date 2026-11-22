@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { useState, useTransition } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,8 +42,8 @@ export function TimSayaPanel({
     });
   }
 
-  function handleNonaktifkan(anggotaId: number, namaAnggota: string) {
-    if (!confirm(`Nonaktifkan ${namaAnggota} dari ${timNama}?`)) return;
+  async function handleNonaktifkan(anggotaId: number, namaAnggota: string) {
+    if (!(await konfirmasi(`Nonaktifkan ${namaAnggota} dari ${timNama}?`))) return;
     startTransition(async () => {
       const result = await hapusAnggotaTimSayaAction(anggotaId);
       if (result.success) onChanged();

@@ -18,7 +18,6 @@ export default async function PmpersadaModulePage({ params }: { params: Promise<
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-lg font-semibold">{label}</h1>
-        <p className="text-sm text-muted-foreground">PT Putra Maesa Persada — Es Balok</p>
       </div>
       <Card>
         <CardHeader>

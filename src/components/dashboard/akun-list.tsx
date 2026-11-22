@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+import { konfirmasi } from "@/components/konfirmasi";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Plus, Pencil, KeyRound, Trash2, Phone, Mail, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -526,12 +528,12 @@ export function AkunList({
     });
   }
 
-  function handleDelete(akun: AkunRow) {
-    if (!confirm(`Hapus akun "${akun.nama}" (@${akun.username})? Tindakan ini tidak dapat dibatalkan.`)) return;
+  async function handleDelete(akun: AkunRow) {
+    if (!(await konfirmasi(`Hapus akun "${akun.nama}" (@${akun.username})? Tindakan ini tidak dapat dibatalkan.`))) return;
     startTransition(async () => {
       const result = await deleteAkunAction(akun.id);
       if (!result.success) {
-        alert(result.error);
+        toast.error(result.error);
       }
     });
   }

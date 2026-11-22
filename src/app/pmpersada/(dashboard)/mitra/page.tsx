@@ -24,10 +24,9 @@ export default async function PmpersadaMitraPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="font-display text-xl font-semibold">Mitra</h1>
-        <p className="text-sm text-muted-foreground">PT Putra Maesa Persada — Es Balok</p>
-      </div>
+      {/* Tanpa judul terlihat, sama dengan Mitra Es Kristal: peta di puncak
+          halaman, tombol ☰ melayang di pojoknya. */}
+      <h1 className="sr-only">Mitra</h1>
       <AgenLocationsPanel points={points} growthRows={growthRows} centerFallback={centerFallback} />
       <MitraPageClient cards={cards} />
     </div>
