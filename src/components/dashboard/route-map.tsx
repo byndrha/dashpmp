@@ -1,14 +1,116 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { Search, X } from "lucide-react";
 import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
-import { formatRelativeTime } from "@/lib/format";
+import { formatRelativeTime, formatTime } from "@/lib/format";
 import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
+import type { JejakAktual } from "@/lib/queries/jejak-armada";
+
+// Status lapisan "rute aktual" (riwayat GPS provider) — dimuat terpisah oleh
+// pemanggil setelah peta tampil, jadi peta tidak pernah menunggunya.
+export type JejakPeta =
+  | { keadaan: "memuat" }
+  | { keadaan: "gagal"; pesan: string }
+  | { keadaan: "siap"; data: JejakAktual };
+
+const LABEL_SUMBER_JEJAK = { solofleet: "SoloFleet", hino: "Hino Connect" } as const;
+const WARNA_AKTUAL = "#ea580c";
+const WARNA_RENCANA = "#2563eb";
+
+// Animasi alur: dash SVG yang bergeser maju searah urutan titik garis
+// (stroke-dashoffset negatif = bergerak ke ujung garis). Jarak geser per
+// putaran harus sama dengan panjang pola dashArray masing-masing kelas.
+const CSS_ALUR = `
+.alur-rute { animation: alur-rute 1.1s linear infinite; }
+.alur-rute-putus { animation: alur-rute-putus 0.9s linear infinite; }
+@keyframes alur-rute { to { stroke-dashoffset: -20; } }
+@keyframes alur-rute-putus { to { stroke-dashoffset: -14; } }
+@media (prefers-reduced-motion: reduce) { .alur-rute, .alur-rute-putus { animation: none; } }
+`;
+
+const ikonPanahCache = new Map<string, L.DivIcon>();
+function ikonPanah(sudut: number, warna: string): L.DivIcon {
+  const bulat = Math.round(sudut / 5) * 5;
+  const kunci = `${bulat}|${warna}`;
+  let ikon = ikonPanahCache.get(kunci);
+  if (!ikon) {
+    ikon = L.divIcon({
+      className: "",
+      html: `<svg viewBox="0 0 12 12" width="14" height="14" style="transform:rotate(${bulat}deg);filter:drop-shadow(0 0 1px rgba(255,255,255,.95))"><path d="M3 2 L9 6 L3 10" fill="none" stroke="${warna}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+    ikonPanahCache.set(kunci, ikon);
+  }
+  return ikon;
+}
+
+// Panah arah (chevron) di sepanjang garis, berjarak tetap dalam PIKSEL layar
+// — dihitung ulang tiap zoom supaya tidak menumpuk saat diperkecil dan tidak
+// terlalu jarang saat diperbesar.
+function PanahArah({ titik, warna, jarakPx }: { titik: [number, number][]; warna: string; jarakPx: number }) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(() => map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  const panah = useMemo(() => {
+    const hasil: { pos: L.LatLng; sudut: number }[] = [];
+    if (titik.length < 2) return hasil;
+    const px = titik.map(([lat, lng]) => map.project(L.latLng(lat, lng), zoom));
+    let menuju = jarakPx / 2;
+    for (let i = 1; i < px.length && hasil.length < 200; i++) {
+      const a = px[i - 1];
+      const b = px[i];
+      const panjang = a.distanceTo(b);
+      if (panjang === 0) continue;
+      const sudut = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+      while (menuju <= panjang && hasil.length < 200) {
+        const f = menuju / panjang;
+        hasil.push({ pos: map.unproject(L.point(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f), zoom), sudut });
+        menuju += jarakPx;
+      }
+      menuju -= panjang;
+    }
+    return hasil;
+  }, [map, titik, zoom, jarakPx]);
+  return (
+    <>
+      {panah.map((p, i) => (
+        <Marker key={i} position={p.pos} icon={ikonPanah(p.sudut, warna)} interactive={false} keyboard={false} />
+      ))}
+    </>
+  );
+}
+
+// Garis rute + panah arah + lapisan titik putih yang mengalir searah rute.
+// `putus` = gaya rencana saat rute aktual ikut tampil (garis putus-putus
+// tipis yang alirannya dianimasikan langsung, tanpa lapisan titik).
+function GarisRute({ titik, warna, putus = false }: { titik: [number, number][]; warna: string; putus?: boolean }) {
+  return (
+    <>
+      {putus ? (
+        <Polyline
+          positions={titik}
+          pathOptions={{ color: warna, weight: 3, opacity: 0.7, dashArray: "6 8", className: "alur-rute-putus" }}
+        />
+      ) : (
+        <>
+          <Polyline positions={titik} pathOptions={{ color: warna, weight: 4, opacity: 0.9 }} />
+          <Polyline
+            positions={titik}
+            interactive={false}
+            pathOptions={{ color: "#ffffff", weight: 2.5, opacity: 0.85, dashArray: "2 18", lineCap: "round", className: "alur-rute" }}
+          />
+        </>
+      )}
+      <PanahArah titik={titik} warna={warna} jarakPx={putus ? 110 : 90} />
+    </>
+  );
+}
 
 // Truck marker input. `source` says where the ping came from (driver app or
 // the armada's GPS tracker) and `recordedAt` (ISO) when — both optional so
@@ -205,6 +307,7 @@ export function RouteMap({
   geometry,
   refitTrigger = 0,
   driverPosition = null,
+  jejak = null,
 }: {
   pabrik: { latitude: number; longitude: number };
   stops: (JadwalDetailRow & { Latitude: number; Longitude: number })[];
@@ -221,7 +324,15 @@ export function RouteMap({
   // would fight any manual pan/zoom and jump the view around as the truck
   // moves, when the point is to watch it move within a fixed frame.
   driverPosition?: TruckPosition | null;
+  // Rute yang benar-benar ditempuh (null = tidak ditampilkan sama sekali,
+  // mis. armada belum berangkat).
+  jejak?: JejakPeta | null;
 }) {
+  const jejakAda = jejak?.keadaan === "siap" && jejak.data.status === "ada" ? jejak.data : null;
+  // Sakelar legenda — keduanya tampil secara bawaan.
+  const [tampilRencana, setTampilRencana] = useState(true);
+  const [tampilAktual, setTampilAktual] = useState(true);
+  const jejakSiap = jejakAda && tampilAktual ? jejakAda : null;
   const polylinePositions: [number, number][] | undefined = geometry?.map(([lng, lat]) => [lat, lng]);
   const mapRef = useRef<L.Map | null>(null);
   const markerRefs = useRef<Map<number, L.Marker>>(new Map());
@@ -249,6 +360,7 @@ export function RouteMap({
 
   return (
     <div className="relative z-0">
+      <style>{CSS_ALUR}</style>
       <MapContainer
         ref={mapRef}
         center={[pabrik.latitude, pabrik.longitude]}
@@ -262,7 +374,12 @@ export function RouteMap({
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
         <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
-        <FitBounds pabrik={pabrik} stops={stops} routePoints={polylinePositions} refitTrigger={refitTrigger} />
+        <FitBounds
+          pabrik={pabrik}
+          stops={stops}
+          routePoints={jejakSiap ? [...(polylinePositions ?? []), ...jejakSiap.titik] : polylinePositions}
+          refitTrigger={refitTrigger}
+        />
         <MapZoomControl className="top-2 left-2" />
         <Marker position={[pabrik.latitude, pabrik.longitude]} icon={pabrikIcon} />
         {stops.map((s, i) => (
@@ -284,7 +401,28 @@ export function RouteMap({
             </Popup>
           </Marker>
         ))}
-        {polylinePositions && <Polyline positions={polylinePositions} pathOptions={{ color: "#2563eb", weight: 4 }} />}
+        {/* Saat jejak aktual ada, rencana menjadi garis putus-putus tipis
+            di bawahnya supaya penyimpangan rute terlihat jelas. */}
+        {/* key berganti bersama gaya: className path Leaflet hanya dipasang
+            saat dibuat, jadi ganti gaya = pasang ulang garisnya. */}
+        {polylinePositions && tampilRencana && (
+          <GarisRute key={jejakSiap ? "rencana-putus" : "rencana"} titik={polylinePositions} warna={WARNA_RENCANA} putus={!!jejakSiap} />
+        )}
+        {jejakSiap && <GarisRute titik={jejakSiap.titik} warna={WARNA_AKTUAL} />}
+        {jejakSiap?.berhenti.map((b) => (
+          <CircleMarker
+            key={b.mulai}
+            center={[b.lat, b.lng]}
+            radius={Math.min(10, 5 + b.menit / 10)}
+            pathOptions={{ color: "white", weight: 2, fillColor: WARNA_AKTUAL, fillOpacity: 0.9 }}
+          >
+            <Popup>
+              Berhenti {b.menit} menit
+              <br />
+              {formatTime(b.mulai)} – {formatTime(b.selesai)}
+            </Popup>
+          </CircleMarker>
+        ))}
         {driverPosition && (
           <Marker position={[driverPosition.latitude, driverPosition.longitude]} icon={truckIcon(driverBearing, isStale)} zIndexOffset={1000}>
             {positionLabel && <Popup>{positionLabel}</Popup>}
@@ -301,9 +439,113 @@ export function RouteMap({
           Posisi armada: {positionLabel}
         </div>
       )}
+      {jejak && (
+        <KeteranganJejak
+          jejak={jejak}
+          tampilRencana={tampilRencana}
+          onTampilRencana={setTampilRencana}
+          tampilAktual={tampilAktual}
+          onTampilAktual={setTampilAktual}
+        />
+      )}
       <StopSearchBox stops={stops} onSelect={handleSelectStop} />
       <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="top-2 right-2" />
       <MapAttribution className="bottom-2 right-2" />
+    </div>
+  );
+}
+
+// Sakelar kecil di legenda (role="switch").
+function Sakelar({
+  nyala,
+  onUbah,
+  label,
+  children,
+}: {
+  nyala: boolean;
+  onUbah: (v: boolean) => void;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={nyala}
+      aria-label={label}
+      onClick={() => onUbah(!nyala)}
+      className="flex w-full items-center gap-1.5 rounded px-0.5 py-0.5 text-left hover:bg-muted/60"
+    >
+      <span
+        className={`relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full transition-colors ${nyala ? "bg-primary" : "bg-muted-foreground/30"}`}
+      >
+        <span
+          className={`absolute size-2.5 rounded-full bg-white shadow-sm transition-transform ${nyala ? "translate-x-3" : "translate-x-0.5"}`}
+        />
+      </span>
+      <span className={`flex min-w-0 items-center gap-1.5 ${nyala ? "" : "opacity-50"}`}>{children}</span>
+    </button>
+  );
+}
+
+// Keterangan garis di pojok kanan atas (di bawah pemilih gaya peta), dengan
+// sakelar untuk menyembunyikan rute rencana / aktual.
+function KeteranganJejak({
+  jejak,
+  tampilRencana,
+  onTampilRencana,
+  tampilAktual,
+  onTampilAktual,
+}: {
+  jejak: JejakPeta;
+  tampilRencana: boolean;
+  onTampilRencana: (v: boolean) => void;
+  tampilAktual: boolean;
+  onTampilAktual: (v: boolean) => void;
+}) {
+  const rencana = (
+    <Sakelar nyala={tampilRencana} onUbah={onTampilRencana} label="Tampilkan rute rencana">
+      <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: WARNA_RENCANA }} />
+      Rencana
+    </Sakelar>
+  );
+  let isi: ReactNode;
+  if (jejak.keadaan === "memuat") {
+    isi = <span className="pl-7.5 text-muted-foreground">Memuat rute aktual…</span>;
+  } else if (jejak.keadaan === "gagal") {
+    isi = <span className="pl-7.5 text-amber-600">Rute aktual gagal dimuat</span>;
+  } else if (jejak.data.status === "tanpa_alat") {
+    isi = <span className="pl-7.5 text-muted-foreground">Armada ini tanpa alat GPS</span>;
+  } else if (jejak.data.status === "kosong") {
+    isi = <span className="pl-7.5 text-muted-foreground">Belum ada titik GPS perjalanan ini</span>;
+  } else {
+    const d = jejak.data;
+    isi = (
+      <>
+        <Sakelar nyala={tampilAktual} onUbah={onTampilAktual} label="Tampilkan rute aktual">
+          <span className="inline-block w-4 border-t-[3px]" style={{ borderColor: WARNA_AKTUAL }} />
+          Aktual{d.jarakKm != null ? ` · ${d.jarakKm.toLocaleString("id-ID")} km` : ""}
+        </Sakelar>
+        {tampilAktual && d.berhenti.length > 0 && (
+          <span className="flex items-center gap-1.5 pl-7.5">
+            <span className="inline-block size-2.5 rounded-full ring-2 ring-white" style={{ background: WARNA_AKTUAL }} />
+            {d.berhenti.length} kali berhenti ≥5 mnt
+          </span>
+        )}
+        <span className="pl-7.5 text-[10px] text-muted-foreground">
+          GPS {d.sumber ? LABEL_SUMBER_JEJAK[d.sumber] : ""}
+          {d.final ? "" : " · berlangsung"}
+        </span>
+      </>
+    );
+  }
+  return (
+    <div
+      title={jejak.keadaan === "gagal" ? jejak.pesan : undefined}
+      className="absolute top-12 right-2 z-1000 flex max-w-[calc(100%-1rem)] flex-col gap-0.5 rounded-md bg-card/90 px-1.5 py-1.5 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm"
+    >
+      {rencana}
+      {isi}
     </div>
   );
 }

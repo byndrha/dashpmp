@@ -1,5 +1,6 @@
 "use client";
 
+import { konfirmasi } from "@/components/konfirmasi";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, useTransition } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -72,7 +73,8 @@ import {
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
-import type { TruckPosition } from "@/components/dashboard/route-map";
+import type { JejakPeta, TruckPosition } from "@/components/dashboard/route-map";
+import type { JejakAktual } from "@/lib/queries/jejak-armada";
 import { shareImageBlob, shareTextBlock } from "@/lib/share-image";
 import { pilihanLokasiStopTampil } from "@/lib/mitra-lokasi";
 
@@ -346,6 +348,9 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<DriverStopRow[]>([]);
   const [vehicleChecks, setVehicleChecks] = useState<VehicleCheckRow[]>([]);
+  // Jadwal mana yang cek kendaraannya sudah selesai dimuat — rute aktual
+  // menunggu ini supaya tahu jam kembali (DATANG) sejak permintaan pertama.
+  const [cekDimuatUntuk, setCekDimuatUntuk] = useState<number | null>(null);
   // Whether this armada already started loading (JamMulaiMuat) its
   // chronologically next Jadwal -- decides whether a still-missing
   // Berangkat/Datang check shows "Menunggu Inspeksi" (still could happen)
@@ -513,7 +518,10 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
         setOrder(rows);
       })
       .finally(() => setLoading(false));
-    getVehicleChecksForJadwalAction(jadwalId).then(setVehicleChecks);
+    getVehicleChecksForJadwalAction(jadwalId).then((rows) => {
+      setVehicleChecks(rows);
+      setCekDimuatUntuk(jadwalId);
+    });
     getArmadaNextJadwalStartedAction(jadwalId).then(setNextJadwalStarted);
     getJadwalTotalReturAction(jadwalId).then(setTotalRetur);
     getIstirahatForJadwalAction(jadwalId).then(setIstirahatSessions);
@@ -630,6 +638,50 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     };
   }, [jadwalId, armadaId, enRoute]);
   const truckPosition = driverPosition ?? armadaGpsPosition;
+
+  // Rute AKTUAL dari riwayat provider GPS — diminta terpisah setelah dialog
+  // tampil (tidak ikut pemuatan utama), jadi membuka Validasi Rute tidak
+  // pernah menunggunya. Perjalanan yang sudah kembali cukup sekali (server
+  // menyimpannya); yang masih berlangsung disegarkan tiap 2 menit.
+  const berangkatAktualIso = jadwal?.JamAktualBerangkat ? new Date(jadwal.JamAktualBerangkat).toISOString() : null;
+  const kembaliAktualIso = vehicleChecks.find((c) => c.tipe === "DATANG")?.checkedAt ?? null;
+  const [jejak, setJejak] = useState<JejakPeta | null>(null);
+  useEffect(() => {
+    if (jadwalId == null || armadaId == null || !berangkatAktualIso) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setJejak(null);
+      return;
+    }
+    // Belum tahu jam kembali — tunggu cek kendaraan termuat dulu.
+    if (cekDimuatUntuk !== jadwalId) {
+      setJejak({ keadaan: "memuat" });
+      return;
+    }
+    const kendali = new AbortController();
+    const qs = new URLSearchParams({ jadwalId: String(jadwalId), armadaId: String(armadaId), berangkat: berangkatAktualIso });
+    if (kembaliAktualIso) qs.set("kembali", new Date(kembaliAktualIso).toISOString());
+    function muat(awal: boolean) {
+      if (awal) setJejak({ keadaan: "memuat" });
+      fetch(`/api/mkesindo/jejak-armada?${qs}`, { signal: kendali.signal })
+        .then(async (r) => {
+          const body = await r.json().catch(() => null);
+          if (!r.ok) throw new Error(body?.error ?? `Status ${r.status}`);
+          return body as JejakAktual;
+        })
+        .then((data) => setJejak({ keadaan: "siap", data }))
+        .catch((err: unknown) => {
+          if (kendali.signal.aborted) return;
+          // Penyegaran yang gagal tidak menghapus jejak yang sudah tampil.
+          if (awal) setJejak({ keadaan: "gagal", pesan: err instanceof Error ? err.message : String(err) });
+        });
+    }
+    muat(true);
+    const interval = kembaliAktualIso ? null : setInterval(() => muat(false), 120_000);
+    return () => {
+      kendali.abort();
+      if (interval) clearInterval(interval);
+    };
+  }, [jadwalId, armadaId, berangkatAktualIso, kembaliAktualIso, cekDimuatUntuk]);
 
   // Recomputes the route whenever the stop order or the pabrik location
   // changes. Every stop must have a saved coordinate — otherwise a full
@@ -759,9 +811,9 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // Removing the last remaining stop also deletes the now-empty Jadwal
   // itself (removeSalesOrderFromJadwal's own cleanup) — nothing left to
   // show, so this closes the dialog the same way "Batalkan Draft" does.
-  function handleRemoveStop(detail: DriverStopRow) {
+  async function handleRemoveStop(detail: DriverStopRow) {
     if (jadwalId == null) return;
-    if (!confirm(`Keluarkan "${detail.CustomerName}" dari draft ini?`)) return;
+    if (!(await konfirmasi(`Keluarkan "${detail.CustomerName}" dari draft ini?`))) return;
     const targetId = jadwalId;
     setError(null);
     startTransition(async () => {
@@ -1430,6 +1482,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     geometry={route?.geometry ?? null}
                     refitTrigger={refitTrigger}
                     driverPosition={truckPosition}
+                    jejak={jejak}
                   />
                 ) : (
                   <Skeleton className="h-full w-full md:rounded-lg" />

@@ -105,7 +105,7 @@ function extractRequestVerificationToken(html: string): string | null {
  * authenticated session. Throws AppError on any failure (missing
  * credentials, missing antiforgery token, or a rejected login).
  */
-async function login(perusahaanId: number): Promise<string> {
+export async function login(perusahaanId: number): Promise<string> {
   const kredensial = await resolveGpsKredensial(perusahaanId, "solofleet");
   if (!kredensial) {
     throw new AppError("Kredensial GPS SoloFleet belum dikonfigurasi.");

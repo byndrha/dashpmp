@@ -156,7 +156,7 @@ interface HinoClustersResponse {
  * fragment. Throws AppError on any failure (missing credentials or a
  * rejected login), never logging the password.
  */
-async function login(perusahaanId: number): Promise<string> {
+export async function login(perusahaanId: number): Promise<string> {
   const kredensial = await resolveGpsKredensial(perusahaanId, "hino");
   if (!kredensial) {
     throw new AppError("Kredensial GPS Hino Connect belum dikonfigurasi.");
