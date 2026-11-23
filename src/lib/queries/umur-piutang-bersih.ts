@@ -31,6 +31,7 @@ import {
   ES_BALOK_JATUH_TEMPO_HARI,
   type EsBalokAgingBucket,
   type EsBalokPiutangStatus,
+  type PiutangTerbukaRingkas,
 } from "@/lib/piutang-es-balok-status";
 
 const MAX_DATE = new Date(9999, 11, 31);
@@ -42,6 +43,9 @@ export interface UmurPiutangBersih {
   ember: { ember: EmberUmur; nominal: number }[];
   status: { status: EsBalokPiutangStatus; mitra: number; nominal: number }[];
   jumlahAgen: number;
+  // Per Agen berhutang: [hutang bersih, umur terburuk (hari lewat jatuh
+  // tempo; 9999 = sebagian berasal dari saldo awal ERP tanpa tanggal)].
+  perAgen: Record<string, PiutangTerbukaRingkas>;
 }
 
 export const URUTAN_EMBER: EmberUmur[] = ["Belum Jatuh Tempo", "1-30 Hari", "31-60 Hari", "61-90 Hari", ">90 Hari", "Saldo Awal"];
@@ -130,6 +134,7 @@ export async function getUmurPiutangBersih(kode: string): Promise<UmurPiutangBer
     ["Kritis", { mitra: 0, nominal: 0 }],
   ]);
   let total = 0;
+  const perAgen: Record<string, PiutangTerbukaRingkas> = {};
   for (const [agenId, h] of hutang) {
     total += h;
     let sisa = h;
@@ -149,7 +154,9 @@ export async function getUmurPiutangBersih(kode: string): Promise<UmurPiutangBer
       ember.set("Saldo Awal", ember.get("Saldo Awal")! + sisa);
       terburuk = Number.POSITIVE_INFINITY;
     }
-    const st = esBalokStatus(terburuk === Number.POSITIVE_INFINITY ? 9999 : terburuk);
+    const hariTerburuk = terburuk === Number.POSITIVE_INFINITY ? 9999 : terburuk;
+    perAgen[agenId] = [Math.round(h), hariTerburuk ?? 0];
+    const st = esBalokStatus(hariTerburuk);
     const s = status.get(st)!;
     s.mitra += 1;
     s.nominal += h;
@@ -160,5 +167,6 @@ export async function getUmurPiutangBersih(kode: string): Promise<UmurPiutangBer
     ember: URUTAN_EMBER.map((e) => ({ ember: e, nominal: ember.get(e)! })),
     status: (["Kritis", "Perhatian", "Sehat"] as EsBalokPiutangStatus[]).map((st) => ({ status: st, ...status.get(st)! })),
     jumlahAgen: hutang.size,
+    perAgen,
   };
 }

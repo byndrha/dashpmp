@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Banknote, ChevronDown, Clock, Copy, CreditCard, Download, FileText, Info, MapPin, Package, Search, Share2, SlidersHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Banknote, ChevronDown, Clock, Copy, CreditCard, Download, FileText, Info, MapPin, Package, Search, Share2, SlidersHorizontal, TriangleAlert, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Pagination } from "@/components/dashboard/pagination";
-import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { PiutangBayarDialog } from "@/components/dashboard/piutang-bayar-dialog";
 import { formatRupiah } from "@/lib/format";
 import { usePanelMenempel } from "@/hooks/use-panel-menempel";
@@ -19,7 +18,6 @@ import { Petunjuk } from "@/components/ui/petunjuk";
 import { utcInstantToWibDisplay } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import { SEGMENTASI_OPTIONS } from "@/lib/segmentasi-mitra";
-import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { PiutangPerAgenRow, PiutangTransaksiRow } from "@/lib/queries/penjualan-piutang";
 import type { PiutangBayarContext, PiutangTarikContext, BayarPiutangResult } from "@/lib/queries/piutang-pembayaran";
 import type { KomponenSelisih } from "@/lib/queries/piutang-invoice-outstanding";
@@ -31,23 +29,6 @@ import {
   type RingkasanPiutangTerbuka,
 } from "@/lib/piutang-es-balok-status";
 
-const EXPORT_COLUMNS: XlsxColumn[] = [
-  { header: "Mitra", key: "nama", width: 26 },
-  { header: "Tabungan Awal", key: "tabunganAwal", type: "number", width: 16 },
-  { header: "Hutang Awal", key: "hutangAwal", type: "number", width: 16 },
-  { header: "Pesanan", key: "pesanan", type: "number", width: 16 },
-  { header: "Retur", key: "retur", type: "number", width: 14 },
-  { header: "Pembayaran", key: "pembayaran", type: "number", width: 16 },
-  { header: "Tarikan", key: "tarikan", type: "number", width: 14 },
-  { header: "Saldo Akhir", key: "saldoAkhir", type: "number", width: 16 },
-  // Sama dengan chip di kartu: status dari piutang terbuka terburuk; usia =
-  // hari sejak tanggal pesanan belum lunas yang paling lama. Kosong bila
-  // Agen tidak punya piutang terbuka.
-  { header: "Status Piutang", key: "statusPiutang", width: 14 },
-  { header: "Piutang Terbuka", key: "piutangTerbuka", type: "number", width: 16 },
-  { header: "Usia Piutang Terlama (hari)", key: "usiaTerlama", type: "number", numFmt: "0", width: 26 },
-  { header: "Lewat Jatuh Tempo (hari)", key: "lewatJatuhTempo", type: "number", numFmt: "0", width: 24 },
-];
 
 const MONTH_NAMES = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -273,7 +254,10 @@ export interface PesananBelumLunas {
   terbuka: PiutangTerbuka;
 }
 
-function BelumLunasRow({ item }: { item: PesananBelumLunas }) {
+// `tertutup`: hutang bersih Agen nol — pesanan ini masih terbuka di ERP
+// tetapi sudah tertutup saldo lain (tabungan/kelebihan bayar di database
+// lain), jadi umurnya ditampilkan redup, bukan merah.
+function BelumLunasRow({ item, tertutup = false }: { item: PesananBelumLunas; tertutup?: boolean }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border px-2 py-1.5">
       <div className="flex items-center justify-between gap-2">
@@ -286,12 +270,18 @@ function BelumLunasRow({ item }: { item: PesananBelumLunas }) {
       <div className="flex items-center justify-between gap-2">
         <span className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-foreground">
           <span className="shrink-0">{item.tanggal ? formatTanggalPendek(item.tanggal) : "—"}</span>
-          {item.tanggal && (
-            <UmurChip
-              item={{ tanggal: item.tanggal } as PiutangTransaksiRow}
-              terbuka={item.terbuka}
-            />
-          )}
+          {item.tanggal &&
+            (tertutup ? (
+              <Petunjuk
+                render={<span className="shrink-0 cursor-help rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground" />}
+                judul="Tertutup saldo lain"
+                isi="Masih tercatat belum lunas di ERP, tetapi hutang bersih mitra ini sudah nol — tertutup tabungan atau kelebihan bayar di database lain yang belum dipindahbukukan."
+              >
+                Tertutup saldo lain
+              </Petunjuk>
+            ) : (
+              <UmurChip item={{ tanggal: item.tanggal } as PiutangTransaksiRow} terbuka={item.terbuka} />
+            ))}
         </span>
         <Petunjuk
           render={<span className="font-data shrink-0 cursor-help text-xs font-semibold tabular-nums text-foreground" />}
@@ -308,6 +298,34 @@ function BelumLunasRow({ item }: { item: PesananBelumLunas }) {
 // (getKomponenSelisihPiutang). Dimuat saat dibuka supaya tidak menambah
 // query untuk setiap kartu. Komponen yang tidak terurai (mis. beda filter
 // cabang) ditampilkan sebagai "Lainnya" agar jumlahnya selalu tepat.
+// Isi tooltip satu komponen selisih: keterangan + dokumen pembentuknya
+// (nomor, tanggal, nilai), terbaru dulu.
+function IsiKomponen({ komponen }: { komponen: KomponenSelisih }) {
+  const dokumen = komponen.dokumen ?? [];
+  const lebih = (komponen.jumlahDokumen ?? dokumen.length) - dokumen.length;
+  return (
+    <span className="block">
+      {komponen.keterangan && <span className="block">{komponen.keterangan}</span>}
+      {dokumen.length > 0 && (
+        <span className="mt-1.5 block border-t pt-1.5">
+          {dokumen.map((d, i) => (
+            <span key={`${d.noDokumen}-${i}`} className="flex items-baseline justify-between gap-3 py-px">
+              <span className="min-w-0">
+                <span className="font-data block truncate text-[10px] text-foreground">{d.noDokumen}</span>
+                <span className="block text-[10px]">
+                  {d.jenis} · {d.tanggal ? formatTanggalPendek(d.tanggal) : "tanpa tanggal"}
+                </span>
+              </span>
+              <span className="font-data shrink-0 tabular-nums text-foreground">{formatRupiah(Math.abs(d.nilai))}</span>
+            </span>
+          ))}
+          {lebih > 0 && <span className="block pt-0.5 text-[10px]">dan {lebih} dokumen lainnya</span>}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function RincianSelisih({
   selisih,
   totalBelumLunas,
@@ -366,7 +384,7 @@ function RincianSelisih({
               key={k.label}
               render={<div className="flex cursor-help items-start justify-between gap-2" />}
               judul={k.label}
-              isi={k.keterangan}
+              isi={<IsiKomponen komponen={k} />}
             >
               <span className="min-w-0 text-muted-foreground">{k.label}</span>
               <span className={cn("font-data shrink-0 tabular-nums", k.nilai < 0 ? "text-primary" : "text-foreground")}>
@@ -394,6 +412,7 @@ function RincianSelisih({
 function AgenCard({
   row,
   terbukaAgen,
+  fifoAgen,
   terbukaDokumen,
   periodeLabel,
   lastUpdated,
@@ -406,7 +425,12 @@ function AgenCard({
   submitTarik,
 }: {
   row: PiutangPerAgenRow;
+  // Hutang BERSIH Agen (gabungan utama + logistik) + umur tagihan terburuk
+  // yang belum tertutup — dasar status kartu, sama dengan Sisa Hutang.
   terbukaAgen: PiutangTerbuka | undefined;
+  // Total pesanan belum lunas menurut ERP (FIFO per database) — hanya untuk
+  // mendeteksi selisih pembukuan, bukan untuk status.
+  fifoAgen: PiutangTerbuka | undefined;
   terbukaDokumen: RingkasanPiutangTerbuka["dokumen"];
   periodeLabel: string;
   lastUpdated: Date;
@@ -431,9 +455,15 @@ function AgenCard({
   ) => Promise<BayarPiutangResult[]>;
 }) {
   const status = statusOf(row);
-  // Status kesehatan piutang Agen = umur piutang terbuka TERBURUK (sama
-  // dengan Prioritas Penagihan); Agen tanpa piutang terbuka = Sehat.
+  // Status kesehatan piutang Agen = umur tagihan TERBURUK yang belum tertutup
+  // dari hutang BERSIH (dasar yang sama dengan Sisa Hutang & panel
+  // ringkasan); Agen yang bersihnya lunas/tabungan = Sehat.
   const statusPiutang = esBalokStatus(terbukaAgen ? terbukaAgen.maxDaysOverdue : null);
+  // ERP masih mencatat pesanan belum lunas MELEBIHI hutang bersih: sebagian
+  // pesanan itu sebenarnya sudah tertutup tabungan/kelebihan bayar atau saldo
+  // di database lain yang belum dipindahbukukan di ERP (contoh: RESTU,
+  // PMPutra — pesanan di logistik, uangnya di utama).
+  const selisihErp = (fifoAgen?.outstanding ?? 0) - (terbukaAgen?.outstanding ?? 0);
   const [expanded, setExpanded] = useState(false);
   const [bayarOpen, setBayarOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -585,10 +615,14 @@ function AgenCard({
                   judul={`Status ${statusPiutang}`}
                   isi={
                     terbukaAgen
-                      ? `Piutang terbuka ${formatRupiah(terbukaAgen.outstanding)}; terlama ${
-                          terbukaAgen.maxDaysOverdue > 0 ? `lewat ${terbukaAgen.maxDaysOverdue} hari dari jatuh tempo` : "belum jatuh tempo"
+                      ? `Hutang bersih ${formatRupiah(terbukaAgen.outstanding)}; tagihan terlama ${
+                          terbukaAgen.maxDaysOverdue >= 9999
+                            ? "berasal dari saldo awal ERP"
+                            : terbukaAgen.maxDaysOverdue > 0
+                              ? `lewat ${terbukaAgen.maxDaysOverdue} hari dari jatuh tempo`
+                              : "belum jatuh tempo"
                         }.`
-                      : "Tidak ada piutang terbuka."
+                      : "Tidak ada hutang bersih (lunas atau punya tabungan)."
                   }
                 >
                   <Badge variant="outline" className={cn("h-5 gap-1 px-1.5 text-[10px]", STATUS_PIUTANG_CLASS[statusPiutang].badge)}>
@@ -596,6 +630,22 @@ function AgenCard({
                     {statusPiutang}
                   </Badge>
                 </Petunjuk>
+                {selisihErp >= 1 && (
+                  <Petunjuk
+                    render={<span className="inline-flex cursor-help" />}
+                    judul="Selisih pembukuan ERP"
+                    isi={`ERP masih mencatat pesanan belum lunas ${formatRupiah(fifoAgen!.outstanding)}, padahal hutang bersih gabungan ${formatRupiah(
+                      terbukaAgen?.outstanding ?? 0
+                    )}. Selisih ${formatRupiah(
+                      selisihErp
+                    )} sudah tertutup tabungan, kelebihan bayar, atau saldo di database lain (utama/logistik) yang belum dipindahbukukan di ERP. Status di kartu ini mengikuti hutang bersih; rinciannya ada di bawah daftar pesanan belum lunas.`}
+                  >
+                    <Badge variant="outline" className="h-5 gap-1 border-warning/40 px-1.5 text-[10px] text-warning">
+                      <TriangleAlert className="size-3" />
+                      Selisih ERP
+                    </Badge>
+                  </Petunjuk>
+                )}
                 {hasPin && (
                   <Button
                     variant="ghost"
@@ -631,7 +681,7 @@ function AgenCard({
             {belumLunas.length > 0 ? (
               <div className="flex flex-col gap-1">
                 {visibleBelumLunas.map((item) => (
-                  <BelumLunasRow key={item.noDokumen} item={item} />
+                  <BelumLunasRow key={item.noDokumen} item={item} tertutup={!terbukaAgen} />
                 ))}
                 <div className="flex items-center justify-between gap-2 px-1 pt-0.5 text-[11px]">
                   <span className="text-muted-foreground">Total sisa pesanan</span>
@@ -821,6 +871,7 @@ function AgenCard({
 // through the page's server-side fetch, since the date range is
 // client-adjustable after first load.
 export function PiutangPerAgenTable({
+  namaPerusahaan,
   initialRows,
   initialTerbuka,
   awalISO,
@@ -833,6 +884,8 @@ export function PiutangPerAgenTable({
   fetchTarikContext,
   submitTarik,
 }: {
+  // Untuk judul & nama file ekspor .xlsx.
+  namaPerusahaan: string;
   initialRows: PiutangPerAgenRow[];
   // Sisa piutang terbuka per pesanan (FIFO) — sumber status Sehat/Perhatian/
   // Kritis per Agen dan indikator umur per transaksi. Tidak bergantung pada
@@ -888,6 +941,7 @@ export function PiutangPerAgenTable({
   // Bawaan NYALA — kartu langsung menunjukkan pesanan yang masih terbuka,
   // tidak tampak kosong untuk Agen yang tak bertransaksi di periode ini.
   const [semuaBelumLunas, setSemuaBelumLunas] = useState(true);
+  const [mengekspor, setMengekspor] = useState(false);
   // Denyut (pulse) di sakelar sampai pengguna menyentuhnya sekali, supaya
   // fitur ini terlihat dan dicoba.
   const [sakelarDisentuh, setSakelarDisentuh] = useState(false);
@@ -968,7 +1022,7 @@ export function PiutangPerAgenTable({
   // Status kesehatan piutang per Agen — aturan yang sama dengan chip di kartu.
   const statusPiutangOf = useCallback(
     (agenId: string): EsBalokPiutangStatus => {
-      const t = terbuka.agen[agenId];
+      const t = terbuka.bersih ? terbuka.bersih[agenId] : terbuka.agen[agenId];
       return esBalokStatus(t ? t[1] : null);
     },
     [terbuka]
@@ -1003,27 +1057,31 @@ export function PiutangPerAgenTable({
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const periodeLabel = formatPeriodeLabel(startDate, endDate);
 
-  const exportRows = useMemo(
-    () =>
-      filtered.map((r) => {
-        const t = terbuka.agen[r.agenId];
-        return {
-          nama: r.nama,
-          tabunganAwal: r.tabunganAwal,
-          hutangAwal: r.hutangAwal,
-          pesanan: r.pesanan,
-          retur: r.retur,
-          pembayaran: r.pembayaran,
-          tarikan: r.tarikan,
-          saldoAkhir: r.saldoAkhir,
-          statusPiutang: statusPiutangOf(r.agenId),
-          piutangTerbuka: t ? t[0] : null,
-          usiaTerlama: t ? Math.max(0, t[1] + ES_BALOK_JATUH_TEMPO_HARI) : null,
-          lewatJatuhTempo: t ? Math.max(0, t[1]) : null,
-        };
-      }),
-    [filtered, terbuka, statusPiutangOf]
-  );
+  async function eksporXlsx() {
+    setMengekspor(true);
+    try {
+      const { eksporRekeningMitra } = await import("@/lib/ekspor-piutang-es-balok");
+      const filterAktif = [
+        search && `Cari: "${search}"`,
+        segmentasi !== "all" && `Segmentasi: ${segmentasi === "none" ? "Belum ditentukan" : (segmentasiLabel(segmentasi as PiutangPerAgenRow["segmentasi"]) ?? segmentasi)}`,
+        status !== "all" && `Jenis: ${status === "hutang" ? "Hutang" : status === "tabungan" ? "Tabungan" : "Lunas"}`,
+        statusPiutang !== "all" && `Status: ${statusPiutang}`,
+        semuaBelumLunas && "Hanya Mitra dengan pesanan belum lunas",
+      ].filter((x): x is string => Boolean(x));
+      await eksporRekeningMitra({
+        namaPerusahaan,
+        awalISO: startDate,
+        akhirISO: akhirDiterapkan,
+        filterAktif,
+        rows: filtered,
+        terbuka,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal membuat file .xlsx.");
+    } finally {
+      setMengekspor(false);
+    }
+  }
 
   const jumlahFilterAktif = [segmentasi !== "all", status !== "all", statusPiutang !== "all"].filter(Boolean).length;
 
@@ -1177,7 +1235,10 @@ export function PiutangPerAgenTable({
                   <SortToggle label="Nama" sortKey="Nama" active={sortKey === "Nama"} direction={sortDir} onSort={handleSort} penuh />
                 </div>
                 <div className="border-t pt-2">
-                  <ExportXlsxButton filename="rekening-mitra-gabungan" sheetName="Rekening Mitra" columns={EXPORT_COLUMNS} rows={exportRows} />
+                  <Button variant="outline" size="sm" disabled={mengekspor || filtered.length === 0} onClick={eksporXlsx}>
+                    <FileSpreadsheet className="size-3.5" />
+                    {mengekspor ? "Membuat..." : "Export .xlsx"}
+                  </Button>
                 </div>
               </div>
             </PopoverContent>
@@ -1266,7 +1327,10 @@ export function PiutangPerAgenTable({
                 <SortToggle label="Nama" sortKey="Nama" active={sortKey === "Nama"} direction={sortDir} onSort={handleSort} />
               </div>
             </div>
-            <ExportXlsxButton filename="rekening-mitra-gabungan" sheetName="Rekening Mitra" columns={EXPORT_COLUMNS} rows={exportRows} />
+            <Button variant="outline" size="sm" disabled={mengekspor || filtered.length === 0} onClick={eksporXlsx}>
+              <FileSpreadsheet className="size-3.5" />
+              {mengekspor ? "Membuat..." : "Export .xlsx"}
+            </Button>
           </div>
         </div>
       </div>
@@ -1283,7 +1347,8 @@ export function PiutangPerAgenTable({
           <AgenCard
             key={r.agenId}
             row={r}
-            terbukaAgen={bacaTerbuka(terbuka.agen[r.agenId])}
+            terbukaAgen={bacaTerbuka(terbuka.bersih ? terbuka.bersih[r.agenId] : terbuka.agen[r.agenId])}
+            fifoAgen={bacaTerbuka(terbuka.agen[r.agenId])}
             terbukaDokumen={terbuka.dokumen}
             periodeLabel={periodeLabel}
             lastUpdated={lastUpdated}

@@ -476,13 +476,64 @@ export function getEsBalokStatusOverview(rows: EsBalokInvoiceRow[]): EsBalokStat
 // selisih. Transaksi bertanggal >= akhir periode ada di FIFO tetapi tidak
 // di Sisa Hutang kartu. Sisa yang tak terurai (mis. beda filter cabang)
 // dihitung di klien sebagai "Lainnya".
+export interface DokumenSelisih {
+  noDokumen: string;
+  tanggal: string | null; // yyyy-MM-dd (tanggal ERP, naive WIB)
+  nilai: number;
+  jenis: "Pemesanan" | "Pembayaran" | "Tarikan" | "Bayar di pesanan";
+}
+
 export interface KomponenSelisih {
   label: string;
   nilai: number; // + menambah Sisa Hutang di atas total pesanan belum lunas
   keterangan?: string;
+  // Dokumen pembentuk komponen ini (terbaru dulu, maks. BATAS_DOKUMEN);
+  // `jumlahDokumen` = jumlah sebenarnya bila daftar dipotong.
+  dokumen?: DokumenSelisih[];
+  jumlahDokumen?: number;
 }
 
 const LABEL_SUMBER: Record<SumberAgen, string> = { utama: "utama", logistik: "logistik" };
+const BATAS_DOKUMEN = 12;
+
+interface BarisPesanan {
+  NoDokumen: string;
+  Tanggal: Date;
+  NetValue: number;
+  Pembayaran: number;
+}
+interface BarisPembayaran {
+  NoDokumen: string;
+  Tanggal: Date;
+  Pembayaran: number;
+  Tarikan: number;
+}
+
+const isoTanggal = (d: Date | null) => (d ? new Date(d).toISOString().slice(0, 10) : null);
+
+// Pembayaran (PMP_Pembayaran + pembayaran yang dicatat langsung di pesanan)
+// yang TIDAK tertampung tagihan: pembayaran melunasi yang tertua dulu, jadi
+// kelebihan sebesar `lebih` ada di pembayaran-pembayaran TERBARU. Pembayaran
+// terakhir yang hanya sebagian lebih dicatat sebesar bagian lebihnya saja.
+function pembayaranBerlebih(pesanan: BarisPesanan[], bayar: BarisPembayaran[], lebih: number): DokumenSelisih[] {
+  const semua: DokumenSelisih[] = [
+    ...bayar
+      .filter((r) => Number(r.Pembayaran) > 0)
+      .map((r) => ({ noDokumen: r.NoDokumen, tanggal: isoTanggal(r.Tanggal), nilai: Number(r.Pembayaran), jenis: "Pembayaran" as const })),
+    ...pesanan
+      .filter((r) => Number(r.Pembayaran) > 0)
+      .map((r) => ({ noDokumen: r.NoDokumen, tanggal: isoTanggal(r.Tanggal), nilai: Number(r.Pembayaran), jenis: "Bayar di pesanan" as const })),
+  ].sort((x, y) => (y.tanggal ?? "").localeCompare(x.tanggal ?? ""));
+  const hasil: DokumenSelisih[] = [];
+  let sisa = lebih;
+  for (const d of semua) {
+    if (sisa < 1) break;
+    const ambil = Math.min(sisa, d.nilai);
+    hasil.push({ ...d, nilai: Math.round(ambil) });
+    sisa -= ambil;
+  }
+  return hasil;
+}
 
 export async function getKomponenSelisihPiutang(kode: string, agenId: string, akhirEksklusif: Date): Promise<KomponenSelisih[]> {
   const sources: SumberAgen[] = ["utama", "logistik"];
@@ -492,46 +543,64 @@ export async function getKomponenSelisihPiutang(kode: string, agenId: string, ak
       const pool = await getCompanyPool(physKode, label);
       const branchId = branchFilterFor(kode, sumber);
       const req = () => {
-        const r = pool.request().input("agen", sql.VarChar(16), agenId).input("akhir", sql.DateTime, akhirEksklusif);
+        const r = pool.request().input("agen", sql.VarChar(16), agenId);
         if (branchId) r.input("branchId", sql.VarChar(16), branchId);
         return r;
       };
       const filterCabang = branchId ? "AND BranchID = @branchId" : "";
-      const [awal, pesanan, bayar] = await Promise.all([
+      // Baris per dokumen (bukan SUM) supaya tiap komponen bisa menyebut
+      // dokumen & tanggalnya; volumenya per Agen kecil (ratusan baris).
+      const [awal, pesananRes, bayarRes] = await Promise.all([
         req().query(`SELECT SUM(PiutangSaldoAwal - TabunganSaldoAwal) AS Net FROM PMP_Agen WHERE IsDeleted = 0 AND AgenID = @agen`),
         req().query(`
-          SELECT SUM(NetValue) AS P,
-                 SUM(CASE WHEN NetValue > 0 THEN NetValue ELSE 0 END) AS PPlus,
-                 SUM(ISNULL(Pembayaran,0)) AS Bayar,
-                 SUM(CASE WHEN Tanggal >= @akhir THEN NetValue - ISNULL(Pembayaran,0) ELSE 0 END) AS SetelahAkhir
-          FROM (
-            SELECT Tanggal, Pembayaran,
-              (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
-                + (BalokBesarRealisasi - ISNULL(BalokBesarRetur,0)) * BalokBesarHarga AS NetValue
-            FROM PMP_Pemesanan WHERE IsDeleted = 0 AND AgenID = @agen ${filterCabang}
-          ) x`),
+          SELECT NoDokumen, Tanggal, ISNULL(Pembayaran,0) AS Pembayaran,
+            (BalokKecilRealisasi - ISNULL(BalokKecilRetur,0)) * BalokKecilHarga
+              + (BalokBesarRealisasi - ISNULL(BalokBesarRetur,0)) * BalokBesarHarga AS NetValue
+          FROM PMP_Pemesanan WHERE IsDeleted = 0 AND AgenID = @agen ${filterCabang}`),
         req().query(`
-          SELECT SUM(ISNULL(Pembayaran,0)) AS Bayar, SUM(ISNULL(Tarikan,0)) AS Tarikan,
-                 SUM(CASE WHEN Tanggal >= @akhir THEN ISNULL(Tarikan,0) - ISNULL(Pembayaran,0) ELSE 0 END) AS SetelahAkhir
+          SELECT NoDokumen, Tanggal, ISNULL(Pembayaran,0) AS Pembayaran, ISNULL(Tarikan,0) AS Tarikan
           FROM PMP_Pembayaran WHERE IsDeleted = 0 AND AgenID = @agen ${filterCabang}`),
       ]);
       const n = (v: unknown) => Number(v ?? 0) || 0;
-      const a = awal.recordset[0] ?? {};
-      const p = pesanan.recordset[0] ?? {};
-      const b = bayar.recordset[0] ?? {};
-      const saldoAwal = n(a.Net);
-      const P = n(p.P);
-      const PPlus = n(p.PPlus);
-      const totalBayar = n(p.Bayar) + n(b.Bayar);
-      const tarikan = n(b.Tarikan);
+      const pesanan = pesananRes.recordset as BarisPesanan[];
+      const bayar = bayarRes.recordset as BarisPembayaran[];
+      const saldoAwal = n(awal.recordset[0]?.Net);
+      const P = pesanan.reduce((t, r) => t + n(r.NetValue), 0);
+      const PPlus = pesanan.reduce((t, r) => t + Math.max(0, n(r.NetValue)), 0);
+      const totalBayar = pesanan.reduce((t, r) => t + n(r.Pembayaran), 0) + bayar.reduce((t, r) => t + n(r.Pembayaran), 0);
+      const tarikan = bayar.reduce((t, r) => t + n(r.Tarikan), 0);
       const net = saldoAwal + P - totalBayar + tarikan;
-      return { sumber, saldoAwal, P, PPlus, totalBayar, tarikan, net, setelahAkhir: n(p.SetelahAkhir) + n(b.SetelahAkhir) };
+      const akhirMs = akhirEksklusif.getTime();
+      const dokSetelahAkhir: DokumenSelisih[] = [
+        ...pesanan
+          .filter((r) => new Date(r.Tanggal).getTime() >= akhirMs && Math.abs(n(r.NetValue) - n(r.Pembayaran)) >= 1)
+          .map((r) => ({ noDokumen: r.NoDokumen, tanggal: isoTanggal(r.Tanggal), nilai: Math.round(n(r.NetValue) - n(r.Pembayaran)), jenis: "Pemesanan" as const })),
+        ...bayar
+          .filter((r) => new Date(r.Tanggal).getTime() >= akhirMs && Math.abs(n(r.Tarikan) - n(r.Pembayaran)) >= 1)
+          .map((r) => ({
+            noDokumen: r.NoDokumen,
+            tanggal: isoTanggal(r.Tanggal),
+            nilai: Math.round(n(r.Tarikan) - n(r.Pembayaran)),
+            jenis: (n(r.Tarikan) > 0 ? "Tarikan" : "Pembayaran") as DokumenSelisih["jenis"],
+          })),
+      ];
+      const setelahAkhir = dokSetelahAkhir.reduce((t, d) => t + d.nilai, 0);
+      return { sumber, saldoAwal, P, PPlus, totalBayar, tarikan, net, setelahAkhir, pesanan, bayar, dokSetelahAkhir };
     })
   );
 
+  const urutTerbaru = (d: DokumenSelisih[]) => [...d].sort((x, y) => (y.tanggal ?? "").localeCompare(x.tanggal ?? ""));
   const komponen: KomponenSelisih[] = [];
-  const tambah = (label: string, nilai: number, keterangan?: string) => {
-    if (Math.abs(nilai) >= 1) komponen.push({ label, nilai: Math.round(nilai), keterangan });
+  const tambah = (label: string, nilai: number, keterangan?: string, dokumen?: DokumenSelisih[]) => {
+    if (Math.abs(nilai) < 1) return;
+    const urut = dokumen ? urutTerbaru(dokumen) : undefined;
+    komponen.push({
+      label,
+      nilai: Math.round(nilai),
+      keterangan,
+      dokumen: urut?.slice(0, BATAS_DOKUMEN),
+      jumlahDokumen: urut?.length,
+    });
   };
   for (const s of perSumber) {
     const nama = LABEL_SUMBER[s.sumber];
@@ -542,20 +611,50 @@ export async function getKomponenSelisihPiutang(kode: string, agenId: string, ak
       tambah(
         `Saldo ${nama} (tidak dialokasikan ke pesanan)`,
         s.net,
-        s.net < 0 ? "Tabungan/kelebihan bayar di database ini mengurangi Sisa Hutang gabungan" : undefined
+        s.net < 0
+          ? `Tabungan/kelebihan bayar di database ini mengurangi Sisa Hutang gabungan${
+              s.saldoAwal < 0 ? ` (termasuk tabungan awal ERP ${formatRupiahPolos(-s.saldoAwal)})` : ""
+            }.`
+          : undefined,
+        s.net < 0 ? pembayaranBerlebih(s.pesanan, s.bayar, -s.net - Math.max(0, -s.saldoAwal)) : undefined
       );
       continue;
     }
-    tambah(`Saldo awal ERP (${nama})`, s.saldoAwal, "Piutang/tabungan awal yang dicatat di data Agen, bukan dari pesanan");
-    tambah(`Tarikan tabungan (${nama})`, s.tarikan, "Tarikan menambah hutang tetapi tidak terikat ke pesanan");
-    tambah(`Retur melebihi pesanan (${nama})`, s.P - s.PPlus, "Pesanan yang nilai bersihnya negatif setelah retur");
+    tambah(`Saldo awal ERP (${nama})`, s.saldoAwal, "Piutang/tabungan awal yang dicatat di data Agen, bukan dari dokumen bertanggal.");
+    tambah(
+      `Tarikan tabungan (${nama})`,
+      s.tarikan,
+      "Tarikan menambah hutang tetapi tidak terikat ke pesanan.",
+      s.bayar
+        .filter((r) => Number(r.Tarikan) > 0)
+        .map((r) => ({ noDokumen: r.NoDokumen, tanggal: isoTanggal(r.Tanggal), nilai: Math.round(Number(r.Tarikan)), jenis: "Tarikan" as const }))
+    );
+    tambah(
+      `Retur melebihi pesanan (${nama})`,
+      s.P - s.PPlus,
+      "Pesanan yang nilai bersihnya negatif setelah retur.",
+      s.pesanan
+        .filter((r) => Number(r.NetValue) < 0)
+        .map((r) => ({ noDokumen: r.NoDokumen, tanggal: isoTanggal(r.Tanggal), nilai: Math.round(Number(r.NetValue)), jenis: "Pemesanan" as const }))
+    );
+    const lebih = Math.max(0, s.totalBayar - s.PPlus);
     tambah(
       `Kelebihan bayar (${nama})`,
-      -Math.max(0, s.totalBayar - s.PPlus),
-      "Pembayaran melebihi seluruh pesanan, jadi tidak ada pesanan yang menampungnya"
+      -lebih,
+      "Pembayaran melebihi seluruh pesanan, jadi tidak ada pesanan yang menampungnya.",
+      pembayaranBerlebih(s.pesanan, s.bayar, lebih)
     );
   }
-  const setelahAkhir = perSumber.reduce((t, s) => t + (s.net > 0 ? s.setelahAkhir : 0), 0);
-  tambah("Transaksi setelah tanggal akhir periode", -setelahAkhir, "Sudah masuk daftar pesanan belum lunas, belum masuk Sisa Hutang periode ini");
+  const sumberFifo = perSumber.filter((s) => s.net > 0);
+  tambah(
+    "Transaksi setelah tanggal akhir periode",
+    -sumberFifo.reduce((t, s) => t + s.setelahAkhir, 0),
+    "Sudah masuk daftar pesanan belum lunas, belum masuk Sisa Hutang periode ini.",
+    sumberFifo.flatMap((s) => s.dokSetelahAkhir)
+  );
   return komponen;
+}
+
+function formatRupiahPolos(n: number): string {
+  return `Rp ${Math.round(n).toLocaleString("id-ID")}`;
 }

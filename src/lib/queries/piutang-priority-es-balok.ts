@@ -7,6 +7,7 @@ import { getAgenRoster } from "@/lib/queries/penjualan-piutang";
 import { getEsBalokCollectionTargets } from "@/lib/queries/piutang-target-es-balok";
 import { esBalokStatus, type EsBalokInvoiceRow, type EsBalokPiutangStatus } from "@/lib/queries/piutang-invoice-outstanding";
 import type { Segmentasi } from "@/lib/segmentasi-mitra";
+import type { PiutangTerbukaRingkas } from "@/lib/piutang-es-balok-status";
 
 const SOURCES: SumberAgen[] = ["utama", "logistik"];
 
@@ -107,6 +108,10 @@ export interface EsBalokPriorityRow {
   piutangBerjalan: number;
   maxDaysOverdue: number | null;
   status: EsBalokPiutangStatus;
+  // Pesanan belum lunas menurut ERP (FIFO) MELEBIHI hutang bersih — sisanya
+  // sudah tertutup saldo lain yang belum dipindahbukukan (chip "Selisih ERP").
+  selisihErp: number;
+  pesananBelumLunasErp: number;
   terakhirPesan: string | null;
   terakhirBayar: string | null;
   targetDate: string | null;
@@ -115,12 +120,24 @@ export interface EsBalokPriorityRow {
   isTarget: boolean;
 }
 
+// `bersih` (getUmurPiutangBersih().perAgen): bila diberikan, daftar,
+// nominal, umur terburuk & status memakai hutang BERSIH per Agen — dasar yang
+// sama dengan Sisa Hutang, kartu per Mitra & panel ringkasan. Agen yang
+// bersihnya lunas/tabungan tidak masuk daftar penagihan walau ERP masih
+// mencatat pesanan belum lunas (lihat selisihErp).
 export async function getEsBalokCollectionPriority(
   kode: string,
-  invoiceRows: EsBalokInvoiceRow[]
+  invoiceRows: EsBalokInvoiceRow[],
+  bersih?: Record<string, PiutangTerbukaRingkas>
 ): Promise<EsBalokPriorityRow[]> {
   const aggByAgen = aggregateByAgen(invoiceRows);
-  const agenIds = [...aggByAgen.keys()];
+  const agenIds = bersih ? Object.keys(bersih) : [...aggByAgen.keys()];
+  // Agen berhutang bersih tanpa pesanan terbuka di ERP (mis. hutangnya dari
+  // tarikan tabungan) belum punya nama/segmentasi dari FIFO — ambil roster.
+  const butuhRoster = agenIds.some((id) => !aggByAgen.has(id));
+  const roster = butuhRoster
+    ? new Map((await getAgenRoster(kode)).map((r) => [r.AgenID, { nama: r.Nama, segmentasi: r.Segmentasi }]))
+    : new Map<string, { nama: string; segmentasi: Segmentasi | null }>();
 
   const [pesananMapsBySource, pembayaranMapsBySource, targets] = await Promise.all([
     Promise.all(SOURCES.map((s) => getMaxTanggalByAgen(kode, s, "PMP_Pemesanan", agenIds))),
@@ -129,15 +146,20 @@ export async function getEsBalokCollectionPriority(
   ]);
 
   const rows: EsBalokPriorityRow[] = agenIds.map((agenId) => {
-    const agg = aggByAgen.get(agenId)!;
+    const agg = aggByAgen.get(agenId);
     const target = targets.get(agenId) ?? null;
+    const fifo = agg?.piutangBerjalan ?? 0;
+    const nominal = bersih ? bersih[agenId][0] : fifo;
+    const hari = bersih ? bersih[agenId][1] : (agg?.maxDaysOverdue ?? null);
     return {
       agenId,
-      agenNama: agg.agenNama,
-      segmentasi: agg.segmentasi,
-      piutangBerjalan: agg.piutangBerjalan,
-      maxDaysOverdue: agg.maxDaysOverdue,
-      status: esBalokStatus(agg.maxDaysOverdue),
+      agenNama: agg?.agenNama ?? roster.get(agenId)?.nama ?? agenId,
+      segmentasi: agg?.segmentasi ?? roster.get(agenId)?.segmentasi ?? null,
+      piutangBerjalan: nominal,
+      maxDaysOverdue: hari,
+      status: esBalokStatus(hari),
+      selisihErp: Math.max(0, Math.round(fifo - nominal)),
+      pesananBelumLunasErp: Math.round(fifo),
       terakhirPesan: toIsoDate(laterOf(agenId, pesananMapsBySource)),
       terakhirBayar: toIsoDate(laterOf(agenId, pembayaranMapsBySource)),
       targetDate: target?.targetDate ?? null,

@@ -14,6 +14,7 @@ import { getEsBalokInvoiceOutstanding, getEsBalokPiutangPeriodSummary } from "@/
 import { getEsBalokCollectionPriority, getEsBalokPembayaranByDate } from "@/lib/queries/piutang-priority-es-balok";
 import { getUmurPiutangBersih } from "@/lib/queries/umur-piutang-bersih";
 import { ringkasPiutangTerbuka } from "@/lib/piutang-es-balok-status";
+import { getPgPool } from "@/lib/pg";
 import { periodeBawaanPiutang, rentangQueryPiutang } from "@/lib/piutang-es-balok-periode";
 import { PiutangSummaryPanel } from "@/components/dashboard/piutang-summary-panel";
 import { PiutangPerAgenTable } from "@/components/dashboard/piutang-per-agen-table";
@@ -41,6 +42,13 @@ export interface AksiPiutangEsBalok {
 
 // Satu kali per request walau dipakai tiga bagian tab.
 const fifoSekali = cache((kode: string) => getEsBalokInvoiceOutstanding(kode));
+// Umur & hutang bersih per Agen — dipakai panel ringkasan DAN status kartu.
+const umurSekali = cache((kode: string) => getUmurPiutangBersih(kode));
+// Nama PT untuk judul & nama file ekspor .xlsx.
+async function namaPerusahaanDari(kode: string): Promise<string> {
+  const r = await getPgPool().query<{ nama: string }>(`SELECT nama FROM perusahaan WHERE kode = $1`, [kode]);
+  return r.rows[0]?.nama ?? kode;
+}
 
 async function BagianRingkasan({ kode, aksi }: { kode: string; aksi: AksiPiutangEsBalok }) {
   const { awalISO, akhirISO } = periodeBawaanPiutang();
@@ -50,7 +58,7 @@ async function BagianRingkasan({ kode, aksi }: { kode: string; aksi: AksiPiutang
   const [data, periode, umur] = await Promise.all([
     getPiutangSummary(kode),
     getEsBalokPiutangPeriodSummary(kode, start, end, []),
-    getUmurPiutangBersih(kode),
+    umurSekali(kode),
   ]);
   return (
     <PiutangSummaryPanel
@@ -68,11 +76,17 @@ async function BagianRingkasan({ kode, aksi }: { kode: string; aksi: AksiPiutang
 async function PanelRincian({ kode, aksi }: { kode: string; aksi: AksiPiutangEsBalok }) {
   const { awalISO, akhirISO } = periodeBawaanPiutang();
   const { start, end } = rentangQueryPiutang(awalISO, akhirISO);
-  const [perMitra, invoiceRows] = await Promise.all([getPiutangPerAgen(kode, start, end), fifoSekali(kode)]);
+  const [perMitra, invoiceRows, umur, namaPerusahaan] = await Promise.all([
+    getPiutangPerAgen(kode, start, end),
+    fifoSekali(kode),
+    umurSekali(kode),
+    namaPerusahaanDari(kode),
+  ]);
   return (
     <PiutangPerAgenTable
+      namaPerusahaan={namaPerusahaan}
       initialRows={perMitra}
-      initialTerbuka={ringkasPiutangTerbuka(invoiceRows)}
+      initialTerbuka={ringkasPiutangTerbuka(invoiceRows, umur.perAgen)}
       awalISO={awalISO}
       akhirISO={akhirISO}
       fetchTerbuka={aksi.getRingkasanPiutangTerbukaAction}
@@ -95,7 +109,8 @@ async function PanelPembayaran({ kode, aksi }: { kode: string; aksi: AksiPiutang
 }
 
 async function PanelPrioritas({ kode, aksi }: { kode: string; aksi: AksiPiutangEsBalok }) {
-  const rows = await getEsBalokCollectionPriority(kode, await fifoSekali(kode));
+  const [fifo, umur] = await Promise.all([fifoSekali(kode), umurSekali(kode)]);
+  const rows = await getEsBalokCollectionPriority(kode, fifo, umur.perAgen);
   return (
     <EsBalokCollectionPriorityTable
       rows={rows}

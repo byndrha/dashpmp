@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Target } from "lucide-react";
+import { Target, TriangleAlert } from "lucide-react";
+import { Petunjuk } from "@/components/ui/petunjuk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +35,7 @@ const PAGE_SIZE = 9;
 const EXPORT_COLUMNS: XlsxColumn[] = [
   { header: "Mitra", key: "agenNama", width: 26 },
   { header: "Segmentasi", key: "segmentasi", width: 16 },
-  { header: "Piutang Berjalan", key: "piutangBerjalan", type: "number", width: 14 },
+  { header: "Hutang Bersih", key: "piutangBerjalan", type: "number", width: 14 },
   { header: "Hari Terlambat Maks", key: "maxDaysOverdue", type: "number", width: 14 },
   { header: "Target Nominal", key: "targetAmount", type: "number", width: 14 },
   { header: "Target Tanggal", key: "targetDate", type: "text", width: 14 },
@@ -74,6 +75,22 @@ function PriorityCard({
             </Badge>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {row.selisihErp >= 1 && (
+              <Petunjuk
+                render={<span className="inline-flex cursor-help" />}
+                judul="Selisih pembukuan ERP"
+                isi={`ERP masih mencatat pesanan belum lunas ${formatRupiah(row.pesananBelumLunasErp)}, padahal hutang bersih gabungan ${formatRupiah(
+                  row.piutangBerjalan
+                )}. Selisih ${formatRupiah(
+                  row.selisihErp
+                )} sudah tertutup tabungan, kelebihan bayar, atau saldo di database lain yang belum dipindahbukukan di ERP. Yang perlu ditagih hanya hutang bersihnya.`}
+              >
+                <Badge variant="outline" className="h-5 gap-1 border-warning/40 px-1.5 text-[10px] text-warning">
+                  <TriangleAlert className="size-3" />
+                  Selisih ERP
+                </Badge>
+              </Petunjuk>
+            )}
             <span className={cn("rounded px-2 py-0.5 text-[11px] font-medium", STATUS_BADGE[row.status])}>
               {row.status}
             </span>
@@ -85,12 +102,14 @@ function PriorityCard({
 
         <div className="grid grid-cols-2 gap-2 border-t pt-2 text-xs sm:grid-cols-3">
           <div>
-            <p className="text-muted-foreground">Piutang Berjalan</p>
+            <p className="text-muted-foreground">Hutang Bersih</p>
             <p className="tabular-nums font-medium text-warning">{formatRupiah(row.piutangBerjalan)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Hari Terlambat Maks</p>
-            <p className="tabular-nums font-medium">{formatDays(row.maxDaysOverdue)}</p>
+            <p className="tabular-nums font-medium">
+              {row.maxDaysOverdue != null && row.maxDaysOverdue >= 9999 ? "Saldo awal ERP" : formatDays(row.maxDaysOverdue)}
+            </p>
           </div>
         </div>
 

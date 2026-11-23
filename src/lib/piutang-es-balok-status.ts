@@ -39,12 +39,19 @@ export function esBalokStatus(daysOverdue: number | null): EsBalokPiutangStatus 
 export type PiutangTerbukaRingkas = [outstanding: number, maxDaysOverdue: number, tanggal?: string];
 
 export interface RingkasanPiutangTerbuka {
-  agen: Record<string, PiutangTerbukaRingkas>; // key: AgenID
+  agen: Record<string, PiutangTerbukaRingkas>; // key: AgenID — FIFO per sumber
   dokumen: Record<string, PiutangTerbukaRingkas>; // key: `${AgenID}|${NoDokumen}`
+  // Hutang BERSIH per Agen (utama + logistik digabung, dasar yang sama dengan
+  // Sisa Hutang & panel ringkasan) beserta umur terburuk tagihan yang belum
+  // tertutup — lihat getUmurPiutangBersih().perAgen. Agen yang bersihnya
+  // lunas/tabungan tidak ada di sini. Status Sehat/Perhatian/Kritis kartu
+  // memakai INI, bukan `agen` (FIFO).
+  bersih?: Record<string, PiutangTerbukaRingkas>;
 }
 
 export function ringkasPiutangTerbuka(
-  rows: { agenId: string; noDokumen: string; outstanding: number; daysOverdue: number; tanggal?: string }[]
+  rows: { agenId: string; noDokumen: string; outstanding: number; daysOverdue: number; tanggal?: string }[],
+  bersih?: Record<string, PiutangTerbukaRingkas>
 ): RingkasanPiutangTerbuka {
   const agen: Record<string, PiutangTerbukaRingkas> = {};
   const dokumen: Record<string, PiutangTerbukaRingkas> = {};
@@ -65,5 +72,5 @@ export function ringkasPiutangTerbuka(
     if (r.tanggal && (!tgl || r.tanggal < tgl)) dokumen[kunci][2] = r.tanggal;
   }
   for (const map of [agen, dokumen]) for (const k in map) map[k][0] = Math.round(map[k][0]);
-  return { agen, dokumen };
+  return { agen, dokumen, bersih };
 }

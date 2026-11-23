@@ -69,7 +69,8 @@ export async function getEsBalokInvoiceOutstandingAction(): Promise<EsBalokInvoi
 // per pesanan) — hanya angka per Agen/dokumen, bukan ribuan baris mentah.
 export async function getRingkasanPiutangTerbukaAction(): Promise<RingkasanPiutangTerbuka> {
   await requirePmpersadaKeuangan();
-  return ringkasPiutangTerbuka(await getEsBalokInvoiceOutstanding(KODE));
+  const [fifo, umur] = await Promise.all([getEsBalokInvoiceOutstanding(KODE), getUmurPiutangBersih(KODE)]);
+  return ringkasPiutangTerbuka(fifo, umur.perAgen);
 }
 
 export async function getEsBalokPeriodSummaryAction(startDate: string, endDate: string): Promise<EsBalokPeriodSummary> {
@@ -87,8 +88,8 @@ export async function getEsBalokStatusOverviewAction(): Promise<EsBalokStatusBuc
 
 export async function getEsBalokCollectionPriorityAction(): Promise<EsBalokPriorityRow[]> {
   await requirePmpersadaKeuangan();
-  const invoiceRows = await getEsBalokInvoiceOutstanding(KODE);
-  return getEsBalokCollectionPriority(KODE, invoiceRows);
+  const [invoiceRows, umur] = await Promise.all([getEsBalokInvoiceOutstanding(KODE), getUmurPiutangBersih(KODE)]);
+  return getEsBalokCollectionPriority(KODE, invoiceRows, umur.perAgen);
 }
 
 export async function setEsBalokCollectionTargetAction(
