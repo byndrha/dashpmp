@@ -275,8 +275,10 @@ test("UKURAN_BAWAAN dalam meter & NAMA_TIPE tipe baru", () => {
     beton: { w: 2, h: 2 },
     tangki: { w: 2, h: 2 },
     jalur: { w: 1, h: 1 },
+    perlengkapan: { w: 7, h: 0.9 },
   });
   assert.equal(NAMA_TIPE.beton, "Beton");
+  assert.equal(NAMA_TIPE.perlengkapan, "Perlengkapan");
   assert.equal(NAMA_TIPE.tangki, "Tangki");
   assert.equal(NAMA_TIPE.jalur, "Jalur");
 });

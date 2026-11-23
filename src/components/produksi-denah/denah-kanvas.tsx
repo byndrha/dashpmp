@@ -57,6 +57,8 @@ import {
   type LabelElemen,
   type MesinElemen,
   type Titik,
+  type PerlengkapanElemen,
+  PRESET_PERLENGKAPAN,
 } from "@/lib/produksi-denah";
 
 // ---------- API publik ----------
@@ -973,6 +975,14 @@ const ElemenView = memo(function ElemenView(p: ElemenViewProps) {
         </Teks>
       );
       break;
+    case "perlengkapan":
+      tubuh = <PerlengkapanTubuh p={e} />;
+      nama = (
+        <Teks x={kotak.x + kotak.w / 2} y={kotak.y + kotak.h + fs * 0.3} ukuran={fs} baseline="hanging" tebal>
+          {e.nama}
+        </Teks>
+      );
+      break;
     case "jalur":
       // Titik jalur dalam koordinat dunia ABSOLUT (meter) — tidak ikut transform tubuh.
       return <JalurView j={e} tertanam={p.tertanam ?? ""} terpilih={p.terpilih} sorot={p.sorot} peringatan={p.peringatan} hover={p.hover} fs={fs} skalaKira={p.skalaKira} />;
@@ -1295,21 +1305,188 @@ function TangkiTubuh({ t, skalaKira }: { t: TangkiElemen; skalaKira: number }) {
 
 // ---------- Mesin, derek, pintu, area, label ----------
 
+// Warna simbol mesin per kategori (isi/garis/ikon), terang & gelap.
+const KELAS_MESIN: Record<MesinElemen["kategori"], { kotak: string; garis: string; ikon: string }> = {
+  refrigerasi: {
+    kotak: "fill-violet-100 stroke-violet-500 dark:fill-violet-950 dark:stroke-violet-400",
+    garis: "fill-none stroke-violet-600 dark:stroke-violet-300",
+    ikon: "text-violet-600 dark:text-violet-300",
+  },
+  pompa: {
+    kotak: "fill-sky-100 stroke-sky-500 dark:fill-sky-950 dark:stroke-sky-400",
+    garis: "fill-none stroke-sky-600 dark:stroke-sky-300",
+    ikon: "text-sky-600 dark:text-sky-300",
+  },
+  listrik: {
+    kotak: "fill-red-100 stroke-red-500 dark:fill-red-950 dark:stroke-red-400",
+    garis: "fill-none stroke-red-600 dark:stroke-red-300",
+    ikon: "text-red-600 dark:text-red-300",
+  },
+  lainnya: {
+    kotak: "fill-slate-100 stroke-slate-500 dark:fill-slate-900 dark:stroke-slate-400",
+    garis: "fill-none stroke-slate-600 dark:stroke-slate-300",
+    ikon: "text-slate-600 dark:text-slate-300",
+  },
+};
+
+/**
+ * Simbol mesin tampak atas, koordinat lokal 0..w × 0..h (sebelum rotasi).
+ * Tanpa model = kotak + ikon kipas (perilaku lama); dengan model = siluet
+ * tampak atas bendanya (lihat model-mesin-3d.tsx untuk bentuk 3D-nya).
+ */
 function MesinTubuh({ m }: { m: MesinElemen }) {
-  const s = Math.min(m.w, m.h) * 0.62;
-  return (
-    <>
-      <rect
-        width={m.w}
-        height={m.h}
-        rx={Math.min(m.w, m.h) * 0.18}
-        className="fill-violet-100 stroke-violet-500 dark:fill-violet-950 dark:stroke-violet-400"
-        strokeWidth={1.5}
-        vectorEffect={NS}
-      />
-      <Fan x={(m.w - s) / 2} y={(m.h - s) / 2} width={s} height={s} className="text-violet-600 dark:text-violet-300" pointerEvents="none" />
-    </>
-  );
+  const { w, h } = m;
+  const k = KELAS_MESIN[m.kategori] ?? KELAS_MESIN.lainnya;
+  const g = { className: k.garis, strokeWidth: 1.2, vectorEffect: NS };
+  const kotak = { className: k.kotak, strokeWidth: 1.5, vectorEffect: NS };
+  switch (m.model) {
+    case "kompresor":
+      // Skid, blok kompresor (kiri) dengan dua katup, kopling, motor (kanan), kotak kontrol.
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} rx={Math.min(w, h) * 0.04} />
+          <rect x={w * 0.05} y={h * 0.11} width={w * 0.42} height={h * 0.78} {...g} />
+          <circle cx={w * 0.12} cy={h * 0.38} r={Math.min(w, h) * 0.09} {...g} />
+          <circle cx={w * 0.45} cy={h * 0.38} r={Math.min(w, h) * 0.09} {...g} />
+          <rect x={w * 0.47} y={h * 0.36} width={w * 0.06} height={h * 0.28} {...g} />
+          <rect x={w * 0.53} y={h * 0.16} width={w * 0.33} height={h * 0.68} rx={h * 0.3} {...g} />
+          <rect x={w * 0.87} y={h * 0.6} width={w * 0.11} height={h * 0.3} {...g} />
+        </>
+      );
+    case "kondensor":
+      // Tabung bertutup cembung, garis flens di kedua ujung, nosel atas.
+      return (
+        <>
+          <rect x={w * 0.02} y={h * 0.05} width={w * 0.96} height={h * 0.9} rx={Math.min(h * 0.45, w * 0.1)} {...kotak} />
+          <line x1={w * 0.09} y1={h * 0.02} x2={w * 0.09} y2={h * 0.98} {...g} />
+          <line x1={w * 0.91} y1={h * 0.02} x2={w * 0.91} y2={h * 0.98} {...g} />
+          <circle cx={w * 0.14} cy={h / 2} r={Math.min(h * 0.12, w * 0.03)} {...g} />
+          <circle cx={w * 0.86} cy={h / 2} r={Math.min(h * 0.12, w * 0.03)} {...g} />
+          <line x1={w * 0.2} y1={h * 0.5} x2={w * 0.8} y2={h * 0.5} {...g} strokeDasharray="4 3" />
+        </>
+      );
+    case "akumulator": {
+      // Alas persegi, bejana bundar, dua pipa atas.
+      const r = Math.min(w, h) * 0.3;
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} rx={Math.min(w, h) * 0.08} />
+          <circle cx={w / 2} cy={h / 2} r={r} {...g} />
+          <circle cx={w / 2 - r * 0.5} cy={h / 2} r={r * 0.2} {...g} />
+          <circle cx={w / 2 + r * 0.5} cy={h / 2} r={r * 0.2} {...g} />
+        </>
+      );
+    }
+    case "agitator":
+      // Dudukan + motor, poros miring, baling-baling.
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} rx={Math.min(w, h) * 0.08} />
+          <rect x={w * 0.1} y={h * 0.25} width={w * 0.42} height={h * 0.5} rx={h * 0.2} {...g} />
+          <line x1={w * 0.55} y1={h / 2} x2={w * 0.85} y2={h / 2} {...g} />
+          <circle cx={w * 0.85} cy={h / 2} r={Math.min(w, h) * 0.12} {...g} />
+          <line x1={w * 0.85} y1={h / 2 - Math.min(w, h) * 0.2} x2={w * 0.85} y2={h / 2 + Math.min(w, h) * 0.2} {...g} />
+        </>
+      );
+    case "katup-ekspansi":
+      // Simbol katup baku (dua segitiga) + batang.
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} rx={Math.min(w, h) * 0.1} />
+          <path d={`M ${w * 0.15} ${h * 0.2} L ${w / 2} ${h / 2} L ${w * 0.15} ${h * 0.8} Z M ${w * 0.85} ${h * 0.2} L ${w / 2} ${h / 2} L ${w * 0.85} ${h * 0.8} Z`} {...g} />
+          <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.08} {...g} />
+        </>
+      );
+    case "pompa":
+      // Rumah keong (bundar) + motor.
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} rx={Math.min(w, h) * 0.06} />
+          <circle cx={w * 0.2} cy={h / 2} r={Math.min(w * 0.17, h * 0.38)} {...g} />
+          <rect x={w * 0.38} y={h * 0.2} width={w * 0.55} height={h * 0.6} rx={h * 0.25} {...g} />
+        </>
+      );
+    case "panel":
+      // Lemari + tanda petir.
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} rx={Math.min(w, h) * 0.04} />
+          <path d={`M ${w * 0.55} ${h * 0.15} L ${w * 0.38} ${h * 0.55} L ${w * 0.52} ${h * 0.55} L ${w * 0.45} ${h * 0.85} L ${w * 0.64} ${h * 0.42} L ${w * 0.5} ${h * 0.42} Z`} {...g} />
+        </>
+      );
+    default: {
+      const s = Math.min(w, h) * 0.62;
+      return (
+        <>
+          <rect width={w} height={h} rx={Math.min(w, h) * 0.18} {...kotak} />
+          <Fan x={(w - s) / 2} y={(h - s) / 2} width={s} height={s} className={k.ikon} pointerEvents="none" />
+        </>
+      );
+    }
+  }
+}
+
+/** Simbol perlengkapan tampak atas, koordinat lokal 0..w × 0..h (sebelum rotasi). */
+function PerlengkapanTubuh({ p }: { p: PerlengkapanElemen }) {
+  const { w, h } = p;
+  const n = Math.max(1, Math.min(p.jumlah ?? PRESET_PERLENGKAPAN[p.model].jumlah ?? 1, 200));
+  const garis = { className: "fill-none stroke-teal-600 dark:stroke-teal-300", strokeWidth: 1, vectorEffect: NS };
+  const kotak = { className: "fill-teal-50 stroke-teal-500 dark:fill-teal-950 dark:stroke-teal-400", strokeWidth: 1.5, vectorEffect: NS };
+  const jarak = (w * 0.94) / n;
+  switch (p.model) {
+    case "pengisi-air":
+      if (p.varian === "pipa" || p.varian === "kotak") {
+        // Pipa induk tebal di sisi belakang (+ kotak), anak pipa menuju sisi depan (ujung = nosel).
+        return (
+          <>
+            <rect width={w} height={h} {...kotak} />
+            <line x1={0} y1={h * 0.14} x2={w} y2={h * 0.14} className="stroke-slate-500 dark:stroke-slate-300" strokeWidth={4} vectorEffect={NS} />
+            {p.varian === "kotak" && <rect x={w * 0.01} y={h * 0.24} width={w * 0.98} height={h * 0.26} className="fill-blue-500/40 stroke-blue-600" strokeWidth={1} vectorEffect={NS} />}
+            {Array.from({ length: n }, (_, i) => {
+              const x = w * 0.03 + jarak * (i + 0.5);
+              return (
+                <g key={i}>
+                  <line x1={x} y1={p.varian === "kotak" ? h * 0.5 : h * 0.2} x2={x} y2={h * 0.86} {...garis} />
+                  <circle cx={x} cy={h * 0.86} r={Math.min(jarak * 0.28, h * 0.07)} className="fill-sky-400 stroke-none" />
+                </g>
+              );
+            })}
+          </>
+        );
+      }
+      // Berkaki: bak air (atas) + pipa induk + deretan nosel di sisi depan.
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} />
+          <rect x={w * 0.01} y={h * 0.05} width={w * 0.98} height={h * 0.55} {...garis} />
+          <line x1={w * 0.02} y1={h * 0.62} x2={w * 0.98} y2={h * 0.62} {...garis} />
+          {Array.from({ length: n }, (_, i) => (
+            <circle key={i} cx={w * 0.03 + jarak * (i + 0.5)} cy={h * 0.8} r={Math.min(jarak * 0.3, h * 0.08)} className="fill-sky-400 stroke-none" />
+          ))}
+        </>
+      );
+    case "penuang":
+      // Meja miring (arsir) + ice can tergeletak sepanjang lebar.
+      return (
+        <>
+          <rect width={w} height={h} {...kotak} />
+          {Array.from({ length: n }, (_, i) => (
+            <rect key={i} x={w * 0.03 + jarak * i + jarak * 0.08} y={h * 0.08} width={jarak * 0.84} height={h * 0.6} className="fill-slate-200 stroke-slate-500 dark:fill-slate-700" strokeWidth={0.6} vectorEffect={NS} />
+          ))}
+          <line x1={0} y1={h * 0.85} x2={w} y2={h * 0.85} {...garis} strokeDasharray="3 2" />
+        </>
+      );
+    case "pekerja":
+      // Bahu (rompi oranye) + helm kuning tampak atas.
+      return (
+        <>
+          <ellipse cx={w / 2} cy={h / 2} rx={w * 0.45} ry={h * 0.4} className="fill-orange-400 stroke-orange-600" strokeWidth={1} vectorEffect={NS} />
+          <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.28} className="fill-yellow-400 stroke-yellow-600" strokeWidth={1} vectorEffect={NS} />
+        </>
+      );
+    default:
+      return <rect width={w} height={h} {...kotak} />;
+  }
 }
 
 function DerekView({

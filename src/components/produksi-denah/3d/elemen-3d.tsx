@@ -23,6 +23,7 @@ import {
   RepeatWrapping,
   SphereGeometry,
   SRGBColorSpace,
+  TorusGeometry,
   TubeGeometry,
   Vector3,
   Object3D,
@@ -36,6 +37,8 @@ import { kotakElemen, type BakElemen, type DenahElemen, type DerekElemen, type D
 import { garisRel, segmenJalur, tataBakMeter } from "@/lib/produksi-denah-geometri";
 import { WARNA_AIR, WARNA_BETON, WARNA_MESIN, warnaJalur } from "@/components/produksi-denah/warna";
 import type { ModePotongan } from "./kamera";
+import { ModelMesin3D } from "./model-mesin-3d";
+import { CoolingTower3D, Perlengkapan3D } from "./perlengkapan-3d";
 import { balokAntara, diameterVisualM, iceCanBak, keThree, kunciDerekBak, kotakThree, potongDinding, ruangBebasDerek, type Kotak2D, type Vek3 } from "./koordinat";
 
 // ---------- Sumber daya (material + geometri dasar) ----------
@@ -89,6 +92,31 @@ export function buatSumberDaya() {
     mawarUtara: std("#dc2626"),
     mawarSelatan: std("#9ca3af"),
     mawarCincin: std("#57534e"),
+    // Model mesin detail (model-mesin-3d.tsx).
+    catBiru: std("#2f6aa8", { roughness: 0.5, metalness: 0.15 }),
+    catBiruTua: std("#234f7e", { roughness: 0.55, metalness: 0.15 }),
+    tabungAbu: std("#7f949c", { roughness: 0.45, metalness: 0.3 }),
+    tabungAbuTua: std("#5b6b72", { roughness: 0.5, metalness: 0.35 }),
+    logam: std("#a8b0b8", { roughness: 0.35, metalness: 0.7 }),
+    logamGelap: std("#3b434c", { roughness: 0.45, metalness: 0.55 }),
+    panelAbu: std("#a7adb3", { roughness: 0.6, metalness: 0.2 }),
+    putih: std("#eef1f4", { roughness: 0.6 }),
+    kuning: std("#eab308", { roughness: 0.5 }),
+    merah: std("#dc2626", { roughness: 0.5 }),
+    hijau: std("#16a34a", { roughness: 0.5 }),
+    kayu: std("#8b5a2b", { roughness: 0.9 }),
+    kaca: transparan("#bae6fd", 0.55),
+    // Perlengkapan area bak, derek detail, cooling tower (perlengkapan-3d.tsx).
+    oranye: std("#ea580c", { roughness: 0.5, metalness: 0.2 }),
+    rantai: std("#4b5563", { roughness: 0.35, metalness: 0.75 }),
+    frp: std("#e6e8e3", { roughness: 0.55 }),
+    frpTua: std("#cfd3cc", { roughness: 0.55 }),
+    airKucur: transparan("#7dd3fc", 0.55),
+    esBalok: std("#e0f2fe", { roughness: 0.2, metalness: 0.05, transparent: true, opacity: 0.88 }),
+    celana: std("#1f2937", { roughness: 0.8 }),
+    bajuAbu: std("#9ca3af", { roughness: 0.8 }),
+    rompi: std("#f97316", { roughness: 0.7 }),
+    kulit: std("#c68e5e", { roughness: 0.8 }),
     mesin,
   };
   const tepi = {
@@ -111,7 +139,9 @@ export function buatSumberDaya() {
     kotak,
     tepiKotak: new EdgesGeometry(kotak),
     silinder: new CylinderGeometry(0.5, 0.5, 1, 32),
-    bola: new SphereGeometry(0.5, 12, 8),
+    bola: new SphereGeometry(0.5, 16, 12),
+    // Jari-jari 1 (diskalakan); tabung tipis untuk roda tangan/rantai/kait.
+    torus: new TorusGeometry(1, 0.12, 8, 24),
   };
 
   // Material berwarna bebas (jalur per fluida, tint area) di-cache per warna.
@@ -332,7 +362,6 @@ function Derek3D({ derek, byId, terlaluRendah }: { derek: DerekElemen; byId: Rea
   const zRel = derek.elevasiM;
   // Persis nilai yang diperiksa periksaTeknik (aturan 3).
   const kaitZ = zRel - derek.tinggiKaitM;
-  const atasTali = zRel - 0.25; // dasar troli
   const tinggiBalok = Math.max(derek.tinggiM, 0.05);
   const bebas = derek.bakIds.flatMap((id) => {
     const bak = byId.get(id);
@@ -340,17 +369,60 @@ function Derek3D({ derek, byId, terlaluRendah }: { derek: DerekElemen; byId: Rea
     const r = ruangBebasDerek(bak);
     return r ? [{ id, ...r }] : [];
   });
+  // Rek yang dibawa (opsional): jumlah & ukuran can dari bak pertama yang dilayani.
+  const bakRek = derek.bakIds.map((id) => byId.get(id)).find((x): x is BakElemen => x?.tipe === "bak");
+  const rek = derek.bawaRek && bakRek ? { n: bakRek.iceCanPerKolomBawaan, can: bakRek.iceCan[bakRek.varianBawaan] } : null;
+  const canLebar = rek ? rek.can.lebarMm / 1000 : 0;
+  const canTinggi = rek ? rek.can.tinggiMm / 1000 : 0;
+  const pjRek = rek ? rek.n * (canLebar + bakRek!.jarakAntarCanMm / 1000) : 1.2;
+  // Rantai: dari hoist (di bawah troli) sampai blok kait; mata rantai bergantian arah.
+  const atasRantai = zRel - 0.5;
+  const atasBlok = kaitZ + 0.32;
+  const jumlahMata = Math.max(0, Math.min(120, Math.floor((atasRantai - atasBlok) / 0.07)));
   return (
     <group>
       {b.panjang > 0 && (
         <mesh geometry={geo.kotak} material={materi.rel} position={keThree(b.pusat.x, b.pusat.y, zRel + tinggiBalok / 2)} rotation={[0, b.rotY, 0]} scale={[b.panjang, tinggiBalok, LEBAR_REL]} />
       )}
-      {/* Troli di tengah rel, tali, dan blok kait pada elevasi rel − tinggi kait. */}
-      <Kotak pusat={keThree(b.pusat.x, b.pusat.y, zRel - 0.125)} ukuran={[0.5, 0.25, 0.5]} materi={materi.troli} />
-      {atasTali > kaitZ + 0.15 && (
-        <Kotak pusat={keThree(b.pusat.x, b.pusat.y, (kaitZ + 0.15 + atasTali) / 2)} ukuran={[0.03, atasTali - (kaitZ + 0.15), 0.03]} materi={materi.kait} />
-      )}
-      <Kotak pusat={keThree(b.pusat.x, b.pusat.y, kaitZ + 0.075)} ukuran={[0.2, 0.15, 0.2]} materi={materi.kait} />
+      {/* Kelompok lokal di tengah rel: X sepanjang rel, Z melintang rel. */}
+      <group position={keThree(b.pusat.x, b.pusat.y, 0)} rotation={[0, b.rotY, 0]}>
+        {/* Troli beroda + hoist bermotor di bawah rel */}
+        {[-1, 1].map((sx) =>
+          [-1, 1].map((sz) => <mesh key={`${sx}${sz}`} geometry={geo.silinder} material={materi.kait} position={[sx * 0.18, zRel - 0.02, sz * (LEBAR_REL / 2 + 0.05)]} rotation={[Math.PI / 2, 0, 0]} scale={[0.12, 0.05, 0.12]} />)
+        )}
+        <Kotak pusat={[0, zRel - 0.1, 0]} ukuran={[0.55, 0.08, LEBAR_REL + 0.16]} materi={materi.troli} />
+        <mesh geometry={geo.silinder} material={materi.troli} position={[0, zRel - 0.3, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.32, 0.55, 0.32]} />
+        <mesh geometry={geo.silinder} material={materi.kait} position={[0.36, zRel - 0.3, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.24, 0.18, 0.24]} />
+        {/* Rantai */}
+        {Array.from({ length: jumlahMata }, (_, i) => (
+          <mesh key={i} geometry={geo.torus} material={materi.rantai} position={[0, atasRantai - 0.035 - i * 0.07, 0]} rotation={[0, i % 2 ? Math.PI / 2 : 0, Math.PI / 2]} scale={[0.04, 0.025, 0.04]} />
+        ))}
+        {/* Blok kait oranye + kait */}
+        <Kotak pusat={[0, kaitZ + 0.22, 0]} ukuran={[0.16, 0.2, 0.12]} materi={materi.oranye} />
+        <mesh geometry={geo.silinder} material={materi.oranye} position={[0, kaitZ + 0.22, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[0.18, 0.14, 0.18]} />
+        <mesh geometry={geo.torus} material={materi.oranye} position={[0, kaitZ + 0.06, 0]} rotation={[0, Math.PI / 2, 0]} scale={[0.07, 0.07, 0.07]} />
+        {/* Pengangkut kerangka: balok melintang rel + dua penggantung */}
+        <Kotak pusat={[0, kaitZ - 0.06, 0]} ukuran={[0.08, 0.1, pjRek * 0.95]} materi={materi.oranye} />
+        {[-1, 1].map((sz) => (
+          <Kotak key={sz} pusat={[0, kaitZ - 0.2, sz * pjRek * 0.42]} ukuran={[0.03, 0.2, 0.03]} materi={materi.kait} />
+        ))}
+        {/* Rek + deretan ice can tergantung */}
+        {rek && (
+          <group>
+            {[-1, 1].map((sx) => (
+              <Kotak key={sx} pusat={[sx * (canLebar / 2 + 0.03), kaitZ - 0.32, 0]} ukuran={[0.04, 0.06, pjRek]} materi={materi.rel} />
+            ))}
+            {Array.from({ length: rek.n }, (_, i) => (
+              <Kotak
+                key={i}
+                pusat={[0, kaitZ - 0.35 - canTinggi / 2, -pjRek / 2 + (i + 0.5) * (pjRek / rek.n)]}
+                ukuran={[canLebar, canTinggi, Math.max(pjRek / rek.n - 0.01, 0.01)]}
+                materi={materi.iceCan}
+              />
+            ))}
+          </group>
+        )}
+      </group>
       {/* Kotak ruang bebas per bak yang dilayani: merah bila aturan 3 aktif. */}
       {bebas.map((r) => (
         <KotakZ key={r.id} kotak={r.kotak} zBawah={r.zBawah} zAtas={r.zAtas} materi={terlaluRendah.has(kunciDerekBak(derek.id, r.id)) ? materi.bebasGagal : materi.bebasOk} tembus />
@@ -461,13 +533,20 @@ export const Elemen3D = memo(function Elemen3D({ e, byId, daftarPintu, derekRend
       isi = <KotakZ kotak={kotakElemen(e)} zBawah={e.elevasiM} zAtas={e.elevasiM + Math.max(e.tinggiM, 0.01)} materi={materi.pintu} />;
       break;
     case "mesin":
-      isi = <KotakZ kotak={kotakElemen(e)} zBawah={e.elevasiM} zAtas={e.elevasiM + Math.max(e.tinggiM, 0.01)} materi={materi.mesin[e.kategori] ?? materi.mesin.lainnya} />;
+      isi = e.model ? (
+        <ModelMesin3D e={{ ...e, model: e.model }} />
+      ) : (
+        <KotakZ kotak={kotakElemen(e)} zBawah={e.elevasiM} zAtas={e.elevasiM + Math.max(e.tinggiM, 0.01)} materi={materi.mesin[e.kategori] ?? materi.mesin.lainnya} />
+      );
       break;
     case "beton":
       isi = <KotakZ kotak={kotakElemen(e)} zBawah={e.elevasiM} zAtas={e.elevasiM + Math.max(e.tinggiM, 0.01)} materi={materi.beton} />;
       break;
     case "tangki":
-      isi = <Tangki3D tangki={e} />;
+      isi = e.jenis === "cooling-tower" ? <CoolingTower3D t={e} /> : <Tangki3D tangki={e} />;
+      break;
+    case "perlengkapan":
+      isi = <Perlengkapan3D e={e} />;
       break;
     case "jalur":
       isi = <Jalur3D jalur={e} aliran={aliran} />;

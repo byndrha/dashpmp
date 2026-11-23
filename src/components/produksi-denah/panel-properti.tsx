@@ -48,6 +48,14 @@ import {
   type JalurElemen,
   type JenisTangki,
   type KategoriMesin,
+  type PerlengkapanElemen,
+  type ModelPerlengkapan,
+  type VarianPengisi,
+  MODEL_PERLENGKAPAN,
+  PRESET_PERLENGKAPAN,
+  type ModelMesin,
+  MODEL_MESIN,
+  PRESET_MODEL_MESIN,
   type LabelElemen,
   type MesinElemen,
   type TangkiElemen,
@@ -245,6 +253,8 @@ function IsianKhusus({ e, dok, dispatch, onKeKolom }: { e: DenahElemen; dok: Den
       return <IsianTangki t={e} dispatch={dispatch} />;
     case "jalur":
       return <IsianJalur j={e} dok={dok} dispatch={dispatch} />;
+    case "perlengkapan":
+      return <IsianPerlengkapan p={e} dispatch={dispatch} />;
     default:
       return null;
   }
@@ -542,8 +552,47 @@ function IsianMesin({ m, dok, dispatch }: { m: MesinElemen; dok: DenahDokumen; d
     </Bidang>
   );
   const dilayani = dok.elemen.filter((e): e is BakElemen => e.tipe === "bak" && e.mesinIds.includes(m.id));
+  const preset = m.model ? PRESET_MODEL_MESIN[m.model] : null;
+  // Ukuran standar model, titik tengah elemen tetap di tempatnya.
+  const ukuranStandar = (model: ModelMesin) => {
+    const p = PRESET_MODEL_MESIN[model];
+    const cx = m.x + m.w / 2;
+    const cy = m.y + m.h / 2;
+    return { x: cx - p.w / 2, y: cy - p.h / 2, w: p.w, h: p.h, tinggiM: p.tinggiM };
+  };
+  const sudahStandar = !!preset && Math.abs(m.w - preset.w) < 0.005 && Math.abs(m.h - preset.h) < 0.005 && Math.abs(m.tinggiM - preset.tinggiM) < 0.005;
+  const jenisPreset = new Set(MODEL_MESIN.map((x) => PRESET_MODEL_MESIN[x].jenis));
   return (
     <div className="flex flex-col gap-2">
+      <Bidang label="Model" petunjuk={preset?.petunjuk ?? "Bentuk detail di 2D & 3D. Kotak polos = tanpa model."}>
+        <Pilihan<ModelMesin | "kotak">
+          nilai={m.model ?? "kotak"}
+          disabled={!!m.terkunci}
+          ariaLabel="Model mesin"
+          pilihan={[{ nilai: "kotak", label: "Kotak polos" }, ...MODEL_MESIN.map((x) => ({ nilai: x, label: PRESET_MODEL_MESIN[x].label }))]}
+          onUbah={(v) => {
+            if (v === "kotak") return dispatch({ type: "ubahElemen", id: m.id, patch: { model: undefined } });
+            const p = PRESET_MODEL_MESIN[v];
+            // Jenis hanya diganti bila masih bawaan/isian preset lain — jenis
+            // yang sudah diketik pengguna (mis. merek) dipertahankan.
+            const gantiJenis = !m.jenis.trim() || m.jenis === "Kompresor Amonia" || jenisPreset.has(m.jenis);
+            dispatch({
+              type: "ubahElemen",
+              id: m.id,
+              patch: { model: v, kategori: p.kategori, ...(gantiJenis ? { jenis: p.jenis } : {}), ...ukuranStandar(v) },
+            });
+          }}
+        />
+      </Bidang>
+      {m.model && !sudahStandar && !m.terkunci && (
+        <button
+          type="button"
+          onClick={() => dispatch({ type: "ubahElemen", id: m.id, patch: ukuranStandar(m.model!) })}
+          className="self-start text-[11px] font-medium text-primary hover:underline"
+        >
+          Pakai ukuran standar ({preset!.w.toLocaleString("id-ID")} × {preset!.h.toLocaleString("id-ID")} × {preset!.tinggiM.toLocaleString("id-ID")} m)
+        </button>
+      )}
       <Bidang label="Kategori" petunjuk="Menentukan lapisan & warna di mode 3D.">
         <Pilihan<KategoriMesin>
           nilai={m.kategori}
@@ -620,11 +669,18 @@ function IsianDerek({ d, dok, dispatch }: { d: DerekElemen; dok: DenahDokumen; d
           </div>
         )}
       </Bidang>
+      <div className="flex flex-col gap-1">
+        <Centang nilai={!!d.bawaRek} label="Tampilkan rek tergantung (3D)" onUbah={(bawaRek) => dispatch({ type: "ubahElemen", id: d.id, patch: { bawaRek } })} />
+        <span className="text-[10px] leading-tight text-muted-foreground">
+          Rantai, kait & pengangkut selalu tampil. Rek ikut jumlah & ukuran ice can bak pertama yang dilayani
+          {d.bakIds.length === 0 ? " — pilih bak dulu." : "."}
+        </span>
+      </div>
     </div>
   );
 }
 
-const WARNA_AREA = ["#10b981", "#0ea5e9", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"];
+const WARNA_AREA =["#10b981", "#0ea5e9", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"];
 
 function IsianArea({ a, dispatch }: { a: AreaElemen; dispatch: Dispatch<AksiBuilder> }) {
   return (
@@ -688,6 +744,106 @@ const PILIHAN_JENIS_TANGKI: { nilai: JenisTangki; label: string }[] = [
   { nilai: "cooling-tower", label: "Cooling tower" },
   { nilai: "lainnya", label: "Lainnya" },
 ];
+
+function IsianPerlengkapan({ p, dispatch }: { p: PerlengkapanElemen; dispatch: Dispatch<AksiBuilder> }) {
+  const preset = PRESET_PERLENGKAPAN[p.model];
+  const ubah = (patch: Partial<PerlengkapanElemen>, kunci?: string) => dispatch({ type: "ubahElemen", id: p.id, patch, gabung: kunci ? `${p.id}:${kunci}` : undefined });
+  const ukuranStandar = (model: ModelPerlengkapan) => {
+    const s = PRESET_PERLENGKAPAN[model];
+    const cx = p.x + p.w / 2;
+    const cy = p.y + p.h / 2;
+    return { x: cx - s.w / 2, y: cy - s.h / 2, w: s.w, h: s.h, tinggiM: s.tinggiM };
+  };
+  const punyaJumlah = preset.jumlah !== undefined;
+  return (
+    <div className="flex flex-col gap-2">
+      <Bidang label="Model" petunjuk={preset.petunjuk}>
+        <Pilihan<ModelPerlengkapan>
+          nilai={p.model}
+          disabled={!!p.terkunci}
+          ariaLabel="Model perlengkapan"
+          pilihan={MODEL_PERLENGKAPAN.map((m) => ({ nilai: m, label: PRESET_PERLENGKAPAN[m].label }))}
+          onUbah={(model) => ubah({ model, jumlah: PRESET_PERLENGKAPAN[model].jumlah, varian: model === "pengisi-air" ? (p.varian ?? "pipa") : undefined, ...ukuranStandar(model) })}
+        />
+      </Bidang>
+      {p.model === "pengisi-air" && (
+        <Bidang label="Jenis pengisi" petunjuk="Pipa induk: tergantung tanpa kaki, anak pipa mendatar lalu serong ke bawah. Rangka berkaki: bentuk lama.">
+          <Pilihan<VarianPengisi>
+            nilai={p.varian ?? "berkaki"}
+            disabled={!!p.terkunci}
+            ariaLabel="Jenis pengisi air"
+            pilihan={[
+              { nilai: "pipa", label: "Pipa induk" },
+              { nilai: "kotak", label: "Pipa induk + kotak" },
+              { nilai: "berkaki", label: "Rangka berkaki" },
+            ]}
+            onUbah={(varian) => ubah({ varian })}
+          />
+        </Bidang>
+      )}
+      {p.model === "pengisi-air" && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">Nosel (anak pipa)</span>
+          <div className="grid grid-cols-2 gap-2">
+            <Bidang label="Panjang mendatar">
+              <InputAngka
+                nilai={p.noselDatarM ?? null}
+                bulat={false}
+                min={0.01}
+                max={10}
+                satuan="m"
+                placeholder="otomatis"
+                onUbah={(noselDatarM) => ubah({ noselDatarM }, "noselDatar")}
+                onKosong={() => ubah({ noselDatarM: undefined })}
+              />
+            </Bidang>
+            <Bidang label={p.varian === "pipa" || p.varian === "kotak" ? "Panjang serong" : "Panjang turun"}>
+              <InputAngka
+                nilai={p.noselSerongM ?? null}
+                bulat={false}
+                min={0.01}
+                max={10}
+                satuan="m"
+                placeholder="otomatis"
+                onUbah={(noselSerongM) => ubah({ noselSerongM }, "noselSerong")}
+                onKosong={() => ubah({ noselSerongM: undefined })}
+              />
+            </Bidang>
+            {(p.varian === "pipa" || p.varian === "kotak") && (
+              <Bidang label="Sudut serong">
+                <InputAngka
+                  nilai={p.noselSudut ?? null}
+                  min={5}
+                  max={90}
+                  satuan="°"
+                  placeholder="55"
+                  onUbah={(noselSudut) => ubah({ noselSudut }, "noselSudut")}
+                  onKosong={() => ubah({ noselSudut: undefined })}
+                />
+              </Bidang>
+            )}
+          </div>
+          <span className="text-[10px] leading-tight text-muted-foreground">
+            Kosongkan untuk otomatis (ujung nosel tepat di atas bibir ice can). Sudut diukur dari bidang datar; 90° = turun tegak.
+          </span>
+        </div>
+      )}
+      {punyaJumlah && (
+        <Bidang label={p.model === "pengisi-air" ? "Jumlah nosel" : "Jumlah ice can"} petunjuk="Samakan dengan jumlah ice can per rek di bak yang dilayani.">
+          <InputAngka nilai={p.jumlah ?? preset.jumlah ?? 1} min={1} max={200} onUbah={(jumlah) => ubah({ jumlah }, "jumlah")} />
+        </Bidang>
+      )}
+      <Bidang label="Catatan">
+        <InputTeks
+          multiBaris
+          nilai={p.catatan ?? ""}
+          onUbah={(catatan) => ubah({ catatan }, "catatan")}
+          onSelesai={() => dispatch({ type: "putusGabung" })}
+        />
+      </Bidang>
+    </div>
+  );
+}
 
 function IsianTangki({ t, dispatch }: { t: TangkiElemen; dispatch: Dispatch<AksiBuilder> }) {
   const ubah = (patch: Partial<TangkiElemen>, kunci?: string) => dispatch({ type: "ubahElemen", id: t.id, patch, gabung: kunci ? `${t.id}:${kunci}` : undefined });

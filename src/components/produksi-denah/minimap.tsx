@@ -26,6 +26,7 @@ const KELAS: Record<DenahElemen["tipe"], string> = {
   beton: "fill-stone-400/70",
   tangki: "fill-sky-300/70",
   jalur: "fill-blue-500/70",
+  perlengkapan: "fill-teal-500/70",
 };
 
 const IsiMinimap = memo(function IsiMinimap({ elemen, terpilih }: { elemen: DenahElemen[]; terpilih: ReadonlySet<string> }) {

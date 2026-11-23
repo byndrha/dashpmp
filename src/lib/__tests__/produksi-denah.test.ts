@@ -10,6 +10,9 @@ import {
   ubahJumlahKolom,
   validasiDenah,
   validasiBentukDenah,
+  MODEL_MESIN,
+  MODEL_PERLENGKAPAN,
+  VARIAN_PENGISI,
   migrasiDenah,
   kodeBakEfektif,
   orientasiKolom,
@@ -457,6 +460,28 @@ test("validasiBentukDenah v2: menolak fluida tak dikenal, titik NaN, utara di lu
   assert.ok(validasiBentukDenah(dok({ ...mesin(0, 0), elevasiM: undefined as never })));
   const bak = buatBak(0, 0);
   assert.ok(validasiBentukDenah(dok({ ...bak, iceCan: { ...bak.iceCan, kecil: { ...bak.iceCan.kecil, tinggiMm: Infinity } } })));
+});
+
+test("validasiBentukDenah: model mesin opsional — semua model preset sah, model asing ditolak", () => {
+  assert.equal(validasiBentukDenah(dok(mesin(0, 0))), null);
+  for (const model of MODEL_MESIN) assert.equal(validasiBentukDenah(dok({ ...mesin(0, 0), model })), null, model);
+  assert.ok(validasiBentukDenah(dok({ ...mesin(0, 0), model: "reaktor" as never })));
+});
+
+test("validasiBentukDenah: perlengkapan — model sah, jumlah bulat 1–200, lapisan proses", () => {
+  const dasar = { id: "p1", nama: "Pengisi 1", tipe: "perlengkapan" as const, x: 0, y: 0, w: 7, h: 0.9, rotasi: 0 as const, elevasiM: 0, tinggiM: 3 };
+  for (const model of MODEL_PERLENGKAPAN) assert.equal(validasiBentukDenah(dok({ ...dasar, model })), null, model);
+  assert.equal(validasiBentukDenah(dok({ ...dasar, model: "pengisi-air", jumlah: 36 })), null);
+  assert.ok(validasiBentukDenah(dok({ ...dasar, model: "robot" as never })));
+  assert.ok(validasiBentukDenah(dok({ ...dasar, model: "penuang", jumlah: 0 })));
+  assert.ok(validasiBentukDenah(dok({ ...dasar, model: "penuang", jumlah: 2.5 })));
+  assert.equal(lapisanElemen({ ...dasar, model: "pekerja" }), "proses");
+  for (const varian of VARIAN_PENGISI) assert.equal(validasiBentukDenah(dok({ ...dasar, model: "pengisi-air", varian })), null, varian);
+  assert.ok(validasiBentukDenah(dok({ ...dasar, model: "pengisi-air", varian: "sprinkler" as never })));
+  assert.equal(validasiBentukDenah(dok({ ...dasar, model: "pengisi-air", varian: "pipa", noselDatarM: 0.3, noselSerongM: 0.9, noselSudut: 60 })), null);
+  assert.ok(validasiBentukDenah(dok({ ...dasar, model: "pengisi-air", noselSerongM: 0 })));
+  assert.ok(validasiBentukDenah(dok({ ...dasar, model: "pengisi-air", noselDatarM: 11 })));
+  assert.ok(validasiBentukDenah(dok({ ...dasar, model: "pengisi-air", noselSudut: 95 })));
 });
 
 // ---------- lapisanElemen & kotakJalur ----------

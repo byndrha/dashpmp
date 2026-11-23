@@ -96,6 +96,13 @@ export interface BakElemen extends ElemenDasar {
 
 export type KategoriMesin = "refrigerasi" | "pompa" | "listrik" | "lainnya";
 
+/**
+ * Bentuk 3D/2D detail sebuah mesin. Tidak ada = kotak polos berwarna
+ * kategori (perilaku lama). Model mengisi kotak elemen (w × h × tinggiM):
+ * sumbu panjang model = w (sebelum rotasi).
+ */
+export type ModelMesin = "kompresor" | "kondensor" | "akumulator" | "agitator" | "katup-ekspansi" | "pompa" | "panel";
+
 export interface MesinElemen extends ElemenDasar {
   tipe: "mesin";
   jenis: string; // mis. "Kompresor Amonia"
@@ -103,7 +110,84 @@ export interface MesinElemen extends ElemenDasar {
   catatan: string;
   /** Menentukan lapisan & warna 3D. */
   kategori: KategoriMesin;
+  model?: ModelMesin;
 }
+
+/**
+ * Preset per model: label pilihan, jenis & kategori yang diisikan, dan ukuran
+ * standar (meter). Kompresor mengikuti Mycom 8WB 8 silinder (95 × 42 × 40 in,
+ * ±2.005 kg); tingginya ditambah katup hisap/buang yang menjulang di atas badan.
+ */
+export const PRESET_MODEL_MESIN: Record<
+  ModelMesin,
+  { label: string; jenis: string; kategori: KategoriMesin; w: number; h: number; tinggiM: number; petunjuk: string }
+> = {
+  kompresor: {
+    label: "Kompresor torak",
+    jenis: "Kompresor Amonia (torak)",
+    kategori: "refrigerasi",
+    w: 2.41,
+    h: 1.07,
+    tinggiM: 1.6,
+    petunjuk: "Mis. Mycom 8WB 8 silinder: 2,41 × 1,07 m, badan 1,02 m + katup di atasnya.",
+  },
+  kondensor: {
+    label: "Tabung kondensor",
+    jenis: "Kondensor shell & tube",
+    kategori: "refrigerasi",
+    w: 6,
+    h: 1,
+    tinggiM: 1.4,
+    petunjuk: "Tabung mendatar di atas kaki pelana; amonia mengembun di dalam tabung, didinginkan air.",
+  },
+  akumulator: {
+    label: "Akumulator",
+    jenis: "Akumulator (suction accumulator)",
+    kategori: "refrigerasi",
+    w: 0.8,
+    h: 0.8,
+    tinggiM: 2.2,
+    petunjuk: "Bejana tegak: masuk dari evaporator (koil bak), keluar ke kompresor.",
+  },
+  agitator: {
+    label: "Agitator",
+    jenis: "Agitator brine",
+    kategori: "refrigerasi",
+    w: 0.9,
+    h: 0.6,
+    tinggiM: 1.6,
+    petunjuk: "Motor di bibir bak, poros miring masuk ke brine, baling-baling di ujung. Taruh di ujung bak.",
+  },
+  "katup-ekspansi": {
+    label: "Katup ekspansi",
+    jenis: "Katup ekspansi NH3",
+    kategori: "refrigerasi",
+    w: 0.4,
+    h: 0.25,
+    tinggiM: 0.45,
+    petunjuk: "Di jalur NH3 cair sebelum evaporator. Sumbu panjang = arah aliran.",
+  },
+  pompa: {
+    label: "Pompa sentrifugal",
+    jenis: "Pompa air",
+    kategori: "pompa",
+    w: 1.4,
+    h: 0.6,
+    tinggiM: 0.8,
+    petunjuk: "Rumah keong + motor di atas pelat dasar.",
+  },
+  panel: {
+    label: "Panel listrik",
+    jenis: "Panel listrik",
+    kategori: "listrik",
+    w: 1,
+    h: 0.5,
+    tinggiM: 2,
+    petunjuk: "Lemari panel berdiri.",
+  },
+};
+
+export const MODEL_MESIN: readonly ModelMesin[] = ["kompresor", "kondensor", "akumulator", "agitator", "katup-ekspansi", "pompa", "panel"];
 
 export interface DerekElemen extends ElemenDasar {
   tipe: "derek";
@@ -113,7 +197,84 @@ export interface DerekElemen extends ElemenDasar {
   // elevasiM = tinggi REL dari ±0,00; tinggiM = tinggi balok rel.
   /** Jarak rel → dasar kait saat terangkat penuh. */
   tinggiKaitM: number;
+  /**
+   * Tampilkan rek (kerangka + deretan ice can) tergantung di pengangkut kait.
+   * Jumlah & ukuran can diambil dari bak pertama di bakIds. Visual saja.
+   */
+  bawaRek?: boolean;
 }
+
+/**
+ * Perlengkapan area bak yang bukan mesin (spec: foto area bak & diagram
+ * pabrik es balok dari pengguna, 2026-11-23):
+ *   - pengisi-air: "ice can filler" — bak air di atas rangka dengan deretan
+ *     pipa leher angsa, satu per ice can dalam satu rek; sumbu panjang = w.
+ *   - penuang: "can dump" — rangka miring tempat rek dibaringkan; ice can
+ *     tergeletak mendatar dan es meluncur keluar.
+ *   - pekerja: tenaga muat (penanda posisi kerja / manpower).
+ */
+export type ModelPerlengkapan = "pengisi-air" | "penuang" | "pekerja";
+
+/**
+ * Jenis pengisi air (foto pengguna 2026-11-23):
+ *   - pipa: tanpa kaki — pipa induk besar di atas; tiap anak pipa keluar
+ *     mendatar lalu menekuk serong ke bawah ke ice can.
+ *   - kotak: seperti "pipa", ditambah kotak/balok memanjang tempat anak pipa keluar.
+ *   - berkaki: rangka 4 kaki + bak air di atas, nosel lurus ke bawah.
+ * Tidak ada = "berkaki" (bentuk awal, agar denah lama tidak berubah).
+ */
+export type VarianPengisi = "pipa" | "kotak" | "berkaki";
+export const VARIAN_PENGISI: readonly VarianPengisi[] = ["pipa", "kotak", "berkaki"];
+
+export interface PerlengkapanElemen extends ElemenDasar {
+  tipe: "perlengkapan";
+  model: ModelPerlengkapan;
+  /** Hanya untuk model pengisi-air. */
+  varian?: VarianPengisi;
+  /**
+   * Ukuran anak pipa (nosel) pengisi air, meter. Tidak ada = otomatis dari
+   * ukuran kotak elemen. Jenis pipa/kotak: mendatar → siku → serong turun
+   * dengan sudut `noselSudut` (derajat dari bidang datar). Jenis berkaki:
+   * `noselSerongM` = panjang nosel yang turun tegak.
+   */
+  noselDatarM?: number;
+  noselSerongM?: number;
+  noselSudut?: number;
+  /** Jumlah nosel (pengisi) atau ice can (penuang); tidak ada = bawaan preset. */
+  jumlah?: number;
+  catatan?: string;
+}
+
+export const PRESET_PERLENGKAPAN: Record<
+  ModelPerlengkapan,
+  { label: string; w: number; h: number; tinggiM: number; jumlah?: number; petunjuk: string }
+> = {
+  "pengisi-air": {
+    label: "Pengisi air (ice can filler)",
+    w: 7,
+    h: 0.9,
+    tinggiM: 3,
+    jumlah: 36,
+    petunjuk: "Bak air di atas rangka dengan pipa leher angsa — satu nosel per ice can dalam satu rek. Sambungkan ke tandon dengan jalur pipa air baku.",
+  },
+  penuang: {
+    label: "Stasiun penuang (can dump)",
+    w: 7.2,
+    h: 2,
+    tinggiM: 1.2,
+    jumlah: 36,
+    petunjuk: "Rangka miring tempat rek dibaringkan setelah thawing; es meluncur keluar dari ice can.",
+  },
+  pekerja: {
+    label: "Pekerja (tenaga muat)",
+    w: 0.6,
+    h: 0.4,
+    tinggiM: 1.7,
+    petunjuk: "Penanda posisi kerja; berhelm & rompi.",
+  },
+};
+
+export const MODEL_PERLENGKAPAN: readonly ModelPerlengkapan[] = ["pengisi-air", "penuang", "pekerja"];
 
 export interface DindingElemen extends ElemenDasar {
   tipe: "dinding";
@@ -177,9 +338,10 @@ export type DenahElemen =
   | LabelElemen
   | BetonElemen
   | TangkiElemen
-  | JalurElemen;
+  | JalurElemen
+  | PerlengkapanElemen;
 export type TipeElemen = DenahElemen["tipe"];
-export const TIPE_ELEMEN: readonly TipeElemen[] = ["bak", "mesin", "derek", "dinding", "pintu", "area", "label", "beton", "tangki", "jalur"];
+export const TIPE_ELEMEN: readonly TipeElemen[] = ["bak", "mesin", "derek", "dinding", "pintu", "area", "label", "beton", "tangki", "jalur", "perlengkapan"];
 
 /** Lapisan turunan (spec v2 §4) — tidak disimpan di dokumen. */
 export type Lapisan = "arsitektur" | "proses" | "refrigerasi" | "air" | "listrik" | "lainnya";
@@ -309,6 +471,7 @@ export const ELEVASI_TINGGI_BAWAAN: Record<TipeElemen, { elevasiM: number; tingg
   beton: { elevasiM: -0.5, tinggiM: 0.5 },
   tangki: { elevasiM: 0, tinggiM: 1.5 },
   jalur: { elevasiM: 0, tinggiM: 0.05 },
+  perlengkapan: { elevasiM: 0, tinggiM: 3 },
 };
 
 /**
@@ -459,6 +622,7 @@ export function lapisanElemen(e: DenahElemen): Lapisan {
       return "arsitektur";
     case "bak":
     case "derek":
+    case "perlengkapan":
       return "proses";
     case "tangki":
       return e.jenis === "filling" || e.jenis === "thawing" ? "proses" : "air";
@@ -747,6 +911,9 @@ function anggota(v: unknown, sah: ReadonlySet<string>): boolean {
 const ROTASI_SAH = new Set([0, 90, 180, 270]);
 const VARIAN_SAH = new Set(["kecil", "besar"]);
 const KATEGORI_MESIN_SAH: ReadonlySet<string> = new Set<KategoriMesin>(["refrigerasi", "pompa", "listrik", "lainnya"]);
+const MODEL_MESIN_SAH: ReadonlySet<string> = new Set<string>(MODEL_MESIN);
+const MODEL_PERLENGKAPAN_SAH: ReadonlySet<string> = new Set<string>(MODEL_PERLENGKAPAN);
+const VARIAN_PENGISI_SAH: ReadonlySet<string> = new Set<string>(VARIAN_PENGISI);
 const JENIS_TANGKI_SAH: ReadonlySet<string> = new Set<JenisTangki>(["tandon", "filling", "thawing", "sumur", "cooling-tower", "lainnya"]);
 const BENTUK_TANGKI_SAH: ReadonlySet<string> = new Set(["kotak", "silinder"]);
 const JENIS_JALUR_SAH: ReadonlySet<string> = new Set(["pipa", "kabel"]);
@@ -801,11 +968,22 @@ function cekElemen(e: unknown): string | null {
     case "mesin":
       if (!teks(e.jenis) || !teks(e.catatan) || !teksOpsional(e.kapasitas)) return "data mesin tidak sah";
       if (!anggota(e.kategori, KATEGORI_MESIN_SAH)) return "kategori mesin tidak sah";
+      if (e.model !== undefined && !anggota(e.model, MODEL_MESIN_SAH)) return "model mesin tidak sah";
       return null;
     case "derek":
       if (!titik(e.titikAwal) || !titik(e.titikAkhir)) return "titik derek tidak sah";
       if (!daftarId(e.bakIds)) return "daftar bak derek tidak sah";
       if (!angka(e.tinggiKaitM)) return "tinggi kait derek tidak sah";
+      if (e.bawaRek !== undefined && typeof e.bawaRek !== "boolean") return "pilihan rek derek tidak sah";
+      return null;
+    case "perlengkapan":
+      if (!anggota(e.model, MODEL_PERLENGKAPAN_SAH)) return "model perlengkapan tidak sah";
+      if (e.varian !== undefined && !anggota(e.varian, VARIAN_PENGISI_SAH)) return "jenis pengisi air tidak sah";
+      for (const v of [e.noselDatarM, e.noselSerongM]) if (v !== undefined && (!angka(v) || v <= 0 || v > 10)) return "panjang nosel tidak sah";
+      if (e.noselSudut !== undefined && (!angka(e.noselSudut) || e.noselSudut < 5 || e.noselSudut > 90)) return "sudut nosel tidak sah";
+      if (e.jumlah !== undefined && (!angka(e.jumlah) || !Number.isInteger(e.jumlah) || e.jumlah < 1 || e.jumlah > BATAS_ICE_CAN_PER_KOLOM))
+        return "jumlah perlengkapan tidak sah";
+      if (!teksOpsional(e.catatan)) return "catatan perlengkapan tidak sah";
       return null;
     case "tangki":
       if (!anggota(e.jenis, JENIS_TANGKI_SAH)) return "jenis tangki tidak sah";

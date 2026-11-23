@@ -36,6 +36,7 @@ const NAMA_TIPE: Record<DenahElemen["tipe"], string> = {
   beton: "Beton",
   tangki: "Tangki",
   jalur: "Jalur",
+  perlengkapan: "Perlengkapan",
 };
 /** Geser pointer (px) di atas ini dianggap memutar kamera, bukan klik. */
 const BATAS_GESER_PX = 4;

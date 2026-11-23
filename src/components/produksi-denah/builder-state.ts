@@ -22,6 +22,7 @@ import {
   KATEGORI_MESIN_BAWAAN,
   SISTEM_KABEL_BAWAAN,
   TANGKI_BAWAAN,
+  PRESET_PERLENGKAPAN,
   TINGGI_KAIT_BAWAAN,
   nomoriUlangKolom,
   ubahJumlahKolom,
@@ -138,6 +139,7 @@ export const NAMA_TIPE: Record<TipeElemen, string> = {
   beton: "Beton",
   tangki: "Tangki",
   jalur: "Jalur",
+  perlengkapan: "Perlengkapan",
 };
 
 /** Ukuran bawaan saat alat diklik (tanpa drag), dalam meter. */
@@ -152,6 +154,7 @@ export const UKURAN_BAWAAN: Record<TipeElemen, { w: number; h: number }> = {
   beton: { w: 2, h: 2 },
   tangki: { w: 2, h: 2 },
   jalur: { w: 1, h: 1 },
+  perlengkapan: { w: PRESET_PERLENGKAPAN["pengisi-air"].w, h: PRESET_PERLENGKAPAN["pengisi-air"].h },
 };
 
 /** Tebal dinding bawaan (meter), juga untuk dinding yang ditarik dari garis. */
@@ -281,6 +284,9 @@ export function buatElemen(
       const titik = [{ ...a, z: Z_JALUR_BAWAAN }, { ...b, z: Z_JALUR_BAWAAN }];
       return { ...buatJalur(titik, { jenis: "pipa", fluida: FLUIDA_BAWAAN, diameterMm: DIAMETER_JALUR_BAWAAN.pipa }, elemenAda), id, nama };
     }
+    case "perlengkapan":
+      // Bawaan: pengisi air; model lain dipilih di panel properti.
+      return { ...dasar, tipe, model: "pengisi-air", varian: "pipa", jumlah: PRESET_PERLENGKAPAN["pengisi-air"].jumlah, tinggiM: PRESET_PERLENGKAPAN["pengisi-air"].tinggiM };
   }
 }
 

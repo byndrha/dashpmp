@@ -44,6 +44,7 @@ export const TOMBOL_ALAT: Record<string, Alat> = {
   t: "tangki",
   m: "ukur",
   j: "jalur",
+  q: "perlengkapan",
 };
 
 export const HURUF_ALAT: Record<Alat, string> = Object.fromEntries(
