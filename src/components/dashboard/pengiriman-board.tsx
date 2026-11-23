@@ -78,6 +78,9 @@ const MIN_HOUR_WIDTH = 28;
 const MIN_CARD_WIDTH = 92;
 const INFO_COL_WIDTH = 224;
 const DATE_SEGMENT_HEIGHT = 20;
+// Batas atas sumbu waktu bila diperpanjang melewati akhir hari penjualan
+// (24 = tepat satu hari penjualan; 48 = sampai 14.00 hari berikutnya).
+const BATAS_JAM_PERPANJANGAN = 48;
 const HOUR_RULER_HEIGHT = 20;
 // Setinggi kolom info armada di kiri (foto + ringkasan), supaya kartu
 // mengisi barisnya dan tidak menyisakan ruang kosong di atas lajur Driver.
@@ -663,6 +666,12 @@ function formatMenit(menit: number) {
   return m ? `${j}j ${m}m` : `${j}j`;
 }
 
+// Latar kartu Terbit adalah strip status berwarna (computeCardSegments), jadi
+// teks polos di atasnya kurang terbaca — tiap elemen isi kartu dibungkus
+// chip solid terang ini agar kontras di atas warna apa pun.
+const CHIP_KARTU =
+  "inline-flex w-fit max-w-full items-center rounded-[4px] bg-card/45 px-1 py-px";
+
 function DraggableJadwalCard({
   jadwal: j,
   hourWidth,
@@ -759,10 +768,10 @@ function DraggableJadwalCard({
         </span>
       )}
       <div className="flex items-center justify-between gap-1 leading-none">
-        <span className="text-[10px] font-semibold tabular-nums">{formatTime(j.JamJadwal)}</span>
+        <span className={cn(CHIP_KARTU, "shrink-0 text-[10px] leading-3 font-bold tabular-nums")}>{formatTime(j.JamJadwal)}</span>
         <span
           className={cn(
-            "rounded px-1 py-px text-[8px] font-medium",
+            "min-w-0 truncate whitespace-nowrap rounded-[4px] px-1 py-px text-[8px] leading-3 font-extrabold tracking-wide uppercase shadow-sm",
             // Each label names the LATEST milestone already reached, not the
             // next action still pending — Draf -> Mulai Muat -> Selesai Muat
             // (menunggu Berangkat) -> Berangkat -> Selesai. Amber covers both
@@ -772,13 +781,13 @@ function DraggableJadwalCard({
             // currentStatusLabel wording for the same milestones.
             isDraft
               ? j.JamMulaiMuat == null
-                ? "bg-muted-foreground/20 text-muted-foreground"
-                : "bg-amber-500/15 text-amber-600"
+                ? "bg-slate-600 text-white"
+                : "bg-amber-600 text-white"
               : j.JamAktualBerangkat == null
-                ? "bg-amber-500/15 text-amber-600"
+                ? "bg-amber-600 text-white"
                 : j.JamKembaliAktual
-                  ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
-                  : "bg-primary/20 text-primary"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-primary text-primary-foreground"
           )}
         >
           {isDraft
@@ -792,7 +801,7 @@ function DraggableJadwalCard({
                 : "Berangkat"}
         </span>
       </div>
-      <div className="flex items-baseline gap-1 leading-none">
+      <div className={cn(CHIP_KARTU, "items-baseline gap-1 leading-none")}>
         {/* leading-none harus di elemen ini sendiri: text-base Tailwind v4
             membawa line-height 24px yang tidak mewarisi dari induk, dan
             dulu mendorong baris "tujuan" keluar dari kartu. */}
@@ -805,12 +814,12 @@ function DraggableJadwalCard({
             (miring, ±) selama Satpam belum mencatat. Rincian lengkap ada di
             tooltip kartu. */}
         {waktu.berangkat && (
-          <p className="flex min-w-0 items-center gap-1.5 truncate text-[9px] leading-[11px] font-medium tabular-nums">
+          <p className={cn(CHIP_KARTU, "min-w-0 gap-1.5 truncate text-[9px] leading-[11px] font-semibold tabular-nums")}>
             <span className="inline-flex items-center gap-px">
               <ArrowUpRight className="size-2.5 text-muted-foreground" />
               {formatTime(waktu.berangkat)}
               {waktu.telatMenit > 5 && (
-                <span className="ml-0.5 text-amber-600">+{formatMenit(waktu.telatMenit)}</span>
+                <span className="ml-0.5 font-bold text-amber-700 dark:text-amber-400">+{formatMenit(waktu.telatMenit)}</span>
               )}
             </span>
             {waktu.kembali && (
@@ -822,7 +831,7 @@ function DraggableJadwalCard({
             )}
           </p>
         )}
-        <p className="truncate text-[9px] leading-[11px] tabular-nums text-muted-foreground">
+        <p className={cn(CHIP_KARTU, "block truncate text-[9px] leading-[11px] font-medium tabular-nums text-foreground/80")}>
           {j.TotalStop} tujuan{lokasiTerjauh ? ` · ${lokasiTerjauh}` : ""}
         </p>
       </div>
@@ -944,6 +953,28 @@ function TakeawayCard({ order, hourWidth, top }: { order: TakeawayOrder; hourWid
   );
 }
 
+// Garis per jam di latar satu baris timeline. Jumlah jamnya diturunkan dari
+// lebar baris (dayWidth = hourWidth × jamTotal), jadi ikut memanjang saat
+// sumbu diperpanjang. Area setelah jam ke-24 (lewat 14.00, batas hari
+// penjualan) diberi arsiran amber + garis putus-putus sebagai penanda.
+function GridJam({ hourWidth, dayWidth }: { hourWidth: number; dayWidth: number }) {
+  const jam = Math.round(dayWidth / hourWidth);
+  return (
+    <>
+      {Array.from({ length: jam }, (_, h) => (
+        <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
+      ))}
+      {jam > 24 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 h-full border-l-2 border-dashed border-amber-400/80 bg-[repeating-linear-gradient(135deg,transparent_0,transparent_6px,rgb(251_191_36/0.07)_6px,rgb(251_191_36/0.07)_12px)]"
+          style={{ left: 24 * hourWidth, width: (jam - 24) * hourWidth }}
+        />
+      )}
+    </>
+  );
+}
+
 function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrder[]; hourWidth: number; dayWidth: number }) {
   const blocks = useMemo(
     () => orders.map((o) => ({ key: o.DeliveryOrderID, left: hourFractionNaiveWib(o.TransDate) * hourWidth, width: TAKEAWAY_CARD_WIDTH })),
@@ -957,7 +988,7 @@ function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrd
 
   return (
     <div className="flex items-stretch">
-      <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center gap-2 bg-card py-2 pr-3">
+      <div className="sticky left-0 shadow-(--bayangan-kolom-armada) z-10 flex w-56 shrink-0 items-center gap-2 bg-card py-2 pr-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <ShoppingBag className="size-4" />
         </span>
@@ -969,9 +1000,7 @@ function TakeawayRowBoard({ orders, hourWidth, dayWidth }: { orders: TakeawayOrd
         </div>
       </div>
       <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: rowHeight }}>
-        {Array.from({ length: 24 }, (_, h) => (
-          <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
-        ))}
+        <GridJam hourWidth={hourWidth} dayWidth={dayWidth} />
         {orders.map((o) => (
           <TakeawayCard
             key={o.DeliveryOrderID}
@@ -993,14 +1022,18 @@ function berlanggananMenit(cb: () => void) {
   const id = setInterval(cb, 30_000);
   return () => clearInterval(id);
 }
-function GarisSekarang({ hourWidth }: { hourWidth: number }) {
+// `geserJam` = 24 saat papan menampilkan hari penjualan KEMARIN dan sumbunya
+// diperpanjang melewati batas 14.00 — garis jatuh di area perpanjangan.
+function GarisSekarang({ hourWidth, geserJam = 0, jamTotal = 24 }: { hourWidth: number; geserJam?: number; jamTotal?: number }) {
   const menit = useSyncExternalStore(
     berlanggananMenit,
     () => Math.floor(Date.now() / 60_000),
     () => null
   );
   if (menit == null) return null;
-  const kiri = 224 + hourFraction(new Date(menit * 60_000)) * hourWidth; // 224 = w-56 kolom info
+  const posisi = hourFraction(new Date(menit * 60_000)) + geserJam;
+  if (posisi > jamTotal) return null;
+  const kiri = 224 + posisi * hourWidth; // 224 = w-56 kolom info
   return (
     <div aria-hidden className="pointer-events-none absolute inset-y-0 z-[15] w-px bg-destructive/70" style={{ left: kiri }}>
       <span className="absolute -top-0.5 -left-[3px] size-[7px] rounded-full bg-destructive" />
@@ -1362,7 +1395,7 @@ function ArmadaRowBoard({
             setEditing(true);
           }
         }}
-        className="group/armada sticky left-0 z-10 flex w-56 shrink-0 cursor-pointer flex-col justify-center gap-1.5 bg-card py-2 pr-3 text-left transition-colors hover:bg-muted/30"
+        className="group/armada sticky left-0 shadow-(--bayangan-kolom-armada) z-10 flex w-56 shrink-0 cursor-pointer flex-col justify-center gap-1.5 bg-card py-2 pr-3 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--muted)_30%,var(--card))]"
       >
         <div className="flex items-stretch gap-2.5">
           {/* Foto besar setinggi seluruh kolom info + titik status di
@@ -1494,9 +1527,7 @@ function ArmadaRowBoard({
         className="relative shrink-0 border-l"
         style={{ width: dayWidth, height: rowHeight }}
       >
-        {Array.from({ length: 24 }, (_, h) => (
-          <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
-        ))}
+        <GridJam hourWidth={hourWidth} dayWidth={dayWidth} />
         {dragStart && dragCurrent && (
           <div
             className="pointer-events-none absolute z-30 rounded border-2 border-primary/60 bg-primary/10"
@@ -1552,13 +1583,11 @@ function ArmadaRowBoard({
     <div className="flex items-stretch self-start border-t border-dashed">
       {/* z-[9], satu di bawah kolom info (z-10), supaya tombol Keberangkatan
           Baru di persimpangan batas tidak tertutup label ini. */}
-      <div className="sticky left-0 z-[9] flex w-56 shrink-0 items-center gap-1 bg-card pr-3 text-[10px] text-muted-foreground">
+      <div className="sticky left-0 shadow-(--bayangan-kolom-armada) z-[9] flex w-56 shrink-0 items-center gap-1 bg-card pr-3 text-[10px] text-muted-foreground">
         <User className="size-3" /> Driver
       </div>
       <div className="relative shrink-0 border-l" style={{ width: dayWidth, height: DRIVER_LANE_HEIGHT }}>
-        {Array.from({ length: 24 }, (_, h) => (
-          <div key={h} className="absolute top-0 h-full border-r" style={{ left: h * hourWidth, width: hourWidth }} />
-        ))}
+        <GridJam hourWidth={hourWidth} dayWidth={dayWidth} />
         {jadwal
           .filter((j) => j.DriverName)
           .map((j) => (
@@ -1651,25 +1680,47 @@ export function PengirimanBoard({
   // overflow-x-auto strip whose scrollLeft is mirrored bidirectionally
   // with containerRef below — same technique as mitra-do-panel.tsx's
   // header/body split.
+  // Header jam TIDAK lagi punya scroller sendiri yang disinkronkan dua arah:
+  // pantulan event scroll-nya (asinkron, datang setelah penanda sinkron
+  // direset) menarik containerRef kembali ke posisi lama di tengah scroll
+  // momentum trackpad — terasa patah-patah. Kini satu arah saja: isi header
+  // digeser dengan transform mengikuti containerRef; roda/geser di atas
+  // header diteruskan ke containerRef.
   const timelineScrollRef = useRef<HTMLDivElement>(null);
-  const syncingTimelineScrollRef = useRef(false);
+  const timelineIsiRef = useRef<HTMLDivElement>(null);
   const hourWidth = Math.max(MIN_HOUR_WIDTH, (containerWidth - INFO_COL_WIDTH) / 24);
-  const dayWidth = hourWidth * 24;
+  // Sumbu tetap 24 jam (satu hari penjualan, 14.00 → 14.00) selebar layar,
+  // tetapi DIPERPANJANG melewati batas hari penjualan bila ada kartu yang
+  // ujungnya lewat 14.00 (pengiriman yang belum tiba, estimasi durasi
+  // panjang, atau kartu sempit di dekat akhir hari). Tanpa ini isi baris
+  // lebih lebar dari header jam — header berhenti di "13" sementara baris
+  // terus bergeser, sehingga posisi jam tidak lagi sejajar dengan kartu.
+  const jamTotal = useMemo(() => {
+    let ujung = 24;
+    const catat = (mulai: number, lebarPx: number, durasiJam = 0) => {
+      ujung = Math.max(ujung, mulai + Math.max(lebarPx / hourWidth, durasiJam));
+    };
+    for (const j of jadwal) {
+      const durasi = j.JamKembaliAktual ? durationHours(j.JamJadwal, j.JamKembaliAktual) : j.EstimasiDurasiMenit / 60;
+      catat(hourFraction(j.JamJadwal), MIN_CARD_WIDTH, durasi);
+    }
+    for (const a of activities) catat(hourFraction(a.StartTime), MIN_AUTO_WIDTH, durationHours(a.StartTime, a.EndTime));
+    for (const d of externalDeliveries) catat(hourFractionNaiveWib(d.TransDate), EXTERNAL_DO_WIDTH);
+    for (const o of takeawayOrders) catat(hourFractionNaiveWib(o.TransDate), TAKEAWAY_CARD_WIDTH);
+    return Math.min(BATAS_JAM_PERPANJANGAN, Math.ceil(ujung - 1e-6));
+  }, [jadwal, activities, externalDeliveries, takeawayOrders, hourWidth]);
+  const dayWidth = hourWidth * jamTotal;
 
   function handleContainerScroll(e: React.UIEvent<HTMLDivElement>) {
-    if (syncingTimelineScrollRef.current) return;
-    if (!timelineScrollRef.current) return;
-    syncingTimelineScrollRef.current = true;
-    timelineScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
-    syncingTimelineScrollRef.current = false;
+    const isi = timelineIsiRef.current;
+    if (isi) isi.style.transform = `translate3d(${-e.currentTarget.scrollLeft}px,0,0)`;
   }
 
-  function handleTimelineScroll(e: React.UIEvent<HTMLDivElement>) {
-    if (syncingTimelineScrollRef.current) return;
-    if (!containerRef.current) return;
-    syncingTimelineScrollRef.current = true;
-    containerRef.current.scrollLeft = e.currentTarget.scrollLeft;
-    syncingTimelineScrollRef.current = false;
+  // Roda/geser horizontal (atau Shift+roda) di atas header jam diteruskan ke
+  // containerRef, karena header kini overflow-hidden (bukan scroller).
+  function handleTimelineWheel(e: React.WheelEvent<HTMLDivElement>) {
+    const dx = e.deltaX !== 0 ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+    if (dx !== 0 && containerRef.current) containerRef.current.scrollLeft += dx;
   }
 
   const jadwalByArmada = useMemo(() => {
@@ -1986,20 +2037,19 @@ export function PengirimanBoard({
                 scrolling ancestor for position:sticky purposes even with
                 overflow-y-visible also set, which broke its sticky
                 entirely (it just scrolled away with the page instead of
-                clamping). Its own date/hour cells scroll horizontally in
-                their own strip instead, mirrored bidirectionally with
-                containerRef's scroll via handleTimelineScroll/
-                handleContainerScroll — same technique mitra-do-panel.tsx's
-                header/body split already uses. */}
+                clamping). Its own date/hour cells follow
+                containerRef's scroll one-way via handleContainerScroll
+                (transform on timelineIsiRef) — no two-way scroll sync, which
+                caused stutter during momentum scrolling. */}
             <div ref={timelineHeaderRef} className="sticky z-20 border-b bg-card" style={{ top: "7rem" }}>
               <div className="flex items-stretch">
-                <div className="w-56 shrink-0 bg-card" />
+                <div className="relative z-10 w-56 shrink-0 bg-card shadow-[8px_0_10px_-6px_rgb(15_23_42/0.18)] dark:shadow-[8px_0_12px_-6px_rgb(0_0_0/0.7)]" />
                 <div
                   ref={timelineScrollRef}
-                  onScroll={handleTimelineScroll}
-                  className="no-scrollbar min-w-0 flex-1 overflow-x-auto border-l"
+                  onWheel={handleTimelineWheel}
+                  className="min-w-0 flex-1 overflow-hidden border-l"
                 >
-                  <div style={{ width: dayWidth }}>
+                  <div ref={timelineIsiRef} className="will-change-transform" style={{ width: dayWidth }}>
                     <div className="relative" style={{ height: DATE_SEGMENT_HEIGHT }}>
                       <div
                         className="absolute top-0 flex h-full items-center justify-center truncate border-r px-1 text-[10px] font-medium text-muted-foreground"
@@ -2013,12 +2063,25 @@ export function PengirimanBoard({
                       >
                         {formatDate(businessDate)}
                       </div>
+                      {jamTotal > 24 && (
+                        <div
+                          className="absolute top-0 flex h-full items-center gap-1 truncate border-l-2 border-dashed border-amber-400/80 bg-amber-50 px-1.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                          style={{ left: 24 * hourWidth, width: (jamTotal - 24) * hourWidth }}
+                          title={`Lewat batas hari penjualan ${formatDate(businessDate)} (14.00). Hanya menampilkan pengiriman dari penjualan hari ini yang belum selesai.`}
+                        >
+                          <span className="truncate">Lewat batas hari penjualan</span>
+                        </div>
+                      )}
                     </div>
                     <div className="relative" style={{ height: HOUR_RULER_HEIGHT }}>
-                      {Array.from({ length: 24 }, (_, h) => (
+                      {Array.from({ length: jamTotal }, (_, h) => (
                         <div
                           key={h}
-                          className="absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums text-muted-foreground"
+                          className={cn(
+                            "absolute top-0 flex h-full items-center border-r pl-1 text-[9px] tabular-nums",
+                            h >= 24 ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
+                            h === 24 && "border-l-2 border-dashed border-l-amber-400/80"
+                          )}
                           style={{ left: h * hourWidth, width: hourWidth }}
                         >
                           {String((h + ROLLOVER_HOUR) % 24).padStart(2, "0")}
@@ -2030,14 +2093,17 @@ export function PengirimanBoard({
               </div>
             </div>
             <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-              <div ref={containerRef} onScroll={handleContainerScroll} className="relative overflow-x-auto">
+              <div ref={containerRef} onScroll={handleContainerScroll} className="relative overflow-x-auto [--bayangan-kolom-armada:8px_0_10px_-6px_rgb(15_23_42/0.18)] dark:[--bayangan-kolom-armada:8px_0_12px_-6px_rgb(0_0_0/0.7)]">
                 {/* gap-y-3 separates one armada's whole block (its own
                     timeline + its driver row underneath) from the next
                     armada's block, so they don't visually stick together —
                     the tight spacing WITHIN one armada's block (timeline to
                     its own driver row, just a dashed border-t) is untouched. */}
                 <div className="relative flex flex-col divide-y gap-y-3">
-                  {businessDate === todayISO && <GarisSekarang hourWidth={hourWidth} />}
+                  {businessDate === todayISO && <GarisSekarang hourWidth={hourWidth} jamTotal={jamTotal} />}
+                  {jamTotal > 24 && businessDate === shiftDateISO(todayISO, -1) && (
+                    <GarisSekarang hourWidth={hourWidth} geserJam={24} jamTotal={jamTotal} />
+                  )}
                   <TakeawayRowBoard orders={takeawayOrders} hourWidth={hourWidth} dayWidth={dayWidth} />
                   {sortedArmada.map((a) => (
                     <ArmadaRowBoard
