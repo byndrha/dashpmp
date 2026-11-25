@@ -102,13 +102,13 @@ export interface AnalisisJejak {
   segmenKeluar: [number, number][][];
 }
 
-const ARAH = ["utara", "timur laut", "timur", "tenggara", "selatan", "barat daya", "barat", "barat laut"];
+export const ARAH_MATA_ANGIN = ["utara", "timur laut", "timur", "tenggara", "selatan", "barat daya", "barat", "barat laut"];
 export function arahMataAngin(dari: TitikLatLng, ke: TitikLatLng): string {
   const rad = (d: number) => (d * Math.PI) / 180;
   const y = Math.sin(rad(ke.lng - dari.lng)) * Math.cos(rad(ke.lat));
   const x = Math.cos(rad(dari.lat)) * Math.sin(rad(ke.lat)) - Math.sin(rad(dari.lat)) * Math.cos(rad(ke.lat)) * Math.cos(rad(ke.lng - dari.lng));
   const sudut = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-  return ARAH[Math.round(sudut / 45) % 8];
+  return ARAH_MATA_ANGIN[Math.round(sudut / 45) % 8];
 }
 
 const iso = (t: number) => new Date(t).toISOString();

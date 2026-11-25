@@ -7,7 +7,7 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History, Gauge, CheckCircle2 } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, PackageOpen, Image as ImageIcon, List, ChevronDown, History, Gauge, CheckCircle2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TimeInput } from "@/components/ui/time-input";
@@ -175,7 +175,7 @@ function SortableStopRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         ringkas
-          ? "flex flex-wrap items-center gap-x-2 rounded-lg border bg-card px-2.5 py-2 text-sm shadow-xs"
+          ? "flex flex-wrap items-center gap-x-2 rounded-lg border border-white/10 bg-card/55 px-2.5 py-2 text-sm shadow-xs"
           : "flex flex-wrap items-center gap-x-2 border-b bg-card px-3 py-2.5 text-sm last:border-b-0",
         isDragging && "z-10 opacity-70 shadow-lg"
       )}
@@ -192,7 +192,7 @@ function SortableStopRow({
         </>
       ) : (
         <>
-          <button type="button" {...attributes} {...listeners} className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
+          <button type="button" {...attributes} {...listeners} data-capture-hide="true" className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
             <GripVertical className="size-4" />
           </button>
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
@@ -221,8 +221,12 @@ function SortableStopRow({
           <p className="text-xs text-muted-foreground">Tiba {formatTime(detail.JamTiba)}</p>
         )}
         {bongkarGps?.map((b) => (
-          <p key={b.mulai} className="text-[11px] font-medium text-emerald-600 tabular-nums dark:text-emerald-400">
-            Tiba &amp; bongkar {formatTime(b.mulai)}–{formatTime(b.selesai)} · {b.menit} mnt
+          <p
+            key={b.mulai}
+            className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 tabular-nums dark:text-emerald-400"
+          >
+            <PackageOpen className="size-3.5 shrink-0" aria-label="Tiba & bongkar" />
+            {formatTime(b.mulai)}–{formatTime(b.selesai)} · {b.menit} mnt
           </p>
         ))}
         {bongkarGps && bongkarGps.length === 0 && !cadangan && !masalahGps?.length && (
@@ -293,6 +297,7 @@ function SortableStopRow({
         <button
           type="button"
           title="Lihat SI"
+          data-capture-hide="true"
           onClick={() => onOpenSi(detail)}
           className="shrink-0 rounded border border-transparent p-1 text-muted-foreground transition-colors hover:border-border"
         >
@@ -305,6 +310,7 @@ function SortableStopRow({
         <button
           type="button"
           title="Keluarkan dari draft"
+          data-capture-hide="true"
           onClick={() => onRemove(detail)}
           className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
@@ -1318,6 +1324,26 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
 
   const captureRef = useRef<HTMLDivElement>(null);
 
+  // Tunggu peta di dalam `akar` siap ditangkap: semua tile raster Leaflet
+  // termuat (+ jeda transisi pudar 200 ms-nya) dan lapisan vektor MapLibre
+  // (penanda data-peta-vektor dari LapisanVektor) sudah "idle". Batas 8 dtk
+  // supaya tile yang gagal tidak menggantung Bagikan selamanya.
+  async function tungguPetaSiap(akar: HTMLElement, batasMs = 8000) {
+    const mulai = Date.now();
+    const jeda = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    await jeda(150);
+    while (Date.now() - mulai < batasMs) {
+      const tile = [...akar.querySelectorAll<HTMLImageElement>("img.leaflet-tile")];
+      const rasterSiap = tile.every((t) => t.complete && t.classList.contains("leaflet-tile-loaded"));
+      const vektorSiap = [...akar.querySelectorAll<HTMLElement>("[data-peta-vektor]")].every(
+        (el) => el.dataset.petaVektor === "siap"
+      );
+      if (rasterSiap && vektorSiap) break;
+      await jeda(100);
+    }
+    await jeda(300);
+  }
+
   // Renders captureRef's subtree (dialog title/summary + body) to a PNG
   // Blob — skips any node marked data-capture-hide (action buttons that
   // don't make sense in a shared screenshot, e.g. the Bagikan trigger
@@ -1335,11 +1361,36 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     // max-height removed) to reflow, one more for RouteMap's un-animated
     // fitBounds to finish repainting tiles at the new view.
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Tangkapan memakai tata letak bertumpuk, jadi peta dipasang ULANG dari
+    // nol (bukan peta mode melayang yang sudah termuat) — tunggu tile dasar
+    // (raster & vektor) selesai, kalau tidak gambar berisi peta kosong.
+    if (showMap && captureRef.current) {
+      // Peta baru dimuat lewat dynamic import; tunggu wadahnya ada, lalu
+      // bingkai ulang rute di ukuran akhirnya sebelum menunggu tile.
+      const akar = captureRef.current;
+      for (let i = 0; i < 30 && !akar.querySelector(".leaflet-container"); i++) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      // Lebar dialog beranimasi dari mode melayang (layar penuh) ke tata
+      // letak bertumpuk — wadah peta menyusut ±0,5 dtk. Tunggu ukurannya
+      // stabil dulu, kalau tidak rute dibingkai di ukuran lama & terpotong.
+      let ukuranLama = "";
+      for (let i = 0, stabil = 0; i < 40 && stabil < 3; i++) {
+        const r = akar.querySelector(".leaflet-container")?.getBoundingClientRect();
+        const ukuran = r ? `${Math.round(r.width)}x${Math.round(r.height)}` : "";
+        stabil = ukuran && ukuran === ukuranLama ? stabil + 1 : 0;
+        ukuranLama = ukuran;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      setRefitTrigger((n) => n + 1);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await tungguPetaSiap(akar);
+    }
     try {
       const { toBlob } = await import("html-to-image");
       return await toBlob(captureRef.current, {
         pixelRatio: 2,
-        filter: (node) => !(node instanceof HTMLElement && node.dataset.captureHide === "true"),
+        filter: (node) => !(node instanceof Element && node.getAttribute("data-capture-hide") === "true"),
       });
     } finally {
       setCapturing(false);
@@ -1459,7 +1510,17 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // bertab di atas peta) dan tata letak bertumpuk (Bagikan/potret/HP).
   const bagianKontrol = (
     <>
-            {isDraft ? (
+            {/* Ekspor gambar: tanggal/jam/driver jadi teks biasa, bukan kontrol form. */}
+            {isDraft && capturing ? (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="font-medium">{date ? formatDate(date) : "-"}</span>
+                <span className="font-medium tabular-nums">{time || "--:--"}</span>
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <UserRound className="size-3.5" />
+                  {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Belum ada driver"}
+                </span>
+              </p>
+            ) : isDraft ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 shrink-0" />
                 <TimeInput value={time} onChange={setTime} className="shrink-0" />
@@ -1590,7 +1651,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   const bagianAksi = (
     <>
             {isDraft && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2" data-capture-hide="true">
                 {!adding && (
                   <Button size="sm" variant="ghost" className="gap-1.5" disabled={pending} onClick={handleOpenAdd}>
                     <Plus className="size-3.5" />
@@ -1903,18 +1964,28 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
               : "sm:max-w-3xl lg:max-w-6xl"
         )}
       >
-        <div ref={captureRef} className={modeApung ? "flex min-h-0 flex-1 flex-col" : undefined}>
+        {/* Ekspor tanpa peta (Data Rute): lebar dibatasi supaya kolom qty
+            tidak terdorong ke tepi kanan dialog lebar dan menyisakan celah. */}
+        <div
+          ref={captureRef}
+          className={cn(
+            modeApung && "flex min-h-0 flex-1 flex-col",
+            capturing && !showMap && !portrait && "w-[600px] max-w-full bg-popover"
+          )}
+        >
         <DialogHeader className="p-4 pb-0">
-          <div className="flex items-center justify-between gap-2 pr-8">
-            <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
+          <div className={cn("flex gap-2 pr-8", capturing ? "flex-col items-start" : "items-center justify-between")}>
+            {/* "Validasi Rute" tidak boleh patah; chip detail turun utuh ke
+                baris berikut bila tidak muat (dialog sempit / ekspor potret). */}
+            <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2 text-xl font-semibold">
               {jadwal && (
                 <Badge variant="outline" className={cn("text-[10px]", isDraft ? "border-dashed" : "border-primary/30 text-primary")}>
                   {jadwal.Status}
                 </Badge>
               )}
-              Validasi Rute
+              <span className="whitespace-nowrap">Validasi Rute</span>
               {jadwal && (
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm rounded-lg border bg-primary/5 px-2 py-1">
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg [&>span]:whitespace-nowrap border bg-primary/5 px-2 py-1 text-sm">
                   <span className="flex items-center gap-1.5 font-semibold">
                     {armadaPlat && <span>{armadaPlat}</span>}
                     <Truck className="size-4 text-muted-foreground" />
@@ -1946,7 +2017,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                   >
                     <History className="size-3.5" />
                     {currentStatusLabel}
-                    <ChevronDown className="size-3 opacity-60" />
+                    <ChevronDown className="size-3 opacity-60" data-capture-hide="true" />
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-80">
                     <VerticalTimeline>
@@ -2022,7 +2093,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                 </div>
               )}
               {isWaitingDeparture && (
-                <Button size="sm" disabled={pending || !hasBerangkatCheck} onClick={handleKonfirmasiBerangkat}>
+                <Button size="sm" data-capture-hide="true" disabled={pending || !hasBerangkatCheck} onClick={handleKonfirmasiBerangkat}>
                   {pending ? "Memproses..." : "Berangkat"}
                 </Button>
               )}
@@ -2042,8 +2113,9 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
              memakai tata letak bertumpuk di cabang bawah. */
           <div className="relative mx-4 mt-3 mb-4 min-h-0 flex-1 overflow-hidden rounded-xl border">
             <div className="absolute inset-0">{petaEl(true)}</div>
+            {/* Kaca buram: peta tetap samar terlihat di balik panel. */}
             <div
-              className="absolute top-3 bottom-3 left-3 z-[1100] flex flex-col overflow-hidden rounded-xl border bg-popover/95 shadow-lg backdrop-blur-sm"
+              className="absolute top-3 bottom-3 left-3 z-[1100] flex flex-col overflow-hidden rounded-xl border border-white/15 bg-popover/70 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
               style={{ width: LEBAR_PANEL_APUNG }}
             >
               {bagianKontrolAda && <div className="flex flex-col gap-2 border-b p-3">{bagianKontrol}</div>}
@@ -2058,10 +2130,10 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                 </div>
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-popover via-popover/70 to-transparent"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-popover/70 via-popover/35 to-transparent"
                 />
               </div>
-              <div className="relative z-10 flex shrink-0 flex-col gap-2 border-t bg-popover p-3 shadow-[0_-10px_16px_-10px_rgba(0,0,0,0.25)]">
+              <div className="relative z-10 flex shrink-0 flex-col gap-2 border-t border-white/10 bg-popover/60 p-3 shadow-[0_-10px_16px_-10px_rgba(0,0,0,0.25)]">
                 {bagianTotal}
                 {bagianRingkas}
                 {bagianGalat}
@@ -2070,7 +2142,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             </div>
             {route && (
               <div
-                className="absolute right-3 z-[1100] w-[min(360px,calc(100%-1.5rem))] overflow-hidden rounded-xl border bg-popover/95 shadow-lg backdrop-blur-sm"
+                className="absolute right-3 z-[1100] w-[min(360px,calc(100%-1.5rem))] overflow-hidden rounded-xl border border-white/15 bg-popover/70 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
                 style={{ bottom: 12 + ruangBukti }}
               >
                 <button
@@ -2100,7 +2172,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             {!isDraft && (
               <div
                 ref={setElBukti}
-                className="absolute right-3 bottom-3 z-[1100] rounded-xl border bg-popover/95 p-2 shadow-lg backdrop-blur-sm"
+                className="absolute right-3 bottom-3 z-[1100] rounded-xl border border-white/15 bg-popover/70 p-2 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
                 style={{ left: LEBAR_PANEL_APUNG + 24 }}
               >
                 {bagianBukti}
@@ -2111,7 +2183,14 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
         <div className={cn("flex flex-col", !portrait && (showMap ? "md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]" : "md:p-4 md:pt-2"))}>
           {showMap && (
             <div className={cn("order-1 flex flex-col gap-3", !portrait && "md:order-2")}>
-              <div className={cn("h-[34vh] min-h-[220px] w-full overflow-hidden", portrait ? "h-[300px]" : "md:h-auto md:min-h-[220px] md:rounded-lg")}>
+              {/* md:flex-1 → di tangkapan Bagikan peta mengisi tinggi kolom
+                  kanan (setinggi daftar tujuan), bukan menyisakan ruang kosong. */}
+              <div
+                className={cn(
+                  "h-[34vh] min-h-[220px] w-full overflow-hidden",
+                  portrait ? "h-[300px]" : "md:h-auto md:min-h-[220px] md:flex-1 md:rounded-lg"
+                )}
+              >
                 {petaEl(false)}
               </div>
               {route && (

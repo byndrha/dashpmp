@@ -55,8 +55,21 @@ export function LapisanVektor({ vektor, onGagal }: { vektor: VektorTile; onGagal
     muatGaya(vektor)
       .then((style) => {
         if (batal) return;
-        lapisan = maplibreGL({ style, attributionControl: false });
+        // preserveDrawingBuffer: kanvas WebGL tetap bisa dibaca html-to-image
+        // (Bagikan Validasi Rute); tanpanya peta dasar tertangkap kosong.
+        lapisan = maplibreGL({
+          style,
+          attributionControl: false,
+          canvasContextAttributes: { contextType: "webgl2", preserveDrawingBuffer: true },
+        });
         lapisan.addTo(map);
+        // Penanda kesiapan untuk penangkap gambar (tungguPetaSiap):
+        // "memuat" saat tile vektor diambil, "siap" saat peta idle.
+        const wadah = lapisan.getContainer();
+        const mm = lapisan.getMaplibreMap();
+        wadah.dataset.petaVektor = "memuat";
+        mm.on("dataloading", () => (wadah.dataset.petaVektor = "memuat"));
+        mm.on("idle", () => (wadah.dataset.petaVektor = "siap"));
       })
       .catch(() => {
         if (!batal) onGagal();

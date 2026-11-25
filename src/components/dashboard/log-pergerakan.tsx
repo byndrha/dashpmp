@@ -6,11 +6,25 @@
 // aktual di atas daftar (BarisUrutan). Analisisnya: src/lib/analisis-jejak.ts.
 // Klik baris → peta melompat ke titiknya (lewat onPilih).
 
-import { ArrowDownUp, CircleAlert, Gauge, MapPinOff, Route, SignalLow, Timer, TriangleAlert, Warehouse } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  ArrowDownUp,
+  ArrowRight,
+  CircleAlert,
+  Gauge,
+  MapPinOff,
+  Navigation2,
+  Route,
+  SignalLow,
+  Timer,
+  TriangleAlert,
+  Truck,
+  Warehouse,
+} from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { formatTime } from "@/lib/format";
 import { formatJarakM, type BerhentiTerklasifikasi, type JenisBerhenti, type TujuanRute } from "@/lib/klasifikasi-berhenti";
-import type { CatatanPerjalanan, MasalahTujuan } from "@/lib/analisis-jejak";
+import { ARAH_MATA_ANGIN, type CatatanPerjalanan, type MasalahTujuan } from "@/lib/analisis-jejak";
 
 export const WARNA_JENIS_BERHENTI: Record<JenisBerhenti, string> = {
   bongkar: "#059669",
@@ -40,8 +54,48 @@ export function keteranganBerhenti(b: BerhentiTerklasifikasi): string {
         : "Di jalur rute";
     case "menyimpang":
       return b.jarakRencanaM != null
-        ? `${formatJarakM(b.jarakRencanaM)} dari rute rencana — periksa aktivitas armada`
-        : "Di luar rute rencana — periksa aktivitas armada";
+        ? `${formatJarakM(b.jarakRencanaM)} dari rute rencana`
+        : "Di luar rute rencana";
+  }
+}
+
+// Angka jarak sebagai chip kecil, mis. "singgah [437 m]".
+function ChipJarak({ m, kira = false }: { m: number; kira?: boolean }) {
+  return (
+    <span className="rounded bg-foreground/10 px-1 py-px font-medium text-foreground tabular-nums">
+      {kira ? "±" : ""}
+      {formatJarakM(m)}
+    </span>
+  );
+}
+
+// Versi berchip dari keteranganBerhenti (yang string dipakai popup peta).
+function KeteranganBerhentiChip({ b }: { b: BerhentiTerklasifikasi }) {
+  switch (b.jenis) {
+    case "bongkar":
+      return (
+        <>
+          #{b.tujuan?.nomor} {b.tujuan?.nama} {b.jarakTujuanM != null && <ChipJarak m={b.jarakTujuanM} kira />}
+        </>
+      );
+    case "di_jalur":
+      return b.tujuan && b.jarakTujuanM != null ? (
+        <>
+          Di jalur rute · <ChipJarak m={b.jarakTujuanM} /> dari #{b.tujuan.nomor} {b.tujuan.nama}
+        </>
+      ) : (
+        <>Di jalur rute</>
+      );
+    case "menyimpang":
+      return b.jarakRencanaM != null ? (
+        <>
+          <ChipJarak m={b.jarakRencanaM} /> dari rute rencana
+        </>
+      ) : (
+        <>Di luar rute rencana</>
+      );
+    default:
+      return <>{keteranganBerhenti(b)}</>;
   }
 }
 
@@ -58,6 +112,8 @@ const jam = (iso: string) => formatTime(iso);
 const rentang = (a: string, b: string) => `${jam(a)}–${jam(b)}`;
 
 // Kerangka satu baris catatan (bergaris putus-putus, berwarna sesuai jenis).
+// Latarnya rona warna jenis di atas alas popover yang hampir padat, supaya
+// teks tetap terbaca walau panel daftar tujuan transparan di atas peta.
 function Baris({
   warna,
   ikon: Ikon,
@@ -66,11 +122,14 @@ function Baris({
   children,
   onClick,
   padat = false,
+  chip,
 }: {
   warna: string;
   ikon: ComponentType<{ className?: string; style?: React.CSSProperties }> | null;
   waktu?: ReactNode;
   label: ReactNode;
+  // Chip tindakan di samping label (mis. "Validasi ulang").
+  chip?: string;
   children?: ReactNode;
   onClick?: () => void;
   // Di dalam kartu mitra: tanpa bingkai luar sendiri yang tebal.
@@ -85,7 +144,10 @@ function Baris({
       className={`flex w-full items-start gap-2 rounded-lg border border-dashed text-left text-[11px] transition-colors enabled:hover:brightness-110 ${
         padat ? "mt-1 px-2 py-1" : "px-2.5 py-1.5"
       }`}
-      style={{ borderColor: `${warna}80`, background: `${warna}14` }}
+      style={{
+        borderColor: `${warna}80`,
+        background: `linear-gradient(${warna}1a, ${warna}1a), color-mix(in oklab, var(--popover) 88%, transparent)`,
+      }}
     >
       {Ikon ? (
         <Ikon className="mt-0.5 size-3.5 shrink-0" style={{ color: warna }} />
@@ -98,6 +160,14 @@ function Baris({
           <span className="font-semibold" style={{ color: warna }}>
             {label}
           </span>
+          {chip && (
+            <span
+              className="rounded-full px-1.5 py-px text-[10px] font-semibold leading-tight text-white"
+              style={{ background: warna }}
+            >
+              {chip}
+            </span>
+          )}
         </span>
         {children && <span className="text-muted-foreground">{children}</span>}
       </span>
@@ -116,17 +186,30 @@ export function MasalahTujuanBaris({ m, onPilih }: { m: MasalahTujuan; onPilih: 
           ikon={MapPinOff}
           waktu={`${rentang(m.kandidat.mulai, m.kandidat.selesai)} · ${m.kandidat.menit} mnt`}
           label="Titik drop diragukan"
+          chip="Validasi ulang"
           onClick={() => onPilih({ lat: m.kandidat.lat, lng: m.kandidat.lng, mulai: m.kandidat.mulai })}
         >
-          Armada singgah {formatJarakM(m.jarakM)} ke arah {m.arah} dari pin
-          {m.lintasM != null ? `, hanya melintas ±${formatJarakM(m.lintasM)} dari pin` : ""}. Kemungkinan lokasi drop sebenarnya —
-          perbarui titik mitra.
+          <span className="inline-flex flex-wrap items-center gap-x-1">
+            <Truck className="size-3 shrink-0" aria-label="Armada" />
+            singgah <ChipJarak m={m.jarakM} />
+            <Navigation2
+              className="size-3 shrink-0"
+              style={{ transform: `rotate(${Math.max(0, ARAH_MATA_ANGIN.indexOf(m.arah)) * 45}deg)` }}
+              aria-hidden
+            />
+            {m.arah} dari pin
+            {m.lintasM != null && (
+              <span>
+                · melintas <ChipJarak m={m.lintasM} kira />
+              </span>
+            )}
+          </span>
         </Baris>
       );
     case "pin_di_pabrik":
       return (
         <Baris padat warna="#d97706" ikon={Warehouse} label="Titik mitra di area pabrik">
-          Pin hanya ±{formatJarakM(m.jarakM)} dari pabrik — bongkar tidak bisa dibedakan dari aktivitas pabrik. Kemungkinan pin
+          Pin hanya <ChipJarak m={m.jarakM} kira /> dari pabrik — bongkar tidak bisa dibedakan dari aktivitas pabrik. Kemungkinan pin
           salah.
         </Baris>
       );
@@ -140,7 +223,7 @@ export function MasalahTujuanBaris({ m, onPilih }: { m: MasalahTujuan; onPilih: 
           label="Hanya melintas"
           onClick={() => onPilih({ lat: m.lat, lng: m.lng })}
         >
-          Lewat ±{formatJarakM(m.jarakM)} dari titik tanpa singgah ≥2 menit — pastikan es benar diantar.
+          Lewat <ChipJarak m={m.jarakM} kira /> dari titik tanpa singgah ≥2 menit.
         </Baris>
       );
     case "tidak_didatangi":
@@ -152,7 +235,7 @@ export function MasalahTujuanBaris({ m, onPilih }: { m: MasalahTujuan; onPilih: 
           label="Tidak didatangi"
           onClick={() => onPilih({ lat: m.lat, lng: m.lng })}
         >
-          Armada tidak pernah mendekati titik ini (terdekat {formatJarakM(m.jarakM)}
+          Armada tidak pernah mendekati titik ini (terdekat <ChipJarak m={m.jarakM} />
           {m.waktu ? `, ${jam(m.waktu)}` : ""}).
         </Baris>
       );
@@ -184,7 +267,9 @@ export function BarisCatatan({ c, onPilih }: { c: CatatanPerjalanan; onPilih: (f
           label={LABEL_JENIS_BERHENTI[b.jenis]}
           onClick={() => onPilih({ lat: b.lat, lng: b.lng, mulai: b.mulai })}
         >
-          <span className="line-clamp-2">{keteranganBerhenti(b)}</span>
+          <span className="line-clamp-2">
+            <KeteranganBerhentiChip b={b} />
+          </span>
         </Baris>
       );
     }
@@ -202,10 +287,26 @@ export function BarisCatatan({ c, onPilih }: { c: CatatanPerjalanan; onPilih: (f
           label="Keluar jalur rencana"
           onClick={() => onPilih({ lat: c.lat, lng: c.lng })}
         >
-          Menempuh {formatJarakM(c.tempuhM)}, terjauh {formatJarakM(c.maksM)} dari rute
-          {c.singgah.length > 0 &&
-            ` · singgah ${c.singgah.length}× (${c.singgah.map((s) => `${jam(s.mulai)} ${s.menit} mnt`).join(", ")})`}
-          {menuju ? ` · menuju dugaan lokasi drop ${nomorTujuan(c.menujuDrop)}` : " — periksa aktivitas armada"}
+          Menempuh <ChipJarak m={c.tempuhM} />, terjauh <ChipJarak m={c.maksM} /> dari rute
+          {c.singgah.length === 1 && (
+            <>
+              {" "}
+              · singgah {jam(c.singgah[0].mulai)} · {c.singgah[0].menit} mnt
+            </>
+          )}
+          {c.singgah.length > 1 && (
+            <>
+              {" "}
+              · <TooltipSinggah singgah={c.singgah} />
+            </>
+          )}
+          {menuju && (
+            <>
+              {" "}
+              · <Truck className="inline size-3 align-[-2px]" aria-label="Armada" />{" "}
+              <ArrowRight className="inline size-3 align-[-2px]" aria-label="menuju" /> {nomorTujuan(c.menujuDrop)}
+            </>
+          )}
         </Baris>
       );
     }
@@ -238,6 +339,40 @@ export function BarisCatatan({ c, onPilih }: { c: CatatanPerjalanan; onPilih: (f
         </Baris>
       );
   }
+}
+
+// Singgah lebih dari sekali dalam satu catatan: ringkas jadi chip "N×",
+// rinciannya (jam, lama, lokasi) di tooltip.
+function TooltipSinggah({ singgah }: { singgah: BerhentiTerklasifikasi[] }) {
+  const totalMenit = singgah.reduce((s, b) => s + b.menit, 0);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span />}
+        className="cursor-help underline decoration-dotted underline-offset-2"
+      >
+        singgah <span className="rounded bg-foreground/10 px-1 py-px font-medium text-foreground tabular-nums">{singgah.length}×</span>
+      </TooltipTrigger>
+      <TooltipContent side="right" className="max-w-80">
+        <p className="font-semibold text-foreground">
+          Singgah {singgah.length}× · total {totalMenit} mnt
+        </p>
+        <ul className="flex flex-col gap-1">
+          {singgah.map((b) => (
+            <li key={b.mulai} className="flex items-start gap-1.5">
+              <span className="mt-1 size-2 shrink-0 rounded-full" style={{ background: WARNA_JENIS_BERHENTI[b.jenis] }} />
+              <span>
+                <span className="font-semibold tabular-nums">
+                  {rentang(b.mulai, b.selesai)} · {b.menit} mnt
+                </span>
+                <span className="block text-muted-foreground">{keteranganBerhenti(b)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function BarisUrutan({ urutan }: { urutan: TujuanRute[] }) {

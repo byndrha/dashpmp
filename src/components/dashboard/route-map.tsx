@@ -243,6 +243,10 @@ function FitBounds({
       ...(routePoints ?? []),
     ];
     if (points.length === 0) return;
+    // Ukuran wadah bisa berubah sejak peta dibuat (mis. wadah tangkapan
+    // Bagikan yang meregang setelah tata letak selesai) — tanpa ini
+    // fitBounds memakai ukuran lama dan rute terpotong di tepi.
+    map.invalidateSize({ animate: false });
     // Ruang kiri/bawah = area peta yang tertutup panel melayang (Validasi
     // Rute mode melayang) — rute dibingkai di area yang benar-benar terlihat.
     map.fitBounds(L.latLngBounds(points), {
@@ -274,7 +278,7 @@ function StopSearchBox({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: St
 
   return (
     <div className="absolute bottom-[calc(var(--ruang-bawah,0px)+var(--tinggi-label-posisi,0px)+0.5rem)] left-[calc(var(--ruang-kiri,0px)+0.5rem)] z-1000 flex w-56 max-w-[calc(100%-1rem)] flex-col-reverse gap-1">
-      <div className="flex items-center gap-1.5 rounded-md bg-card/90 px-2 py-1.5 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
+      <div className="flex items-center gap-1.5 rounded-md border border-white/15 bg-popover/70 px-2 py-1.5 shadow-lg ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150">
         <Search className="size-3.5 shrink-0 text-muted-foreground" />
         <input
           value={query}
@@ -423,9 +427,12 @@ export function RouteMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fokusBerhenti?.n]);
 
+  // h-full juga di luar mode penuh: wadah peta tangkapan Bagikan meregang
+  // (flex-1) setinggi daftar tujuan; minHeight 320 tetap berlaku bila
+  // wadahnya bertinggi auto.
   return (
     <div
-      className={penuh ? "relative z-0 h-full" : "relative z-0"}
+      className="relative z-0 h-full"
       style={
         {
           "--ruang-kiri": `${ruangKiri}px`,
@@ -561,8 +568,8 @@ export function RouteMap({
 
       {positionLabel && (
         <div
-          className={`absolute bottom-[calc(var(--ruang-bawah,0px)+0.5rem)] left-[calc(var(--ruang-kiri,0px)+0.5rem)] z-1000 max-w-[calc(100%-1rem)] rounded-md px-2 py-1 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm ${
-            isStale ? "bg-amber-500/90 text-white" : "bg-card/90"
+          className={`absolute bottom-[calc(var(--ruang-bawah,0px)+0.5rem)] left-[calc(var(--ruang-kiri,0px)+0.5rem)] z-1000 max-w-[calc(100%-1rem)] rounded-md px-2 py-1 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 ${
+            isStale ? "bg-amber-500/90 text-white backdrop-blur-sm" : "border border-white/15 bg-popover/70 backdrop-blur-[1px] backdrop-saturate-150"
           }`}
         >
           Posisi armada: {positionLabel}
@@ -704,7 +711,7 @@ function KeteranganJejak({
   return (
     <div
       title={jejak.keadaan === "gagal" ? jejak.pesan : undefined}
-      className="flex flex-col gap-0.5 rounded-md bg-card/90 px-1.5 py-1.5 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm"
+      className="flex flex-col gap-0.5 rounded-md border border-white/15 bg-popover/70 px-1.5 py-1.5 text-[11px] font-medium shadow-lg ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
     >
       {rencana}
       {isi}
