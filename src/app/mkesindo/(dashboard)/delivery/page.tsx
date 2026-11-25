@@ -8,7 +8,7 @@ import { getKendalaReports } from "@/lib/queries/driver-kendala";
 import { getArmadaActivities } from "@/lib/queries/armada-activity";
 import { getDriverProfiles } from "@/lib/queries/driver-profile";
 import { getExpeditionVehicleOptions } from "@/lib/queries/expedition";
-import { getLatestVehiclePositions } from "@/lib/queries/armada-gps";
+import { getLatestVehiclePositions, ringkasGpsPerArmada } from "@/lib/queries/armada-gps";
 import { getBusinessDateISO } from "@/lib/business-date";
 import { Button } from "@/components/ui/button";
 import { OpenDeliveriesPanel } from "@/components/dashboard/open-deliveries-panel";
@@ -94,6 +94,7 @@ export default async function DeliveryPage({
         papanPanel={
           <PengirimanBoard
             armada={board.armada}
+            gpsArmada={ringkasGpsPerArmada(vehiclePositions)}
             jadwal={board.jadwal}
             externalDeliveries={board.externalDeliveries}
             takeawayOrders={board.takeawayOrders}

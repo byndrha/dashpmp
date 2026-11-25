@@ -175,3 +175,28 @@ export async function cleanupOldVehiclePositions(): Promise<void> {
   const pool = getPgPool();
   await pool.query(`DELETE FROM armada_gps_riwayat WHERE recorded_at < now() - INTERVAL '${RETENTION_DAYS} days'`);
 }
+
+// Ringkasan GPS per armada untuk chip "GPS ✓/✗" di kolom armada Papan
+// Pengiriman: provider yang terpasang + ping terbaru lintas provider.
+// Armada tanpa baris di sini = tidak ada perangkat yang cocok platnya atau
+// tidak ada ping dalam RETENTION_DAYS.
+export interface ArmadaGpsRingkas {
+  armadaId: number;
+  providers: string[]; // "hino" | "solofleet"
+  terakhir: string; // ISO ping terbaru lintas provider
+}
+
+export function ringkasGpsPerArmada(posisi: VehiclePositionRow[]): ArmadaGpsRingkas[] {
+  const peta = new Map<number, ArmadaGpsRingkas>();
+  for (const p of posisi) {
+    if (p.armadaId == null) continue;
+    const ada = peta.get(p.armadaId);
+    if (!ada) {
+      peta.set(p.armadaId, { armadaId: p.armadaId, providers: [p.provider], terakhir: p.recordedAt });
+      continue;
+    }
+    if (!ada.providers.includes(p.provider)) ada.providers.push(p.provider);
+    if (Date.parse(p.recordedAt) > Date.parse(ada.terakhir)) ada.terakhir = p.recordedAt;
+  }
+  return [...peta.values()];
+}

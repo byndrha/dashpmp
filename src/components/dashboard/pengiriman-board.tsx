@@ -5,7 +5,8 @@ import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerS
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Plus, User, Combine, Share2, ChevronDown, Loader2, Image as ImageIcon, List, ShoppingBag, Truck, Package, Settings, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, User, Combine, Share2, ChevronDown, Loader2, Image as ImageIcon, List, ShoppingBag, Truck, Package, Settings, ArrowUpRight, ArrowDownLeft, Check, X } from "lucide-react";
+import { Petunjuk } from "@/components/ui/petunjuk";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ import { mergeImagesGrid, shareImageBlob, shareTextBlock } from "@/lib/share-ima
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime, naiveWibTransDateToUtcInstant } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
+import type { ArmadaGpsRingkas } from "@/lib/queries/armada-gps";
 import type { ExpeditionVehicleOption } from "@/lib/queries/expedition";
 import type {
   JadwalCard as JadwalCardData,
@@ -1193,8 +1195,36 @@ function ArmadaActivityFormDialog({
 // label, and a real activity span can be much shorter than a hover slot.
 const MIN_AUTO_WIDTH = 56;
 
+// GPS dianggap aktif bila ping terakhir ≤ 24 jam lalu.
+const BATAS_GPS_AKTIF_MS = 24 * 60 * 60_000;
+const LABEL_PROVIDER_GPS: Record<string, string> = { hino: "Hino Connect", solofleet: "SoloFleet" };
+
+function ChipGps({ gps }: { gps: ArmadaGpsRingkas | undefined }) {
+  const aktif = gps != null && Date.now() - Date.parse(gps.terakhir) <= BATAS_GPS_AKTIF_MS;
+  const sumber = gps?.providers.map((p) => LABEL_PROVIDER_GPS[p] ?? p).join(" + ");
+  const isi = !gps
+    ? "Tidak ada perangkat GPS / tidak ada data 14 hari terakhir"
+    : `${sumber} · ping terakhir ${formatDate(gps.terakhir)} ${formatTime(gps.terakhir)}${aktif ? "" : " (lebih dari 24 jam)"}`;
+  return (
+    <Petunjuk judul={aktif ? "GPS aktif" : "GPS tidak aktif"} isi={isi} render={<span className="shrink-0" />}>
+      <span
+        className={cn(
+          "inline-flex items-center gap-0.5 rounded-[4px] px-1 text-[10px] leading-4 font-semibold",
+          aktif
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+            : "bg-destructive/10 text-destructive"
+        )}
+      >
+        GPS
+        {aktif ? <Check className="size-2.5" strokeWidth={3} /> : <X className="size-2.5" strokeWidth={3} />}
+      </span>
+    </Petunjuk>
+  );
+}
+
 function ArmadaRowBoard({
   armada,
+  gps,
   jadwal,
   activities,
   externalDeliveries,
@@ -1207,6 +1237,7 @@ function ArmadaRowBoard({
   expeditionOptions,
 }: {
   armada: ArmadaRow;
+  gps: ArmadaGpsRingkas | undefined;
   jadwal: JadwalCardData[];
   activities: ArmadaActivity[];
   externalDeliveries: ExternalDelivery[];
@@ -1447,7 +1478,10 @@ function ArmadaRowBoard({
             </button>
           </div>
           <div className="flex min-w-0 flex-1 flex-col items-start justify-between gap-1">
-            <p className="w-full truncate text-sm leading-tight font-semibold">{armada.Nama}</p>
+            <div className="flex w-full min-w-0 items-center gap-1.5">
+              <p className="min-w-0 truncate text-sm leading-tight font-semibold">{armada.Nama}</p>
+              <ChipGps gps={gps} />
+            </div>
             <div className="flex items-center gap-1">
               <span
                 title={`Kapasitas maksimal ${armada.KapasitasMaks ?? "-"} kantong per keberangkatan`}
@@ -1616,8 +1650,10 @@ export function PengirimanBoard({
   businessDate,
   todayISO,
   expeditionOptions,
+  gpsArmada = [],
 }: {
   armada: ArmadaRow[];
+  gpsArmada?: ArmadaGpsRingkas[];
   jadwal: JadwalCardData[];
   externalDeliveries: ExternalDelivery[];
   takeawayOrders: TakeawayOrder[];
@@ -1633,6 +1669,7 @@ export function PengirimanBoard({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const isToday = businessDate === todayISO;
+  const gpsByArmada = useMemo(() => new Map(gpsArmada.map((g) => [g.armadaId, g])), [gpsArmada]);
   const [detailJadwalId, setDetailJadwalId] = useState<number | null>(null);
   // Drives RouteValidationDialog through every Terbit Jadwal in turn for
   // the batch "Bagikan Semua Rute" toolbar button — see its own handler
@@ -2109,6 +2146,7 @@ export function PengirimanBoard({
                     <ArmadaRowBoard
                       key={a.ArmadaID}
                       armada={a}
+                      gps={gpsByArmada.get(a.ArmadaID)}
                       jadwal={jadwalByArmada.get(a.ArmadaID) ?? []}
                       activities={activitiesByArmada.get(a.ArmadaID) ?? []}
                       externalDeliveries={externalByArmada.get(a.ArmadaID) ?? []}
