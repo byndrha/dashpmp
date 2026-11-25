@@ -6,7 +6,7 @@
 // sengaja TIDAK bisa digeser: memindah tahap berarti membuat dokumen ERP
 // (jadwal/DO/SI), jadi tetap lewat aksi & Papan Pengiriman yang sudah ada.
 import { useState } from "react";
-import { CircleDashed, CalendarClock, Truck, ReceiptText, FileText, CalendarDays, MapPin, Undo2, type LucideIcon } from "lucide-react";
+import { Check, CircleDashed, CalendarClock, Truck, ReceiptText, FileText, CalendarDays, MapPin, Undo2, type LucideIcon } from "lucide-react";
 import { formatDate, formatDateWib, formatRupiah, formatTime, formatTimeWib } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesOrderListRow } from "@/lib/queries/pemesanan";
@@ -188,6 +188,22 @@ export function SorotSo({ row, cocok }: { row: SalesOrderListRow; cocok?: KodeDo
   );
 }
 
+// Chip "SI Lunas ✓" — hanya untuk SI yang sudah lunas; SI yang belum lunas
+// tidak diberi chip (tidak adanya chip = belum lunas). Dipakai kartu Papan
+// & baris Daftar.
+export function ChipSi({ row }: { row: SalesOrderListRow }) {
+  if (!row.InvoiceToken || !row.SiLunas) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+      title={row.SiVoucherNo ? `${row.SiVoucherNo} — sudah lunas` : "SI sudah lunas"}
+    >
+      SI Lunas
+      <Check className="size-3" strokeWidth={3} />
+    </span>
+  );
+}
+
 export function TahapBadge({ row }: { row: SalesOrderListRow }) {
   const t = TAHAP.find((x) => x.key === tahapPesanan(row))!;
   const Icon = t.icon;
@@ -261,9 +277,9 @@ function KartuPesanan({
             5KG <span className="font-semibold text-foreground">{row.Qty5KG.toLocaleString("id-ID")}</span>
           </span>
         )}
-        {tahapPesanan(row) === "terfaktur" && (
-          <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">SI terbit</span>
-        )}
+        {/* SI sudah terbit = transaksi aktif; tandai sekalian lunas-tidaknya
+            (Terfaktur, dan Retur sebagian yang tetap ber-SI). */}
+        {row.InvoiceToken && <ChipSi row={row} />}
         {row.SalesReturnId && (
           // Retur sebagian: mitra menolak sebagian, sisanya tetap ditagih (SI
           // terbit). Retur penuh: semua ditolak, tidak ada SI.

@@ -20,6 +20,7 @@ import {
   PemesananPapan,
   SorotSo,
   TahapBadge,
+  ChipSi,
   infoPengiriman,
   labelRetur,
   tahapPesanan,
@@ -30,6 +31,7 @@ import { useTampilanPemesanan } from "@/components/dashboard/pemesanan-tampilan"
 import { useKueriPemesanan } from "@/components/dashboard/pemesanan-cari";
 import { cocokkanPesanan, parseKueriPemesanan, type KodeDokumen } from "@/lib/pencarian-pemesanan";
 import { cariPemesananDokumenAction } from "@/app/mkesindo/(dashboard)/pemesanan/actions";
+import { useTerbitkanBarisPemesanan } from "@/components/dashboard/pemesanan-ekspor";
 
 // Kolom bersama kepala tabel & baris (layar lebar); di HP tiap baris jadi
 // kartu bertumpuk. Tahap memakai lencana yang sama dengan kolom Papan.
@@ -97,6 +99,7 @@ function PemesananRow({
       {/* Tahap */}
       <div className="flex flex-wrap items-center gap-1">
         <TahapBadge row={row} />
+        <ChipSi row={row} />
         {row.SalesReturnId && (
           <span
             className={cn(
@@ -216,6 +219,8 @@ export function PemesananList({
     return { tampilRows, cocokPer };
   }, [rows, kueri, kunciServer, hasilSiap]);
   const mencari = kueri.jenis !== "kosong";
+  // Baris yang tampil = isi tombol Export .xlsx di bilah atas halaman.
+  useTerbitkanBarisPemesanan(tampilRows);
 
   function aksiFor(r: SalesOrderListRow): PemesananAksiHandlers {
     return {

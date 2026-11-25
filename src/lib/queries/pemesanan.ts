@@ -189,6 +189,9 @@ export interface SalesOrderListRow {
   // SalesReturnId (yang terbaru bila lebih dari satu).
   SiVoucherNo: string | null;
   SrVoucherNo: string | null;
+  // SI pesanan ini sudah lunas (SalesInvoice.Paid >= Netto, Netto > 0 —
+  // konvensi sama dengan sales-cards.ts). null bila belum ada SI.
+  SiLunas: boolean | null;
 }
 
 export interface SalesOrderListFilter {
@@ -222,12 +225,17 @@ const SI_DO_KEY = "REPLACE(DeliveryOrderID, CHAR(39), '')";
 interface DokumenTerkait {
   id: string;
   voucherNo: string | null;
+  // Hanya untuk SI: Paid >= Netto (Netto > 0). undefined untuk SR.
+  lunas?: boolean;
 }
 
 async function petaDariQuery(request: sql.Request, query: string): Promise<Map<string, DokumenTerkait>> {
   const result = await request.query(query);
   const map = new Map<string, DokumenTerkait>();
-  for (const row of result.recordset as { K: string; M: string; V: string | null }[]) map.set(row.K, { id: row.M, voucherNo: row.V });
+  for (const row of result.recordset as { K: string; M: string; V: string | null; N?: number | null; P?: number | null }[]) {
+    const lunas = row.N !== undefined ? Number(row.N) > 0 && Number(row.P ?? 0) >= Number(row.N) : undefined;
+    map.set(row.K, { id: row.M, voucherNo: row.V, lunas });
+  }
   return map;
 }
 
@@ -259,7 +267,7 @@ function getDocumentIdMaps(
     // SI per SalesOrderID
     petaDariQuery(
       req(),
-      `SELECT x.K, x.M, si.VoucherNo AS V FROM (
+      `SELECT x.K, x.M, si.VoucherNo AS V, si.Netto AS N, si.Paid AS P FROM (
          SELECT SalesOrderID AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
          WHERE IsDeleted = 0 AND SalesOrderID IN (${SO_RENTANG}) GROUP BY SalesOrderID
        ) x JOIN SalesInvoice si ON si.SalesInvoiceID = x.M`
@@ -267,7 +275,7 @@ function getDocumentIdMaps(
     // SI per DeliveryOrderID
     petaDariQuery(
       req(),
-      `SELECT x.K, x.M, si.VoucherNo AS V FROM (
+      `SELECT x.K, x.M, si.VoucherNo AS V, si.Netto AS N, si.Paid AS P FROM (
          SELECT ${SI_DO_KEY} AS K, MAX(SalesInvoiceID) AS M FROM SalesInvoice
          WHERE IsDeleted = 0 AND ${SI_DO_KEY} IN (${DO_RENTANG}) GROUP BY ${SI_DO_KEY}
        ) x JOIN SalesInvoice si ON si.SalesInvoiceID = x.M`
@@ -372,7 +380,7 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
 
   const rows = result.recordset as (Omit<
     SalesOrderListRow,
-    "HasDO" | "InvoiceToken" | "HasSoInvoice" | "HasDoInvoice" | "SalesReturnId" | "ReturQty" | "SiVoucherNo" | "SrVoucherNo"
+    "HasDO" | "InvoiceToken" | "HasSoInvoice" | "HasDoInvoice" | "SalesReturnId" | "ReturQty" | "SiVoucherNo" | "SrVoucherNo" | "SiLunas"
   > & { DeliveryOrderID: string | null })[];
 
   // SalesInvoice/SalesReturn have 200K+/9K+ rows and no index on
@@ -405,6 +413,7 @@ export async function getSalesOrderList(filter: SalesOrderListFilter): Promise<S
       ReturQty: salesReturnId && hasDO ? (returQtyMap.get(DeliveryOrderID) ?? null) : null,
       SiVoucherNo: invoice?.voucherNo ?? null,
       SrVoucherNo: retur?.voucherNo ?? null,
+      SiLunas: invoice ? (invoice.lunas ?? false) : null,
     };
   });
 

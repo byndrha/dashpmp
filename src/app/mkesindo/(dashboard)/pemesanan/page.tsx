@@ -14,6 +14,7 @@ import { PemesananFormDialog } from "@/components/dashboard/pemesanan-form-dialo
 import { PemesananList } from "@/components/dashboard/pemesanan-list";
 import { TombolTampilanPemesanan } from "@/components/dashboard/pemesanan-tampilan";
 import { KotakCariPemesanan } from "@/components/dashboard/pemesanan-cari";
+import { EksporPemesanan } from "@/components/dashboard/pemesanan-ekspor";
 
 function docFilterValue(value: string | undefined): "yes" | "no" | undefined {
   return value === "yes" || value === "no" ? value : undefined;
@@ -109,6 +110,7 @@ export default async function PemesananPage({
             priceLevels5kg={priceLevels5kg}
             todayISO={todayISO}
           />
+          <EksporPemesanan />
           <FilterBar wilayahList={wilayahList} bare hanyaTombol />
         </div>
       </div>
