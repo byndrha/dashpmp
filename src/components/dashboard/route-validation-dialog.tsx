@@ -7,7 +7,8 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, PackageOpen, Image as ImageIcon, List, ChevronDown, History, Gauge, CheckCircle2, UserRound } from "lucide-react";
+import { GripVertical, MapPin, Route as RouteIcon, Fuel, Clock, Plus, Printer, X, Share2, Truck, Package, Image as ImageIcon, List, ChevronDown, History, Gauge, CheckCircle2, UserRound } from "lucide-react";
+import { SerahEsKristal } from "@/components/icons/serah-barang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TimeInput } from "@/components/ui/time-input";
@@ -123,6 +124,7 @@ function SortableStopRow({
   onOpenProof,
   onChangeLokasi,
   ringkas = false,
+  ekspor = false,
   bongkarGps,
   masalahGps,
   onFokus,
@@ -150,6 +152,12 @@ function SortableStopRow({
   // Panel sempit (mode melayang): nama lebih kecil, kolom kantong tidak
   // selebar 160px supaya nama mitra tidak terpotong.
   ringkas?: boolean;
+  // Sedang ditangkap jadi gambar (Bagikan): kontrol (pegangan seret, tombol
+  // keluarkan, placeholder ikon) TIDAK dirender sama sekali. Menyembunyikan
+  // lewat filter html-to-image tidak cukup — lebar kolom nama sudah dihitung
+  // bersama kontrol itu, jadi tersisa celah kosong di kanan dan nama tetap
+  // terpotong.
+  ekspor?: boolean;
   // Berhenti GPS dalam radius toleransi mitra ini (tiba & bongkar). undefined
   // = jejak GPS tidak tersedia; [] = ada jejak tapi tidak terdeteksi berhenti.
   bongkarGps?: BerhentiTerklasifikasi[];
@@ -192,9 +200,11 @@ function SortableStopRow({
         </>
       ) : (
         <>
-          <button type="button" {...attributes} {...listeners} data-capture-hide="true" className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
-            <GripVertical className="size-4" />
-          </button>
+          {!ekspor && (
+            <button type="button" {...attributes} {...listeners} data-capture-hide="true" className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
+              <GripVertical className="size-4" />
+            </button>
+          )}
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
             {index + 1}
           </span>
@@ -225,12 +235,12 @@ function SortableStopRow({
             key={b.mulai}
             className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 tabular-nums dark:text-emerald-400"
           >
-            <PackageOpen className="size-3.5 shrink-0" aria-label="Tiba & bongkar" />
+            <SerahEsKristal className="size-3.5 shrink-0" aria-label="Diserahkan ke mitra" />
             {formatTime(b.mulai)}–{formatTime(b.selesai)} · {b.menit} mnt
           </p>
         ))}
         {bongkarGps && bongkarGps.length === 0 && !cadangan && !masalahGps?.length && (
-          <p className="text-[11px] text-muted-foreground">Belum terdeteksi berhenti di lokasi ini (GPS)</p>
+          <p className="text-[11px] text-muted-foreground">APP / GPS belum mendeteksi</p>
         )}
       </button>
       {pilihanLokasi && (
@@ -263,8 +273,10 @@ function SortableStopRow({
           on one line instead of wrapping — was w-24, which avoided the
           name/location column being squeezed to zero width but wrapped
           this qty text awkwardly. */}
-      <span className={cn("shrink-0 text-right tabular-nums", ringkas ? "text-xs" : "w-40")}>
-        <span className="font-medium">
+      <span className={cn("shrink-0 text-right tabular-nums", ringkas ? "text-xs" : ekspor ? undefined : "w-40")}>
+        {/* Ekspor: lebar kolom mengikuti isi (bukan w-40 tetap) dan qty
+            selalu satu baris — nama mitra yang mengalah/terpotong. */}
+        <span className={cn("font-medium", ekspor && "whitespace-nowrap")}>
           {formatKemasanQty(detail.Qty10KG, detail.Qty5KG)}
           {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
         </span>
@@ -293,7 +305,7 @@ function SortableStopRow({
         >
           <CheckCircle2 className="size-4" />
         </button>
-      ) : detail.InvoiceToken != null ? (
+      ) : ekspor ? null : detail.InvoiceToken != null ? (
         <button
           type="button"
           title="Lihat SI"
@@ -306,7 +318,7 @@ function SortableStopRow({
       ) : (
         <span className="size-6 shrink-0" />
       )}
-      {onRemove && (
+      {onRemove && !ekspor && (
         <button
           type="button"
           title="Keluarkan dari draft"
@@ -1183,6 +1195,35 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     return Math.round((endMs - new Date(jadwal.JamAktualBerangkat).getTime()) / 60000);
   }, [jadwal, jamKembaliAktual]);
   const waktuEfektifMenit = totalBerjalanMenit != null ? totalBerjalanMenit - totalIstirahatMenit : null;
+  const sudahSelesai = jamKembaliAktual != null;
+
+  // Linimasa status menyamping untuk ekspor gambar (pengganti tombol
+  // Riwayat Status): jam tiap tahap kiri→kanan, lalu durasi pengiriman
+  // (Berangkat → Datang) bila sudah selesai.
+  // Ekspor rute Draft: jam "Draf dibuat" sudah tertulis di chip Draft, jadi
+  // tidak diulang di linimasa.
+  const linimasaEkspor = isDraft ? statusHistory.filter((s) => s.label !== "Draf dibuat") : statusHistory;
+  function renderLinimasaStatus() {
+    return (
+      <div className="flex flex-nowrap items-center gap-1.5 text-xs whitespace-nowrap">
+        {linimasaEkspor.map((s, i) => (
+          <Fragment key={s.label}>
+            {i > 0 && <span aria-hidden className="mb-2.5 h-0.5 w-4 shrink-0 rounded-full bg-foreground/25" />}
+            <span className="flex flex-col items-center leading-tight">
+              <span className="font-semibold tabular-nums">{formatTime(s.timestamp)}</span>
+              <span className="text-[9px] text-muted-foreground">{s.label}</span>
+            </span>
+          </Fragment>
+        ))}
+        {sudahSelesai && totalBerjalanMenit != null && (
+          <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 font-semibold text-primary tabular-nums">
+            <Clock className="size-3" />
+            {formatDurationMinutes(totalBerjalanMenit)}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   // Same sentence the status area below used to show on its own — now it
   // doubles as the Riwayat Status trigger's own label (next to the Terbit
@@ -1586,6 +1627,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                           onRemove={isDraft ? handleRemoveStop : undefined}
                           hasDeparted={hasDeparted}
                           ringkas={modeApung}
+                          ekspor={capturing}
                           onOpenProof={setProofDetail}
                           onChangeLokasi={isDraft ? handleChangeLokasi : undefined}
                           bongkarGps={analisis ? (analisis.bongkarPerTujuan.get(d.JadwalDetailID) ?? []) : undefined}
@@ -1620,7 +1662,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                             onOpenSi={setSiDetail}
                             onRemove={isDraft ? handleRemoveStop : undefined}
                             hasDeparted={hasDeparted}
-                        ringkas={modeApung}
+                            ringkas={modeApung}
+                            ekspor={capturing}
                             onOpenProof={setProofDetail}
                           />
                         ))}
@@ -1741,12 +1784,20 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     <>
             {routeError && <p className="text-xs text-destructive">{routeError}</p>}
             {route && (
-              <div className="flex flex-wrap gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+              <div
+                className={cn(
+                  "flex rounded-lg border bg-muted/30",
+                  // Ekspor: huruf & jarak lebih kecil, label disingkat, satu baris.
+                  capturing
+                    ? "flex-nowrap items-center gap-2 px-2.5 py-1.5 text-[11px] whitespace-nowrap [&_svg]:size-3.5"
+                    : "flex-wrap gap-3 px-3 py-2 text-sm"
+                )}
+              >
                 <span className="flex items-center gap-1">
                   <Clock className="size-4 text-muted-foreground" />
-                  Tempuh {route.durationMinutes} + Bongkar {Math.round(bongkarTotalMenit)} + Konfirmasi{" "}
-                  {konfirmasiTotalMenit} = {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)}{" "}
-                  menit
+                  Tempuh {route.durationMinutes} + Bongkar {Math.round(bongkarTotalMenit)} +{" "}
+                  {capturing ? "Konf." : "Konfirmasi"} {konfirmasiTotalMenit} ={" "}
+                  {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)} {capturing ? "mnt" : "menit"}
                 </span>
                 {totalFuelLiters != null && (
                   <span className="flex items-center gap-1">
@@ -1773,6 +1824,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     <>
             {!isDraft && (
               <div className={modeApung ? "grid grid-cols-2 gap-3" : "flex flex-col gap-2"}>
+                {/* Ekspor gambar memakai tampilan ringkas yang sama dengan
+                    mode melayang (bukan kartu lama). */}
                 {(["BERANGKAT", "DATANG"] as const).map((tipe) => {
                   const check = vehicleChecks.find((c) => c.tipe === tipe);
                   if (check) {
@@ -1780,12 +1833,12 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     // was loaded (MuatanQty, same figure already shown on
                     // Cek Berangkat) -- confirmed with user 2026-09-23.
                     return tipe === "DATANG" ? (
-                      <CheckSummary key={tipe} check={check} packageLabel="kantong retur" packageQty={totalRetur} ringkas={modeApung} />
+                      <CheckSummary key={tipe} check={check} packageLabel="kantong retur" packageQty={totalRetur} ringkas={modeApung || capturing} />
                     ) : (
-                      <CheckSummary key={tipe} check={check} ringkas={modeApung} />
+                      <CheckSummary key={tipe} check={check} ringkas={modeApung || capturing} />
                     );
                   }
-                  if (modeApung) {
+                  if (modeApung || capturing) {
                     const Ikon = TIPE_IKON[tipe];
                     return (
                       <div key={tipe} className="flex items-center gap-2 self-start rounded-lg border bg-muted/30 p-2 text-xs">
@@ -1978,14 +2031,26 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             {/* "Validasi Rute" tidak boleh patah; chip detail turun utuh ke
                 baris berikut bila tidak muat (dialog sempit / ekspor potret). */}
             <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2 text-xl font-semibold">
-              {jadwal && (
+              {/* Ekspor pengiriman yang sudah selesai: status & judul tidak
+                  relevan lagi — linimasa di bawah sudah menceritakannya. */}
+              {jadwal && !(capturing && sudahSelesai) && (
                 <Badge variant="outline" className={cn("text-[10px]", isDraft ? "border-dashed" : "border-primary/30 text-primary")}>
                   {jadwal.Status}
+                  {capturing && isDraft && (
+                    <span className="font-normal text-muted-foreground tabular-nums">· {formatTime(jadwal.CreatedDate)}</span>
+                  )}
                 </Badge>
               )}
-              <span className="whitespace-nowrap">Validasi Rute</span>
+              {!(capturing && sudahSelesai) && <span className="whitespace-nowrap">Validasi Rute</span>}
               {jadwal && (
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg [&>span]:whitespace-nowrap border bg-primary/5 px-2 py-1 text-sm">
+                <p
+                  className={cn(
+                    "flex items-center rounded-lg [&>span]:whitespace-nowrap border bg-primary/5 px-2 py-1",
+                    // Ekspor: lebih kecil & satu baris supaya jarak tidak turun
+                    // baris lalu menumpuk dengan elemen di bawahnya.
+                    capturing ? "flex-nowrap gap-x-2 text-xs [&_svg]:size-3.5" : "flex-wrap gap-x-3 gap-y-1 text-sm"
+                  )}
+                >
                   <span className="flex items-center gap-1.5 font-semibold">
                     {armadaPlat && <span>{armadaPlat}</span>}
                     <Truck className="size-4 text-muted-foreground" />
@@ -2008,7 +2073,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
               )}
             </DialogTitle>
             <div className="flex shrink-0 items-center gap-2">
-              {statusHistory.length > 0 && (
+              {capturing && linimasaEkspor.length > 0 && renderLinimasaStatus()}
+              {!capturing && statusHistory.length > 0 && (
                 <Popover>
                   <PopoverTrigger
                     render={
@@ -2115,7 +2181,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             <div className="absolute inset-0">{petaEl(true)}</div>
             {/* Kaca buram: peta tetap samar terlihat di balik panel. */}
             <div
-              className="absolute top-3 bottom-3 left-3 z-[1100] flex flex-col overflow-hidden rounded-xl border border-white/15 bg-popover/70 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
+              className="absolute top-3 bottom-3 left-3 z-[1100] flex flex-col overflow-hidden rounded-xl border border-white/15 bg-popover/85 dark:bg-popover/70 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
               style={{ width: LEBAR_PANEL_APUNG }}
             >
               {bagianKontrolAda && <div className="flex flex-col gap-2 border-b p-3">{bagianKontrol}</div>}
@@ -2142,7 +2208,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             </div>
             {route && (
               <div
-                className="absolute right-3 z-[1100] w-[min(360px,calc(100%-1.5rem))] overflow-hidden rounded-xl border border-white/15 bg-popover/70 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
+                className="absolute right-3 z-[1100] w-[min(360px,calc(100%-1.5rem))] overflow-hidden rounded-xl border border-white/15 bg-popover/85 dark:bg-popover/70 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
                 style={{ bottom: 12 + ruangBukti }}
               >
                 <button
@@ -2172,7 +2238,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             {!isDraft && (
               <div
                 ref={setElBukti}
-                className="absolute right-3 bottom-3 z-[1100] rounded-xl border border-white/15 bg-popover/70 p-2 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
+                className="absolute right-3 bottom-3 z-[1100] rounded-xl border border-white/15 bg-popover/85 dark:bg-popover/70 p-2 shadow-2xl ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
                 style={{ left: LEBAR_PANEL_APUNG + 24 }}
               >
                 {bagianBukti}

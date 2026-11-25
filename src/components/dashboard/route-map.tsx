@@ -278,7 +278,7 @@ function StopSearchBox({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: St
 
   return (
     <div className="absolute bottom-[calc(var(--ruang-bawah,0px)+var(--tinggi-label-posisi,0px)+0.5rem)] left-[calc(var(--ruang-kiri,0px)+0.5rem)] z-1000 flex w-56 max-w-[calc(100%-1rem)] flex-col-reverse gap-1">
-      <div className="flex items-center gap-1.5 rounded-md border border-white/15 bg-popover/70 px-2 py-1.5 shadow-lg ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150">
+      <div className="flex items-center gap-1.5 rounded-md border border-white/15 bg-popover/85 dark:bg-popover/70 px-2 py-1.5 shadow-lg ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150">
         <Search className="size-3.5 shrink-0 text-muted-foreground" />
         <input
           value={query}
@@ -569,7 +569,7 @@ export function RouteMap({
       {positionLabel && (
         <div
           className={`absolute bottom-[calc(var(--ruang-bawah,0px)+0.5rem)] left-[calc(var(--ruang-kiri,0px)+0.5rem)] z-1000 max-w-[calc(100%-1rem)] rounded-md px-2 py-1 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 ${
-            isStale ? "bg-amber-500/90 text-white backdrop-blur-sm" : "border border-white/15 bg-popover/70 backdrop-blur-[1px] backdrop-saturate-150"
+            isStale ? "bg-amber-500/90 text-white backdrop-blur-sm" : "border border-white/15 bg-popover/85 dark:bg-popover/70 backdrop-blur-[1px] backdrop-saturate-150"
           }`}
         >
           Posisi armada: {positionLabel}
@@ -711,7 +711,7 @@ function KeteranganJejak({
   return (
     <div
       title={jejak.keadaan === "gagal" ? jejak.pesan : undefined}
-      className="flex flex-col gap-0.5 rounded-md border border-white/15 bg-popover/70 px-1.5 py-1.5 text-[11px] font-medium shadow-lg ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
+      className="flex flex-col gap-0.5 rounded-md border border-white/15 bg-popover/85 dark:bg-popover/70 px-1.5 py-1.5 text-[11px] font-medium shadow-lg ring-1 ring-inset ring-white/5 backdrop-blur-[1px] backdrop-saturate-150"
     >
       {rencana}
       {isi}

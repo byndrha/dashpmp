@@ -7,13 +7,13 @@
 // Klik baris → peta melompat ke titiknya (lewat onPilih).
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Kompas } from "@/components/icons/kompas";
 import {
   ArrowDownUp,
   ArrowRight,
   CircleAlert,
   Gauge,
   MapPinOff,
-  Navigation2,
   Route,
   SignalLow,
   Timer,
@@ -192,8 +192,8 @@ export function MasalahTujuanBaris({ m, onPilih }: { m: MasalahTujuan; onPilih: 
           <span className="inline-flex flex-wrap items-center gap-x-1">
             <Truck className="size-3 shrink-0" aria-label="Armada" />
             singgah <ChipJarak m={m.jarakM} />
-            <Navigation2
-              className="size-3 shrink-0"
+            <Kompas
+              className="size-3.5 shrink-0"
               style={{ transform: `rotate(${Math.max(0, ARAH_MATA_ANGIN.indexOf(m.arah)) * 45}deg)` }}
               aria-hidden
             />
