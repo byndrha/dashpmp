@@ -26,6 +26,12 @@ export interface MitraDORow {
   // underlying value now tracks whatever range is actually selected.
   TargetBulanan: number | null;
   DailyQty: number[];
+  // Jumlah DO & jumlah SO berbeda di balik DO-DO itu, per tanggal (indeks
+  // sama dengan DailyQty). DO > 1 dengan SO berbeda = beberapa pesanan sah
+  // (chip abu "2×"); DO > SO = satu pesanan dikirim lebih dari sekali —
+  // ciri bug dobel (chip oranye "dobel?").
+  DailyDOCount: number[];
+  DailySOCount: number[];
   TotalQty: number;
   PctAchievement: number | null;
   HasTransaksi: boolean;
@@ -57,6 +63,8 @@ interface RawDailyRow {
   JoinDate: string | null;
   TransDate: string;
   QtyKantong: number;
+  JumlahDO: number;
+  JumlahSO: number;
 }
 
 // "Kantong" here always means the 10KG-equivalent unit that mitra
@@ -93,7 +101,10 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
             bp.Capacity,
             bp.JoinDate,
             CAST(do_.TransDate AS DATE) AS TransDate,
-            ${KANTONG_QTY_EXPR} AS QtyKantong
+            ${KANTONG_QTY_EXPR} AS QtyKantong,
+            COUNT(DISTINCT do_.DeliveryOrderID) AS JumlahDO,
+            -- DO tanpa SO (dibuat langsung) dihitung sebagai pesanannya sendiri.
+            COUNT(DISTINCT ISNULL(do_.SalesOrderID, do_.DeliveryOrderID)) AS JumlahSO
         FROM DeliveryOrder do_
         JOIN DeliveryOrderDetail dod ON dod.DeliveryOrderID = do_.DeliveryOrderID
         JOIN BusinessPartner bp ON bp.BusinessPartnerID = do_.BusinessPartnerID
@@ -132,6 +143,8 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
         TargetHarian: row.Capacity,
         TargetBulanan: row.Capacity != null ? row.Capacity * daysInRange : null,
         DailyQty: new Array(daysInRange).fill(0),
+        DailyDOCount: new Array(daysInRange).fill(0),
+        DailySOCount: new Array(daysInRange).fill(0),
         TotalQty: 0,
         PctAchievement: null,
         HasTransaksi: true,
@@ -145,6 +158,8 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
     const dayIndex = Math.round((new Date(row.TransDate).getTime() - rangeStart.getTime()) / 86400000);
     if (dayIndex >= 0 && dayIndex < daysInRange) {
       entry.DailyQty[dayIndex] += row.QtyKantong;
+      entry.DailyDOCount[dayIndex] += row.JumlahDO;
+      entry.DailySOCount[dayIndex] += row.JumlahSO;
     }
   }
 
@@ -173,6 +188,8 @@ export async function getMitraDOMonthly(filter: DateRangeFilter): Promise<MitraD
       TargetHarian: m.Capacity,
       TargetBulanan: m.Capacity != null ? m.Capacity * daysInRange : null,
       DailyQty: new Array(daysInRange).fill(0),
+      DailyDOCount: new Array(daysInRange).fill(0),
+      DailySOCount: new Array(daysInRange).fill(0),
       TotalQty: 0,
       PctAchievement: null,
       HasTransaksi: false,

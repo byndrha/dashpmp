@@ -1,24 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { WilayahDeliveryPanel } from "@/components/dashboard/wilayah-delivery-panel";
-import { KartuTransaksiPanel } from "@/components/dashboard/kartu-transaksi-panel";
 import { MitraDOPanel } from "@/components/dashboard/mitra-do-panel";
-import type { SalesOrderCard } from "@/lib/queries/sales-cards";
 import type { WilayahDeliverySummary } from "@/lib/queries/delivery";
 import type { MitraDOMonthly } from "@/lib/queries/mitra-do";
 import type { MitraContactLogSummaryEntry } from "@/lib/queries/mitra-contact-log";
 
+// Panel Kartu Transaksi dihapus 2026-11-25: fungsinya pindah ke panel
+// Transaksi DO per Mitra (klik angka tanggal = popover transaksi hari itu,
+// chip "2×" = lebih dari satu DO sehari, tombol "Export Transaksi") dan ke
+// modul Pemesanan (chip SI Lunas + ekspor).
 export function TransaksiPanels({
-  orders,
   wilayahDelivery,
   mitraDO,
   contactLogSummary,
   initialMarketingFilter,
 }: {
-  orders: SalesOrderCard[];
   wilayahDelivery: WilayahDeliverySummary[];
   mitraDO: MitraDOMonthly;
   contactLogSummary: MitraContactLogSummaryEntry[];
@@ -27,7 +25,6 @@ export function TransaksiPanels({
   // to the DO-per-Mitra panel instead of the page top.
   initialMarketingFilter?: string;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
   // Lifted here (not local to MitraDOPanel) so clicking a Wilayah tile below
   // can drive it directly — this is the single shared "which region is the
   // DO-per-Mitra panel currently filtered to" state.
@@ -48,17 +45,7 @@ export function TransaksiPanels({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3">
-        <Button variant="outline" size="sm" className="self-start" onClick={() => setCollapsed((v) => !v)}>
-          {collapsed ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-          {collapsed ? "Detail" : "Ringkas"}
-        </Button>
-
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-          <WilayahDeliveryPanel data={wilayahDelivery} collapsed={collapsed} onWilayahClick={handleWilayahClick} />
-          <KartuTransaksiPanel orders={orders} collapsed={collapsed} />
-        </div>
-      </div>
+      <WilayahDeliveryPanel data={wilayahDelivery} onWilayahClick={handleWilayahClick} />
 
       <div ref={mitraDORef}>
         <MitraDOPanel

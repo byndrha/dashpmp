@@ -248,6 +248,47 @@ export async function listAkun(): Promise<AkunRow[]> {
   }));
 }
 
+// ---------- Pelaku follow-up penawaran (dropdown "Oleh") ----------
+
+// Urutan kelompok di dropdown. "Direktur" = akun tanpa PT dan tanpa peran
+// (scope direktur) milik holding yang sama dengan PT ini.
+export const KELOMPOK_PELAKU_FOLLOW_UP = ["Marketing", "Supervisor", "Staff", "Accounting", "Direktur"] as const;
+
+export interface PelakuFollowUp {
+  kelompok: string;
+  nama: string;
+  username: string;
+}
+
+// Akun aktif yang bisa melakukan follow-up penawaran ke mitra PT ini.
+export async function listPelakuFollowUp(perusahaanKode: string): Promise<PelakuFollowUp[]> {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `
+    WITH pt AS (
+      SELECT p.id, COALESCE(h.kode, 'pmp') AS holding
+      FROM perusahaan p LEFT JOIN holding h ON h.id = p.holding_id
+      WHERE p.kode = $1
+    )
+    SELECT CASE WHEN a.perusahaan_id IS NULL THEN 'Direktur' ELSE r.nama END AS kelompok,
+           a.nama, a.username
+    FROM akun a
+    CROSS JOIN pt
+    LEFT JOIN peran r ON r.id = a.peran_id
+    LEFT JOIN holding ha ON ha.id = a.holding_id
+    WHERE a.is_active
+      AND (
+        (a.perusahaan_id = pt.id AND r.nama = ANY($2::text[]))
+        OR (a.perusahaan_id IS NULL AND a.peran_id IS NULL AND COALESCE(ha.kode, 'pmp') = pt.holding)
+      )
+    ORDER BY a.nama
+    `,
+    [perusahaanKode, KELOMPOK_PELAKU_FOLLOW_UP.filter((k) => k !== "Direktur")]
+  );
+  const urutan = (k: string) => KELOMPOK_PELAKU_FOLLOW_UP.indexOf(k as (typeof KELOMPOK_PELAKU_FOLLOW_UP)[number]);
+  return (result.rows as PelakuFollowUp[]).sort((a, b) => urutan(a.kelompok) - urutan(b.kelompok));
+}
+
 // PT-scoped: "at least one active superadmin" is now an invariant per
 // perusahaan_id, not global — a Direktur-only account count (perusahaanId
 // null) never needs this check.

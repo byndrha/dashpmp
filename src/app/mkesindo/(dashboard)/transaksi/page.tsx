@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { requireModuleAccess } from "@/lib/require-access";
-import { getSalesOrderCards } from "@/lib/queries/sales-cards";
 import { getMitraDOMonthly } from "@/lib/queries/mitra-do";
 import { getMitraContactLogSummaryForRange } from "@/lib/queries/mitra-contact-log";
 import { getWilayahDeliverySummary } from "@/lib/queries/delivery";
@@ -25,8 +24,7 @@ export default async function TransaksiPage({
   // summary without falling just outside the filtered window.
   const contactLogRangeEnd = new Date(filter.endDate);
   contactLogRangeEnd.setUTCDate(contactLogRangeEnd.getUTCDate() + 1);
-  const [orders, wilayahList, mitraDO, wilayahDelivery, contactLogSummary] = await Promise.all([
-    getSalesOrderCards(filter),
+  const [wilayahList, mitraDO, wilayahDelivery, contactLogSummary] = await Promise.all([
     getWilayahList(),
     getMitraDOMonthly(filter),
     getWilayahDeliverySummary(filter),
@@ -41,7 +39,6 @@ export default async function TransaksiPage({
       </div>
 
       <TransaksiPanels
-        orders={orders}
         wilayahDelivery={wilayahDelivery}
         mitraDO={mitraDO}
         contactLogSummary={contactLogSummary}

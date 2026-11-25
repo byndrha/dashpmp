@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   ChevronDown,
+  EqualApproximately,
+  Info,
+  Target,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -13,31 +16,29 @@ import {
   Percent,
   Plus,
   Search,
-  MessageCircle,
-  Phone,
   Eye,
   EyeOff,
-  Loader2,
   type LucideIcon,
 } from "lucide-react";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExportXlsxButton } from "@/components/dashboard/export-xlsx-button";
 import { MitraEditDialog } from "@/components/dashboard/mitra-edit-dialog";
+import { SelMitraHarian } from "@/components/dashboard/sel-mitra-harian";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { XlsxColumn } from "@/lib/export-xlsx";
 import type { MitraDOMonthly, MitraDORow } from "@/lib/queries/mitra-do";
-import type { ContactType, MitraContactLogSummaryEntry } from "@/lib/queries/mitra-contact-log";
+import type { MitraContactLogSummaryEntry } from "@/lib/queries/mitra-contact-log";
 import { updateMitraCapacityAction } from "@/app/mkesindo/(dashboard)/mitra/actions";
-import { getMitraContactLogAction, saveMitraContactLogAction } from "@/app/mkesindo/(dashboard)/transaksi/actions";
+import {
+  getKartuTransaksiEksporAction,
+} from "@/app/mkesindo/(dashboard)/transaksi/actions";
 
 type SortMode = "target" | "persentase" | "terbanyak" | "tren" | "terbaru";
 
@@ -62,6 +63,31 @@ const INFO_COL_CLASS = "w-52 sm:w-56";
 // mitra list's actual, deliberately not scaled down to just the mitra
 // who've logged a forecast so far), so w-20 gives it enough room too.
 const DAY_COL_WIDTH_CLASS = "w-20";
+
+const NAMA_HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+// Dukungan scroll-driven animation (animation-timeline), dicek sekali.
+let dukungScrollTimeline: boolean | null = null;
+function DUKUNG_SCROLL_TIMELINE(): boolean {
+  if (dukungScrollTimeline == null) {
+    dukungScrollTimeline = typeof CSS !== "undefined" && CSS.supports("animation-timeline: scroll()");
+  }
+  return dukungScrollTimeline;
+}
+
+// Kolom ekspor "Export Transaksi" (dulu milik panel Kartu Transaksi).
+const KARTU_TRANSAKSI_EXPORT_COLUMNS: XlsxColumn[] = [
+  { header: "No Voucher", key: "voucherNo", type: "text", width: 20 },
+  { header: "Tanggal", key: "transDate", type: "text", width: 12 },
+  { header: "Mitra", key: "customerName", width: 26 },
+  { header: "Tipe", key: "partnerType", width: 12 },
+  { header: "Wilayah", key: "wilayah", width: 16 },
+  { header: "Kecamatan", key: "kecamatan", width: 16 },
+  { header: "Qty 10KG", key: "qty10kg", type: "number", width: 10 },
+  { header: "Qty 5KG", key: "qty5kg", type: "number", width: 10 },
+  { header: "No SI", key: "siVoucherNo", type: "text", width: 20 },
+  { header: "No SP", key: "spVoucherNo", type: "text", width: 20 },
+];
 
 function formatQty(value: number): string {
   return value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
@@ -94,179 +120,6 @@ function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
   return <Minus className="mt-0.5 inline-block size-3.5 text-muted-foreground/40" />;
 }
 
-// Narrator log for one mitra+date+channel — what a phone/chat follow-up
-// turned up about a discrepancy between what was ordered and what actually
-// shipped. Fetched lazily on open (one mitra, one date, both channels in a
-// single call) rather than bundled into the page's initial load, which
-// would mean a query per mitra per visible date — easily thousands of rows
-// nobody's looking at yet.
-//
-// Every date column's log button gets the Hari ini/Besok tab switcher —
-// "Hari ini" and "Besok" are relative to whichever date this particular
-// button belongs to (dateISO), not to the real calendar today. Opening the
-// log for 01/08 and picking "Besok" edits 02/08's own entry; the switcher
-// exists purely as a convenience so a rep can log the next day's forecast
-// without closing this popover and scrolling the day-strip to find that
-// column. Writes still land on that date's own (BusinessPartnerID, LogDate,
-// ContactType) row, so 02/08's own DayChip picks up the same value once the
-// page's data refreshes — this popover doesn't "own" tomorrow's data any
-// more than 02/08's own log button does.
-function ContactLogButton({
-  businessPartnerId,
-  dateISO,
-  contactType,
-}: {
-  businessPartnerId: string;
-  dateISO: string;
-  contactType: ContactType;
-}) {
-  const Icon = contactType === "Chat" ? MessageCircle : Phone;
-  const router = useRouter();
-  const besokISO = useMemo(() => addDaysISO(dateISO, 1), [dateISO]);
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"hari-ini" | "besok">("hari-ini");
-  const [loading, setLoading] = useState(false);
-  const [hasEntry, setHasEntry] = useState(false);
-  const [hasilPenawaran, setHasilPenawaran] = useState("");
-  const [angkaPemesanan, setAngkaPemesanan] = useState("");
-  const [alasanTidakSesuai, setAlasanTidakSesuai] = useState("");
-  const [pending, startTransition] = useTransition();
-
-  const activeDateISO = tab === "besok" ? besokISO : dateISO;
-
-  function loadFor(targetDateISO: string) {
-    setLoading(true);
-    getMitraContactLogAction(businessPartnerId, targetDateISO)
-      .then((result) => {
-        if (!result.success) {
-          toast.error(result.error);
-          return;
-        }
-        const found = result.data.find((e) => e.ContactType === contactType) ?? null;
-        setHasEntry(!!found);
-        setHasilPenawaran(found?.HasilPenawaran ?? "");
-        setAngkaPemesanan(found?.AngkaPemesanan != null ? String(found.AngkaPemesanan) : "");
-        setAlasanTidakSesuai(found?.AlasanTidakSesuai ?? "");
-      })
-      .finally(() => setLoading(false));
-  }
-
-  function handleOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) return;
-    setTab("hari-ini");
-    loadFor(dateISO);
-  }
-
-  function handleTabChange(nextTab: "hari-ini" | "besok") {
-    setTab(nextTab);
-    loadFor(nextTab === "besok" ? besokISO : dateISO);
-  }
-
-  function handleSave() {
-    startTransition(async () => {
-      const result = await saveMitraContactLogAction({
-        businessPartnerId,
-        dateISO: activeDateISO,
-        contactType,
-        hasilPenawaran: hasilPenawaran.trim() || null,
-        angkaPemesanan: angkaPemesanan.trim() ? Number(angkaPemesanan) : null,
-        alasanTidakSesuai: alasanTidakSesuai.trim() || null,
-      });
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      setHasEntry(true);
-      setOpen(false);
-      // The "angka | %" readout under every DayChip's icons comes from a
-      // page-level batch fetch (contactLogSummary), not this popover's own
-      // state — refresh so a just-saved value shows up there immediately.
-      router.refresh();
-    });
-  }
-
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            title={contactType}
-            className="rounded p-1 transition-colors hover:bg-muted"
-          />
-        }
-      >
-        <Icon className={cn("size-2.5", hasEntry ? "text-primary" : "text-muted-foreground/40")} />
-      </PopoverTrigger>
-      <PopoverContent className="w-64" align="center">
-        <Tabs
-          value={tab}
-          onValueChange={(v) => typeof v === "string" && handleTabChange(v as "hari-ini" | "besok")}
-          className="mb-2"
-        >
-          <TabsList className="w-full">
-            <TabsTrigger value="hari-ini" className="flex-1 text-xs">
-              Hari ini
-            </TabsTrigger>
-            <TabsTrigger value="besok" className="flex-1 text-xs">
-              Besok
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <p className="mb-2 text-xs font-medium">
-          Log {contactType} &mdash; {activeDateISO.slice(8, 10)}/{activeDateISO.slice(5, 7)}/{activeDateISO.slice(0, 4)}
-        </p>
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
-            Memuat...
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1">
-              <Label className="text-[10px] text-muted-foreground">Hasil Penawaran Pemesanan</Label>
-              <Textarea
-                value={hasilPenawaran}
-                onChange={(e) => setHasilPenawaran(e.target.value)}
-                rows={2}
-                className="text-xs"
-                placeholder="Apa hasil penawaran ke mitra..."
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-[10px] text-muted-foreground">Angka Pemesanan</Label>
-              <Input
-                type="number"
-                min={0}
-                value={angkaPemesanan}
-                onChange={(e) => setAngkaPemesanan(e.target.value)}
-                className="h-8 text-xs"
-                placeholder="Kantong"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-[10px] text-muted-foreground">
-                Alasan Pengiriman Tidak Sesuai Pemesanan Awal
-              </Label>
-              <Textarea
-                value={alasanTidakSesuai}
-                onChange={(e) => setAlasanTidakSesuai(e.target.value)}
-                rows={2}
-                className="text-xs"
-                placeholder="Opsional..."
-              />
-            </div>
-            <Button size="sm" disabled={pending} onClick={handleSave} className="mt-1">
-              {pending ? "Menyimpan..." : "Simpan"}
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 // The percentage is an achievement/variance read against the forecast: how
 // much actually got delivered on THIS SAME DATE relative to what this log
 // entry forecasted — e.g. forecast 60, 104 actually delivered that day ->
@@ -290,10 +143,10 @@ function PemesananBadge({
   actualQtyForDate: number;
   dateHasElapsed: boolean;
 }) {
-  const pct = dateHasElapsed && angkaPemesanan > 0 ? Math.round((actualQtyForDate / angkaPemesanan) * 100) : null;
+  const pct = dateHasElapsed && angkaPemesanan > 0 ? persenRealisasi(actualQtyForDate, angkaPemesanan) : null;
   return (
     <span className="flex w-full min-w-0 items-center justify-center gap-1 rounded bg-warning px-1 py-0.5 text-[9px] font-semibold leading-none text-warning-foreground">
-      <span className="truncate">{formatQty(angkaPemesanan)}</span>
+      <span className="truncate">{angkaBilah(angkaPemesanan)}</span>
       {pct != null && (
         <>
           <span className="h-2.5 w-px shrink-0 bg-warning-foreground/40" />
@@ -302,6 +155,136 @@ function PemesananBadge({
       )}
     </span>
   );
+}
+
+// Isi tooltip bilah pesanan di kepala kolom — menjelaskan bahwa persennya
+// hanya membandingkan pesanan dengan kiriman ke mitra yang memesan itu
+// (bukan total kiriman semua mitra), plus seberapa besar kiriman hari itu
+// yang berasal dari pesanan hasil follow-up.
+function TooltipPesananKolom({
+  labelTanggal,
+  pesan,
+  jumlahMitra,
+  terkirimKeMitraPesan,
+  totalTerkirim,
+  sudahBerjalan,
+}: {
+  labelTanggal: string;
+  pesan: number;
+  jumlahMitra: number;
+  terkirimKeMitraPesan: number;
+  totalTerkirim: number;
+  sudahBerjalan: boolean;
+}) {
+  // Detail lengkap (desimal) — bilahnya sendiri dibulatkan ke bawah.
+  const pctPesan = pesan > 0 ? persenDetail(terkirimKeMitraPesan, pesan) : null;
+  const cakupan = totalTerkirim > 0 ? Math.round((terkirimKeMitraPesan / totalTerkirim) * 100) : null;
+  const tanpaFollowUp = Math.max(0, totalTerkirim - terkirimKeMitraPesan);
+  return (
+    <>
+      <p className="text-sm font-semibold text-foreground">Pesanan hasil follow-up</p>
+      <div className="flex w-full flex-col gap-1 rounded-md bg-muted/60 px-2.5 py-2 tabular-nums">
+        <p className="flex justify-between gap-3">
+          <span className="text-muted-foreground">Pesanan ({jumlahMitra} mitra)</span>
+          <span className="font-medium text-foreground">{formatQty(pesan)}</span>
+        </p>
+        {sudahBerjalan && (
+          <>
+            <p className="flex justify-between gap-3">
+              <span className="whitespace-nowrap text-muted-foreground">Terkirim ke mitra tsb.</span>
+              <span className="font-medium whitespace-nowrap text-foreground">
+                {formatQty(terkirimKeMitraPesan)}
+                {pctPesan != null && ` (${pctPesan}%)`}
+              </span>
+            </p>
+            <p className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Ke mitra tanpa follow-up</span>
+              <span className="font-medium text-foreground">{formatQty(tanpaFollowUp)}</span>
+            </p>
+            <p className="mt-0.5 flex justify-between gap-3 border-t border-border pt-1">
+              <span className="font-semibold text-foreground">Total terkirim</span>
+              <span className="font-semibold text-foreground">{formatQty(totalTerkirim)}</span>
+            </p>
+          </>
+        )}
+      </div>
+      {sudahBerjalan ? (
+        cakupan != null && (
+          <p className="text-muted-foreground">
+            <span className="font-semibold text-primary">{cakupan}%</span> kiriman {labelTanggal} berasal dari pesanan
+            hasil follow-up.
+          </p>
+        )
+      ) : (
+        <p className="text-muted-foreground">Tanggal ini belum berjalan — belum ada realisasi.</p>
+      )}
+    </>
+  );
+}
+
+// Badge pesanan di sel mitra DAN kepala kolom:
+//   realisasi = pesanan  -> latar hijau; sel: "100%" saja, kepala kolom
+//                           (tampilAngka): "pesanan | 100%"
+//   realisasi > pesanan  -> "pesanan | %" lengkap, latar biru
+//   realisasi < pesanan  -> "pesanan | %" lengkap, latar oranye (meleset)
+//   tanggal belum lewat  -> angka pesanan saja, oranye (seperti sebelumnya)
+// Di kepala kolom title bawaan dimatikan — sudah ada tooltip rincian.
+function BadgePesananSel({
+  pesan,
+  qty,
+  isPast,
+  tampilAngka = false,
+}: {
+  pesan: number;
+  qty: number;
+  isPast: boolean;
+  tampilAngka?: boolean;
+}) {
+  if (!isPast || pesan <= 0 || qty < pesan) {
+    return <PemesananBadge angkaPemesanan={pesan} actualQtyForDate={qty} dateHasElapsed={isPast} />;
+  }
+  if (qty === pesan) {
+    return (
+      <span
+        title={tampilAngka ? undefined : `Pesanan ${formatQty(pesan)} terkirim sesuai`}
+        className="flex w-full min-w-0 items-center justify-center gap-1 rounded bg-primary px-1 py-0.5 text-[9px] leading-none font-semibold text-primary-foreground"
+      >
+        {tampilAngka && (
+          <>
+            <span className="truncate">{angkaBilah(pesan)}</span>
+            <span className="h-2.5 w-px shrink-0 bg-primary-foreground/40" />
+          </>
+        )}
+        <span className="truncate">100%</span>
+      </span>
+    );
+  }
+  return (
+    <span
+      title={tampilAngka ? undefined : "Realisasi melebihi pesanan"}
+      className="flex w-full min-w-0 items-center justify-center gap-1 rounded bg-sky-600 px-1 py-0.5 text-[9px] leading-none font-semibold text-white"
+    >
+      <span className="truncate">{angkaBilah(pesan)}</span>
+      <span className="h-2.5 w-px shrink-0 bg-white/40" />
+      <span className="truncate">{persenRealisasi(qty, pesan)}%</span>
+    </span>
+  );
+}
+
+// Angka di bilah pesanan selalu bulat ke bawah — tidak pernah melebihi nilai
+// sebenarnya (1.940,5 -> 1.940; 100,03% -> 100%; 99,8% -> 99%). Angka
+// lengkapnya ada di tooltip kepala kolom.
+function persenRealisasi(realisasi: number, pesan: number): string {
+  return String(Math.floor((realisasi / pesan) * 100));
+}
+
+function angkaBilah(n: number): string {
+  return Math.floor(n).toLocaleString("id-ID");
+}
+
+// Persen lengkap untuk tooltip (sampai 2 desimal).
+function persenDetail(realisasi: number, pesan: number): string {
+  return ((realisasi / pesan) * 100).toLocaleString("id-ID", { maximumFractionDigits: 2 });
 }
 
 // Right-border-only cells (no rounded chip look) so adjacent cells across
@@ -316,63 +299,101 @@ function PemesananBadge({
 // page — only the affected mitra's own row gets taller, not the whole grid.
 function DayChip({
   businessPartnerId,
+  namaMitra,
   dateISO,
   qty,
+  jumlahDO,
+  jumlahSO,
   prevQty,
   target,
   isPast,
-  contactSummary,
+  pesan,
+  marketingMitra,
 }: {
   businessPartnerId: string;
+  namaMitra: string;
   dateISO: string;
   qty: number;
+  jumlahDO: number;
+  jumlahSO: number;
   // The immediately preceding date's qty for this same mitra — null for the
   // very first date in the visible range (nothing to compare against) or
   // when the point of comparison itself hasn't happened yet.
   prevQty: number | null;
   target: number | null;
   isPast: boolean;
-  contactSummary: { chat?: number; telepon?: number } | undefined;
+  // Dari log penawaran TERBARU mitra+tanggal ini: angka pemesanan, null =
+  // sudah follow-up tanpa angka, undefined = belum ada follow-up.
+  pesan: number | null | undefined;
+  marketingMitra: string | null;
 }) {
   const state = !isPast ? "future" : target == null ? "neutral" : qty >= target ? "hit" : "miss";
-  const day = Number(dateISO.slice(8, 10));
   // Only meaningful for a day that's actually elapsed and has a prior day to
   // compare against — a future placeholder cell or the range's first date
   // shows no arrow rather than a misleading flat/up/down guess.
   const change = isPast && prevQty != null ? (qty > prevQty ? "up" : qty < prevQty ? "down" : "flat") : null;
+  // Seluruh sel = satu tombol: membuka UI gabungan hasil penawaran +
+  // transaksi (SelMitraHarian). Nomor tanggal ada di kepala kolom, bukan
+  // diulang di tiap sel.
   return (
-    <div
+    <SelMitraHarian
+      businessPartnerId={businessPartnerId}
+      namaMitra={namaMitra}
+      dateISO={dateISO}
+      isPast={isPast}
+      qty={qty}
+      target={target}
+      marketingMitra={marketingMitra}
       className={cn(
-        "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r py-1 text-[10px] tabular-nums",
+        "relative flex shrink-0 cursor-pointer flex-col items-center justify-center gap-1 border-r py-1.5 text-[10px] tabular-nums transition-colors hover:bg-foreground/5",
         DAY_COL_WIDTH_CLASS,
-        "min-h-14",
-        state === "hit" && "bg-primary/10 text-primary",
-        state === "miss" && "bg-destructive/10 text-destructive",
+        "min-h-11",
+        state === "hit" && "bg-primary/10 text-primary hover:bg-primary/15",
+        state === "miss" && "bg-destructive/10 text-destructive hover:bg-destructive/15",
         state === "future" && "text-muted-foreground/50",
         state === "neutral" && "text-muted-foreground"
       )}
     >
-      <span className="opacity-60">{day}</span>
-      <span className="flex items-center gap-0.5 font-semibold">
-        {isPast ? formatQty(qty) : "-"}
+      <span className="flex items-center gap-0.5">
+        <span className="text-xs font-semibold">{isPast ? formatQty(qty) : "-"}</span>
         {change === "up" && <ArrowUp className="size-2.5 shrink-0 text-primary" />}
         {change === "down" && <ArrowDown className="size-2.5 shrink-0 text-destructive" />}
+        {/* DO lebih banyak dari SO-nya = satu pesanan dikirim lebih dari
+            sekali (ciri bug dobel). Beberapa DO dari SO berbeda = pesanan
+            sah yang terpisah, cukup info abu-abu. */}
+        {jumlahDO > jumlahSO ? (
+          <span
+            title={`${jumlahDO} DO untuk ${jumlahSO} pesanan — kemungkinan dobel`}
+            className="rounded-[3px] bg-warning px-0.5 text-[8px] leading-3 font-bold text-white"
+          >
+            dobel?
+          </span>
+        ) : jumlahDO > 1 ? (
+          <span
+            title={`${jumlahDO} pengiriman dari ${jumlahSO} pesanan berbeda`}
+            className="rounded-[3px] bg-foreground/15 px-0.5 text-[8px] leading-3 font-bold"
+          >
+            {jumlahDO}×
+          </span>
+        ) : null}
       </span>
-      <span className="flex items-center gap-0.5">
-        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Chat" />
-        <ContactLogButton businessPartnerId={businessPartnerId} dateISO={dateISO} contactType="Telepon" />
-      </span>
-      {contactSummary && (contactSummary.chat != null || contactSummary.telepon != null) && (
-        <span className="flex w-full min-w-0 flex-col items-center gap-0.5 px-0.5 font-medium">
-          {contactSummary.chat != null && (
-            <PemesananBadge angkaPemesanan={contactSummary.chat} actualQtyForDate={qty} dateHasElapsed={isPast} />
-          )}
-          {contactSummary.telepon != null && (
-            <PemesananBadge angkaPemesanan={contactSummary.telepon} actualQtyForDate={qty} dateHasElapsed={isPast} />
-          )}
+      {pesan != null && (
+        <span className="flex w-full min-w-0 px-0.5 font-medium">
+          <BadgePesananSel pesan={pesan} qty={qty} isPast={isPast} />
         </span>
       )}
-    </div>
+      {/* Penanda follow-up di tempat bilah pesanan (setinggi bilah), hanya
+          sampai hari ini: abu-abu = follow-up tanpa angka pemesanan, merah =
+          belum ada follow-up. Follow-up berangka terwakili bilah di atas. */}
+      {isPast && pesan == null && (
+        <span className="flex h-[13px] items-center justify-center">
+          <span
+            title={pesan === null ? "Sudah follow-up, tanpa angka pemesanan" : "Belum ada follow-up"}
+            className={cn("size-1.5 rounded-full", pesan === null ? "bg-muted-foreground/60" : "bg-destructive")}
+          />
+        </span>
+      )}
+    </SelMitraHarian>
   );
 }
 
@@ -494,7 +515,7 @@ function MitraDOCard({
   elapsedDays: number;
   // Keyed `${BusinessPartnerID}|${dateISO}` — built once in MitraDOPanel from
   // the page's batch-fetched contactLogSummary, not per-card.
-  contactSummaryMap: Map<string, { chat?: number; telepon?: number }>;
+  contactSummaryMap: Map<string, number | null>;
   onCardClick: (businessPartnerId: string) => void;
 }) {
   const trend = getTrend(m.DailyQty, elapsedDays);
@@ -553,12 +574,16 @@ function MitraDOCard({
           <DayChip
             key={dateISO}
             businessPartnerId={m.BusinessPartnerID}
+            namaMitra={m.Name}
             dateISO={dateISO}
             qty={m.DailyQty[i]}
+            jumlahDO={m.DailyDOCount[i]}
+            jumlahSO={m.DailySOCount[i]}
             prevQty={i > 0 ? m.DailyQty[i - 1] : null}
             target={m.TargetHarian}
             isPast={dateISO <= todayISO}
-            contactSummary={contactSummaryMap.get(`${m.BusinessPartnerID}|${dateISO}`)}
+            pesan={contactSummaryMap.get(`${m.BusinessPartnerID}|${dateISO}`)}
+            marketingMitra={m.MarketingNama}
           />
         ))}
       </div>
@@ -597,25 +622,20 @@ export function MitraDOPanel({
   const [search, setSearch] = useState("");
   const [editMitraId, setEditMitraId] = useState<string | null>(null);
   const { active, inactive, daysInRange, rangeStartISO, todayISO } = data;
+  const wilayahUrl = useSearchParams().get("wilayah");
   const bodyScrollRef = useRef<HTMLDivElement>(null);
-  const headerScrollRef = useRef<HTMLDivElement>(null);
-  // Guards the bidirectional mirror below from ping-ponging: setting one
-  // side's scrollLeft fires its own scroll event, which would otherwise
-  // immediately write back to the side that just triggered it.
-  const syncingScrollRef = useRef(false);
+  // Isi kepala kolom (deret tanggal) yang digeser dengan transform mengikuti
+  // scroll body — lihat handleBodyScroll.
+  const headerTrackRef = useRef<HTMLDivElement>(null);
+  // Seret horizontal langsung di kepala kolom (mouse/sentuh).
+  const seretRef = useRef<{ x: number; scrollLeft: number; id: number } | null>(null);
+  const gulirTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keyed `${BusinessPartnerID}|${LogDate}` -> per-channel Angka Pemesanan,
-  // built once per contactLogSummary change rather than re-scanned per
-  // mitra card.
+  // Keyed `${BusinessPartnerID}|${LogDate}` -> angka pemesanan dari log
+  // penawaran terbaru (server sudah memilih yang terbaru per pasangan).
   const contactSummaryMap = useMemo(() => {
-    const map = new Map<string, { chat?: number; telepon?: number }>();
-    for (const entry of contactLogSummary) {
-      const key = `${entry.BusinessPartnerID}|${entry.LogDate}`;
-      const existing = map.get(key) ?? {};
-      if (entry.ContactType === "Chat") existing.chat = entry.AngkaPemesanan;
-      else existing.telepon = entry.AngkaPemesanan;
-      map.set(key, existing);
-    }
+    const map = new Map<string, number | null>();
+    for (const entry of contactLogSummary) map.set(`${entry.BusinessPartnerID}|${entry.LogDate}`, entry.AngkaPemesanan);
     return map;
   }, [contactLogSummary]);
 
@@ -655,10 +675,6 @@ export function MitraDOPanel({
     return searchQuery ? byMarketing.filter((m) => m.Name.toLowerCase().includes(searchQuery)) : byMarketing;
   }, [inactive, wilayahFilter, marketingFilter, searchQuery]);
 
-  // Reflects whatever the Wilayah filter currently shows, not the
-  // unfiltered total — matches what the user is actually looking at.
-  const totalKantong = useMemo(() => filteredActive.reduce((sum, m) => sum + m.TotalQty, 0), [filteredActive]);
-
   const totalPerDate = useMemo(() => {
     const totals = new Array(daysInRange).fill(0);
     for (const m of filteredActive) {
@@ -686,36 +702,17 @@ export function MitraDOPanel({
   const totalPemesananPerDate = useMemo(() => {
     const dateIndex = new Map(dates.map((d, i) => [d, i]));
     const mitraById = new Map(filteredActive.map((m) => [m.BusinessPartnerID, m]));
-    const totals: {
-      chat: number;
-      telepon: number;
-      hasChat: boolean;
-      hasTelepon: boolean;
-      actualChat: number;
-      actualTelepon: number;
-    }[] = Array.from({ length: daysInRange }, () => ({
-      chat: 0,
-      telepon: 0,
-      hasChat: false,
-      hasTelepon: false,
-      actualChat: 0,
-      actualTelepon: 0,
-    }));
+    const totals = Array.from({ length: daysInRange }, () => ({ pesan: 0, actual: 0, jumlahMitra: 0, ada: false }));
     for (const entry of contactLogSummary) {
       const mitra = mitraById.get(entry.BusinessPartnerID);
       if (!mitra) continue;
       const i = dateIndex.get(entry.LogDate);
-      if (i == null) continue;
-      const actualQty = mitra.DailyQty[i];
-      if (entry.ContactType === "Chat") {
-        totals[i].chat += entry.AngkaPemesanan;
-        totals[i].actualChat += actualQty;
-        totals[i].hasChat = true;
-      } else {
-        totals[i].telepon += entry.AngkaPemesanan;
-        totals[i].actualTelepon += actualQty;
-        totals[i].hasTelepon = true;
-      }
+      // Follow-up tanpa angka tidak ikut dijumlahkan di kepala kolom.
+      if (i == null || entry.AngkaPemesanan == null) continue;
+      totals[i].pesan += entry.AngkaPemesanan;
+      totals[i].actual += mitra.DailyQty[i];
+      totals[i].jumlahMitra += 1;
+      totals[i].ada = true;
     }
     return totals;
   }, [contactLogSummary, filteredActive, dates, daysInRange]);
@@ -802,28 +799,76 @@ export function MitraDOPanel({
     [dates]
   );
 
-  // Bidirectional mirror: the header's date-total row and the body's mitra
-  // rows live in separate DOM regions (the header stays vertically sticky
-  // while the body scrolls past it), so they can't share one native
-  // scroll container — but either one can be dragged directly, and a
-  // plain synchronous scrollLeft assignment (no transition/smooth-scroll
-  // anywhere in this tree) keeps the other in the exact same frame, with
-  // no perceptible lag. The guard flag stops the write-back from
-  // re-triggering the scroll handler that caused it.
+  // Kepala kolom (sticky vertikal) dan body (scroll horizontal) tidak bisa
+  // berbagi satu scroll container. Dulu keduanya saling menyalin scrollLeft
+  // dua arah: event scroll pasangan datang di frame berikutnya sehingga
+  // penjaga flag tidak efektif dan keduanya saling tarik — kepala kolom
+  // tersendat. Sekarang SATU arah: body satu-satunya yang bergulir, kepala
+  // kolom (overflow-hidden) hanya digeser transform di frame yang sama.
+  // Wheel/seret di kepala kolom diteruskan ke body.
+  //
+  // Browser yang mendukung scroll-driven animation (Chrome/Edge/Safari baru)
+  // menggeser kepala kolom lewat CSS (.gulir-mitra-* di globals.css) —
+  // dijalankan compositor, jadi tetap mulus walau main thread sibuk. JS di
+  // bawah hanya cadangan untuk browser lain, plus mengisi jarak gulirnya.
   function handleBodyScroll(e: React.UIEvent<HTMLDivElement>) {
-    if (syncingScrollRef.current) return;
-    if (!headerScrollRef.current) return;
-    syncingScrollRef.current = true;
-    headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
-    syncingScrollRef.current = false;
+    const body = e.currentTarget;
+    // Selama bergulir, isi tabel tidak menerima kursor (.sedang-gulir di
+    // globals.css): ribuan sel yang lewat di bawah kursor tidak memicu
+    // hover/repaint. Dilepas 150 ms setelah gulir berhenti.
+    if (!body.classList.contains("sedang-gulir")) body.classList.add("sedang-gulir");
+    if (gulirTimerRef.current) clearTimeout(gulirTimerRef.current);
+    gulirTimerRef.current = setTimeout(() => body.classList.remove("sedang-gulir"), 150);
+
+    if (DUKUNG_SCROLL_TIMELINE()) return;
+    const track = headerTrackRef.current;
+    if (track) track.style.transform = `translate3d(${-body.scrollLeft}px,0,0)`;
   }
 
-  function handleHeaderScroll(e: React.UIEvent<HTMLDivElement>) {
-    if (syncingScrollRef.current) return;
-    if (!bodyScrollRef.current) return;
-    syncingScrollRef.current = true;
-    bodyScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
-    syncingScrollRef.current = false;
+  // Jarak gulir maksimum body = ujung animasi kepala kolom. Diperbarui saat
+  // ukuran body/isinya berubah (resize jendela, filter, jumlah baris).
+  const adaBaris = displayedMitra.length > 0;
+  useEffect(() => {
+    const body = bodyScrollRef.current;
+    const track = headerTrackRef.current;
+    if (!body || !track) return;
+    const perbarui = () => {
+      track.style.width = `${Math.max(0, body.scrollWidth - body.clientWidth)}px`;
+    };
+    perbarui();
+    const ro = new ResizeObserver(perbarui);
+    ro.observe(body);
+    if (body.firstElementChild) ro.observe(body.firstElementChild);
+    return () => ro.disconnect();
+  }, [adaBaris, showAll]);
+
+  function handleHeaderWheel(e: React.WheelEvent<HTMLDivElement>) {
+    const body = bodyScrollRef.current;
+    if (!body) return;
+    const dx = e.deltaX !== 0 ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+    if (dx !== 0) body.scrollLeft += dx;
+  }
+
+  function handleHeaderPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const body = bodyScrollRef.current;
+    if (!body || e.button !== 0) return;
+    seretRef.current = { x: e.clientX, scrollLeft: body.scrollLeft, id: e.pointerId };
+  }
+
+  function handleHeaderPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const seret = seretRef.current;
+    const body = bodyScrollRef.current;
+    if (!seret || !body || seret.id !== e.pointerId) return;
+    const geser = e.clientX - seret.x;
+    // Ambang kecil supaya klik/hover biasa (tooltip) tidak jadi seret.
+    if (Math.abs(geser) < 4) return;
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.setPointerCapture(e.pointerId);
+    body.scrollLeft = seret.scrollLeft - geser;
+  }
+
+  function handleHeaderPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (seretRef.current?.id === e.pointerId) seretRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
   const CurrentSortIcon = SORT_OPTIONS[sortMode].icon;
@@ -834,28 +879,32 @@ export function MitraDOPanel({
     // clipping/scroll-container ancestor for the sticky CardHeader below,
     // which made the header cover the first row of content even at rest
     // (not just while scrolling). Everything else matches Card's own classes.
-    <div className="flex flex-col gap-(--card-spacing) rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 shadow-md [--card-spacing:--spacing(4)]">
+    <div className="gulir-mitra-scope flex flex-col gap-(--card-spacing) rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 shadow-md [--card-spacing:--spacing(4)]">
       {/* Sticky within this div's own bounds (its containing block) — stays
           pinned below the app header while scrolling through the mitra list
           in CardContent, and lets go once this div's bottom comes into view. */}
       <CardHeader className="sticky top-(--tinggi-kepala-halaman,0px) z-20 border-b bg-card pt-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        {/* Judul + legenda satu baris; catatan konversi 5KG cukup ikon info. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <CardTitle className="font-display">Transaksi DO per Mitra — Bulan Berjalan</CardTitle>
-          <p className="shrink-0 text-right text-sm font-semibold tabular-nums text-primary">
-            {formatQty(totalKantong)} kantong
-          </p>
+          <CardDescription className="flex items-center gap-3 text-xs">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-primary" />
+              Tercapai
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-destructive" />
+              Belum tercapai
+            </span>
+            <span
+              className="inline-flex cursor-help items-center gap-1"
+              title="Kemasan 5KG sudah dikonversi ke setara 10KG di semua angka panel ini"
+            >
+              <Info className="size-3.5" />
+              5KG dikonversi
+            </span>
+          </CardDescription>
         </div>
-        <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-primary" />
-            Tercapai
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-destructive" />
-            Belum tercapai
-          </span>
-          <span>(Kemasan 5KG telah dikonversi)</span>
-        </CardDescription>
         {/* Lives inside the sticky CardHeader (not CardContent) so both stay
             reachable at every scroll position within this panel, not just
             near the bottom — a bottom-sticky button here had nothing left
@@ -931,75 +980,150 @@ export function MitraDOPanel({
               <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} />
             </Button>
           )}
-          <ExportXlsxButton
-            filename={`transaksi-do-per-mitra_${rangeStartISO}`}
-            sheetName="DO per Mitra"
-            columns={exportColumns}
-            rows={exportRows}
-          />
+          {/* Filter di kiri, ekspor dikelompokkan di kanan. */}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <ExportXlsxButton
+              filename={`transaksi-do-per-mitra_${rangeStartISO}`}
+              sheetName="DO per Mitra"
+              columns={exportColumns}
+              rows={exportRows}
+            />
+            {/* Pengganti ekspor panel Kartu Transaksi lama: semua SO periode
+                filter + SI/SP-nya, diambil saat diklik. */}
+            <ExportXlsxButton
+              filename={`kartu-transaksi_${rangeStartISO}`}
+              sheetName="Kartu Transaksi"
+              columns={KARTU_TRANSAKSI_EXPORT_COLUMNS}
+              label="Export Transaksi"
+              ambilRows={async () => {
+                const res = await getKartuTransaksiEksporAction({
+                  startDate: rangeStartISO,
+                  endDate: addDaysISO(rangeStartISO, daysInRange),
+                  wilayah: wilayahUrl ?? undefined,
+                });
+                if (!res.success) throw new Error(res.error);
+                return res.data.map((o) => ({
+                  voucherNo: o.VoucherNo,
+                  transDate: o.TransDate,
+                  customerName: o.CustomerName,
+                  partnerType: o.PartnerType,
+                  wilayah: o.Wilayah,
+                  kecamatan: o.Kecamatan ?? "",
+                  qty10kg: o.Qty10KG,
+                  qty5kg: o.Qty5KG,
+                  siVoucherNo: o.SIVoucherNo ?? "",
+                  spVoucherNo: o.SPVoucherNo ?? "",
+                }));
+              }}
+            />
+          </div>
         </div>
-        {/* Per-date total row — bidirectionally mirrors the body's horizontal
-            scroll (see handleBodyScroll/handleHeaderScroll) so it always
-            lines up with the date columns below it and can be dragged
-            directly too, while staying put in the sticky header itself.
-            The "N mitra ditampilkan" block to its left is a plain sibling,
-            not part of either scrolling region, so it never moves. */}
+        {/* Deret total per tanggal — digeser transform mengikuti scroll body
+            (lihat handleBodyScroll) supaya selalu sejajar dengan kolom
+            tanggal di bawahnya; wheel/seret di sini diteruskan ke body.
+            Kolom info di kirinya bukan bagian dari area geser, jadi diam. */}
         <div className="mt-2 flex min-w-0 border-t pt-2">
-          <div
-            className={cn(
-              "flex shrink-0 flex-col gap-1 self-center pr-3 text-xs font-medium text-muted-foreground",
-              INFO_COL_CLASS
-            )}
-          >
+          {/* Kolom info: total kantong (mengikuti filter) sebagai angka
+              utama, lalu jumlah mitra, lalu target & rata-rata harian
+              sebagai chip berikon — ikon sama dengan tile wilayah. */}
+          <div className={cn("flex shrink-0 flex-col justify-center gap-1 pr-3", INFO_COL_CLASS)}>
+            <p className="flex items-baseline gap-1 leading-none">
+              <span className="font-display text-lg font-semibold text-primary tabular-nums">
+                {formatQty(totalQtyDisplayed)}
+              </span>
+              <span className="text-xs text-muted-foreground">kantong</span>
+              <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
+                {displayedMitra.length} mitra
+              </span>
+            </p>
+            {/* Rata-rata di kiri, target di kanan (tepat di bawah "N mitra"). */}
             <div className="flex items-center justify-between gap-1">
-              <span>{displayedMitra.length} mitra ditampilkan</span>
-              <span className="flex items-center gap-1 tabular-nums text-foreground">
-                <span className="size-2 shrink-0 rounded-full bg-primary" />
-                {formatQty(totalTargetDisplayed)}
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 text-[10px] leading-4 text-muted-foreground tabular-nums"
+                title="Rata-rata kantong terkirim per hari"
+              >
+                <EqualApproximately className="size-3 shrink-0" />
+                {avgPenjualanDisplayed != null ? formatQty(avgPenjualanDisplayed) : "-"}/hari
+              </span>
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 text-[10px] leading-4 text-muted-foreground tabular-nums"
+                title="Total target harian mitra yang ditampilkan"
+              >
+                <Target className="size-3 shrink-0" />
+                {formatQty(totalTargetDisplayed)}/hari
               </span>
             </div>
-            <span className="w-fit rounded border bg-muted/40 px-1.5 py-0.5 tabular-nums text-foreground">
-              &plusmn;{avgPenjualanDisplayed != null ? formatQty(avgPenjualanDisplayed) : "-"}
-            </span>
           </div>
           <div
-            ref={headerScrollRef}
-            onScroll={handleHeaderScroll}
-            className="no-scrollbar flex min-w-0 flex-1 overflow-x-auto border-l"
+            onWheel={handleHeaderWheel}
+            onPointerDown={handleHeaderPointerDown}
+            onPointerMove={handleHeaderPointerMove}
+            onPointerUp={handleHeaderPointerUp}
+            onPointerCancel={handleHeaderPointerUp}
+            className="min-w-0 flex-1 touch-pan-y overflow-hidden border-l"
           >
+            {/* Pembawa animasi: lebarnya = jarak gulir maksimum body (diisi
+                JS), isinya meluber — translateX(-100%) = geser sejauh itu. */}
+            <div ref={headerTrackRef} className="gulir-mitra-kepala will-change-transform">
+            <div className="flex w-max">
             {dates.map((dateISO, i) => {
               const pemesanan = totalPemesananPerDate[i];
+              const hariKe = new Date(`${dateISO}T00:00:00Z`).getUTCDay();
+              const hariIni = dateISO === todayISO;
+              const nanti = dateISO > todayISO;
               return (
                 <div
                   key={dateISO}
                   className={cn(
                     "flex shrink-0 flex-col items-center justify-center gap-0.5 border-r py-1 text-[10px] font-semibold tabular-nums text-primary",
                     DAY_COL_WIDTH_CLASS,
-                    "min-h-14"
+                    "min-h-14",
+                    hariIni && "bg-primary/10"
                   )}
                 >
-                  <span>{formatQty(totalPerDate[i])}</span>
-                  {(pemesanan.hasChat || pemesanan.hasTelepon) && (
-                    <span className="flex w-full min-w-0 flex-col items-center gap-0.5 px-0.5 font-medium">
-                      {pemesanan.hasChat && (
-                        <PemesananBadge
-                          angkaPemesanan={pemesanan.chat}
-                          actualQtyForDate={pemesanan.actualChat}
-                          dateHasElapsed={dateISO <= todayISO}
+                  {/* Label kolom: nama hari + tanggal. Minggu merah, hari ini
+                      disorot. */}
+                  <span
+                    className={cn(
+                      "text-[9px] font-medium text-muted-foreground",
+                      hariKe === 0 && "text-destructive",
+                      hariIni && "font-semibold text-primary"
+                    )}
+                  >
+                    {hariIni ? "Hari ini" : `${NAMA_HARI[hariKe]} ${Number(dateISO.slice(8, 10))}`}
+                  </span>
+                  <span className={cn("text-xs", nanti && "font-normal text-muted-foreground/50")}>
+                    {nanti ? "-" : formatQty(totalPerDate[i])}
+                  </span>
+                  {pemesanan.ada && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<span className="flex w-full min-w-0 cursor-help px-0.5 font-medium" />}
+                      >
+                        <BadgePesananSel
+                          pesan={pemesanan.pesan}
+                          qty={pemesanan.actual}
+                          isPast={!nanti}
+                          tampilAngka
                         />
-                      )}
-                      {pemesanan.hasTelepon && (
-                        <PemesananBadge
-                          angkaPemesanan={pemesanan.telepon}
-                          actualQtyForDate={pemesanan.actualTelepon}
-                          dateHasElapsed={dateISO <= todayISO}
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="w-72 max-w-72 gap-2 p-3">
+                        <TooltipPesananKolom
+                          labelTanggal={hariIni ? "hari ini" : `${NAMA_HARI[hariKe]} ${Number(dateISO.slice(8, 10))}`}
+                          pesan={pemesanan.pesan}
+                          jumlahMitra={pemesanan.jumlahMitra}
+                          terkirimKeMitraPesan={pemesanan.actual}
+                          totalTerkirim={totalPerDate[i]}
+                          sudahBerjalan={!nanti}
                         />
-                      )}
-                    </span>
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
               );
             })}
+            </div>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -1007,8 +1131,10 @@ export function MitraDOPanel({
         {displayedMitra.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Belum ada Delivery Order bulan ini.</p>
         ) : (
-          <div ref={bodyScrollRef} onScroll={handleBodyScroll} className="overflow-x-auto">
-            <div className="flex flex-col divide-y">
+          <div ref={bodyScrollRef} onScroll={handleBodyScroll} className="gulir-mitra-body overflow-x-auto">
+            {/* w-max: baris selebar isinya (bukan selebar layar) — kolom info
+                sticky hanya bisa menempel di dalam kotak barisnya sendiri. */}
+            <div className="flex w-max min-w-full flex-col divide-y">
               {sortedActive.map((m) => (
                 <MitraDOCard
                   key={m.BusinessPartnerID}
@@ -1023,7 +1149,7 @@ export function MitraDOPanel({
             </div>
 
             {showAll && filteredInactive.length > 0 && (
-              <div className="flex flex-col divide-y border-t">
+              <div className="flex w-max min-w-full flex-col divide-y border-t">
                 {filteredInactive.map((m) => (
                   <MitraDOCard
                     key={m.BusinessPartnerID}

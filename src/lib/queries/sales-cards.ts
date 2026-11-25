@@ -36,6 +36,42 @@ export async function getSalesOrderCards(filter: DateRangeFilter): Promise<Sales
     .input("startDate", sql.Date, filter.startDate)
     .input("endDate", sql.Date, filter.endDate);
   if (filter.wilayah) request.input("wilayah", sql.VarChar(128), filter.wilayah);
+  const wilayah = filter.wilayah ? "AND bp_.NPWPName = @wilayah" : "";
+  return querySalesOrderCards(
+    request,
+    `so_.TransDate >= @startDate AND so_.TransDate < @endDate ${wilayah}`
+  );
+}
+
+// Transaksi satu mitra pada satu tanggal (klik angka tanggal di panel
+// Transaksi DO per Mitra). Panel itu dihitung dari tanggal DO, sedangkan SO
+// bisa bertanggal sehari sebelumnya (SO malam → DO pagi), jadi SO diambil
+// bila tanggal SO-nya ATAU salah satu DO-nya jatuh di hari itu.
+export async function getSalesOrderCardsMitraHarian(
+  businessPartnerId: string,
+  dateISO: string
+): Promise<SalesOrderCard[]> {
+  const pool = await getPool();
+  const request = pool
+    .request()
+    .input("bp", sql.VarChar(16), businessPartnerId)
+    .input("hari", sql.Date, dateISO);
+  return querySalesOrderCards(
+    request,
+    `so_.BusinessPartnerID = @bp
+     AND (
+       (so_.TransDate >= @hari AND so_.TransDate < DATEADD(DAY, 1, @hari))
+       OR EXISTS (
+         SELECT 1 FROM DeliveryOrder dx
+         WHERE dx.SalesOrderID = so_.SalesOrderID AND dx.IsDeleted = 0
+           AND dx.TransDate >= @hari AND dx.TransDate < DATEADD(DAY, 1, @hari)
+       )
+     )`
+  );
+}
+
+// `kondisiSo` memakai alias so_ (SalesOrder) dan bp_ (BusinessPartner).
+async function querySalesOrderCards(request: sql.Request, kondisiSo: string): Promise<SalesOrderCard[]> {
 
   const result = await request.query(`
     -- SI/SP rollup is done as set-based CTEs (not a per-row correlated
@@ -51,8 +87,7 @@ export async function getSalesOrderCards(filter: DateRangeFilter): Promise<Sales
         FROM SalesOrder so_
         LEFT JOIN BusinessPartner bp_ ON bp_.BusinessPartnerID = so_.BusinessPartnerID
         WHERE so_.IsDeleted = 0
-          AND so_.TransDate >= @startDate AND so_.TransDate < @endDate
-          ${filter.wilayah ? "AND bp_.NPWPName = @wilayah" : ""}
+          AND ${kondisiSo}
     ),
     DoRep AS (
         SELECT do_.SalesOrderID, do_.DeliveryOrderID,
@@ -97,8 +132,7 @@ export async function getSalesOrderCards(filter: DateRangeFilter): Promise<Sales
     LEFT JOIN SiRep si ON si.SalesOrderID = so.SalesOrderID
     LEFT JOIN SpRep sp ON sp.SalesOrderID = so.SalesOrderID AND sp.rn = 1
     WHERE so.IsDeleted = 0
-      AND so.TransDate >= @startDate AND so.TransDate < @endDate
-      ${filter.wilayah ? "AND bp.NPWPName = @wilayah" : ""}
+      AND so.SalesOrderID IN (SELECT SalesOrderID FROM FilteredSO)
     GROUP BY so.SalesOrderID, so.VoucherNo, so.TransDate, bp.BusinessPartnerID, bp.Name,
              bp.NPWPName, bp.NPWPAddress, bp.SalesmanID, bp.Gender,
              si.SIVoucherNo, si.SINetto, si.SIPaid, sp.SPVoucherNo

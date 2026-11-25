@@ -454,3 +454,39 @@
     animation: indeterminate-bar 1.1s ease-in-out infinite;
   }
 }
+
+/* Panel Transaksi DO per Mitra: kepala kolom tanggal digeser mengikuti
+   scroll horizontal body lewat scroll-driven animation — dijalankan
+   compositor, bukan JavaScript, sehingga bergerak persis bersama body
+   walau main thread sibuk. Elemen yang dianimasikan diberi LEBAR = jarak
+   gulir maksimum body (scrollWidth - clientWidth, diisi dari JS) dan isinya
+   meluber, sehingga cukup translateX(-100%) — keyframe persen murni tanpa
+   var()/calc() supaya pasti bisa dijalankan compositor. Browser tanpa
+   dukungan memakai cadangan transform dari handler scroll
+   (mitra-do-panel.tsx). */
+@keyframes geser-kepala-mitra {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+/* Selama body panel di atas bergulir: anak-anaknya tidak menerima kursor
+   (hover tidak memicu repaint ribuan sel). Wadahnya sendiri tetap menerima
+   wheel, jadi guliran tidak berpindah ke halaman. */
+.gulir-mitra-body.sedang-gulir > * {
+  pointer-events: none;
+}
+@supports (animation-timeline: scroll()) {
+  .gulir-mitra-scope {
+    timeline-scope: --gulir-mitra;
+  }
+  .gulir-mitra-body {
+    scroll-timeline: --gulir-mitra x;
+  }
+  .gulir-mitra-kepala {
+    animation: geser-kepala-mitra linear both;
+    animation-timeline: --gulir-mitra;
+  }
+}

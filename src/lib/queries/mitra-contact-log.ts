@@ -1,61 +1,69 @@
 import { getPool, sql } from "@/lib/db";
+import type { ContactType } from "@/lib/saluran-follow-up";
 
-export type ContactType = "Chat" | "Telepon";
+// Kolom DB ContactType = saluran follow-up ("melalui apa").
+export type { ContactType };
 
 export interface MitraContactLogEntry {
   LogID: number;
   BusinessPartnerID: string;
   LogDate: string;
   ContactType: ContactType;
+  DilakukanOleh: string | null;
   HasilPenawaran: string | null;
   AngkaPemesanan: number | null;
   AlasanTidakSesuai: string | null;
   CreatedByUserID: string;
-  CreatedAt: string;
-  ModifiedAt: string | null;
+  // Waktu log dicatat (naive WIB dari GETDATE(), dikirim apa adanya sebagai
+  // string ISO tanpa zona — tampilkan dengan slice, jangan dikonversi).
+  DicatatPada: string;
 }
 
-// Fetched lazily, one mitra+date at a time (both channels together, since
-// they're cheap to fetch as a pair and the popover UI shows whichever the
-// user clicked) — deliberately NOT bundled into MitraDOPanel's initial load,
-// which would mean one row per mitra per visible date, easily thousands of
-// rows nobody asked to see yet.
-export async function getMitraContactLogForDate(
-  businessPartnerId: string,
-  dateISO: string
-): Promise<MitraContactLogEntry[]> {
+// Urutan "terbaru": log lama (sebelum append-only) bisa diedit di tempat,
+// jadi waktu efektifnya ModifiedAt bila ada.
+const URUTAN_TERBARU = "COALESCE(ModifiedAt, CreatedAt) DESC, LogID DESC";
+
+// Riwayat lengkap log penawaran satu mitra di satu tanggal, terbaru dulu.
+// Baris pertama = yang dianggap benar. Diambil saat sel dibuka saja.
+export async function getRiwayatPenawaran(businessPartnerId: string, dateISO: string): Promise<MitraContactLogEntry[]> {
   const pool = await getPool();
   const result = await pool
     .request()
     .input("businessPartnerId", sql.VarChar(16), businessPartnerId)
     .input("logDate", sql.Date, new Date(dateISO))
     .query(`
-      SELECT LogID, BusinessPartnerID, LogDate, ContactType, HasilPenawaran,
-             AngkaPemesanan, AlasanTidakSesuai, CreatedByUserID, CreatedAt, ModifiedAt
+      SELECT LogID, BusinessPartnerID, LogDate, ContactType, DilakukanOleh, HasilPenawaran,
+             AngkaPemesanan, AlasanTidakSesuai, CreatedByUserID,
+             COALESCE(ModifiedAt, CreatedAt) AS DicatatPada
       FROM DashboardMitraContactLog
-      WHERE BusinessPartnerID = @businessPartnerId AND LogDate = @logDate
+      WHERE BusinessPartnerID = @businessPartnerId AND LogDate = @logDate AND IsDeleted = 0
+      ORDER BY ${URUTAN_TERBARU}
     `);
-  return (result.recordset as (Omit<MitraContactLogEntry, "LogDate"> & { LogDate: Date })[]).map((r) => ({
+  return (
+    result.recordset as (Omit<MitraContactLogEntry, "LogDate" | "DicatatPada"> & {
+      LogDate: Date;
+      DicatatPada: Date;
+      AngkaPemesanan: number | string | null;
+    })[]
+  ).map((r) => ({
     ...r,
+    AngkaPemesanan: r.AngkaPemesanan != null ? Number(r.AngkaPemesanan) : null,
     LogDate: r.LogDate.toISOString().slice(0, 10),
+    DicatatPada: r.DicatatPada.toISOString().slice(0, 19),
   }));
 }
 
 export interface MitraContactLogSummaryEntry {
   BusinessPartnerID: string;
   LogDate: string;
-  ContactType: ContactType;
-  AngkaPemesanan: number;
+  // null = sudah follow-up tapi log terbarunya tanpa angka pemesanan.
+  AngkaPemesanan: number | null;
 }
 
-// Lightweight batch read for MitraDOPanel's always-visible "angka | %"
-// readout under each DayChip's icons — unlike getMitraContactLogForDate this
-// covers the WHOLE visible date range in one call, but only the 4 columns
-// actually needed for that readout (no HasilPenawaran/AlasanTidakSesuai
-// text, and AngkaPemesanan IS NULL rows are dropped since there's nothing to
-// show for those). Still cheap even at scale: one row per mitra per date per
-// channel that was actually filled in, not one per mitra per date that
-// merely exists.
+// Satu baris per (mitra, tanggal) yang punya follow-up, untuk seluruh
+// rentang tampil — diambil dari log TERBARU tiap pasangan. Kalau log
+// terbaru tidak menyebut angka, AngkaPemesanan null (log lama yang
+// berangka tidak dipakai); pasangan tanpa baris = belum di-follow-up.
 export async function getMitraContactLogSummaryForRange(
   startDateISO: string,
   endDateISO: string
@@ -65,23 +73,46 @@ export async function getMitraContactLogSummaryForRange(
     .request()
     .input("startDate", sql.Date, new Date(startDateISO))
     .input("endDate", sql.Date, new Date(endDateISO)).query(`
-      SELECT BusinessPartnerID, LogDate, ContactType, AngkaPemesanan
-      FROM DashboardMitraContactLog
-      WHERE LogDate >= @startDate AND LogDate < @endDate AND AngkaPemesanan IS NOT NULL
+      SELECT BusinessPartnerID, LogDate, AngkaPemesanan
+      FROM (
+        SELECT BusinessPartnerID, LogDate, AngkaPemesanan,
+               ROW_NUMBER() OVER (PARTITION BY BusinessPartnerID, LogDate ORDER BY ${URUTAN_TERBARU}) AS Urut
+        FROM DashboardMitraContactLog
+        WHERE LogDate >= @startDate AND LogDate < @endDate AND IsDeleted = 0
+      ) x
+      WHERE Urut = 1
     `);
   return (
-    result.recordset as (Omit<MitraContactLogSummaryEntry, "LogDate"> & { LogDate: Date })[]
-  ).map((r) => ({ ...r, LogDate: r.LogDate.toISOString().slice(0, 10) }));
+    result.recordset as { BusinessPartnerID: string; LogDate: Date; AngkaPemesanan: number | string | null }[]
+  ).map((r) => ({
+    BusinessPartnerID: r.BusinessPartnerID,
+    LogDate: r.LogDate.toISOString().slice(0, 10),
+    AngkaPemesanan: r.AngkaPemesanan != null ? Number(r.AngkaPemesanan) : null,
+  }));
 }
 
-// Upsert on the (BusinessPartnerID, LogDate, ContactType) unique key — one
-// note per channel per day, edited in place rather than accumulating an
-// unbounded history, matching the "log the current situation for this date"
-// intent (not a running chat transcript).
-export async function saveMitraContactLog(input: {
+// Hapus-lunak satu log (khusus Accounting/Direktur — dicek di action). Log
+// tetap ada di DB beserta siapa & kapan menghapus; hanya disembunyikan dari
+// riwayat dan ringkasan, sehingga log sebelumnya kembali jadi "terbaru".
+export async function hapusLogPenawaran(logId: number, userId: string): Promise<boolean> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("logId", sql.Int, logId)
+    .input("userId", sql.VarChar(16), userId).query(`
+      UPDATE DashboardMitraContactLog
+      SET IsDeleted = 1, DihapusOlehUserID = @userId, DihapusPada = GETDATE()
+      WHERE LogID = @logId AND IsDeleted = 0
+    `);
+  return result.rowsAffected[0] > 0;
+}
+
+// Append-only: setiap log baru = baris baru, tidak pernah mengubah log lama.
+export async function tambahLogPenawaran(input: {
   businessPartnerId: string;
   dateISO: string;
   contactType: ContactType;
+  dilakukanOleh: string;
   hasilPenawaran: string | null;
   angkaPemesanan: number | null;
   alasanTidakSesuai: string | null;
@@ -93,18 +124,14 @@ export async function saveMitraContactLog(input: {
     .input("businessPartnerId", sql.VarChar(16), input.businessPartnerId)
     .input("logDate", sql.Date, new Date(input.dateISO))
     .input("contactType", sql.VarChar(10), input.contactType)
+    .input("dilakukanOleh", sql.NVarChar(100), input.dilakukanOleh)
     .input("hasilPenawaran", sql.NVarChar(500), input.hasilPenawaran)
     .input("angkaPemesanan", sql.Decimal(18, 2), input.angkaPemesanan)
     .input("alasanTidakSesuai", sql.NVarChar(500), input.alasanTidakSesuai)
     .input("userId", sql.VarChar(16), input.userId).query(`
-      MERGE DashboardMitraContactLog AS target
-      USING (SELECT @businessPartnerId AS BusinessPartnerID, @logDate AS LogDate, @contactType AS ContactType) AS src
-      ON target.BusinessPartnerID = src.BusinessPartnerID AND target.LogDate = src.LogDate AND target.ContactType = src.ContactType
-      WHEN MATCHED THEN
-        UPDATE SET HasilPenawaran = @hasilPenawaran, AngkaPemesanan = @angkaPemesanan,
-                   AlasanTidakSesuai = @alasanTidakSesuai, ModifiedAt = GETDATE()
-      WHEN NOT MATCHED THEN
-        INSERT (BusinessPartnerID, LogDate, ContactType, HasilPenawaran, AngkaPemesanan, AlasanTidakSesuai, CreatedByUserID)
-        VALUES (@businessPartnerId, @logDate, @contactType, @hasilPenawaran, @angkaPemesanan, @alasanTidakSesuai, @userId);
+      INSERT INTO DashboardMitraContactLog
+        (BusinessPartnerID, LogDate, ContactType, DilakukanOleh, HasilPenawaran, AngkaPemesanan, AlasanTidakSesuai, CreatedByUserID)
+      VALUES
+        (@businessPartnerId, @logDate, @contactType, @dilakukanOleh, @hasilPenawaran, @angkaPemesanan, @alasanTidakSesuai, @userId)
     `);
 }

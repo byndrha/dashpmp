@@ -195,7 +195,14 @@ function SalesOrderTransactionCard({
   );
 }
 
-export function SalesTransactionCards({ orders }: { orders: SalesOrderCard[] }) {
+export function SalesTransactionCards({
+  orders,
+  satuKolom = false,
+}: {
+  orders: SalesOrderCard[];
+  // Popover/kolom sempit: selalu satu kartu per baris.
+  satuKolom?: boolean;
+}) {
   const [page, setPage] = useState(1);
   const [deliveriesByOrder, setDeliveriesByOrder] = useState<Record<string, DeliveryCard[]>>({});
   const [loading, setLoading] = useState(false);
@@ -239,7 +246,7 @@ export function SalesTransactionCards({ orders }: { orders: SalesOrderCard[] }) 
     <div className="flex flex-col gap-3">
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Package className="size-3.5" />
-        Menampilkan {pageOrders.length} dari {orders.length} pesanan (SO), diikuti tiap pengiriman (DO) dan status
+        {orders.length.toLocaleString("id-ID")} pesanan (SO), diikuti tiap pengiriman (DO) dan status
         penagihan/pelunasan.
       </p>
       {/* @sm here targets this panel's own width (it's wrapped in @container by
@@ -247,7 +254,7 @@ export function SalesTransactionCards({ orders }: { orders: SalesOrderCard[] }) 
           50/50 column next to Pengiriman per Wilayah, so a viewport-width
           breakpoint like md:/xl: would try to fit 2-3 cards into half the
           space it used to have. */}
-      <div className="grid grid-cols-1 gap-3 @sm:grid-cols-2">
+      <div className={cn("grid grid-cols-1 gap-3", !satuKolom && "@sm:grid-cols-2")}>
         {pageOrders.map((so) => (
           <SalesOrderTransactionCard
             key={so.SalesOrderID}
@@ -262,7 +269,7 @@ export function SalesTransactionCards({ orders }: { orders: SalesOrderCard[] }) 
           </p>
         )}
       </div>
-      <Pagination page={page} pageCount={pageCount} onChange={setPage} />
+      {pageCount > 1 && <Pagination page={page} pageCount={pageCount} onChange={setPage} />}
     </div>
   );
 }
