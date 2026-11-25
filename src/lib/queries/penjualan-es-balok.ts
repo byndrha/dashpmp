@@ -207,15 +207,29 @@ export interface PenjualanBalokHari {
   kemarinQty: number;
   bulanLaluNominal: number;
   growthPercent: number | null;
+  // Tabel "VS Tanggal": kemarin, tanggal sama bulan lalu, tahun lalu, dua
+  // tahun lalu (urutan tampil) — padanan SalesToday.Pembanding Es Kristal.
+  pembanding: PembandingHariBalok[];
+}
+
+export interface PembandingHariBalok {
+  tanggalISO: string;
+  nominal: number;
+  qty: number;
 }
 
 export async function getPenjualanBalokHari(kode: string, dateISO: string): Promise<PenjualanBalokHari> {
   const day = new Date(`${dateISO}T00:00:00Z`);
   const bulanLalu = sameDayMonthsBack(day, 1);
-  const [hari, kemarin, bl] = await Promise.all([
+  const tahunLalu = sameDayMonthsBack(day, 12);
+  const duaTahunLalu = sameDayMonthsBack(day, 24);
+  const kemarinTgl = addDays(day, -1);
+  const [hari, kemarin, bl, tl, dtl] = await Promise.all([
     aggregateRange(kode, day, addDays(day, 1)),
-    aggregateRange(kode, addDays(day, -1), day),
+    aggregateRange(kode, kemarinTgl, day),
     aggregateRange(kode, bulanLalu, addDays(bulanLalu, 1)),
+    aggregateRange(kode, tahunLalu, addDays(tahunLalu, 1)),
+    aggregateRange(kode, duaTahunLalu, addDays(duaTahunLalu, 1)),
   ]);
   const nominal = nominalOf(hari);
   const bulanLaluNominal = nominalOf(bl);
@@ -231,6 +245,14 @@ export async function getPenjualanBalokHari(kode: string, dateISO: string): Prom
     kemarinQty: qtyOf(kemarin),
     bulanLaluNominal,
     growthPercent: pctChange(nominal, bulanLaluNominal),
+    pembanding: (
+      [
+        [kemarinTgl, kemarin],
+        [bulanLalu, bl],
+        [tahunLalu, tl],
+        [duaTahunLalu, dtl],
+      ] as const
+    ).map(([tgl, agg]) => ({ tanggalISO: tgl.toISOString().slice(0, 10), nominal: nominalOf(agg), qty: qtyOf(agg) })),
   };
 }
 

@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { addDays, subDays, format, parseISO } from "date-fns";
 import { ChevronLeft, ChevronRight, ShoppingCart, Truck, Receipt, Wallet, Coins, Package, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DocChip } from "@/components/dashboard/sales-chips";
+import { DocChip, TrendPill } from "@/components/dashboard/sales-chips";
 import { formatRupiah, formatRupiahAvg, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SalesToday } from "@/lib/queries/sales-overview";
 import { getSalesForDayAction } from "@/app/mkesindo/(dashboard)/sales/actions";
+
+const compactRupiahFormatter = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+// Sesuai urutan SalesToday.Pembanding (lihat getSalesForDay).
+const KETERANGAN_PEMBANDING = ["Kemarin", "Tanggal yang sama bulan lalu", "Tanggal yang sama tahun lalu", "Tanggal yang sama dua tahun lalu"];
+
+function pctChange(current: number, previous: number): number | null {
+  return previous ? ((current - previous) / previous) * 100 : null;
+}
 
 function toISO(date: Date): string {
   return format(date, "yyyy-MM-dd");
@@ -55,24 +69,9 @@ export function SalesTodayPanel({
   const [dateISO, setDateISO] = useState(initialDateISO);
   const [data, setData] = useState(initialData);
   const [pending, startTransition] = useTransition();
-  // The day before whichever day is currently displayed (dateISO), not
-  // necessarily "yesterday" relative to today — re-fetched whenever dateISO
-  // changes (mount included) so the prev/next buttons keep this figure in
-  // sync with the panel's own displayed day, per the comparison's intent.
-  const [yesterdayQty, setYesterdayQty] = useState<number | null>(null);
 
   const isToday = dateISO === businessTodayISO;
   const canGoNext = dateISO < businessTodayISO;
-
-  useEffect(() => {
-    let cancelled = false;
-    getSalesForDayAction(toISO(subDays(parseISO(dateISO), 1))).then((result) => {
-      if (!cancelled) setYesterdayQty(result.Qty10KG + result.Qty5KG);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [dateISO]);
 
   function navigate(nextDateISO: string) {
     setDateISO(nextDateISO);
@@ -122,9 +121,20 @@ export function SalesTodayPanel({
 
         <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <p className="font-display text-2xl font-semibold tabular-nums text-primary">
-              {formatRupiah(data.NetSales)}
-            </p>
+            {/* Nominal + harga rata-rata tepat di bawahnya. */}
+            <div className="flex flex-col items-start gap-1">
+              <p className="font-display text-2xl leading-tight font-semibold tabular-nums text-primary">
+                {formatRupiah(data.NetSales)}
+              </p>
+              <span
+                title="Harga rata-rata"
+                aria-label="Harga rata-rata"
+                className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+              >
+                <Coins className="size-3" />
+                {formatRupiahAvg(data.AvgPrice)}
+              </span>
+            </div>
             <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5">
               <Truck className="size-4 text-primary" />
               <div className="flex flex-col leading-tight">
@@ -154,25 +164,38 @@ export function SalesTodayPanel({
               </span>
             </div>
           </div>
-          <div className="mt-2 flex items-center justify-between gap-2 border-t pt-2">
-            <span
-              title="Harga rata-rata"
-              aria-label="Harga rata-rata"
-              className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-            >
-              <Coins className="size-3" />
-              {formatRupiahAvg(data.AvgPrice)}
-            </span>
-            {yesterdayQty != null && (
-              <span
-                title="Kantong terkirim kemarin — pembanding untuk tanggal yang sedang ditampilkan"
-                aria-label="Kantong terkirim kemarin"
-                className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-              >
-                <Truck className="size-3" />
-                {yesterdayQty.toLocaleString("id-ID")} kemarin
+          {/* Perbandingan dengan kemarin & tanggal yang sama bulan lalu,
+              tahun lalu, dua tahun lalu (nominal SI & kantong terkirim DO) —
+              gaya sama dengan tabel "VS Periode" di panel perbandingan bulan. */}
+          <div className="-mx-1 mt-2 overflow-x-auto border-t px-1 pt-2">
+            <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Tanggal</span>
+              <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Nominal
               </span>
-            )}
+              <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                DO Qty
+              </span>
+              {data.Pembanding.map((p, i) => (
+                <Fragment key={p.tanggalISO}>
+                  <span className="whitespace-nowrap text-xs text-foreground" title={KETERANGAN_PEMBANDING[i]}>
+                    {p.tanggalISO.replaceAll("-", "/")}
+                  </span>
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                      {compactRupiahFormatter.format(p.NetSales)}
+                    </span>
+                    <TrendPill percent={pctChange(data.NetSales, p.NetSales)} />
+                  </div>
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                      {p.Qty.toLocaleString("id-ID")}
+                    </span>
+                    <TrendPill percent={pctChange(data.Qty10KG + data.Qty5KG, p.Qty)} />
+                  </div>
+                </Fragment>
+              ))}
+            </div>
           </div>
         </div>
       </CardContent>

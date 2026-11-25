@@ -188,7 +188,12 @@ function pasangKepalaHalaman(isi: HTMLElement): (() => void) | undefined {
       [...main.querySelectorAll<HTMLElement>("h1")].find(
         (h) => !h.classList.contains("sr-only")
       );
-    let barisBaru = judul ? cariBarisKepala(main, judul) : null;
+    // data-tanpa-menempel pada judul/data-awal-halaman: halaman yang baris
+    // kepalanya bukan baris tipis (mis. Produksi — leluhurnya grid peta +
+    // panel Korelasi, yang akan ikut menempel seluruhnya) cukup menempelkan
+    // tombolnya saja; tidak ada baris yang ditandai data-kepala-halaman.
+    let barisBaru =
+      judul && !judul.hasAttribute("data-tanpa-menempel") ? cariBarisKepala(main, judul) : null;
     // Atribut baru boleh dipasang hanya setelah React menghidrasi baris itu:
     // HTML halaman yang di-stream bisa sudah ada di DOM sebelum terhidrasi,
     // dan atribut tambahan saat itu memicu peringatan hydration mismatch.
@@ -228,9 +233,20 @@ function pasangKepalaHalaman(isi: HTMLElement): (() => void) | undefined {
       judul.hasAttribute("data-awal-halaman") || !Number.isFinite(lh)
         ? rj.height / 2
         : Math.min(lh, rj.height) / 2;
-    isi.style.top = `${Math.round(
-      rj.top - rp.top + tengah - isi.offsetHeight / 2
-    )}px`;
+    // Titik acuan posisi tombol, harus "bergerak bersama" judul agar sync di
+    // tengah guliran (mis. isi panjang selesai dimuat) tetap benar:
+    // - Ada baris kepala menempel: judul ikut menempel bersama penahan
+    //   (keduanya mulai menempel pada posisi gulir yang sama), jadi acuannya
+    //   penahan itu sendiri (rp) — selisih keduanya tetap.
+    // - Tanpa baris menempel (data-tanpa-menempel, mis. Produksi): judul ikut
+    //   tergulir sementara penahan menempel, jadi acuannya posisi ASLI
+    //   penahan (puncak isi <main>). Memakai rp di sini membuat tombol
+    //   hilang ribuan piksel ke atas; memakai <main> di kasus pertama
+    //   membuat tombol "nyangkut" di tengah halaman (bug 2026-11-25).
+    const rmJ = main.getBoundingClientRect();
+    const padAtasJ = parseFloat(getComputedStyle(main).paddingTop) || 0;
+    const acuanAtas = baris ? rp.top : rmJ.top + padAtasJ;
+    isi.style.top = `${Math.round(rj.top - acuanAtas + tengah - isi.offsetHeight / 2)}px`;
     if (baris) {
       // Penahan tombol & baris kepala harus mulai menempel pada posisi
       // gulir yang sama: bila baris tidak tepat di puncak halaman (jarak

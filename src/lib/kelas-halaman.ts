@@ -13,6 +13,8 @@
 // buram dibuat lewat ::before yang melebar ke tepi <main> (-inset-x-4),
 // jadi isi halaman yang lewat di bawahnya tertutup. Peta Leaflet diberi
 // isolate supaya z-index panel petanya (400+) tidak menembus kepala ini.
+// Judul bertanda data-tanpa-menempel tidak punya baris kepala menempel —
+// hanya tombol sidebar yang menempel (mis. halaman Produksi Es Kristal).
 // Sudut atas latar ikut membulat (= rounded-2xl lembaran SidebarInset di
 // md+) supaya tidak menutupi lengkungan sudut lembaran.
 const KELAS_KEPALA_MENEMPEL =

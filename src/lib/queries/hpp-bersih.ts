@@ -2,7 +2,10 @@ import { getPool, sql } from "@/lib/db";
 
 // Exact order requested — display order of the detail rows follows this,
 // not whatever order SQL happens to return them in.
-const HPP_BERSIH_ACCOUNT_NOS = ["5000", "6103", "6105", "6108", "6110", "6115", "6126", "6101"];
+// 6126.1 Sparepart, 6126.2 Ban, 6126.3 Oli Kendaraan: akun pecahan biaya
+// kendaraan (setingkat 6126, induk 6100) yang dipakai ERP sejak Feb 2026 —
+// ditambahkan 2026-11-25 atas permintaan user, tampil sebagai baris sendiri.
+const HPP_BERSIH_ACCOUNT_NOS = ["5000", "6103", "6105", "6108", "6110", "6115", "6126", "6126.1", "6126.2", "6126.3", "6101"];
 
 export interface HPPBersihAccountRow {
   AccountNo: string;
@@ -36,7 +39,7 @@ function buildInClause(request: sql.Request, values: string[], prefix: string): 
     .join(", ");
 }
 
-// HPP Bersih = Σ over the 8 listed accounts of (that account's monthly
+// HPP Bersih = Σ over the listed accounts of (that account's monthly
 // Nominal ÷ that month's Total Kantong Penjualan) — computed per account so
 // each one's own contribution stays visible ("detail rinciannya"), not just
 // the combined total.
@@ -84,7 +87,7 @@ export async function getHPPBersih(year: number): Promise<HPPBersihData> {
     }
   }
 
-  // leaf ChartOfAccountID -> which of the 8 display AccountNo it rolls up into.
+  // leaf ChartOfAccountID -> which display AccountNo it rolls up into.
   const leafToDisplay = new Map<string, string>();
   for (const r of accountRows) {
     const leafIds = r.IsChildest ? [r.ChartOfAccountID] : (childrenByParent.get(r.ChartOfAccountID) ?? []);

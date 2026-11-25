@@ -24,7 +24,17 @@ export interface SalesToday extends KemasanQty {
   SPCount: number;
   AvgPrice: number;
   LastMonthNetSales: number;
+  // Pembanding untuk tabel "VS Tanggal": kemarin, tanggal sama bulan lalu,
+  // tahun lalu, dan dua tahun lalu (urutan tampil). Nominal = SI Netto,
+  // Qty = kantong terkirim (DO Delivered) — basis sama dengan hari ini.
+  Pembanding: PembandingHari[];
   GrowthPercent: number | null;
+}
+
+export interface PembandingHari {
+  tanggalISO: string; // "YYYY-MM-DD" (di-clamp ke akhir bulan bila perlu)
+  NetSales: number;
+  Qty: number;
 }
 
 export interface SalesPeriodStat {
@@ -142,8 +152,12 @@ export async function getSalesForDay(date: Date): Promise<SalesToday> {
   // Same calendar day-of-month, one month back — see sameDayMonthsBack()'s
   // comment for why the clamp matters and why plain UTC arithmetic is used.
   const lastMonthDay = sameDayMonthsBack(date, 1);
+  const kemarin = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - 1));
+  // Urutan tampil: kemarin, bulan lalu, tahun lalu, dua tahun lalu. Index 1
+  // (bulan lalu) juga dipakai badge pertumbuhan di judul panel.
+  const tanggalPembanding = [kemarin, lastMonthDay, sameDayMonthsBack(date, 12), sameDayMonthsBack(date, 24)];
 
-  const [dayResult, doQtyResult, siQtyResult, lastMonthResult] = await Promise.all([
+  const [dayResult, doQtyResult, siQtyResult, pembanding] = await Promise.all([
     pool
       .request()
       .input("day", sql.Date, date)
@@ -193,30 +207,47 @@ export async function getSalesForDay(date: Date): Promise<SalesToday> {
         WHERE si.IsDeleted = 0 AND ISNULL(si.IsPerforma,0) = 0
           AND si.TransDate >= @day AND si.TransDate < DATEADD(DAY, 1, @day)
       `),
-    // Same calendar date one month back, for the day-over-day-last-month growth badge.
-    pool
-      .request()
-      .input("day", sql.Date, lastMonthDay)
-      .query(`
-        SELECT ISNULL(SUM(Netto), 0) AS NetSales FROM SalesInvoice
-          WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
-            AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)
-      `),
+    // Tanggal pembanding: nominal (SI) + kantong terkirim (DO Delivered,
+    // basis yang sama dengan kantong hari ini), satu query per tanggal.
+    Promise.all(
+      tanggalPembanding.map((d) =>
+        pool
+          .request()
+          .input("day", sql.Date, d)
+          .query(`
+            SELECT
+                (SELECT ISNULL(SUM(Netto), 0) FROM SalesInvoice
+                  WHERE IsDeleted = 0 AND ISNULL(IsPerforma,0) = 0
+                    AND TransDate >= @day AND TransDate < DATEADD(DAY, 1, @day)) AS NetSales,
+                (SELECT ISNULL(SUM(dod.Delivered), 0)
+                  FROM DeliveryOrderDetail dod
+                  JOIN DeliveryOrder do_ ON do_.DeliveryOrderID = dod.DeliveryOrderID
+                  WHERE do_.IsDeleted = 0
+                    AND do_.TransDate >= @day AND do_.TransDate < DATEADD(DAY, 1, @day)) AS Qty
+          `)
+          .then((r): PembandingHari => ({
+            tanggalISO: d.toISOString().slice(0, 10),
+            NetSales: r.recordset[0].NetSales as number,
+            Qty: r.recordset[0].Qty as number,
+          }))
+      )
+    ),
   ]);
 
   const day = dayResult.recordset[0] as Omit<
     SalesToday,
-    "AvgPrice" | "Qty10KG" | "Qty5KG" | "LastMonthNetSales" | "GrowthPercent"
+    "AvgPrice" | "Qty10KG" | "Qty5KG" | "LastMonthNetSales" | "Pembanding" | "GrowthPercent"
   >;
   const doKemasan = qtyByKemasan(doQtyResult.recordset);
   const siQty = siQtyResult.recordset[0].Qty as number;
-  const lastMonthNetSales = lastMonthResult.recordset[0].NetSales as number;
+  const lastMonthNetSales = pembanding[1].NetSales;
 
   return {
     ...day,
     ...doKemasan,
     AvgPrice: siQty ? day.NetSales / siQty : 0,
     LastMonthNetSales: lastMonthNetSales,
+    Pembanding: pembanding,
     GrowthPercent: lastMonthNetSales
       ? ((day.NetSales - lastMonthNetSales) / lastMonthNetSales) * 100
       : null,

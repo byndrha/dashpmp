@@ -27,7 +27,7 @@ export function HPPBersihPanel({
   initialData,
   onNavigateYear,
   unitLabel = "Kantong",
-  formulaAccountsLabel = "5000, 6103, 6105, 6108, 6110, 6115, 6126, 6101",
+  formulaAccountsLabel = "5000, 6103, 6105, 6108, 6110, 6115, 6126, 6126.1, 6126.2, 6126.3, 6101",
 }: {
   initialData: HPPBersihData;
   onNavigateYear: (year: number) => Promise<ActionResult<HPPBersihData>>;

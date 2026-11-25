@@ -125,6 +125,39 @@ function StatTile({
 
 // `loadMonth`/`saveTarget`/`unitLabel` default ke Es Kristal (MKEsindo);
 // modul Penjualan Es Balok mengoper action dan satuan "balok" miliknya sendiri.
+// Kotak persentase ketercapaian target s.d. hari ini (nominal besar, kantong
+// kecil). Warna: >= 100% hijau, >= 90% kuning, di bawahnya merah.
+function warnaCapaian(pct: number | null) {
+  if (pct == null) return "border-border bg-muted/40 text-muted-foreground";
+  if (pct >= 100) return "border-primary/30 bg-primary/10 text-primary";
+  if (pct >= 90) return "border-warning/40 bg-warning/10 text-warning";
+  return "border-destructive/30 bg-destructive/10 text-destructive";
+}
+
+function formatPersen(pct: number) {
+  return `${pct.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`;
+}
+
+function KotakCapaian({ nominalPct, qtyPct, satuan }: { nominalPct: number | null; qtyPct: number | null; satuan: string }) {
+  return (
+    <div
+      className={cn(
+        "flex w-28 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border p-3 text-center",
+        warnaCapaian(nominalPct)
+      )}
+      title="Ketercapaian target s.d. hari ini"
+    >
+      <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">Tercapai</span>
+      <span className="font-display text-2xl leading-none font-bold tabular-nums">
+        {nominalPct != null ? formatPersen(nominalPct) : "-"}
+      </span>
+      <span className="text-[10px] tabular-nums opacity-80">
+        <span className="capitalize">{satuan}</span> {qtyPct != null ? formatPersen(qtyPct) : "-"}
+      </span>
+    </div>
+  );
+}
+
 export function RevenueTargetPanel({
   target: initialTarget,
   businessTodayISO,
@@ -189,6 +222,12 @@ export function RevenueTargetPanel({
         ? Math.min(150, (target.RealisasiNominalToDate / target.TargetNominalToDate) * 100)
         : 0
       : null;
+  // Persentase asli (tanpa batas 150%) untuk kotak Ketercapaian — batas di
+  // progressPct hanya untuk lebar bilah.
+  const capaianNominalPct =
+    hasTarget && target.TargetNominalToDate ? (target.RealisasiNominalToDate / target.TargetNominalToDate) * 100 : null;
+  const capaianQtyPct =
+    hasTarget && target.TargetQtyToDate ? (target.RealisasiQtyToDate / target.TargetQtyToDate) * 100 : null;
 
   return (
     <Card>
@@ -231,45 +270,48 @@ export function RevenueTargetPanel({
         </div>
       </CardHeader>
       <CardContent className={cn("flex flex-col gap-3", navPending && "opacity-50 transition-opacity")}>
-        {/* Hero: progress s.d. hari ini (bulan berjalan) atau realisasi
-            penuh sebulan (bulan lampau, dipilih lewat tombol navigasi) */}
-        <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {target.IsCurrentMonth
-                  ? `Realisasi vs Target s.d. Hari ke-${target.CurrentDay}`
-                  : "Realisasi vs Target — Bulan Penuh"}
-              </p>
-              <p className="font-display text-2xl font-semibold tabular-nums text-primary">
-                {formatRupiah(target.RealisasiNominalToDate)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                dari target {hasTarget ? formatRupiah(target.TargetNominalToDate!) : "-"} &middot;{" "}
-                {qtyText(target.RealisasiQtyToDate)}
-                {hasTarget && ` dari ${qtyText(target.TargetQtyToDate)}`}
-              </p>
-              {!target.IsCurrentMonth && progressPct != null && (
-                <p className="mt-1 text-xs font-medium text-primary">
-                  {progressPct.toFixed(0)}% capaian bulan tsb
+        {/* Kotak Ketercapaian (kiri) + hero progress s.d. hari ini (bulan
+            berjalan) atau realisasi penuh sebulan (bulan lampau). */}
+        <div className="flex items-stretch gap-3">
+          <KotakCapaian nominalPct={capaianNominalPct} qtyPct={capaianQtyPct} satuan={unitLabel} />
+          <div className="min-w-0 flex-1 rounded-lg border border-primary/25 bg-primary/5 p-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {target.IsCurrentMonth
+                    ? `Realisasi vs Target s.d. Hari ke-${target.CurrentDay}`
+                    : "Realisasi vs Target — Bulan Penuh"}
                 </p>
-              )}
+                <p className="font-display text-2xl font-semibold tabular-nums text-primary">
+                  {formatRupiah(target.RealisasiNominalToDate)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  dari target {hasTarget ? formatRupiah(target.TargetNominalToDate!) : "-"} &middot;{" "}
+                  {qtyText(target.RealisasiQtyToDate)}
+                  {hasTarget && ` dari ${qtyText(target.TargetQtyToDate)}`}
+                </p>
+                {!target.IsCurrentMonth && progressPct != null && (
+                  <p className="mt-1 text-xs font-medium text-primary">
+                    {progressPct.toFixed(0)}% capaian bulan tsb
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <GrowthBadge value={target.GrowthNominal} percent={target.GrowthNominalPercent} />
+                <span className="text-xs text-muted-foreground">
+                  {target.GrowthNominal != null ? formatRupiah(target.GrowthNominal) : "-"} growth
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <GrowthBadge value={target.GrowthNominal} percent={target.GrowthNominalPercent} />
-              <span className="text-xs text-muted-foreground">
-                {target.GrowthNominal != null ? formatRupiah(target.GrowthNominal) : "-"} growth
-              </span>
-            </div>
+            {progressPct != null && (
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className={cn("h-2 rounded-full", progressPct >= 100 ? "bg-primary" : "bg-warning")}
+                  style={{ width: `${Math.min(100, progressPct)}%` }}
+                />
+              </div>
+            )}
           </div>
-          {progressPct != null && (
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className={cn("h-2 rounded-full", progressPct >= 100 ? "bg-primary" : "bg-warning")}
-                style={{ width: `${Math.min(100, progressPct)}%` }}
-              />
-            </div>
-          )}
         </div>
 
         {/* Container query (not sm:) — this panel sits on the same page as

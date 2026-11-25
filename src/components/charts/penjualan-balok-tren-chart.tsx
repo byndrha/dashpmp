@@ -6,6 +6,7 @@
 // mode bulanan juga Pendapatan GL (angka resmi pembukuan) sebagai pembanding.
 import { Bar, ComposedChart, Line, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatRupiah } from "@/lib/format";
+import { LabelChip } from "@/components/charts/label-chip";
 import { useNarrowContainer } from "@/hooks/use-narrow-container";
 import type { TrenBalokPoint } from "@/lib/queries/penjualan-es-balok";
 
@@ -45,7 +46,16 @@ function TrenTooltip({ active, payload }: { active?: boolean; payload?: { payloa
       <p className="mb-1.5 font-medium">{d.name}</p>
       <p className="mb-1.5 font-display font-semibold tabular-nums text-primary">{formatRupiah(d.Nominal)}</p>
       <div className="flex flex-col gap-0.5 text-muted-foreground">
-        <span>{d.BalokKecil.toLocaleString("id-ID")} balok kecil</span>
+        <span>
+          {d.BalokKecil.toLocaleString("id-ID")} balok kecil
+          {/* Konversi: 2 balok kecil = 1 balok besar. */}
+          {d.BalokKecil > 0 && (
+            <span className="text-muted-foreground/80">
+              {" "}
+              (≈ {(d.BalokKecil / 2).toLocaleString("id-ID", { maximumFractionDigits: 1 })} balok besar)
+            </span>
+          )}
+        </span>
         <span>{d.BalokBesar.toLocaleString("id-ID")} balok besar</span>
         <span>{d.dokumen.toLocaleString("id-ID")} pesanan</span>
         {d.pendapatanGL != null && <span>Pendapatan GL: {formatRupiah(d.pendapatanGL)}</span>}
@@ -54,14 +64,66 @@ function TrenTooltip({ active, payload }: { active?: boolean; payload?: { payloa
   );
 }
 
-function series(showBesar: boolean) {
+// Label angka selalu tampil (chip) di setiap titik garis — sama dengan chip
+// qty DO di grafik Es Kristal. Balok kecil di atas titik, balok besar di
+// bawahnya supaya tidak bertumpuk. Di layar sempit hanya tiap `langkah` titik.
+function labelChip(
+  chartData: ChartDatum[],
+  kunci: "BalokKecil" | "BalokBesar",
+  warna: string,
+  posisi: "atas" | "bawah",
+  langkah: number,
+  batasBawah: number
+) {
+  return function Label(props: { x?: string | number; y?: string | number; index?: number }) {
+    const { x, y, index } = props;
+    if (x == null || y == null || index == null) return <g />;
+    if (langkah > 1 && index % langkah !== 0) return <g />;
+    const qty = chartData[index]?.[kunci] ?? 0;
+    return (
+      <LabelChip
+        x={Number(x)}
+        y={Number(y)}
+        teks={qty.toLocaleString("id-ID")}
+        warna={warna}
+        posisi={posisi}
+        batasBawah={batasBawah}
+      />
+    );
+  };
+}
+
+// batasBawah = tinggi grafik - margin bawah - tinggi sumbu X (30, bawaan recharts)
+// - tinggi legenda (~18, hanya mode lebar; di mode sempit legenda di luar SVG).
+// Diukur di browser 2026-11-25: dasar plot mode lebar = 244,9 px.
+function series(chartData: ChartDatum[], showBesar: boolean, langkah: number, batasBawah: number) {
   const els = [
     <Bar key="nominal" yAxisId="nominal" dataKey="Nominal" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />,
-    <Line key="kecil" yAxisId="qty" type="monotone" dataKey="BalokKecil" name="Balok Kecil" stroke="var(--chart-3)" strokeWidth={3} dot={false} />,
+    <Line
+      key="kecil"
+      yAxisId="qty"
+      type="monotone"
+      dataKey="BalokKecil"
+      name="Balok Kecil"
+      stroke="var(--chart-3)"
+      strokeWidth={3}
+      dot={false}
+      label={labelChip(chartData, "BalokKecil", "var(--chart-3)", "atas", langkah, batasBawah)}
+    />,
   ];
   if (showBesar) {
     els.push(
-      <Line key="besar" yAxisId="qty" type="monotone" dataKey="BalokBesar" name="Balok Besar" stroke={BESAR_COLOR} strokeWidth={3} dot={false} />
+      <Line
+        key="besar"
+        yAxisId="qty"
+        type="monotone"
+        dataKey="BalokBesar"
+        name="Balok Besar"
+        stroke={BESAR_COLOR}
+        strokeWidth={3}
+        dot={false}
+        label={labelChip(chartData, "BalokBesar", BESAR_COLOR, "bawah", langkah, batasBawah)}
+      />
     );
   }
   return els;
@@ -101,7 +163,7 @@ export function PenjualanBalokTrenChart({ data, mode }: { data: TrenBalokPoint[]
         <div className="-mx-2 overflow-x-auto px-2">
           <div style={{ width }}>
             <ResponsiveContainer width="100%" height={220}>
-              <ComposedChart data={chartData} margin={{ top: 20, right: 4, left: -20, bottom: 0 }}>
+              <ComposedChart data={chartData} margin={{ top: 28, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                 <XAxis dataKey="mobileName" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} interval={0} />
                 <YAxis
@@ -114,7 +176,7 @@ export function PenjualanBalokTrenChart({ data, mode }: { data: TrenBalokPoint[]
                 />
                 <YAxis yAxisId="qty" orientation="right" hide />
                 <Tooltip content={<TrenTooltip />} />
-                {series(showBesar)}
+                {series(chartData, showBesar, 2, 220 - 0 - 30)}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -126,7 +188,7 @@ export function PenjualanBalokTrenChart({ data, mode }: { data: TrenBalokPoint[]
   return (
     <div ref={containerRef}>
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={chartData} margin={{ top: 20, right: 8, left: 8, bottom: 8 }}>
+        <ComposedChart data={chartData} margin={{ top: 28, right: 8, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
           <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
           <YAxis
@@ -139,7 +201,7 @@ export function PenjualanBalokTrenChart({ data, mode }: { data: TrenBalokPoint[]
           <YAxis yAxisId="qty" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip content={<TrenTooltip />} />
           <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
-          {series(showBesar)}
+          {series(chartData, showBesar, 1, 300 - 8 - 30 - 18)}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

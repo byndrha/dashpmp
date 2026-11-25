@@ -3,9 +3,9 @@
 // Padanan SalesComparisonPanel + SalesAveragesSection (Es Kristal) untuk Es
 // Balok: nominal & balok terjual bulan yang dipilih, dibandingkan dengan
 // bulan lalu, bulan sama tahun lalu, dan dua tahun lalu; plus rata-rata
-// balok/hari dan harga jual per jenis balok (bisa dibuka-tutup).
+// balok/hari dan harga jual per jenis balok (selalu terbuka).
 import { Fragment, useState, useTransition } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Box } from "lucide-react";
+import { ChevronLeft, ChevronRight, Box } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendPill } from "@/components/dashboard/sales-chips";
@@ -68,7 +68,6 @@ export function PenjualanBalokBulanPanel({
 }) {
   const [data, setData] = useState(initialData);
   const [monthISO, setMonthISO] = useState(initialData.monthISO);
-  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const canGoNext = monthISO < todayISO.slice(0, 7) + "-01";
@@ -84,13 +83,12 @@ export function PenjualanBalokBulanPanel({
 
   return (
     <Card className="py-4">
-      <CardContent className="flex flex-col gap-3 px-4">
-        <div>
+      <CardContent className="flex flex-col gap-2 px-4">
+        {/* Kepala panel (sama dengan panel bulan Es Kristal): baris 1 =
+            tombol pindah bulan (kiri) + label bulan (kanan); baris 2 =
+            nominal (kiri) + chip balok terjual (kanan). */}
+        <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {monthLabel(monthISO)}
-              {data.isCurrentMonth && monthISO === data.monthISO ? " (s.d. hari ini)" : ""}
-            </p>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
@@ -113,24 +111,26 @@ export function PenjualanBalokBulanPanel({
                 <ChevronRight className="size-3.5" />
               </Button>
             </div>
+            <p className="text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {monthLabel(monthISO)}
+              {data.isCurrentMonth && monthISO === data.monthISO ? " (s.d. hari ini)" : ""}
+            </p>
           </div>
-          <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <p className="font-display text-xl font-semibold tabular-nums">{formatRupiah(data.nominal)}</p>
-              <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2 py-1">
-                <Box className="size-3.5 text-primary" />
-                <div className="flex flex-col leading-tight">
-                  <span className="font-display text-xs font-semibold tabular-nums text-primary">
-                    {data.qty.toLocaleString("id-ID")}
-                  </span>
-                  <span className="whitespace-nowrap text-[9px] text-muted-foreground">balok terjual</span>
-                </div>
+          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2">
+            <p className="font-display text-xl font-semibold tabular-nums">{formatRupiah(data.nominal)}</p>
+            <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2 py-1">
+              <Box className="size-3.5 text-primary" />
+              <div className="flex flex-col leading-tight">
+                <span className="font-display text-xs font-semibold tabular-nums text-primary">
+                  {data.qty.toLocaleString("id-ID")}
+                </span>
+                <span className="whitespace-nowrap text-[9px] text-muted-foreground">balok terjual</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className={cn("-mx-1 overflow-x-auto border-t px-1 pt-3", pending && "opacity-50")}>
+        <div className={cn("-mx-1 overflow-x-auto border-t px-1 pt-2", pending && "opacity-50")}>
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Periode</span>
             <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -155,31 +155,22 @@ export function PenjualanBalokBulanPanel({
           </div>
         </div>
 
-        <div className="border-t pt-3">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 text-left"
-          >
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Rata-rata Bulan Ini vs Bulan Lalu
-            </p>
-            <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-          </button>
-          {open && (
-            <div className="-mx-1 mt-2 overflow-x-auto px-1">
-              <div className="flex min-w-max flex-col gap-1.5">
-                <AverageRow
-                  label="Balok Terjual / Hari"
-                  now={Math.round(r.balokPerHari).toLocaleString("id-ID")}
-                  before={Math.round(r.balokPerHariLalu).toLocaleString("id-ID")}
-                  percent={r.balokPerHariPct}
-                />
-                <AverageRow label="Harga Balok Kecil" now={rp(r.hargaKecil)} before={rp(r.hargaKecilLalu)} percent={r.hargaKecilPct} />
-                <AverageRow label="Harga Balok Besar" now={rp(r.hargaBesar)} before={rp(r.hargaBesarLalu)} percent={r.hargaBesarPct} />
-              </div>
+        <div className={cn("border-t pt-2", pending && "opacity-50")}>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Rata-rata Bulan Ini vs Bulan Lalu
+          </p>
+          <div className="-mx-1 mt-2 overflow-x-auto px-1">
+            <div className="flex min-w-max flex-col gap-1.5">
+              <AverageRow
+                label="Balok Terjual / Hari"
+                now={Math.round(r.balokPerHari).toLocaleString("id-ID")}
+                before={Math.round(r.balokPerHariLalu).toLocaleString("id-ID")}
+                percent={r.balokPerHariPct}
+              />
+              <AverageRow label="Harga Balok Kecil" now={rp(r.hargaKecil)} before={rp(r.hargaKecilLalu)} percent={r.hargaKecilPct} />
+              <AverageRow label="Harga Balok Besar" now={rp(r.hargaBesar)} before={rp(r.hargaBesarLalu)} percent={r.hargaBesarPct} />
             </div>
-          )}
+          </div>
         </div>
       </CardContent>
     </Card>

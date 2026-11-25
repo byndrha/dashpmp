@@ -9,17 +9,26 @@ export function LabelChip({
   teks,
   warna,
   fontSize = 9,
+  posisi = "atas",
+  batasBawah,
 }: {
   x: number;
-  y: number; // titik data; chip diletakkan di atasnya
+  y: number; // titik data; chip diletakkan di atas (bawaan) atau bawahnya
   teks: string;
   warna: string;
   fontSize?: number;
+  // "bawah": untuk seri kedua di grafik yang sama (mis. balok besar di
+  // bawah titik, balok kecil di atas) supaya chip dua garis tidak bertumpuk.
+  posisi?: "atas" | "bawah";
+  // Dasar area plot (px). Chip "bawah" yang akan melewatinya (titik dekat
+  // dasar grafik) dipindah ke atas titik supaya tidak menimpa label sumbu X.
+  batasBawah?: number;
 }) {
   const padX = 4;
   const tinggi = fontSize + 6;
   const lebar = Math.ceil(teks.length * fontSize * 0.62) + padX * 2;
-  const atas = y - 7 - tinggi;
+  const keBawah = posisi === "bawah" && (batasBawah == null || y + 7 + tinggi <= batasBawah);
+  const atas = keBawah ? y + 7 : y - 7 - tinggi;
   return (
     <g pointerEvents="none">
       <rect

@@ -2,14 +2,15 @@
 
 // Padanan SalesTodayPanel (Es Kristal) untuk Es Balok: nominal hari itu,
 // balok terjual (kecil/besar), jumlah pesanan & agen, harga rata-rata per
-// jenis balok, dan pembanding kemarin. Navigasi hari lewat `loadDay`
+// jenis balok, dan tabel VS Tanggal (kemarin, bulan lalu, tahun lalu, dua
+// tahun lalu). Navigasi hari lewat `loadDay`
 // (server action milik halaman PT masing-masing).
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, ClipboardList, Users, Box, Coins, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DocChip } from "@/components/dashboard/sales-chips";
+import { DocChip, TrendPill } from "@/components/dashboard/sales-chips";
 import { formatRupiah, formatRupiahAvg, formatPercentPoints } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PenjualanBalokHari } from "@/lib/queries/penjualan-es-balok";
@@ -21,6 +22,20 @@ const dayFormatter = new Intl.DateTimeFormat("id-ID", {
   year: "numeric",
   timeZone: "UTC",
 });
+
+const compactRupiah = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+// Sesuai urutan PenjualanBalokHari.pembanding.
+const KETERANGAN_PEMBANDING = ["Kemarin", "Tanggal yang sama bulan lalu", "Tanggal yang sama tahun lalu", "Tanggal yang sama dua tahun lalu"];
+
+function pctChange(now: number, before: number): number | null {
+  return before ? ((now - before) / before) * 100 : null;
+}
 
 function shiftDateISO(dateISO: string, delta: number): string {
   const d = new Date(`${dateISO}T00:00:00Z`);
@@ -129,9 +144,31 @@ export function PenjualanBalokHariPanel({
         </div>
 
         <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <p className="font-display text-2xl font-semibold tabular-nums text-primary">{formatRupiah(data.nominal)}</p>
-            <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5">
+          <div className="flex items-start justify-between gap-2">
+            {/* Nominal + harga rata-rata per jenis balok tepat di bawahnya;
+                chip harga yang menyesuaikan lebar, chip balok tetap di kanan. */}
+            <div className="flex min-w-0 flex-col items-start gap-1">
+              <p className="font-display text-2xl leading-tight font-semibold tabular-nums text-primary">
+                {formatRupiah(data.nominal)}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <span
+                  title="Harga rata-rata balok kecil (termasuk ongkos logistik)"
+                  className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+                >
+                  <Coins className="size-3" />
+                  Kecil {data.hargaKecil ? formatRupiahAvg(data.hargaKecil) : "-"}
+                </span>
+                <span
+                  title="Harga rata-rata balok besar (termasuk ongkos logistik)"
+                  className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+                >
+                  <Coins className="size-3" />
+                  Besar {data.hargaBesar ? formatRupiahAvg(data.hargaBesar) : "-"}
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5">
               <Box className="size-4 text-primary" />
               <div className="flex flex-col leading-tight">
                 <span className="font-display text-sm font-semibold tabular-nums text-primary">
@@ -153,30 +190,32 @@ export function PenjualanBalokHariPanel({
               </span>
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2">
-            <div className="flex flex-wrap gap-1.5">
-              <span
-                title="Harga rata-rata balok kecil (termasuk ongkos logistik)"
-                className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-              >
-                <Coins className="size-3" />
-                Kecil {data.hargaKecil ? formatRupiahAvg(data.hargaKecil) : "-"}
+          {/* Tabel VS Tanggal — gaya sama dengan "VS Periode" di panel bulan. */}
+          <div className="-mx-1 mt-2 overflow-x-auto border-t px-1 pt-2">
+            <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Tanggal</span>
+              <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Nominal
               </span>
-              <span
-                title="Harga rata-rata balok besar (termasuk ongkos logistik)"
-                className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-              >
-                <Coins className="size-3" />
-                Besar {data.hargaBesar ? formatRupiahAvg(data.hargaBesar) : "-"}
+              <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Balok
               </span>
+              {data.pembanding.map((p, i) => (
+                <Fragment key={p.tanggalISO}>
+                  <span className="whitespace-nowrap text-xs" title={KETERANGAN_PEMBANDING[i]}>
+                    {p.tanggalISO.replaceAll("-", "/")}
+                  </span>
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="whitespace-nowrap text-[10px] text-muted-foreground">{compactRupiah.format(p.nominal)}</span>
+                    <TrendPill percent={pctChange(data.nominal, p.nominal)} />
+                  </div>
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="whitespace-nowrap text-[10px] text-muted-foreground">{p.qty.toLocaleString("id-ID")}</span>
+                    <TrendPill percent={pctChange(totalBalok, p.qty)} />
+                  </div>
+                </Fragment>
+              ))}
             </div>
-            <span
-              title="Balok terjual sehari sebelum tanggal yang ditampilkan"
-              className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-            >
-              <Box className="size-3" />
-              {data.kemarinQty.toLocaleString("id-ID")} kemarin
-            </span>
           </div>
         </div>
       </CardContent>

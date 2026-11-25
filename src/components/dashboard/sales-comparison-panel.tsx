@@ -92,10 +92,12 @@ export function SalesComparisonPanel({
 
   return (
     <Card className="py-4">
-      <CardContent className="flex flex-col gap-3 px-4">
-        <div>
+      <CardContent className="flex flex-col gap-2 px-4">
+        {/* Kepala panel: baris 1 = tombol pindah bulan (kiri) + label
+            bulan (kanan); baris 2 = nominal penjualan (kiri) + chip kantong
+            terkirim (kanan). */}
+        <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{monthLabel(monthISO)}</p>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
@@ -116,9 +118,10 @@ export function SalesComparisonPanel({
                 <ChevronRight className="size-3.5" />
               </Button>
             </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{monthLabel(monthISO)}</p>
           </div>
-          <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
-            <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2">
               <p className="font-display text-xl font-semibold tabular-nums">{formatRupiah(current?.NetSales ?? 0)}</p>
               <div className="flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2 py-1">
                 <Truck className="size-3.5 text-primary" />
@@ -136,7 +139,7 @@ export function SalesComparisonPanel({
         {/* Horizontal-scroll safety net: the two "auto" value columns don't
             wrap, so at very narrow container widths (e.g. the tablet 2-up
             layout) this scrolls instead of spilling past the card edge. */}
-        <div className="-mx-1 overflow-x-auto border-t px-1 pt-3">
+        <div className="-mx-1 overflow-x-auto border-t px-1 pt-2">
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1.5">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">VS Periode</span>
             <span className="justify-self-end text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
