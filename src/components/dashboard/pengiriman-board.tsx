@@ -35,6 +35,7 @@ import { RouteValidationDialog, type RouteValidationDialogHandle } from "@/compo
 import { UbahPemesananDialog, type UbahPemesananTarget } from "@/components/dashboard/ubah-pemesanan-dialog";
 import { formatDate, formatTime, formatTimeWib, formatKemasanQty } from "@/lib/format";
 import { mergeImagesGrid, shareImageBlob, shareTextBlock } from "@/lib/share-image";
+import { PratinjauBagikanRute, type BagianRute } from "@/components/dashboard/pratinjau-bagikan-rute";
 import { ROLLOVER_HOUR, shiftDateISO, resolveBusinessDateTime, naiveWibTransDateToUtcInstant } from "@/lib/business-date";
 import { cn } from "@/lib/utils";
 import type { ArmadaRow, ArmadaInput } from "@/lib/queries/armada";
@@ -640,6 +641,17 @@ function computeCardSegments(j: JadwalCardData): CardSegment[] {
     });
   }
   return segments;
+}
+
+// Tahap proses satu Jadwal, untuk urutan "Bagikan Semua Rute → Data Rute":
+// 0 Draft (belum diproses) · 1 Mulai Muat · 2 Selesai Muat (Terbit, belum
+// berangkat) · 3 Berangkat · 4 Selesai (sudah Cek Datang).
+function tahapJadwal(j: JadwalCardData): number {
+  if (j.JamKembaliAktual) return 4;
+  if (j.JamAktualBerangkat) return 3;
+  if (j.Status === "Terbit") return 2;
+  if (j.JamMulaiMuat) return 1;
+  return 0;
 }
 
 // Waktu nyata satu Jadwal untuk kartu papan. Kembali = Cek Datang Satpam
@@ -1678,6 +1690,9 @@ export function PengirimanBoard({
   // actually ready to capture.
   const routeDialogRef = useRef<RouteValidationDialogHandle>(null);
   const [batchSharing, setBatchSharing] = useState<{ current: number; total: number } | null>(null);
+  // Hasil tangkapan "Bagikan Semua Rute → Data Rute" yang sedang ditata di
+  // dialog pratinjau (null = tertutup).
+  const [pratinjauRute, setPratinjauRute] = useState<BagianRute[] | null>(null);
   const [createArmadaId, setCreateArmadaId] = useState<number | null>(null);
   const [createActivityArmadaId, setCreateActivityArmadaId] = useState<number | null>(null);
   const [editingActivity, setEditingActivity] = useState<ArmadaActivity | null>(null);
@@ -1836,11 +1851,22 @@ export function PengirimanBoard({
       toast.error("Tutup dulu Validasi Rute yang sedang terbuka.");
       return;
     }
-    const targets = [...jadwal]
-      .filter((j) => j.Status === "Terbit")
-      .sort((a, b) => new Date(a.JamJadwal).getTime() - new Date(b.JamJadwal).getTime());
+    const menurutJam = (a: JadwalCardData, b: JadwalCardData) =>
+      new Date(a.JamJadwal).getTime() - new Date(b.JamJadwal).getTime();
+    // "Data Rute" menyertakan rute Draft juga, diurutkan per tahap —
+    // Draft lebih dulu (prioritas, belum diproses), lalu Mulai Muat, Selesai
+    // Muat, Berangkat, hingga Selesai; di dalam tahap yang sama menurut jam.
+    // Mode lain tetap hanya rute Terbit.
+    const targets =
+      mode === "data"
+        ? [...jadwal].sort((a, b) => tahapJadwal(a) - tahapJadwal(b) || menurutJam(a, b))
+        : [...jadwal].filter((j) => j.Status === "Terbit").sort(menurutJam);
     if (targets.length === 0) {
-      toast.error("Tidak ada rute Terbit untuk dibagikan pada tanggal ini.");
+      toast.error(
+        mode === "data"
+          ? "Tidak ada rute untuk dibagikan pada tanggal ini."
+          : "Tidak ada rute Terbit untuk dibagikan pada tanggal ini."
+      );
       return;
     }
 
@@ -1882,6 +1908,12 @@ export function PengirimanBoard({
     }
     if (imageParts.length === 0) {
       toast.error("Tidak ada rute yang berhasil diproses.");
+      return;
+    }
+    // "Data Rute": user menata dulu di pratinjau (urutkan/keluarkan) —
+    // penggabungan & salin ke papan klip terjadi dari tombol Bagikan di sana.
+    if (mode === "data") {
+      setPratinjauRute(imageParts);
       return;
     }
     try {
@@ -2240,6 +2272,12 @@ export function PengirimanBoard({
           }}
         />
       )}
+      <PratinjauBagikanRute
+        bagian={pratinjauRute}
+        judul={`Bagikan Semua Rute — ${formatDate(businessDate)}`}
+        namaBerkas={`validasi-rute-${businessDate}.png`}
+        onTutup={() => setPratinjauRute(null)}
+      />
     </Card>
   );
 }
