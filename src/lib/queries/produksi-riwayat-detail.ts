@@ -27,6 +27,9 @@ export interface RiwayatAlokasiPallet {
 export interface RiwayatKualitasEntry {
   kualitasId: number;
   waktu: string;
+  // null = entri tanpa mesin (data lama) -- dikelompokkan ke kolom
+  // "Tanpa mesin" di papan Riwayat Produksi.
+  mesinId: number | null;
   mesinNama: string;
   cekKejernihan: boolean;
   cekUkuranBentuk: boolean;
@@ -104,7 +107,7 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
 
   const [kualitasResult, jadwalResult] = await Promise.all([
     pool.request().input("minTanggal", sql.Date, minTanggal).query(`
-      SELECT k.KualitasID, k.TanggalLabel, k.Waktu, k.Shift, m.Nama AS MesinNama,
+      SELECT k.KualitasID, k.TanggalLabel, k.Waktu, k.Shift, k.MesinID, m.Nama AS MesinNama,
              k.CekKejernihan, k.CekUkuranBentuk, k.Qty10KG, k.Variant, k.DiameterDalamMm, k.Catatan,
              k.FotoPath, k.FotoBeratKemasanPath, k.CreatedByUserID, k.CreatedDate
       FROM DashboardProduksiKualitas k
@@ -125,6 +128,7 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
     TanggalLabel: Date;
     Waktu: string;
     Shift: ShiftNumber;
+    MesinID: number | null;
     MesinNama: string | null;
     CekKejernihan: boolean;
     CekUkuranBentuk: boolean;
@@ -205,6 +209,7 @@ export async function getRiwayatProduksiDetail(jumlahHari = 10): Promise<Riwayat
     group.entries.push({
       kualitasId: r.KualitasID,
       waktu: r.Waktu,
+      mesinId: r.MesinID ?? null,
       mesinNama: r.MesinNama ?? "-",
       cekKejernihan: r.CekKejernihan,
       cekUkuranBentuk: r.CekUkuranBentuk,

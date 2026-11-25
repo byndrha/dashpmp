@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Package, Zap, Timer, PackageCheck } from "lucide-react";
+import { Package, Zap, Timer, PackageCheck, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { updateMesinAction } from "@/app/mkesindo/produksi/actions";
+import { updateMesinAction, createMesinAction } from "@/app/mkesindo/produksi/actions";
 import { STATUS_MESIN_LABEL, type StatusMesin } from "@/lib/produksi-mesin-status";
 import type { MesinRow } from "@/lib/queries/produksi-mesin";
 
@@ -26,37 +26,125 @@ export function PanelMesin({ mesinList }: { mesinList: MesinRow[] }) {
   // (produksi-app, laporan-shift-detail) tidak ikut terdampak.
   const urutanTampil = [...mesinList].reverse();
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="relative flex flex-wrap gap-3">
       {urutanTampil.map((mesin) => (
         <MesinCard key={mesin.MesinID} mesin={mesin} />
       ))}
+      <TambahMesinCard mesinList={mesinList} />
+    </div>
+  );
+}
+
+interface NilaiFormMesin {
+  nama: string;
+  status: StatusMesin;
+  kapasitas: string;
+  listrik: string;
+  lamaProduksi: string;
+  lamaKemas: string;
+}
+
+function nilaiDariMesin(mesin: MesinRow): NilaiFormMesin {
+  return {
+    nama: mesin.Nama,
+    status: mesin.Status,
+    kapasitas: String(mesin.KapasitasProduksiPerHari),
+    listrik: String(mesin.KonsumsiListrikKWh),
+    lamaProduksi: String(mesin.LamaProduksiMenit),
+    lamaKemas: String(mesin.LamaPengemasanMenit),
+  };
+}
+
+// Mesin baru: nama berikutnya ("Mesin 4") dan angka dasar disalin dari
+// mesin terakhir supaya operator cukup mengoreksi bila berbeda.
+function nilaiMesinBaru(mesinList: MesinRow[]): NilaiFormMesin {
+  const contoh = mesinList[mesinList.length - 1];
+  return {
+    nama: `Mesin ${mesinList.length + 1}`,
+    status: "AKTIF",
+    kapasitas: contoh ? String(contoh.KapasitasProduksiPerHari) : "",
+    listrik: contoh ? String(contoh.KonsumsiListrikKWh) : "0",
+    lamaProduksi: contoh ? String(contoh.LamaProduksiMenit) : "0",
+    lamaKemas: contoh ? String(contoh.LamaPengemasanMenit) : "0",
+  };
+}
+
+function keInput(n: NilaiFormMesin) {
+  return {
+    nama: n.nama,
+    status: n.status,
+    kapasitasProduksiPerHari: Number(n.kapasitas),
+    konsumsiListrikKWh: Number(n.listrik),
+    lamaProduksiMenit: Number(n.lamaProduksi),
+    lamaPengemasanMenit: Number(n.lamaKemas),
+  };
+}
+
+// Isi dialog Ubah/Tambah Mesin (form yang sama untuk keduanya).
+function FormMesin({
+  nilai,
+  onUbah,
+  error,
+}: {
+  nilai: NilaiFormMesin;
+  onUbah: (n: NilaiFormMesin) => void;
+  error: string | null;
+}) {
+  function set<K extends keyof NilaiFormMesin>(k: K, v: NilaiFormMesin[K]) {
+    onUbah({ ...nilai, [k]: v });
+  }
+  return (
+    <div className="grid gap-3">
+      <div>
+        <Label>Nama</Label>
+        <Input value={nilai.nama} onChange={(e) => set("nama", e.target.value)} />
+      </div>
+      <div>
+        <Label>Status</Label>
+        <Select value={nilai.status} onValueChange={(v) => set("status", (v as StatusMesin) ?? "AKTIF")}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Pilih status">{(v: string) => STATUS_MESIN_LABEL[v as StatusMesin]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s} value={s}>
+                {STATUS_MESIN_LABEL[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>Kapasitas Produksi (kantong/hari)</Label>
+        <Input type="number" value={nilai.kapasitas} onChange={(e) => set("kapasitas", e.target.value)} />
+      </div>
+      <div>
+        <Label>Konsumsi Listrik (kWh)</Label>
+        <Input type="number" value={nilai.listrik} onChange={(e) => set("listrik", e.target.value)} />
+      </div>
+      <div>
+        <Label>Lama Produksi (menit)</Label>
+        <Input type="number" value={nilai.lamaProduksi} onChange={(e) => set("lamaProduksi", e.target.value)} />
+      </div>
+      <div>
+        <Label>Lama Pengemasan (menit)</Label>
+        <Input type="number" value={nilai.lamaKemas} onChange={(e) => set("lamaKemas", e.target.value)} />
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }
 
 function MesinCard({ mesin }: { mesin: MesinRow }) {
   const [open, setOpen] = useState(false);
-  const [nama, setNama] = useState(mesin.Nama);
-  const [status, setStatus] = useState<StatusMesin>(mesin.Status);
-  const [kapasitas, setKapasitas] = useState(String(mesin.KapasitasProduksiPerHari));
-  const [listrik, setListrik] = useState(String(mesin.KonsumsiListrikKWh));
-  const [lamaProduksi, setLamaProduksi] = useState(String(mesin.LamaProduksiMenit));
-  const [lamaKemas, setLamaKemas] = useState(String(mesin.LamaPengemasanMenit));
+  const [nilai, setNilai] = useState(() => nilaiDariMesin(mesin));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function handleSave() {
     setError(null);
     startTransition(async () => {
-      const result = await updateMesinAction({
-        mesinId: mesin.MesinID,
-        nama,
-        status,
-        kapasitasProduksiPerHari: Number(kapasitas),
-        konsumsiListrikKWh: Number(listrik),
-        lamaProduksiMenit: Number(lamaProduksi),
-        lamaPengemasanMenit: Number(lamaKemas),
-      });
+      const result = await updateMesinAction({ mesinId: mesin.MesinID, ...keInput(nilai) });
       if (!result.success) {
         setError(result.error);
         return;
@@ -71,19 +159,10 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
       onOpenChange={(next) => {
         setOpen(next);
         if (next) {
-          // MesinCard stays mounted across open/close cycles (keyed by
-          // MesinID, not remounted), so abandoned edits from a previous
-          // open that was dismissed without saving (X button, Escape,
-          // backdrop click) would otherwise still be sitting in state the
-          // next time the dialog opens. Reseed from the live `mesin` prop
-          // every time it opens so it always starts from the true current
-          // values.
-          setNama(mesin.Nama);
-          setStatus(mesin.Status);
-          setKapasitas(String(mesin.KapasitasProduksiPerHari));
-          setListrik(String(mesin.KonsumsiListrikKWh));
-          setLamaProduksi(String(mesin.LamaProduksiMenit));
-          setLamaKemas(String(mesin.LamaPengemasanMenit));
+          // MesinCard tetap ter-mount antar buka/tutup (key MesinID), jadi
+          // isian yang ditinggalkan tanpa disimpan diisi ulang dari data
+          // mesin terkini setiap kali dialog dibuka.
+          setNilai(nilaiDariMesin(mesin));
           setError(null);
         }
       }}
@@ -118,47 +197,69 @@ function MesinCard({ mesin }: { mesin: MesinRow }) {
         <DialogHeader>
           <DialogTitle>Ubah Data Mesin</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-3">
-          <div>
-            <Label>Nama</Label>
-            <Input value={nama} onChange={(e) => setNama(e.target.value)} />
-          </div>
-          <div>
-            <Label>Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus((v as StatusMesin) ?? "AKTIF")}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih status">{(v: string) => STATUS_MESIN_LABEL[v as StatusMesin]}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {STATUS_MESIN_LABEL[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Kapasitas Produksi (kantong/hari)</Label>
-            <Input type="number" value={kapasitas} onChange={(e) => setKapasitas(e.target.value)} />
-          </div>
-          <div>
-            <Label>Konsumsi Listrik (kWh)</Label>
-            <Input type="number" value={listrik} onChange={(e) => setListrik(e.target.value)} />
-          </div>
-          <div>
-            <Label>Lama Produksi (menit)</Label>
-            <Input type="number" value={lamaProduksi} onChange={(e) => setLamaProduksi(e.target.value)} />
-          </div>
-          <div>
-            <Label>Lama Pengemasan (menit)</Label>
-            <Input type="number" value={lamaKemas} onChange={(e) => setLamaKemas(e.target.value)} />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </div>
+        <FormMesin nilai={nilai} onUbah={setNilai} error={error} />
         <DialogFooter>
           <Button onClick={handleSave} disabled={pending}>
             {pending ? "Menyimpan..." : "Simpan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Tombol bulat "+" di pojok kanan atas deretan kartu mesin (absolute — deretan
+// kartu menggantung di tepi bawah peta, sebelahnya ada legenda peta, jadi
+// tidak boleh menambah lebar). Mesin baru langsung
+// tampil di peta, menjadi papan (kolom) baru di Riwayat Produksi, dan
+// muncul sebagai pilihan mesin di aplikasi operator.
+function TambahMesinCard({ mesinList }: { mesinList: MesinRow[] }) {
+  const [open, setOpen] = useState(false);
+  const [nilai, setNilai] = useState(() => nilaiMesinBaru(mesinList));
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function handleSave() {
+    setError(null);
+    startTransition(async () => {
+      const result = await createMesinAction(keInput(nilai));
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setNilai(nilaiMesinBaru(mesinList));
+          setError(null);
+        }
+      }}
+    >
+      <DialogTrigger
+        title="Tambah mesin produksi"
+        aria-label="Tambah Mesin"
+        className="absolute -top-3 -right-3 z-10 flex size-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:border-primary/60 hover:bg-primary hover:text-primary-foreground"
+      >
+        <Plus className="size-4" />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Tambah Mesin</DialogTitle>
+        </DialogHeader>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Mesin baru otomatis menjadi papan baru di Riwayat Produksi dan bisa dipilih operator saat mencatat hasil panen.
+        </p>
+        <FormMesin nilai={nilai} onUbah={setNilai} error={error} />
+        <DialogFooter>
+          <Button onClick={handleSave} disabled={pending}>
+            {pending ? "Menyimpan..." : "Tambah"}
           </Button>
         </DialogFooter>
       </DialogContent>

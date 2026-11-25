@@ -8,6 +8,7 @@ import { getAkunNamaMap, getProduksiAkunOptions } from "@/lib/queries/akun";
 import { getJadwalBulan } from "@/lib/queries/jadwal-tim-produksi";
 import { getValidasiBulanAction } from "@/app/mkesindo/produksi/actions";
 import { getCurrentShift } from "@/lib/queries/aktivitas-produksi";
+import { getJedaMesinSejak } from "@/lib/queries/produksi-mesin-jeda";
 import { PetaWarehouseDesktop } from "@/components/produksi/peta-warehouse-desktop";
 import { KorelasiProduksiPenjualanPanel } from "@/components/produksi/korelasi-produksi-penjualan-panel";
 import { PanelMesin } from "@/components/produksi/panel-mesin";
@@ -21,7 +22,11 @@ export default async function ProduksiPage() {
   const { tanggalUsaha } = getCurrentShift();
   const tahunAwal = Number(tanggalUsaha.slice(0, 4));
   const bulanAwal = Number(tanggalUsaha.slice(5, 7));
-  const [posisi, mesinList, timList, anggotaTimList, produksiAkunOptions, riwayatGrupRaw, jadwalAwal, validasiBulanResult] = await Promise.all([
+  // Catatan jeda mesin untuk jendela Riwayat Produksi (10 hari usaha; Shift 2
+  // & 3 jatuh sehari sebelum tanggal usaha, jadi mundur 11 hari).
+  const awalJeda = new Date(`${tanggalUsaha}T00:00:00Z`);
+  awalJeda.setUTCDate(awalJeda.getUTCDate() - 11);
+  const [posisi, mesinList, timList, anggotaTimList, produksiAkunOptions, riwayatGrupRaw, jadwalAwal, validasiBulanResult, jedaList] = await Promise.all([
     getWarehouseMap(),
     getMesinList(),
     getAllTim(),
@@ -30,6 +35,7 @@ export default async function ProduksiPage() {
     getRiwayatProduksiDetail(),
     getJadwalBulan(tahunAwal, bulanAwal),
     getValidasiBulanAction(tahunAwal, bulanAwal),
+    getJedaMesinSejak(awalJeda.toISOString().slice(0, 16)),
   ]);
   const validasiBulanAwal = validasiBulanResult.success ? validasiBulanResult.data : {};
   // CreatedByUserID Kualitas ada di ruang AkunID Postgres yang sama dengan
@@ -60,7 +66,7 @@ export default async function ProduksiPage() {
           "Jadwal Tim Produksi" di bawahnya. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_440px] lg:items-start">
         <div className="relative mb-16 min-w-0">
-          <div data-awal-halaman className="mb-2 flex justify-end">
+          <div data-awal-halaman data-tanpa-menempel className="mb-2 flex justify-end">
             <KoreksiSnapshotDialog />
           </div>
           <PetaWarehouseDesktop posisi={posisi} mesinList={mesinList} />
@@ -88,6 +94,8 @@ export default async function ProduksiPage() {
         produksiAkunOptions={produksiAkunOptions}
         tanggalUsahaHariIni={tanggalUsaha}
         riwayatGrup={riwayatGrup}
+        mesinList={mesinList}
+        jedaList={jedaList}
         validasiBulanAwal={validasiBulanAwal}
       />
     </div>

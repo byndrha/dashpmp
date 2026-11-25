@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireProduksiView, requireProduksiAdmin } from "@/lib/require-access";
-import { getMesinList, updateMesin, type MesinRow, type UpdateMesinInput } from "@/lib/queries/produksi-mesin";
+import { getMesinList, updateMesin, createMesin, type MesinRow, type UpdateMesinInput, type CreateMesinInput } from "@/lib/queries/produksi-mesin";
 import {
   getWarehouseMap,
   getRiwayatProduksi,
@@ -99,6 +99,8 @@ import {
   type TakeAwayMuatanSelesaiRow,
 } from "@/lib/queries/takeaway-muatan";
 import { getValidasiBulan, type ValidasiShift } from "@/lib/queries/produksi-validasi-tim";
+import { createJedaMesin, updateJedaMesin, deleteJedaMesin, type SimpanJedaInput } from "@/lib/queries/produksi-mesin-jeda";
+import { isPenyebabJeda } from "@/lib/produksi-mesin-jeda";
 
 export async function getMesinListAction(): Promise<ActionResult<MesinRow[]>> {
   return runAction(async () => {
@@ -115,6 +117,62 @@ export async function updateMesinAction(input: UpdateMesinInput): Promise<Action
     await updateMesin(input);
     revalidatePath("/mkesindo/produksi");
     revalidatePath("/mkesindo/produksi-app");
+  });
+}
+
+// Catatan Jeda Mesin — alasan mesin tidak berproduksi pada rentang waktu
+// tertentu (dari tombol "+" di samping chip jeda linimasa Riwayat Produksi).
+// jedaId null = catatan baru.
+const POLA_WAKTU_NAIF = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const DURASI_JEDA_MAKS_MENIT = 48 * 60;
+
+function validasiJeda(input: SimpanJedaInput): SimpanJedaInput {
+  if (!Number.isInteger(input.mesinId) || input.mesinId <= 0) throw new AppError("Mesin tidak valid.");
+  if (!isPenyebabJeda(input.penyebab)) throw new AppError("Penyebab tidak valid.");
+  const mulai = input.waktuMulai.slice(0, 16);
+  const selesai = input.waktuSelesai.slice(0, 16);
+  if (!POLA_WAKTU_NAIF.test(mulai) || !POLA_WAKTU_NAIF.test(selesai)) throw new AppError("Waktu mulai/selesai wajib diisi.");
+  const durasi = (Date.parse(`${selesai}:00Z`) - Date.parse(`${mulai}:00Z`)) / 60_000;
+  if (!(durasi > 0)) throw new AppError("Waktu selesai harus setelah waktu mulai.");
+  if (durasi > DURASI_JEDA_MAKS_MENIT) throw new AppError("Durasi satu catatan jeda maksimal 48 jam.");
+  const keterangan = input.keterangan?.trim() || null;
+  if (input.penyebab === "LAINNYA" && !keterangan) throw new AppError("Tuliskan aktivitasnya di keterangan.");
+  if (keterangan && keterangan.length > 500) throw new AppError("Keterangan maksimal 500 karakter.");
+  return { ...input, waktuMulai: mulai, waktuSelesai: selesai, keterangan };
+}
+
+export async function simpanJedaMesinAction(jedaId: number | null, input: SimpanJedaInput): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    const session = await requireProduksiView();
+    const bersih = validasiJeda(input);
+    let id = jedaId;
+    if (id == null) id = await createJedaMesin(bersih, Number(session.user.id));
+    else await updateJedaMesin(id, bersih);
+    revalidatePath("/mkesindo/produksi");
+    return id;
+  });
+}
+
+export async function hapusJedaMesinAction(jedaId: number): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    await deleteJedaMesin(jedaId);
+    revalidatePath("/mkesindo/produksi");
+  });
+}
+
+export async function createMesinAction(input: CreateMesinInput): Promise<ActionResult<number>> {
+  return runAction(async () => {
+    await requireProduksiView();
+    const nama = input.nama.trim();
+    if (!nama) throw new AppError("Nama mesin tidak boleh kosong.");
+    if (input.kapasitasProduksiPerHari <= 0) throw new AppError("Kapasitas produksi harus lebih dari 0.");
+    const sudahAda = (await getMesinList()).some((m) => m.Nama.trim().toLowerCase() === nama.toLowerCase());
+    if (sudahAda) throw new AppError(`Mesin bernama "${nama}" sudah ada.`);
+    const id = await createMesin({ ...input, nama });
+    revalidatePath("/mkesindo/produksi");
+    revalidatePath("/mkesindo/produksi-app");
+    return id;
   });
 }
 

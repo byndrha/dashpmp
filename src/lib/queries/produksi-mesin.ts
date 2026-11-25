@@ -81,6 +81,29 @@ export async function getMesinCounterUntukShift(tanggalUsaha: string, shift: Shi
   return [...byMesin.values()];
 }
 
+export type CreateMesinInput = Omit<UpdateMesinInput, "mesinId">;
+
+// Mesin baru (tombol "Tambah Mesin" di Peta Cold Storage). Otomatis ikut di
+// semua konsumen getMesinList: kartu mesin di peta, papan Riwayat Produksi
+// (satu kolom per mesin), dan pilihan mesin di aplikasi operator.
+export async function createMesin(input: CreateMesinInput): Promise<number> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("nama", sql.VarChar(100), input.nama)
+    .input("status", sql.VarChar(20), input.status)
+    .input("kapasitas", sql.Int, input.kapasitasProduksiPerHari)
+    .input("listrik", sql.Decimal(10, 2), input.konsumsiListrikKWh)
+    .input("lamaProduksi", sql.Int, input.lamaProduksiMenit)
+    .input("lamaKemas", sql.Int, input.lamaPengemasanMenit)
+    .query(`
+      INSERT INTO DashboardProduksiMesin (Nama, Status, KapasitasProduksiPerHari, KonsumsiListrikKWh, LamaProduksiMenit, LamaPengemasanMenit)
+      OUTPUT INSERTED.MesinID
+      VALUES (@nama, @status, @kapasitas, @listrik, @lamaProduksi, @lamaKemas)
+    `);
+  return result.recordset[0].MesinID as number;
+}
+
 export async function updateMesin(input: UpdateMesinInput): Promise<void> {
   const pool = await getPool();
   await pool

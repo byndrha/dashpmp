@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { formatDate } from "@/lib/format";
 import { JadwalTimBulanan } from "@/components/produksi/jadwal-tim-bulanan";
-import { RiwayatProduksi } from "@/components/produksi/riwayat-produksi";
+import { RiwayatProduksiLinimasa } from "@/components/produksi/riwayat-produksi-linimasa";
 import { getValidasiBulanAction } from "@/app/mkesindo/produksi/actions";
 import type { JadwalTimRow } from "@/lib/queries/jadwal-tim-produksi";
 import type { TimRow, AnggotaTimRow } from "@/lib/queries/tim-produksi";
 import type { StafOperasionalOption } from "@/lib/queries/akun";
 import type { RiwayatShiftGroup } from "@/lib/queries/produksi-riwayat-detail";
+import type { MesinRow } from "@/lib/queries/produksi-mesin";
+import type { JedaMesinRow } from "@/lib/produksi-mesin-jeda";
 import type { ValidasiShift } from "@/lib/queries/produksi-validasi-tim";
 
 // Menggabungkan Jadwal Tim Produksi + Riwayat Produksi dalam satu client
@@ -26,6 +28,8 @@ export function JadwalDanRiwayatProduksi({
   produksiAkunOptions,
   tanggalUsahaHariIni,
   riwayatGrup,
+  mesinList,
+  jedaList,
   validasiBulanAwal,
 }: {
   tahunAwal: number;
@@ -36,6 +40,8 @@ export function JadwalDanRiwayatProduksi({
   produksiAkunOptions: StafOperasionalOption[];
   tanggalUsahaHariIni: string;
   riwayatGrup: RiwayatShiftGroup[];
+  mesinList: MesinRow[];
+  jedaList: JedaMesinRow[];
   validasiBulanAwal: Record<string, ValidasiShift>;
 }) {
   const [tanggalFilter, setTanggalFilter] = useState<string | null>(null);
@@ -88,7 +94,7 @@ export function JadwalDanRiwayatProduksi({
             </button>
           )}
         </div>
-        <RiwayatProduksi riwayatGrup={riwayatTertampil} />
+        <RiwayatProduksiLinimasa riwayatGrup={riwayatTertampil} mesinList={mesinList} jedaList={jedaList} />
       </section>
     </>
   );
