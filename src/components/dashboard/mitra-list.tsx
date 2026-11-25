@@ -48,6 +48,7 @@ import type { Kompetitor } from "@/lib/queries/kompetitor";
 import {
   deleteMitraAction,
   setMitraSuspendedAction,
+  setMitraCadanganAction,
   setMitraPemilikAction,
   simpanMitraLengkapAction,
   jadikanLokasiUtamaAction,
@@ -191,6 +192,10 @@ export function MitraFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [sedangJadikan, startJadikan] = useTransition();
+  // Mitra Cadangan (stok es gratis, mis. "Complimentary"): bukan tujuan
+  // antar — tanpa titik lokasi. Diterapkan langsung saat dicentang.
+  const [cadangan, setCadangan] = useState(mitra?.IsCadangan ?? false);
+  const [sedangCadangan, startCadangan] = useTransition();
 
   // Muat identitas + kompetitor + hak akses + alamat/lokasi SEGAR saat
   // dialog dipasang. Isian identitas & alamat dikunci (dan Simpan nonaktif)
@@ -314,7 +319,49 @@ export function MitraFormDialog({
     });
   }
 
-  const titikPeta = useMemo(() => titikLokasiMitra(nama || "Mitra", bpId ?? "baru", alamat), [nama, bpId, alamat]);
+  async function handleCadangan(next: boolean) {
+    if (!bpId) return;
+    const ok = await konfirmasi(
+      next
+        ? "Tandai sebagai Stok Cadangan? Titik lokasi mitra ini akan DIHAPUS dan pesanannya tidak lagi menjadi titik drop di rute maupun Aplikasi Driver (DO/SI tetap dibuat)."
+        : "Lepas tanda Stok Cadangan? Pesanan mitra ini kembali menjadi tujuan antar dan wajib punya titik lokasi. Pin lama dipulihkan bila tersimpan.",
+      { judul: next ? "Tandai Stok Cadangan" : "Lepas Stok Cadangan", tombol: next ? "Tandai" : "Lepas", bahaya: next }
+    );
+    if (!ok) return;
+    setError(null);
+    startCadangan(async () => {
+      const r = await setMitraCadanganAction(bpId, next);
+      if (!r.success) {
+        setError(r.error);
+        return;
+      }
+      setCadangan(next);
+      // Pin/lokasi berubah di server — muat ulang isian alamat supaya
+      // "Simpan" berikutnya tidak menulis ulang pin lama.
+      const d = await getMitraDetailAction(bpId);
+      if (d.success && d.data) {
+        const segar = mitraKeAlamatForm(d.data);
+        // Teks alamat mitra (Identitas) yang sedang diisi dipertahankan; pin
+        // (alamatMitra & lokasiUtama) serta lokasi tambahan ikut data server.
+        setAlamat((prev) => ({
+          ...segar,
+          alamatMitra: {
+            ...prev.alamatMitra,
+            latitude: segar.alamatMitra.latitude,
+            longitude: segar.alamatMitra.longitude,
+            geoAlamat: segar.alamatMitra.geoAlamat,
+          },
+        }));
+        setVersiAlamat((v) => v + 1);
+      }
+      toast.success(next ? "Ditandai Stok Cadangan — titik lokasi dihapus." : "Tanda Stok Cadangan dilepas.");
+    });
+  }
+
+  const titikPeta = useMemo(
+    () => (cadangan ? [] : titikLokasiMitra(nama || "Mitra", bpId ?? "baru", alamat)),
+    [cadangan, nama, bpId, alamat]
+  );
   // Peta dipasang ulang saat titik berubah agar tampilan menyesuaikan semua pin.
   const kunciPeta = titikPeta.map((t) => `${t.Key}@${t.Latitude},${t.Longitude}`).join("|");
 
@@ -358,7 +405,7 @@ export function MitraFormDialog({
             value={alamat.alamatMitra}
             onChange={(fn) => setAlamat((a) => ({ ...a, alamatMitra: fn(a.alamatMitra) }))}
             renderWilayahKecamatan={renderWilayahKecamatan}
-            tampilkanPin={!alamat.lokasiBerbeda}
+            tampilkanPin={!alamat.lokasiBerbeda && !cadangan}
             disabled={memuat}
           />
 
@@ -459,15 +506,35 @@ export function MitraFormDialog({
             </Select>
           </div>
 
-          <LokasiPengirimanSection
-            key={`lokasi-${versiAlamat}`}
-            value={alamat}
-            onChange={setAlamat}
-            renderWilayahKecamatan={renderWilayahKecamatan}
-            onJadikanUtama={bpId ? handleJadikanUtama : undefined}
-            sedangJadikanUtama={sedangJadikan}
-            disabled={memuat}
-          />
+          {bpId && (
+            <label
+              className={cn(
+                "col-span-full flex cursor-pointer items-center gap-2.5 rounded-lg border p-3 text-sm",
+                cadangan ? "border-sky-400/50 bg-sky-500/5" : "border-border"
+              )}
+            >
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 accent-sky-600"
+                checked={cadangan}
+                disabled={memuat || sedangCadangan}
+                onChange={(e) => handleCadangan(e.target.checked)}
+              />
+              <span className="font-medium">Stok Cadangan</span>
+            </label>
+          )}
+
+          {!cadangan && (
+            <LokasiPengirimanSection
+              key={`lokasi-${versiAlamat}`}
+              value={alamat}
+              onChange={setAlamat}
+              renderWilayahKecamatan={renderWilayahKecamatan}
+              onJadikanUtama={bpId ? handleJadikanUtama : undefined}
+              sedangJadikanUtama={sedangJadikan}
+              disabled={memuat}
+            />
+          )}
 
           <div className="col-span-2 flex flex-col gap-1 sm:col-span-3">
             <Label className="text-xs text-muted-foreground">Daftar Kompetitor</Label>
@@ -505,7 +572,7 @@ export function MitraFormDialog({
 
           {(error || galatKonteks) && <p className="col-span-full text-xs text-destructive">{error ?? galatKonteks}</p>}
           <DialogFooter className="col-span-full">
-            <Button type="submit" disabled={pending || memuat || sedangJadikan} className="ml-auto">
+            <Button type="submit" disabled={pending || memuat || sedangJadikan || sedangCadangan} className="ml-auto">
               {pending ? "Menyimpan..." : memuat ? "Memuat..." : "Simpan"}
             </Button>
           </DialogFooter>

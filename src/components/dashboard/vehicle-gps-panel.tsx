@@ -2,7 +2,8 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
+import { MapContainer, Marker, Popup, Polyline } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
 import {
   AlertTriangle,
@@ -19,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 import {
   getVehiclePositionsAction,
@@ -177,7 +178,6 @@ export function VehicleGpsPanel({
   const mapRef = useRef<L.Map | null>(null);
   const markerRefs = useRef<Map<string, L.Marker>>(new Map());
 
-  const tile = TILE_SOURCES[mapStyle];
   const selected = useMemo(() => positions.find((p) => vehicleKey(p) === selectedKey) ?? null, [positions, selectedKey]);
 
   // Which armada currently have more than one provider reporting a position
@@ -286,7 +286,7 @@ export function VehicleGpsPanel({
             attributionControl={false}
             style={{ height: "100%", minHeight: 320, width: "100%", borderRadius: "var(--radius-lg)" }}
           >
-            <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+            <PetaTile mapStyle={mapStyle} />
             <MapZoomControl className="top-2 left-2" />
             {positions.map((v) => (
               <Marker

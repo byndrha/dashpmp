@@ -2,9 +2,10 @@
 
 import "leaflet/dist/leaflet.css";
 import { useCallback, useRef, useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 
 // Leaflet's default marker icon paths break under Next.js's bundler unless
@@ -49,7 +50,6 @@ export interface AgenLocationMapProps {
 export function AgenLocationMap({ latitude, longitude, onChange, recenterKey, readOnly }: AgenLocationMapProps) {
   const markerRef = useRef<L.Marker>(null);
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
-  const tile = TILE_SOURCES[mapStyle];
 
   const handleDragEnd = useCallback(() => {
     const marker = markerRef.current;
@@ -68,7 +68,7 @@ export function AgenLocationMap({ latitude, longitude, onChange, recenterKey, re
         attributionControl={false}
         style={{ height: 260, width: "100%", borderRadius: "var(--radius-lg)" }}
       >
-        <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <MapZoomControl className="top-2 left-2" />
         <Marker
           position={[latitude, longitude]}

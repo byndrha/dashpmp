@@ -33,7 +33,7 @@ export default async function DriverJadwalPage({ params }: { params: Promise<{ j
     notFound();
   }
 
-  const stops = await getDriverJadwalStops(id);
+  const stops = await getDriverJadwalStops(id, { tanpaCadangan: true });
   if (stops.length === 0) notFound();
 
   const [pabrik, header] = await Promise.all([getPabrikLocation(), getJadwalHeader(id)]);

@@ -425,6 +425,13 @@ export async function assertLokasiTidakDipakaiJadwalTerbuka(exec: Exec, lokasiId
 }
 
 /**
+ * Ekspresi SQL boolean: mitra `${bpAlias}` ditandai Cadangan
+ * (DashboardMitraCadangan — stok es gratis cadangan, bukan tujuan antar).
+ */
+export const MITRA_CADANGAN_EXISTS = (bpAlias: string): string =>
+  `EXISTS (SELECT 1 FROM DashboardMitraCadangan mcad WHERE mcad.BusinessPartnerID = ${bpAlias}.BusinessPartnerID)`;
+
+/**
  * JOIN untuk resolusi alamat stop. Alias tetap: `ml` (pin utama, dari
  * `${soAlias}.BusinessPartnerID`) dan `lp` (lokasi terpilih). lp TIDAK
  * difilter IsDeleted — lokasi yang sudah dihapus tetap ter-resolve demi riwayat.
@@ -450,13 +457,24 @@ export const STOP_LOKASI_COLUMNS = (jdAlias: string): string => {
     CASE WHEN ${jdAlias}.KirimDibekukanAt IS NOT NULL THEN ${jdAlias}.${snapshot}
          WHEN ${jdAlias}.LokasiPengirimanID IS NOT NULL THEN ${dipilih}
          ELSE ${utama} END AS ${alias}`;
+  // Mitra Cadangan (stok es gratis cadangan, mis. "Complimentary"): bukan
+  // tujuan antar — koordinatnya SELALU NULL (termasuk snapshot Kirim* lama
+  // yang terlanjur berisi titik palsu), dan StopIsCadangan = 1 supaya
+  // pemeriksaan "semua tujuan wajib punya lokasi" melewatinya.
+  const koordinat = (snapshot: string, dipilih: string, utama: string, alias: string) => `
+    CASE WHEN ${MITRA_CADANGAN_EXISTS("bp")} THEN NULL
+         WHEN ${jdAlias}.KirimDibekukanAt IS NOT NULL THEN ${jdAlias}.${snapshot}
+         WHEN ${jdAlias}.LokasiPengirimanID IS NOT NULL THEN ${dipilih}
+         ELSE ${utama} END AS ${alias}`;
   return [
     kolom("KirimAlamat", "lp.Alamat", "bp.Address", "StopAlamat"),
     kolom("KirimWilayah", "lp.Wilayah", "bp.NPWPName", "StopWilayah"),
     kolom("KirimKecamatan", "lp.Kecamatan", "bp.NPWPAddress", "StopKecamatan"),
     kolom("KirimKontak", "COALESCE(NULLIF(LTRIM(RTRIM(lp.Kontak)), ''), bp.MobileNo)", "bp.MobileNo", "StopKontak"),
-    kolom("KirimLatitude", "lp.Latitude", "ml.Latitude", "StopLatitude"),
-    kolom("KirimLongitude", "lp.Longitude", "ml.Longitude", "StopLongitude"),
+    koordinat("KirimLatitude", "lp.Latitude", "ml.Latitude", "StopLatitude"),
+    koordinat("KirimLongitude", "lp.Longitude", "ml.Longitude", "StopLongitude"),
+    `
+    CASE WHEN ${MITRA_CADANGAN_EXISTS("bp")} THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS StopIsCadangan`,
     `
     CASE WHEN ${jdAlias}.KirimDibekukanAt IS NOT NULL THEN 'snapshot'
          WHEN ${jdAlias}.LokasiPengirimanID IS NOT NULL THEN 'dipilih'

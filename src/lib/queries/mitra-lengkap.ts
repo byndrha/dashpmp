@@ -48,6 +48,13 @@ async function tulisPinUtamaBilaBerubah(
   userId: string
 ): Promise<void> {
   if (utama.latitude == null || utama.longitude == null) return;
+  // Mitra Cadangan (stok es gratis, bukan tujuan) tidak boleh punya titik
+  // lokasi — pin dari form diabaikan (lihat mitra-cadangan.ts).
+  const cad = await tx
+    .request()
+    .input("bpId", sql.VarChar(16), bpId)
+    .query(`SELECT 1 AS Ada FROM DashboardMitraCadangan WHERE BusinessPartnerID = @bpId`);
+  if (cad.recordset.length > 0) return;
   const res = await tx
     .request()
     .input("bpId", sql.VarChar(16), bpId)

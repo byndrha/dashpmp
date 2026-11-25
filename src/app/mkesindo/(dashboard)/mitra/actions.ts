@@ -14,6 +14,7 @@ import {
   type PriceLevelOption,
 } from "@/lib/queries/mitra";
 import { setMitraLocation } from "@/lib/queries/mitra-location";
+import { setMitraCadangan } from "@/lib/queries/mitra-cadangan";
 import { jadikanLokasiUtama } from "@/lib/queries/mitra-lokasi-pengiriman";
 import { simpanMitraLengkap, type MitraLengkapInput } from "@/lib/queries/mitra-lengkap";
 import { getIdentitasMitra, type IdentitasMitra } from "@/lib/queries/mitra-identitas";
@@ -182,6 +183,20 @@ export async function setMitraSuspendedAction(id: string, suspended: boolean): P
     await setMitraSuspended(id, suspended);
     revalidatePath("/mkesindo/mitra");
     revalidatePath("/mkesindo/pemesanan");
+  });
+}
+
+// Checklist "Mitra Cadangan" di form Edit Mitra — langsung diterapkan.
+// Tandai = pin & lokasi pengiriman dihapus (pin lama disimpan untuk
+// pemulihan); lepas = pin lama dipulihkan bila belum ada pin baru.
+export async function setMitraCadanganAction(id: string, cadangan: boolean): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) throw new AppError("Unauthorized");
+    await setMitraCadangan(id, cadangan, Number(userId));
+    revalidatePath("/mkesindo/mitra");
+    revalidatePath("/mkesindo/delivery");
   });
 }
 

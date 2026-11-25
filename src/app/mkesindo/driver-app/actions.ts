@@ -68,7 +68,7 @@ export async function getDriverJadwalStopsAction(jadwalId: number): Promise<Acti
   return runAction(async () => {
     const salesmanId = await requireOwnSalesmanId();
     await assertOwnsJadwal(jadwalId, salesmanId);
-    return getDriverJadwalStops(jadwalId);
+    return getDriverJadwalStops(jadwalId, { tanpaCadangan: true });
   });
 }
 

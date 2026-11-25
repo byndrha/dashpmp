@@ -62,6 +62,13 @@ export function DriverJadwalCardItem({ jadwal: j }: { jadwal: DriverJadwalCard }
           <span className="flex items-center gap-1">
             <PackageCheck className="size-3.5" />
             {j.TotalKantong} kantong
+            {/* Muatan cadangan (mitra Complimentary): ikut dibawa, BUKAN tujuan
+                antar — dipakai bila ada kantong bermasalah/ditolak. */}
+            {j.KantongCadangan > 0 && (
+              <span className="ml-1 rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium text-sky-700 dark:text-sky-300">
+                termasuk {j.KantongCadangan} cadangan
+              </span>
+            )}
           </span>
           {j.EstimasiSampai && !j.IsSelesai && (
             <span className="flex items-center gap-1 font-medium text-foreground">

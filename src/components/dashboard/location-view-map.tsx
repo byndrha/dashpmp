@@ -2,9 +2,10 @@
 
 import "leaflet/dist/leaflet.css";
 import { useState } from "react";
-import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import { MapContainer, Marker } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapAttribution } from "@/components/dashboard/map-controls";
 
 // Same icon setup as mitra-location-map.tsx, but this map is read-only
@@ -27,7 +28,6 @@ const markerIcon = L.icon({
 // visual though, so they still apply for consistency with every other map.
 export function LocationViewMap({ latitude, longitude }: { latitude: number; longitude: number }) {
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
-  const tile = TILE_SOURCES[mapStyle];
 
   return (
     <div className="relative z-0">
@@ -41,7 +41,7 @@ export function LocationViewMap({ latitude, longitude }: { latitude: number; lon
         attributionControl={false}
         style={{ height: 260, width: "100%", borderRadius: "var(--radius-lg)" }}
       >
-        <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <Marker position={[latitude, longitude]} icon={markerIcon} />
       </MapContainer>
 

@@ -28,7 +28,7 @@ export default async function DriverPetaPage() {
   const routes = await Promise.all(
     jadwalList.map(async (j) => ({
       jadwalId: j.JadwalID,
-      stops: await getDriverJadwalStops(j.JadwalID),
+      stops: await getDriverJadwalStops(j.JadwalID, { tanpaCadangan: true }),
     }))
   );
 

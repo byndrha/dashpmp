@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
         titik: [],
         jarakKm: null,
         berhenti: [],
+        waktu: [],
+        kecepatan: [],
         dari: berangkat.toISOString(),
         sampai: ujung.toISOString(),
         final: false,

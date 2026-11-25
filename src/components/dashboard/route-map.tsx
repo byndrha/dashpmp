@@ -2,10 +2,21 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Popup, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
 import { Search, X } from "lucide-react";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import { formatJarakM, type BerhentiTerklasifikasi } from "@/lib/klasifikasi-berhenti";
+import type { AnalisisJejak, MasalahTujuan } from "@/lib/analisis-jejak";
+import {
+  WARNA_JENIS_BERHENTI,
+  LABEL_JENIS_BERHENTI,
+  WARNA_KANDIDAT_DROP,
+  WARNA_KELUAR_JALUR,
+  keteranganBerhenti,
+  type FokusPeta,
+} from "@/components/dashboard/log-pergerakan";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 import { formatRelativeTime, formatTime } from "@/lib/format";
 import type { JadwalDetailRow } from "@/lib/queries/pengiriman-jadwal";
@@ -214,11 +225,15 @@ function FitBounds({
   stops,
   routePoints,
   refitTrigger,
+  ruangKiri,
+  ruangBawah,
 }: {
   pabrik: { latitude: number; longitude: number };
   stops: Stop[];
   routePoints: [number, number][] | undefined;
   refitTrigger: number;
+  ruangKiri: number;
+  ruangBawah: number;
 }) {
   const map = useMap();
   useEffect(() => {
@@ -228,13 +243,20 @@ function FitBounds({
       ...(routePoints ?? []),
     ];
     if (points.length === 0) return;
-    map.fitBounds(L.latLngBounds(points), { padding: [32, 32], maxZoom: 15, animate: false });
+    // Ruang kiri/bawah = area peta yang tertutup panel melayang (Validasi
+    // Rute mode melayang) — rute dibingkai di area yang benar-benar terlihat.
+    map.fitBounds(L.latLngBounds(points), {
+      paddingTopLeft: [32 + ruangKiri, 32],
+      paddingBottomRight: [32, 32 + ruangBawah],
+      maxZoom: 15,
+      animate: false,
+    });
     // stops/routePoints are new array references most renders — keyed on
     // stop identity + point count instead so this only re-fits when the
     // route's actual data changes (or refitTrigger is bumped on purpose),
     // not on every unrelated re-render (which would fight a manual pan/zoom).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pabrik.latitude, pabrik.longitude, stops.map((s) => s.JadwalDetailID).join(","), routePoints?.length, refitTrigger]);
+  }, [pabrik.latitude, pabrik.longitude, stops.map((s) => s.JadwalDetailID).join(","), routePoints?.length, refitTrigger, ruangKiri, ruangBawah]);
   return null;
 }
 
@@ -251,7 +273,7 @@ function StopSearchBox({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: St
     : [];
 
   return (
-    <div className="absolute bottom-2 left-2 z-1000 flex w-56 max-w-[calc(100%-1rem)] flex-col-reverse gap-1">
+    <div className="absolute bottom-[calc(var(--ruang-bawah,0px)+var(--tinggi-label-posisi,0px)+0.5rem)] left-[calc(var(--ruang-kiri,0px)+0.5rem)] z-1000 flex w-56 max-w-[calc(100%-1rem)] flex-col-reverse gap-1">
       <div className="flex items-center gap-1.5 rounded-md bg-card/90 px-2 py-1.5 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
         <Search className="size-3.5 shrink-0 text-muted-foreground" />
         <input
@@ -290,7 +312,8 @@ function StopSearchBox({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: St
               className="flex w-full flex-col items-start px-2 py-1.5 text-left text-xs hover:bg-accent"
             >
               <span className="truncate font-medium">
-                #{s.Urutan} {s.CustomerName}
+                {/* Nomor tampil = nomor penanda peta (mulai 1), bukan Urutan mentah (mulai 0). */}
+                #{stops.indexOf(s) + 1} {s.CustomerName}
               </span>
               <span className="text-[11px] text-muted-foreground">{s.Wilayah}</span>
             </button>
@@ -308,6 +331,12 @@ export function RouteMap({
   refitTrigger = 0,
   driverPosition = null,
   jejak = null,
+  ruangKiri = 0,
+  ruangBawahKanan = 0,
+  ruangBawah = 0,
+  penuh = false,
+  fokusBerhenti = null,
+  analisis = null,
 }: {
   pabrik: { latitude: number; longitude: number };
   stops: (JadwalDetailRow & { Latitude: number; Longitude: number })[];
@@ -327,6 +356,21 @@ export function RouteMap({
   // Rute yang benar-benar ditempuh (null = tidak ditampilkan sama sekali,
   // mis. armada belum berangkat).
   jejak?: JejakPeta | null;
+  // Mode melayang Validasi Rute: lebar panel kiri & tinggi kotak kanan-bawah
+  // yang menutupi peta (px) — kontrol peta & pembingkaian rute menghindarinya.
+  ruangKiri?: number;
+  ruangBawahKanan?: number;
+  // Tinggi kotak yang menempel di dasar peta (mis. Bukti Cek Berangkat/
+  // Datang) — pencarian & atribusi naik di atasnya.
+  ruangBawah?: number;
+  // Peta mengisi tinggi induknya penuh (bukan minimal 320px).
+  penuh?: boolean;
+  // Diklik dari Log Pergerakan di panel dialog: peta melompat ke titik
+  // berhenti ini (dicocokkan lewat `mulai`). `n` berubah tiap klik supaya
+  // klik ulang baris yang sama tetap memicu lompatan.
+  fokusBerhenti?: (FokusPeta & { n: number }) | null;
+  // Analisis jejak GPS (dihitung pemanggil, dipakai bersama daftar tujuan).
+  analisis?: AnalisisJejak | null;
 }) {
   const jejakAda = jejak?.keadaan === "siap" && jejak.data.status === "ada" ? jejak.data : null;
   // Sakelar legenda — keduanya tampil secara bawaan.
@@ -337,7 +381,6 @@ export function RouteMap({
   const mapRef = useRef<L.Map | null>(null);
   const markerRefs = useRef<Map<number, L.Marker>>(new Map());
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
-  const tile = TILE_SOURCES[mapStyle];
   const driverBearing = driverPosition?.heading != null ? driverPosition.heading : driverPosition && polylinePositions ? bearingToNearestSegment([driverPosition.latitude, driverPosition.longitude], polylinePositions) : 0;
 
   // Re-evaluated every 30s so a ping ages into "(lama)" and its relative
@@ -358,8 +401,41 @@ export function RouteMap({
     markerRefs.current.get(stop.JadwalDetailID)?.openPopup();
   }
 
+  // Singgah GPS: bongkar di mitra digabung ke popup mitranya; sisanya
+  // (pabrik / di jalur / di luar rute / dugaan lokasi drop) tampil sebagai
+  // lingkaran berwarna — sama persis dengan catatan di daftar tujuan.
+  const bongkarPerTujuan = analisis?.bongkarPerTujuan ?? new Map<number, BerhentiTerklasifikasi[]>();
+  const lingkaranRefs = useRef<Map<string, L.CircleMarker>>(new Map());
+
+  useEffect(() => {
+    if (!fokusBerhenti) return;
+    const f = fokusBerhenti;
+    mapRef.current?.flyTo([f.lat, f.lng], 16);
+    // Popup dibuka setelah lompatan selesai supaya tidak tertutup animasi.
+    const t = setTimeout(() => {
+      const b = f.mulai ? analisis?.berhenti.find((x) => x.mulai === f.mulai) : undefined;
+      if (b?.jenis === "bongkar" && b.tujuan) markerRefs.current.get(b.tujuan.id)?.openPopup();
+      else if (b) lingkaranRefs.current.get(b.mulai)?.openPopup();
+      else if (f.tujuanId != null) markerRefs.current.get(f.tujuanId)?.openPopup();
+    }, 400);
+    return () => clearTimeout(t);
+    // Hanya saat diklik (n berubah), bukan tiap analisis dihitung ulang.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fokusBerhenti?.n]);
+
   return (
-    <div className="relative z-0">
+    <div
+      className={penuh ? "relative z-0 h-full" : "relative z-0"}
+      style={
+        {
+          "--ruang-kiri": `${ruangKiri}px`,
+          "--ruang-bawah-kanan": `${ruangBawahKanan}px`,
+          "--ruang-bawah": `${ruangBawah}px`,
+          // Label "Posisi armada" duduk di bawah kotak pencarian.
+          "--tinggi-label-posisi": positionLabel ? "30px" : "0px",
+        } as React.CSSProperties
+      }
+    >
       <style>{CSS_ALUR}</style>
       <MapContainer
         ref={mapRef}
@@ -368,19 +444,21 @@ export function RouteMap({
         scrollWheelZoom
         zoomControl={false}
         attributionControl={false}
-        style={{ height: "100%", minHeight: 320, width: "100%", borderRadius: "var(--radius-lg)" }}
+        style={{ height: "100%", minHeight: penuh ? 0 : 320, width: "100%", borderRadius: penuh ? 0 : "var(--radius-lg)" }}
       >
         {/* key={mapStyle} forces a fresh TileLayer instance per style so
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
-        <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <FitBounds
           pabrik={pabrik}
           stops={stops}
           routePoints={jejakSiap ? [...(polylinePositions ?? []), ...jejakSiap.titik] : polylinePositions}
           refitTrigger={refitTrigger}
+          ruangKiri={ruangKiri}
+          ruangBawah={ruangBawah + ruangBawahKanan}
         />
-        <MapZoomControl className="top-2 left-2" />
+        <MapZoomControl className="top-2 left-[calc(var(--ruang-kiri,0px)+0.5rem)]" />
         <Marker position={[pabrik.latitude, pabrik.longitude]} icon={pabrikIcon} />
         {stops.map((s, i) => (
           <Marker
@@ -394,10 +472,33 @@ export function RouteMap({
           >
             <Popup>
               <strong>
-                #{s.Urutan} {s.CustomerName}
+                #{i + 1} {s.CustomerName}
               </strong>
               <br />
               {s.Wilayah}
+              {/* Berhenti GPS dalam radius toleransi mitra = tiba & bongkar
+                  di sini — satu popup, bukan penanda terpisah. */}
+              {jejakSiap &&
+                ((bongkarPerTujuan.get(s.JadwalDetailID) ?? []).length > 0 ? (
+                  (bongkarPerTujuan.get(s.JadwalDetailID) ?? []).map((b) => (
+                    <span key={b.mulai} className="mt-1 block" style={{ color: "#059669" }}>
+                      Tiba &amp; bongkar {formatTime(b.mulai)}–{formatTime(b.selesai)} · {b.menit} mnt
+                      {b.jarakTujuanM != null && (
+                        <span style={{ color: "#6b7280" }}> (±{formatJarakM(b.jarakTujuanM)})</span>
+                      )}
+                    </span>
+                  ))
+                ) : (
+                  <span className="mt-1 block" style={{ color: "#6b7280" }}>
+                    Belum terdeteksi berhenti di lokasi ini
+                  </span>
+                ))}
+              {jejakSiap &&
+                (analisis?.masalahPerTujuan.get(s.JadwalDetailID) ?? []).map((m) => (
+                  <span key={m.jenis} className="mt-1 block" style={{ color: m.jenis === "drop_meleset" ? WARNA_KANDIDAT_DROP : "#d97706" }}>
+                    {ringkasMasalah(m)}
+                  </span>
+                ))}
             </Popup>
           </Marker>
         ))}
@@ -409,20 +510,48 @@ export function RouteMap({
           <GarisRute key={jejakSiap ? "rencana-putus" : "rencana"} titik={polylinePositions} warna={WARNA_RENCANA} putus={!!jejakSiap} />
         )}
         {jejakSiap && <GarisRute titik={jejakSiap.titik} warna={WARNA_AKTUAL} />}
-        {jejakSiap?.berhenti.map((b) => (
-          <CircleMarker
-            key={b.mulai}
-            center={[b.lat, b.lng]}
-            radius={Math.min(10, 5 + b.menit / 10)}
-            pathOptions={{ color: "white", weight: 2, fillColor: WARNA_AKTUAL, fillOpacity: 0.9 }}
-          >
-            <Popup>
-              Berhenti {b.menit} menit
-              <br />
-              {formatTime(b.mulai)} – {formatTime(b.selesai)}
-            </Popup>
-          </CircleMarker>
-        ))}
+        {/* Bagian jejak yang keluar dari jalur rencana — merah di atas garis aktual. */}
+        {jejakSiap &&
+          analisis?.segmenKeluar.map((seg, i) => (
+            <Polyline key={i} positions={seg} pathOptions={{ color: WARNA_KELUAR_JALUR, weight: 5, opacity: 0.85 }} />
+          ))}
+        {jejakSiap &&
+          analisis?.berhentiPeta.map((b) => {
+            const dropUntuk = analisis.kandidatDrop.get(b.mulai);
+            const warna = dropUntuk ? WARNA_KANDIDAT_DROP : WARNA_JENIS_BERHENTI[b.jenis];
+            const tegas = !!dropUntuk || b.jenis === "menyimpang";
+            return (
+              <CircleMarker
+                key={b.mulai}
+                ref={(inst) => {
+                  if (inst) lingkaranRefs.current.set(b.mulai, inst);
+                  else lingkaranRefs.current.delete(b.mulai);
+                }}
+                center={[b.lat, b.lng]}
+                radius={tegas ? Math.min(12, 7 + b.menit / 10) : Math.min(10, 5 + b.menit / 10)}
+                pathOptions={{
+                  color: dropUntuk ? "#ddd6fe" : b.jenis === "menyimpang" ? "#fecaca" : "white",
+                  weight: tegas ? 3 : 2,
+                  fillColor: warna,
+                  fillOpacity: 0.95,
+                }}
+              >
+                <Popup>
+                  <strong style={{ color: warna }}>
+                    {dropUntuk ? `Dugaan lokasi drop #${dropUntuk.nomor} ${dropUntuk.nama}` : LABEL_JENIS_BERHENTI[b.jenis]}
+                  </strong>
+                  <br />
+                  {formatTime(b.mulai)}–{formatTime(b.selesai)} · {b.menit} menit
+                  <br />
+                  <span style={{ color: "#6b7280" }}>
+                    {dropUntuk
+                      ? `Tidak singgah di titik mitra; ${formatJarakM(jarakSederhanaM(b, dropUntuk))} dari pin. Periksa & perbarui titik mitra.`
+                      : keteranganBerhenti(b)}
+                  </span>
+                </Popup>
+              </CircleMarker>
+            );
+          })}
         {driverPosition && (
           <Marker position={[driverPosition.latitude, driverPosition.longitude]} icon={truckIcon(driverBearing, isStale)} zIndexOffset={1000}>
             {positionLabel && <Popup>{positionLabel}</Popup>}
@@ -432,7 +561,7 @@ export function RouteMap({
 
       {positionLabel && (
         <div
-          className={`absolute top-12 left-2 z-1000 max-w-[calc(100%-1rem)] rounded-md px-2 py-1 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm ${
+          className={`absolute bottom-[calc(var(--ruang-bawah,0px)+0.5rem)] left-[calc(var(--ruang-kiri,0px)+0.5rem)] z-1000 max-w-[calc(100%-1rem)] rounded-md px-2 py-1 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm ${
             isStale ? "bg-amber-500/90 text-white" : "bg-card/90"
           }`}
         >
@@ -440,17 +569,21 @@ export function RouteMap({
         </div>
       )}
       {jejak && (
-        <KeteranganJejak
-          jejak={jejak}
-          tampilRencana={tampilRencana}
-          onTampilRencana={setTampilRencana}
-          tampilAktual={tampilAktual}
-          onTampilAktual={setTampilAktual}
-        />
+        <div className="absolute top-12 right-2 z-1000 flex max-w-[calc(100%-1rem)] flex-col items-end">
+          <KeteranganJejak
+            jejak={jejak}
+            jumlahSinggah={analisis?.berhentiPeta.length ?? 0}
+            adaKeluarJalur={(analisis?.segmenKeluar.length ?? 0) > 0}
+            tampilRencana={tampilRencana}
+            onTampilRencana={setTampilRencana}
+            tampilAktual={tampilAktual}
+            onTampilAktual={setTampilAktual}
+          />
+        </div>
       )}
       <StopSearchBox stops={stops} onSelect={handleSelectStop} />
       <MapStyleSwitcher mapStyle={mapStyle} onChange={setMapStyle} className="top-2 right-2" />
-      <MapAttribution className="bottom-2 right-2" />
+      <MapAttribution className="right-2 bottom-[calc(var(--ruang-bawah,0px)+var(--ruang-bawah-kanan,0px)+0.5rem)]" />
     </div>
   );
 }
@@ -488,16 +621,39 @@ function Sakelar({
   );
 }
 
+function jarakSederhanaM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  return L.latLng(a.lat, a.lng).distanceTo(L.latLng(b.lat, b.lng));
+}
+
+function ringkasMasalah(m: MasalahTujuan): string {
+  switch (m.jenis) {
+    case "drop_meleset":
+      return `Titik drop diragukan — singgah ${formatJarakM(m.jarakM)} ke arah ${m.arah} (${formatTime(m.kandidat.mulai)}, ${m.kandidat.menit} mnt)`;
+    case "pin_di_pabrik":
+      return `Titik mitra di area pabrik (±${formatJarakM(m.jarakM)})`;
+    case "hanya_melintas":
+      return `Hanya melintas ±${formatJarakM(m.jarakM)} tanpa singgah`;
+    case "tidak_didatangi":
+      return `Tidak didatangi (terdekat ${formatJarakM(m.jarakM)})`;
+    case "bongkar_lama":
+      return `Singgah lama ${m.menit} mnt`;
+  }
+}
+
 // Keterangan garis di pojok kanan atas (di bawah pemilih gaya peta), dengan
 // sakelar untuk menyembunyikan rute rencana / aktual.
 function KeteranganJejak({
   jejak,
+  jumlahSinggah,
+  adaKeluarJalur,
   tampilRencana,
   onTampilRencana,
   tampilAktual,
   onTampilAktual,
 }: {
   jejak: JejakPeta;
+  jumlahSinggah: number;
+  adaKeluarJalur: boolean;
   tampilRencana: boolean;
   onTampilRencana: (v: boolean) => void;
   tampilAktual: boolean;
@@ -526,10 +682,16 @@ function KeteranganJejak({
           <span className="inline-block w-4 border-t-[3px]" style={{ borderColor: WARNA_AKTUAL }} />
           Aktual{d.jarakKm != null ? ` · ${d.jarakKm.toLocaleString("id-ID")} km` : ""}
         </Sakelar>
-        {tampilAktual && d.berhenti.length > 0 && (
+        {tampilAktual && adaKeluarJalur && (
+          <span className="flex items-center gap-1.5 pl-7.5">
+            <span className="inline-block w-4 border-t-[3px]" style={{ borderColor: WARNA_KELUAR_JALUR }} />
+            Keluar jalur
+          </span>
+        )}
+        {tampilAktual && jumlahSinggah > 0 && (
           <span className="flex items-center gap-1.5 pl-7.5">
             <span className="inline-block size-2.5 rounded-full ring-2 ring-white" style={{ background: WARNA_AKTUAL }} />
-            {d.berhenti.length} kali berhenti ≥5 mnt
+            {jumlahSinggah} singgah tercatat
           </span>
         )}
         <span className="pl-7.5 text-[10px] text-muted-foreground">
@@ -542,7 +704,7 @@ function KeteranganJejak({
   return (
     <div
       title={jejak.keadaan === "gagal" ? jejak.pesan : undefined}
-      className="absolute top-12 right-2 z-1000 flex max-w-[calc(100%-1rem)] flex-col gap-0.5 rounded-md bg-card/90 px-1.5 py-1.5 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm"
+      className="flex flex-col gap-0.5 rounded-md bg-card/90 px-1.5 py-1.5 text-[11px] font-medium shadow-md ring-1 ring-foreground/10 backdrop-blur-sm"
     >
       {rencana}
       {isi}

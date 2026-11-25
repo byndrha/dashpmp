@@ -2,10 +2,11 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, useMap } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
 import type { MultiPointRoute } from "@/lib/osrm";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import type { RecenterTarget } from "./pengiriman-map";
 
 // Small decorative marker for the route's starting point (distinct from the
@@ -76,13 +77,12 @@ export default function PengirimanMapContent({
   recenter: RecenterTarget | null;
 }) {
   const truckPosition = position ?? origin;
-  const tile = TILE_SOURCES[mapStyle];
 
   return (
     <MapContainer center={[truckPosition.lat, truckPosition.lng]} zoom={14} zoomControl={false} attributionControl={false} className="h-full w-full">
       {/* keyed by mapStyle: same reasoning as marketing-location-map.tsx,
           Leaflet doesn't reliably diff/reuse tiles across different servers. */}
-      <TileLayer key={mapStyle} url={tile.url} attribution={tile.attribution} subdomains={tile.subdomains ?? "abc"} />
+      <PetaTile mapStyle={mapStyle} />
       <Marker position={[origin.lat, origin.lng]} icon={originIcon} />
       <Marker position={[truckPosition.lat, truckPosition.lng]} icon={truckIcon} />
       {stops.map((s) => (

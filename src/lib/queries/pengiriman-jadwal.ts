@@ -19,7 +19,7 @@ import {
   utcInstantToWibDisplay,
 } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
-import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS, getLokasiPilihanStop } from "@/lib/queries/mitra-lokasi-pengiriman";
+import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS, MITRA_CADANGAN_EXISTS, getLokasiPilihanStop } from "@/lib/queries/mitra-lokasi-pengiriman";
 import { alamatUntukDeliveryOrder } from "@/lib/mitra-lokasi";
 
 // Same 5KG-counts-as-half-a-kantong normalization already established in
@@ -175,12 +175,15 @@ export async function getPengirimanBoard(
         -- Needs its own per-stop (JadwalDetailID) grouping first — applying
         -- the formula to the Jadwal's already-combined TotalKantong instead
         -- would treat e.g. two 3-kantong stops as one 6-kantong block.
+        -- Muatan cadangan (mitra Complimentary) bukan tujuan: tidak ada
+        -- bongkar/konfirmasi, jadi tidak ikut estimasi durasi kartu.
         WITH StopQty AS (
             SELECT jd.JadwalID, jd.JadwalDetailID,
                    ISNULL(SUM(CASE WHEN sod.Name LIKE '%5 KG%' THEN sod.Qty / 2.0 ELSE sod.Qty END), 0) AS Qty
             FROM DashboardPengirimanJadwalDetail jd
+            JOIN SalesOrder soq ON soq.SalesOrderID = jd.SalesOrderID
             LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
-            WHERE jd.IsDeleted = 0
+            WHERE jd.IsDeleted = 0 AND NOT ${MITRA_CADANGAN_EXISTS("soq")}
             GROUP BY jd.JadwalID, jd.JadwalDetailID
         ),
         StopDuration AS (
@@ -214,7 +217,8 @@ export async function getPengirimanBoard(
             ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS TotalKantong,
             ISNULL(${JADWAL_KANTONG_10KG_EXPR}, 0) AS Qty10KG,
             ISNULL(${JADWAL_KANTONG_5KG_EXPR}, 0) AS Qty5KG,
-            COUNT(DISTINCT jd.JadwalDetailID) AS TotalStop,
+            -- Tujuan sungguhan saja (muatan cadangan bukan tujuan).
+            COUNT(DISTINCT CASE WHEN mcj.BusinessPartnerID IS NULL THEN jd.JadwalDetailID END) AS TotalStop,
             j.JarakKM,
             j.DurasiMenit,
             ISNULL(sdur.EstimasiDurasiMenit, 0) AS EstimasiDurasiMenit,
@@ -230,6 +234,8 @@ export async function getPengirimanBoard(
         FROM DashboardPengirimanJadwal j
         LEFT JOIN Salesman sm ON sm.SalesmanID = j.SalesmanID
         LEFT JOIN DashboardPengirimanJadwalDetail jd ON jd.JadwalID = j.JadwalID AND jd.IsDeleted = 0
+        LEFT JOIN SalesOrder soj ON soj.SalesOrderID = jd.SalesOrderID
+        LEFT JOIN DashboardMitraCadangan mcj ON mcj.BusinessPartnerID = soj.BusinessPartnerID
         LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
         LEFT JOIN StopDuration sdur ON sdur.JadwalID = j.JadwalID
         WHERE j.IsDeleted = 0
@@ -384,9 +390,10 @@ export interface DriverJadwalCard {
   Status: JadwalStatus;
   JamSelesaiMuat: string | Date | null;
   JamAktualBerangkat: string | Date | null;
-  TotalStop: number;
+  TotalStop: number; // tujuan sungguhan saja (tanpa muatan cadangan)
   StopSelesai: number;
-  TotalKantong: number;
+  TotalKantong: number; // seluruh muatan, termasuk cadangan
+  KantongCadangan: number; // muatan cadangan (mitra Complimentary), bukan tujuan
   IsSelesai: boolean;
   // Departed but not every stop confirmed yet — the same predicate the
   // SQL's own ORDER BY already floats to the top; exposed explicitly so
@@ -440,14 +447,19 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
     .input("date", sql.Date, dateISO)
     .input("includeInProgress", sql.Bit, includeInProgress).query(`
       WITH StopAgg AS (
+          -- IsCadangan: SO mitra Cadangan (Complimentary) — muatan cadangan,
+          -- bukan tujuan: tidak dihitung sebagai stop, kantongnya tetap ikut
+          -- total muatan.
           SELECT jd.JadwalID, jd.JadwalDetailID,
                  ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Kantong,
-                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai
+                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai,
+                 CASE WHEN ${MITRA_CADANGAN_EXISTS("so")} THEN 1 ELSE 0 END AS IsCadangan
           FROM DashboardPengirimanJadwalDetail jd
+          JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
           LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
           LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
           WHERE jd.IsDeleted = 0
-          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai
+          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai, so.BusinessPartnerID
       )
       SELECT
           j.JadwalID,
@@ -457,9 +469,10 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
           j.Status,
           j.JamSelesaiMuat,
           j.JamAktualBerangkat,
-          COUNT(sa.JadwalDetailID) AS TotalStop,
-          SUM(sa.IsSelesai) AS StopSelesai,
-          SUM(sa.Kantong) AS TotalKantong
+          SUM(CASE WHEN sa.IsCadangan = 0 THEN 1 ELSE 0 END) AS TotalStop,
+          SUM(CASE WHEN sa.IsCadangan = 0 THEN sa.IsSelesai ELSE 0 END) AS StopSelesai,
+          SUM(sa.Kantong) AS TotalKantong,
+          SUM(CASE WHEN sa.IsCadangan = 1 THEN sa.Kantong ELSE 0 END) AS KantongCadangan
       FROM DashboardPengirimanJadwal j
       JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
       LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
@@ -497,8 +510,10 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
             AND EXISTS (
               SELECT 1
               FROM DashboardPengirimanJadwalDetail jd2
+              JOIN SalesOrder so2 ON so2.SalesOrderID = jd2.SalesOrderID
               LEFT JOIN DashboardPengirimanStopDelivery sd2 ON sd2.JadwalDetailID = jd2.JadwalDetailID
               WHERE jd2.JadwalID = j.JadwalID AND jd2.IsDeleted = 0 AND sd2.JamSelesai IS NULL
+                AND NOT ${MITRA_CADANGAN_EXISTS("so2")}
             )
           )
         )
@@ -514,7 +529,9 @@ export async function getDriverJadwalList(salesmanId: string, dateISO: string): 
       -- rendered sticky client-side regardless of where it falls here, so
       -- this ORDER BY only governs the rest of the list.
       ORDER BY
-        CASE WHEN j.JamAktualBerangkat IS NOT NULL AND SUM(sa.IsSelesai) < COUNT(sa.JadwalDetailID) THEN 0 ELSE 1 END,
+        CASE WHEN j.JamAktualBerangkat IS NOT NULL
+                  AND SUM(CASE WHEN sa.IsCadangan = 0 THEN sa.IsSelesai ELSE 0 END) < SUM(CASE WHEN sa.IsCadangan = 0 THEN 1 ELSE 0 END)
+             THEN 0 ELSE 1 END,
         j.JamJadwal DESC
     `);
   const rows = (result.recordset as Omit<DriverJadwalCard, "IsSelesai" | "IsBerjalan" | "EstimasiSampai">[]).map((r) => ({
@@ -665,21 +682,26 @@ export async function getDriverTimeline(salesmanId: string, businessDateISO: str
     .input("salesmanId", sql.VarChar(16), salesmanId)
     .input("businessDate", sql.Date, businessDateISO).query(`
       WITH StopAgg AS (
+          -- IsCadangan: SO mitra Cadangan (Complimentary) — muatan cadangan,
+          -- bukan tujuan: tidak dihitung sebagai stop, kantongnya tetap ikut
+          -- total muatan.
           SELECT jd.JadwalID, jd.JadwalDetailID,
                  ISNULL(${JADWAL_KANTONG_EXPR}, 0) AS Kantong,
-                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai
+                 CASE WHEN sd.JamSelesai IS NOT NULL THEN 1 ELSE 0 END AS IsSelesai,
+                 CASE WHEN ${MITRA_CADANGAN_EXISTS("so")} THEN 1 ELSE 0 END AS IsCadangan
           FROM DashboardPengirimanJadwalDetail jd
+          JOIN SalesOrder so ON so.SalesOrderID = jd.SalesOrderID
           LEFT JOIN SalesOrderDetail sod ON sod.SalesOrderID = jd.SalesOrderID
           LEFT JOIN DashboardPengirimanStopDelivery sd ON sd.JadwalDetailID = jd.JadwalDetailID
           WHERE jd.IsDeleted = 0
-          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai
+          GROUP BY jd.JadwalID, jd.JadwalDetailID, sd.JamSelesai, so.BusinessPartnerID
       )
       SELECT
           j.JadwalID,
           a.Nama AS ArmadaNama,
           ed.VehicleNo,
           j.JamAktualBerangkat,
-          COUNT(sa.JadwalDetailID) AS TotalStop,
+          SUM(CASE WHEN sa.IsCadangan = 0 THEN 1 ELSE 0 END) AS TotalStop,
           SUM(sa.Kantong) AS TotalKantong
       FROM DashboardPengirimanJadwal j
       JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
@@ -691,7 +713,9 @@ export async function getDriverTimeline(salesmanId: string, businessDateISO: str
         AND j.JamAktualBerangkat >= DATEADD(HOUR, 7, DATEADD(DAY, -1, CAST(@businessDate AS DATETIME)))
         AND j.JamAktualBerangkat < DATEADD(HOUR, 7, CAST(@businessDate AS DATETIME))
       GROUP BY j.JadwalID, a.Nama, ed.VehicleNo, j.JamAktualBerangkat
-      HAVING COUNT(sa.JadwalDetailID) = SUM(sa.IsSelesai)
+      -- Selesai = semua tujuan sungguhan selesai (muatan cadangan tidak pernah
+      -- "diselesaikan" driver).
+      HAVING SUM(CASE WHEN sa.IsCadangan = 0 THEN 1 ELSE 0 END) = SUM(CASE WHEN sa.IsCadangan = 0 THEN sa.IsSelesai ELSE 0 END)
       ORDER BY j.JamAktualBerangkat DESC
     `);
 
@@ -869,6 +893,10 @@ export interface JadwalDetailRow {
   // sudah ter-resolve lewat STOP_LOKASI_COLUMNS (snapshot → terpilih → utama).
   LokasiPengirimanID: number | null;
   LokasiDibekukan: boolean;
+  // Mitra Cadangan (stok es gratis cadangan, mis. "Complimentary") — BUKAN
+  // tujuan antar: Latitude/Longitude selalu null, dikecualikan dari rute,
+  // Validasi Rute, dan Aplikasi Driver; DO/SI-nya tetap dibuat seperti biasa.
+  IsCadangan: boolean;
 }
 
 // Always sources customer/qty/address from SalesOrder/SalesOrderDetail via
@@ -897,7 +925,8 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
           x.StopLongitude AS Longitude,
           x.PriceLevel,
           x.LokasiPengirimanID,
-          CAST(CASE WHEN x.KirimDibekukanAt IS NOT NULL THEN 1 ELSE 0 END AS bit) AS LokasiDibekukan
+          CAST(CASE WHEN x.KirimDibekukanAt IS NOT NULL THEN 1 ELSE 0 END AS bit) AS LokasiDibekukan,
+          x.StopIsCadangan AS IsCadangan
       FROM (
         -- Alamat/kontak/pin stop lewat STOP_LOKASI_COLUMNS (snapshot →
         -- lokasi terpilih → utama). Qty diagregasi di OUTER APPLY supaya
@@ -929,6 +958,7 @@ export async function getJadwalDetail(jadwalId: number): Promise<JadwalDetailRow
     return {
       ...rest,
       LokasiDibekukan: Boolean(rest.LokasiDibekukan),
+      IsCadangan: Boolean(rest.IsCadangan),
       InvoiceToken: SalesInvoiceID ? encodeInvoiceToken(SalesInvoiceID) : null,
     };
   });
@@ -1122,8 +1152,10 @@ async function overwriteOrderTimeIfAfter(pool: sql.ConnectionPool, salesOrderIds
 async function getStopLocationsForSalesOrders(
   pool: sql.ConnectionPool,
   salesOrderIds: string[]
-): Promise<Map<string, { lat: number; lng: number; qty: number } | null>> {
-  const map = new Map<string, { lat: number; lng: number; qty: number } | null>();
+): Promise<Map<string, { lat: number; lng: number; qty: number } | null | "cadangan">> {
+  // "cadangan" = SO mitra Cadangan (Complimentary): bukan tujuan, tidak
+  // menambah waktu perjalanan maupun konfirmasi.
+  const map = new Map<string, { lat: number; lng: number; qty: number } | null | "cadangan">();
   if (salesOrderIds.length === 0) return map;
   const request = pool.request();
   const placeholders = salesOrderIds.map((id, i) => {
@@ -1131,7 +1163,7 @@ async function getStopLocationsForSalesOrders(
     return `@so${i}`;
   });
   const result = await request.query(`
-    SELECT x.SalesOrderID, x.StopLatitude AS Latitude, x.StopLongitude AS Longitude, x.Qty
+    SELECT x.SalesOrderID, x.StopLatitude AS Latitude, x.StopLongitude AS Longitude, x.Qty, x.StopIsCadangan AS IsCadangan
     FROM (
       -- Lokasi stop: bila SO ini sudah duduk di JadwalDetail aktif (Jadwal
       -- tidak dihapus), pakai lokasi stop itu (snapshot / terpilih); SO
@@ -1156,7 +1188,11 @@ async function getStopLocationsForSalesOrders(
       WHERE so.SalesOrderID IN (${placeholders.join(",")})
     ) x
   `);
-  for (const row of result.recordset as { SalesOrderID: string; Latitude: number | null; Longitude: number | null; Qty: number }[]) {
+  for (const row of result.recordset as { SalesOrderID: string; Latitude: number | null; Longitude: number | null; Qty: number; IsCadangan: boolean }[]) {
+    if (row.IsCadangan) {
+      map.set(row.SalesOrderID, "cadangan");
+      continue;
+    }
     map.set(row.SalesOrderID, row.Latitude != null && row.Longitude != null ? { lat: row.Latitude, lng: row.Longitude, qty: row.Qty } : null);
   }
   return map;
@@ -1192,6 +1228,7 @@ async function estimateBusyMinutes(
   const resolvedStops: (LatLng & { qty: number })[] = [];
   for (const id of orderedSalesOrderIds) {
     const loc = locations.get(id) ?? null;
+    if (loc === "cadangan") continue; // muatan cadangan: bukan tujuan, 0 menit
     if (loc) {
       resolvedStops.push({ lat: loc.lat, lng: loc.lng, qty: loc.qty });
     } else {
@@ -2234,7 +2271,8 @@ export async function assertJadwalReadyForMuat(jadwalId: number): Promise<void> 
   }
   const stops = await getJadwalDetail(jadwalId);
   if (stops.length === 0) throw new AppError("Tidak ada SO pada keberangkatan ini.");
-  const missingCoords = stops.some((s) => s.Latitude == null || s.Longitude == null);
+  // Muatan Cadangan (mitra Complimentary) bukan tujuan — tidak butuh lokasi.
+  const missingCoords = stops.some((s) => !s.IsCadangan && (s.Latitude == null || s.Longitude == null));
   if (missingCoords) {
     throw new AppError(
       "Rute belum tervalidasi — minta staf memastikan semua tujuan sudah punya lokasi tersimpan di Validasi Rute (desktop) dulu."
@@ -2533,20 +2571,28 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
   // wrongly flipped to Terbit.
   const stopsForRouteCheck = await getJadwalDetail(jadwalId);
   if (stopsForRouteCheck.length === 0) throw new AppError("Tidak ada SO pada keberangkatan ini.");
-  const missingCoords = stopsForRouteCheck.some((s) => s.Latitude == null || s.Longitude == null);
+  // Muatan Cadangan (mitra Complimentary) bukan tujuan antar: tidak butuh
+  // lokasi dan tidak ikut rute. DO/SI-nya tetap dibuat di bawah.
+  const tujuanRute = stopsForRouteCheck.filter((s) => !s.IsCadangan);
+  const missingCoords = tujuanRute.some((s) => s.Latitude == null || s.Longitude == null);
   if (missingCoords) {
     throw new AppError("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
   }
   const pabrik = await getPabrikLocation();
   let validatedRoute: MultiPointRoute;
-  try {
-    validatedRoute = await getMultiPointRoute([
-      { lat: pabrik.latitude, lng: pabrik.longitude },
-      ...stopsForRouteCheck.map((s) => ({ lat: s.Latitude as number, lng: s.Longitude as number })),
-      { lat: pabrik.latitude, lng: pabrik.longitude },
-    ]);
-  } catch {
-    throw new AppError("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
+  if (tujuanRute.length === 0) {
+    // Hanya berisi muatan cadangan — tidak ada perjalanan untuk dihitung.
+    validatedRoute = { distanceKm: 0, durationMinutes: 0, geometry: [], legs: [] };
+  } else {
+    try {
+      validatedRoute = await getMultiPointRoute([
+        { lat: pabrik.latitude, lng: pabrik.longitude },
+        ...tujuanRute.map((s) => ({ lat: s.Latitude as number, lng: s.Longitude as number })),
+        { lat: pabrik.latitude, lng: pabrik.longitude },
+      ]);
+    } catch {
+      throw new AppError("Rute belum berhasil divalidasi — pastikan seluruh tujuan punya lokasi tersimpan.");
+    }
   }
 
   // Server-side mirror of the capacity hard-block already enforced when SOs
@@ -2932,7 +2978,14 @@ export interface DriverStopRow extends JadwalDetailRow {
 // unchanged, still the read path for the dashboard's own Validasi Rute)
 // with this stop's own completion timestamps and BusinessPartnerID, for
 // the driver-app's Pengiriman/Konfir/Pembayaran screens.
-export async function getDriverJadwalStops(jadwalId: number): Promise<DriverStopRow[]> {
+// `tanpaCadangan`: buang stop muatan cadangan (mitra Complimentary) — untuk
+// Aplikasi Driver & status armada, yang hanya mengenal tujuan sungguhan.
+// Dashboard (Validasi Rute) tetap menerima semuanya dan menampilkan muatan
+// cadangan di bagian terpisah.
+export async function getDriverJadwalStops(
+  jadwalId: number,
+  opsi: { tanpaCadangan?: boolean } = {}
+): Promise<DriverStopRow[]> {
   const pool = await getPool();
   const [stops, extraRows] = await Promise.all([
     getJadwalDetail(jadwalId),
@@ -2961,7 +3014,7 @@ export async function getDriverJadwalStops(jadwalId: number): Promise<DriverStop
     ).map((r) => [r.JadwalDetailID, r])
   );
   const pilihan = await getLokasiPilihanStop([...extraByDetailId.values()].map((r) => r.BusinessPartnerID));
-  return stops.map((s) => {
+  return stops.filter((s) => !(opsi.tanpaCadangan && s.IsCadangan)).map((s) => {
     const extra = extraByDetailId.get(s.JadwalDetailID);
     return {
       ...s,
@@ -4011,7 +4064,7 @@ export async function getArmadaOperationalStatuses(
 
   await Promise.all(
     pendingStopLookup.map(async ({ armadaId, jadwalId }) => {
-      const stops = await getDriverJadwalStops(jadwalId);
+      const stops = await getDriverJadwalStops(jadwalId, { tanpaCadangan: true });
       const nextStop = stops.find((s) => s.JamSelesai == null);
       statuses.set(
         armadaId,

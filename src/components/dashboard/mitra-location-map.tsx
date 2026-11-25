@@ -2,9 +2,10 @@
 
 import "leaflet/dist/leaflet.css";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 
 // Leaflet's default marker icon paths resolve relative to the bundler's
@@ -69,7 +70,6 @@ export interface MitraLocationMapProps {
 export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, pabrikPosition, readOnly }: MitraLocationMapProps) {
   const markerRef = useRef<L.Marker>(null);
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
-  const tile = TILE_SOURCES[mapStyle];
 
   const handleDragEnd = useCallback(() => {
     const marker = markerRef.current;
@@ -91,7 +91,7 @@ export function MitraLocationMap({ latitude, longitude, onChange, recenterKey, p
         {/* key={mapStyle} forces a fresh TileLayer instance per style so
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
-        <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <MapZoomControl className="top-2 left-2" />
         {pabrikPosition && <Marker position={pabrikPosition} icon={pabrikIcon} />}
         <Marker

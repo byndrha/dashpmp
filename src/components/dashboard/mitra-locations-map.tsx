@@ -2,11 +2,12 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, Marker, Popup, useMap } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
 import { Search, LocateFixed, X, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 import type { MitraGrowthRow } from "@/lib/queries/mitra-growth";
 
@@ -249,7 +250,6 @@ export function MitraLocationsMap({
   const markerRefs = useRef<Map<string, L.Marker>>(new Map());
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   const [myLocation, setMyLocation] = useState<[number, number] | null>(null);
-  const tile = TILE_SOURCES[mapStyle];
 
   function handleLocate(lat: number, lng: number) {
     setMyLocation([lat, lng]);
@@ -275,7 +275,7 @@ export function MitraLocationsMap({
         {/* key={mapStyle} forces a fresh TileLayer instance per style so
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
-        <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <MapZoomControl className={kontrolTurun ? "top-14 left-2" : "top-2 left-2"} />
         {points.map((p) => (
           <Marker

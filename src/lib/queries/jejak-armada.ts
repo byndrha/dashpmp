@@ -18,8 +18,19 @@ import { ambilJejakAktual, type SumberJejak, type TitikJejak } from "@/lib/gps-p
 const JEDA_MS = 10 * 60 * 1000;
 const SEGAR_BERLANGSUNG_MS = 2 * 60 * 1000;
 const SEGAR_TANPA_ALAT_MS = 30 * 60 * 1000;
-// Berhenti = kecepatan ≤ 3 km/j beruntun minimal sekian menit (SoloFleet saja).
-const BERHENTI_MIN_MENIT = 5;
+// Singgah = armada bertahan dalam radius RADIUS_SINGGAH_M minimal sekian
+// menit — berbasis POSISI, bukan kecepatan: kecepatan GPS saat parkir/
+// manuver bongkar sering melompat 0–10 km/j sehingga deteksi "kecepatan ≤ 3"
+// melewatkan bongkar singkat (kasus GM 14, 25 Nov 2026: singgah 7 mnt tidak
+// terdeteksi). Penyaringan tampil (mis. ≥5 mnt untuk berhenti biasa)
+// dilakukan di src/lib/analisis-jejak.ts.
+const SINGGAH_MIN_MS = 2 * 60_000;
+const RADIUS_SINGGAH_M = 100;
+// SoloFleet (permintaan timezone "7") mengirim gpstimeISO = jam dinding WIB
+// yang dikodekan sebagai UTC → epoch maju 7 jam. Dikoreksi saat membentuk
+// hasil (bukan saat mengambil) supaya cache lama di armada_jejak_gps ikut
+// benar tanpa migrasi data.
+const GESER_WIB_MS = 7 * 3600_000;
 
 export interface TitikBerhenti {
   lat: number;
@@ -36,6 +47,10 @@ export interface JejakAktual {
   titik: [number, number][];
   jarakKm: number | null;
   berhenti: TitikBerhenti[];
+  // Sejajar dengan `titik`: epoch ms (null = provider tanpa cap waktu, mis.
+  // Hino) dan kecepatan km/j (null = tidak ada).
+  waktu: (number | null)[];
+  kecepatan: (number | null)[];
   dari: string;
   sampai: string;
   final: boolean;
@@ -50,33 +65,71 @@ function haversineKm(a: TitikJejak, b: TitikJejak): number {
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
 
-function hitungBerhenti(titik: TitikJejak[]): TitikBerhenti[] {
+function jarakTitikM(a: TitikJejak, b: TitikJejak): number {
+  return haversineKm(a, b) * 1000;
+}
+
+// Kelompok titik beruntun yang semuanya dalam RADIUS_SINGGAH_M dari titik
+// pertamanya dan berlangsung ≥ SINGGAH_MIN_MS → satu singgah (titik pusat).
+export function hitungBerhenti(titik: TitikJejak[]): TitikBerhenti[] {
   const hasil: TitikBerhenti[] = [];
-  let awal = -1;
-  const tutup = (akhir: number) => {
-    if (awal < 0) return;
-    const a = titik[awal];
-    const b = titik[akhir];
-    const menit = Math.round(((b.t ?? 0) - (a.t ?? 0)) / 60_000);
-    if (menit >= BERHENTI_MIN_MENIT) {
-      hasil.push({
-        lat: a.lat,
-        lng: a.lng,
-        mulai: new Date(a.t!).toISOString(),
-        selesai: new Date(b.t!).toISOString(),
-        menit,
-      });
+  let i = 0;
+  while (i < titik.length) {
+    const a = titik[i];
+    if (a.t == null) {
+      i++;
+      continue;
     }
-    awal = -1;
-  };
-  for (let i = 0; i < titik.length; i++) {
-    const p = titik[i];
-    const diam = p.t != null && p.spd != null && p.spd <= 3;
-    if (diam && awal < 0) awal = i;
-    if (!diam && awal >= 0) tutup(i);
+    let j = i;
+    while (j + 1 < titik.length && titik[j + 1].t != null && jarakTitikM(a, titik[j + 1]) <= RADIUS_SINGGAH_M) j++;
+    const lama = (titik[j].t ?? 0) - a.t;
+    if (lama >= SINGGAH_MIN_MS) {
+      let lat = 0;
+      let lng = 0;
+      for (let k = i; k <= j; k++) {
+        lat += titik[k].lat;
+        lng += titik[k].lng;
+      }
+      const n = j - i + 1;
+      hasil.push({
+        lat: lat / n,
+        lng: lng / n,
+        mulai: new Date(a.t).toISOString(),
+        selesai: new Date(titik[j].t!).toISOString(),
+        menit: Math.round(lama / 60_000),
+      });
+      i = j + 1;
+    } else {
+      i++;
+    }
   }
-  if (awal >= 0) tutup(titik.length - 1);
-  return hasil;
+  // Satu singgah bisa terpecah bila armada sempat bergeser sedikit (manuver
+  // bongkar) — gabungkan yang berdekatan & nyaris bersambung.
+  const gabung: TitikBerhenti[] = [];
+  for (const h of hasil) {
+    const p = gabung[gabung.length - 1];
+    if (p && Date.parse(h.mulai) - Date.parse(p.selesai) <= SINGGAH_MIN_MS && jarakTitikM({ ...p, t: null, spd: null }, { ...h, t: null, spd: null }) <= RADIUS_SINGGAH_M) {
+      const bobotP = p.menit || 1;
+      const bobotH = h.menit || 1;
+      p.lat = (p.lat * bobotP + h.lat * bobotH) / (bobotP + bobotH);
+      p.lng = (p.lng * bobotP + h.lng * bobotH) / (bobotP + bobotH);
+      p.selesai = h.selesai;
+      p.menit = Math.round((Date.parse(p.selesai) - Date.parse(p.mulai)) / 60_000);
+    } else {
+      gabung.push({ ...h });
+    }
+  }
+  return gabung;
+}
+
+// Lihat GESER_WIB_MS. Terdeteksi bila titik TERAKHIR jatuh > 1 jam setelah
+// ujung jendela pengambilan — titik yang benar tidak pernah melewati jendela,
+// sedangkan titik bergeser selalu ±7 jam di depannya.
+export function koreksiZonaWaktu(sumber: SumberJejak | null, titik: TitikJejak[], sampai: Date): TitikJejak[] {
+  if (sumber !== "solofleet") return titik;
+  const terakhir = Math.max(...titik.map((p) => p.t ?? -Infinity));
+  if (!(terakhir > sampai.getTime() + 3600_000)) return titik;
+  return titik.map((p) => (p.t == null ? p : { ...p, t: p.t - GESER_WIB_MS }));
 }
 
 function bentuk(
@@ -87,6 +140,7 @@ function bentuk(
   final: boolean,
   diambilAt: Date
 ): JejakAktual {
+  titik = koreksiZonaWaktu(sumber, titik, sampai);
   let jarak = 0;
   for (let i = 1; i < titik.length; i++) jarak += haversineKm(titik[i - 1], titik[i]);
   return {
@@ -95,6 +149,8 @@ function bentuk(
     titik: titik.map((p) => [p.lat, p.lng]),
     jarakKm: titik.length >= 2 ? Math.round(jarak * 10) / 10 : null,
     berhenti: hitungBerhenti(titik),
+    waktu: titik.map((p) => p.t),
+    kecepatan: titik.map((p) => p.spd),
     dari: dari.toISOString(),
     sampai: sampai.toISOString(),
     final,

@@ -2,11 +2,12 @@
 
 import "leaflet/dist/leaflet.css";
 import { Fragment, useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Popup, useMap } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
 import { getMultiPointRoute, type MultiPointRoute } from "@/lib/osrm";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import type { DriverStopRow } from "@/lib/queries/pengiriman-jadwal";
 import type { RecenterTarget } from "./peta-overview-map";
 
@@ -65,7 +66,6 @@ export default function PetaOverviewMapContent({
   recenter: RecenterTarget | null;
 }) {
   const [geometries, setGeometries] = useState<Map<number, MultiPointRoute>>(new Map());
-  const tile = TILE_SOURCES[mapStyle];
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +100,7 @@ export default function PetaOverviewMapContent({
         {/* key={mapStyle} forces a fresh TileLayer instance per style —
             same reasoning as marketing-location-map.tsx, Leaflet doesn't
             reliably diff/reuse tiles across completely different servers. */}
-        <TileLayer key={mapStyle} url={tile.url} attribution={tile.attribution} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <MapZoomControl className="top-2 left-2" />
         <MapStyleSwitcher mapStyle={mapStyle} onChange={onMapStyleChange} className="top-2 right-2" />
         <MapAttribution className="bottom-12 left-2" />

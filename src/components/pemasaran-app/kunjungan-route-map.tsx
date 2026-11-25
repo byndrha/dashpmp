@@ -2,11 +2,12 @@
 
 import "leaflet/dist/leaflet.css";
 import { useState } from "react";
-import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
+import { MapContainer, Marker, Polyline } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
 import { LocateFixed, Route as RouteIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 
 // Leaflet's default marker icon paths resolve relative to the bundler's
@@ -56,7 +57,6 @@ export function KunjunganRouteMap({
 }) {
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   const [locating, setLocating] = useState(false);
-  const tile = TILE_SOURCES[mapStyle];
   const center: [number, number] = marketingPosition ?? [mitraLat, mitraLng];
 
   function handleLocate() {
@@ -82,7 +82,7 @@ export function KunjunganRouteMap({
         attributionControl={false}
         style={{ height: 280, width: "100%", borderRadius: "var(--radius-lg)" }}
       >
-        <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <MapZoomControl className="top-2 left-2" />
         <Marker position={[mitraLat, mitraLng]} icon={mitraIcon} />
         {marketingPosition && (

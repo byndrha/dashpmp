@@ -1,7 +1,7 @@
 "use client";
 
 import { konfirmasi } from "@/components/konfirmasi";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, useTransition } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VerticalTimeline, VerticalTimelineItem } from "@/components/ui/vertical-timeline";
-import { CheckSummary, TIPE_LABEL } from "@/components/vehicle-check-summary";
+import { CheckSummary, TIPE_LABEL, TIPE_IKON } from "@/components/vehicle-check-summary";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -77,6 +77,10 @@ import type { JejakPeta, TruckPosition } from "@/components/dashboard/route-map"
 import type { JejakAktual } from "@/lib/queries/jejak-armada";
 import { shareImageBlob, shareTextBlock } from "@/lib/share-image";
 import { pilihanLokasiStopTampil } from "@/lib/mitra-lokasi";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { BarisCatatan, BarisUrutan, MasalahTujuanBaris, type FokusPeta } from "@/components/dashboard/log-pergerakan";
+import { analisisJejak, tempatkanCatatan, type CatatanPerjalanan, type MasalahTujuan } from "@/lib/analisis-jejak";
+import type { BerhentiTerklasifikasi } from "@/lib/klasifikasi-berhenti";
 
 const RouteMap = dynamic(() => import("@/components/dashboard/route-map").then((m) => m.RouteMap), {
   ssr: false,
@@ -105,6 +109,8 @@ function formatDurationMinutes(totalMinutes: number): string {
 // Nilai Select untuk "Utama" (LokasiPengirimanID NULL) — base-ui Select
 // butuh string, jadi NULL dipetakan ke penanda ini.
 const LOKASI_UTAMA = "utama";
+// Lebar panel kiri melayang di mode peta latar penuh (px).
+const LEBAR_PANEL_APUNG = 440;
 
 function SortableStopRow({
   detail,
@@ -116,6 +122,10 @@ function SortableStopRow({
   hasDeparted,
   onOpenProof,
   onChangeLokasi,
+  ringkas = false,
+  bongkarGps,
+  masalahGps,
+  onFokus,
 }: {
   detail: DriverStopRow;
   index: number;
@@ -137,10 +147,26 @@ function SortableStopRow({
   // tersembunyi bila mitra cuma punya 1 lokasi (LokasiPilihan null) atau
   // alamat stop sudah dibekukan (DO sudah dibuat).
   onChangeLokasi?: (detail: DriverStopRow, lokasiPengirimanId: number | null) => void;
+  // Panel sempit (mode melayang): nama lebih kecil, kolom kantong tidak
+  // selebar 160px supaya nama mitra tidak terpotong.
+  ringkas?: boolean;
+  // Berhenti GPS dalam radius toleransi mitra ini (tiba & bongkar). undefined
+  // = jejak GPS tidak tersedia; [] = ada jejak tapi tidak terdeteksi berhenti.
+  bongkarGps?: BerhentiTerklasifikasi[];
+  // Kejanggalan dari jejak GPS untuk mitra ini (titik drop diragukan, hanya
+  // melintas, dst.) — tampil di kartu, klik → peta melompat.
+  masalahGps?: MasalahTujuan[];
+  onFokus?: (f: FokusPeta) => void;
 }) {
-  const pilihanLokasi = pilihanLokasiStopTampil(detail.LokasiPilihan, detail.LokasiDibekukan, onChangeLokasi != null);
+  // Muatan cadangan (mitra Complimentary): bukan tujuan antar — tanpa
+  // pegangan geser, nomor urut, lokasi, maupun estimasi bongkar.
+  const cadangan = detail.IsCadangan;
+  const pilihanLokasi = cadangan
+    ? null
+    : pilihanLokasiStopTampil(detail.LokasiPilihan, detail.LokasiDibekukan, onChangeLokasi != null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: detail.JadwalDetailID,
+    disabled: cadangan,
   });
 
   return (
@@ -148,16 +174,32 @@ function SortableStopRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex items-center gap-2 border-b bg-card px-3 py-2.5 text-sm last:border-b-0",
+        ringkas
+          ? "flex flex-wrap items-center gap-x-2 rounded-lg border bg-card px-2.5 py-2 text-sm shadow-xs"
+          : "flex flex-wrap items-center gap-x-2 border-b bg-card px-3 py-2.5 text-sm last:border-b-0",
         isDragging && "z-10 opacity-70 shadow-lg"
       )}
     >
-      <button type="button" {...attributes} {...listeners} className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
-        <GripVertical className="size-4" />
-      </button>
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-        {index + 1}
-      </span>
+      {cadangan ? (
+        <>
+          <span className="size-4 shrink-0" />
+          <span
+            title="Muatan cadangan"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-300"
+          >
+            <Package className="size-3.5" />
+          </span>
+        </>
+      ) : (
+        <>
+          <button type="button" {...attributes} {...listeners} className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
+            <GripVertical className="size-4" />
+          </button>
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {index + 1}
+          </span>
+        </>
+      )}
       <div className="min-w-0 flex-1">
       <button
         type="button"
@@ -165,14 +207,26 @@ function SortableStopRow({
         disabled={disabled}
         className="w-full min-w-0 text-left hover:underline disabled:cursor-default disabled:hover:no-underline"
       >
-        <p className="truncate text-base font-semibold">{detail.CustomerName}</p>
-        <p className="flex items-center gap-1 truncate text-muted-foreground">
-          <MapPin className="size-3.5 shrink-0" />
-          {detail.Wilayah}
-          {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
-        </p>
+        <p className={cn("truncate font-semibold", ringkas ? "text-sm" : "text-base")}>{detail.CustomerName}</p>
+        {cadangan ? (
+          <p className="truncate text-xs text-sky-700 dark:text-sky-300">Muatan cadangan</p>
+        ) : (
+          <p className="flex items-center gap-1 truncate text-muted-foreground">
+            <MapPin className="size-3.5 shrink-0" />
+            {detail.Wilayah}
+            {detail.Kecamatan ? ` | ${detail.Kecamatan}` : ""}
+          </p>
+        )}
         {detail.JamTiba != null && (
           <p className="text-xs text-muted-foreground">Tiba {formatTime(detail.JamTiba)}</p>
+        )}
+        {bongkarGps?.map((b) => (
+          <p key={b.mulai} className="text-[11px] font-medium text-emerald-600 tabular-nums dark:text-emerald-400">
+            Tiba &amp; bongkar {formatTime(b.mulai)}–{formatTime(b.selesai)} · {b.menit} mnt
+          </p>
+        ))}
+        {bongkarGps && bongkarGps.length === 0 && !cadangan && !masalahGps?.length && (
+          <p className="text-[11px] text-muted-foreground">Belum terdeteksi berhenti di lokasi ini (GPS)</p>
         )}
       </button>
       {pilihanLokasi && (
@@ -205,14 +259,14 @@ function SortableStopRow({
           on one line instead of wrapping — was w-24, which avoided the
           name/location column being squeezed to zero width but wrapped
           this qty text awkwardly. */}
-      <span className="w-40 shrink-0 text-right tabular-nums">
+      <span className={cn("shrink-0 text-right tabular-nums", ringkas ? "text-xs" : "w-40")}>
         <span className="font-medium">
           {formatKemasanQty(detail.Qty10KG, detail.Qty5KG)}
           {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
         </span>
-        <span className="block text-xs text-muted-foreground">~{estimateDeliveryMinutes(detail.Qty)} menit</span>
+        {!cadangan && <span className="block text-xs text-muted-foreground">~{estimateDeliveryMinutes(detail.Qty)} menit</span>}
       </span>
-      {detail.Latitude == null && (
+      {!cadangan && detail.Latitude == null && (
         <Badge variant="outline" className="shrink-0 border-destructive/30 text-[10px] text-destructive">
           Tanpa lokasi
         </Badge>
@@ -226,7 +280,7 @@ function SortableStopRow({
           Terkendala
         </Badge>
       )}
-      {hasDeparted ? (
+      {hasDeparted && !cadangan ? (
         <button
           type="button"
           title="Lihat bukti pengiriman"
@@ -256,6 +310,14 @@ function SortableStopRow({
         >
           <X className="size-4" />
         </button>
+      )}
+      {/* Kejanggalan GPS mitra ini — baris sendiri selebar kartu. */}
+      {onFokus && masalahGps && masalahGps.length > 0 && (
+        <div className="flex basis-full flex-col">
+          {masalahGps.map((m) => (
+            <MasalahTujuanBaris key={m.jenis} m={m} onPilih={onFokus} />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -439,6 +501,22 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // layout even on desktop so every route card is a portrait rectangle that
   // tiles neatly into the batch grid image.
   const [portrait, setPortrait] = useState(false);
+  // Mode melayang (opsi B): kotak Efektifitas lipat.
+  const [efekBuka, setEfekBuka] = useState(false);
+  // Tinggi kotak Bukti yang melayang di dasar peta (mode melayang) — kotak
+  // pencarian, Efektifitas, dan pembingkaian rute naik setinggi ini.
+  const [elBukti, setElBukti] = useState<HTMLDivElement | null>(null);
+  const [tinggiBukti, setTinggiBukti] = useState(0);
+  useEffect(() => {
+    if (!elBukti) return;
+    const ro = new ResizeObserver(() => setTinggiBukti(Math.round(elBukti.getBoundingClientRect().height) + 8));
+    ro.observe(elBukti);
+    return () => ro.disconnect();
+  }, [elBukti]);
+  const layarSempit = useIsMobile();
+  // Peta latar penuh + panel melayang hanya di layar lebar dan bukan saat
+  // tangkapan layar/potret — keduanya butuh tata letak bertumpuk yang utuh.
+  const modeApung = showMap && !portrait && !capturing && !layarSempit;
   // Bumped right before a "Seluruhnya" capture to force RouteMap to
   // re-fit its bounds to the whole route (un-animated) before the
   // screenshot, overriding any manual pan/zoom — see FitBounds in
@@ -478,6 +556,11 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   loadingRef.current = loading;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const totalQty = useMemo(() => order.reduce((sum, o) => sum + o.Qty, 0), [order]);
+  // Tujuan antar sungguhan vs muatan cadangan (mitra Complimentary). Rute,
+  // peta, urutan, estimasi waktu, dan teks bagikan memakai `tujuan`; total
+  // muatan tetap memakai seluruh `order` (cadangan ikut dibawa truk).
+  const tujuan = useMemo(() => order.filter((o) => !o.IsCadangan), [order]);
+  const cadanganStops = useMemo(() => order.filter((o) => o.IsCadangan), [order]);
   const totalBonusQty = useMemo(() => order.reduce((sum, o) => sum + o.BonusQty, 0), [order]);
   const totalQty10KG = useMemo(() => order.reduce((sum, o) => sum + o.Qty10KG, 0), [order]);
   const totalQty5KG = useMemo(() => order.reduce((sum, o) => sum + o.Qty5KG, 0), [order]);
@@ -646,6 +729,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   const berangkatAktualIso = jadwal?.JamAktualBerangkat ? new Date(jadwal.JamAktualBerangkat).toISOString() : null;
   const kembaliAktualIso = vehicleChecks.find((c) => c.tipe === "DATANG")?.checkedAt ?? null;
   const [jejak, setJejak] = useState<JejakPeta | null>(null);
+  // Baris Log Pergerakan yang diklik → RouteMap melompat ke titiknya.
+  const [fokusBerhenti, setFokusBerhenti] = useState<(FokusPeta & { n: number }) | null>(null);
   useEffect(() => {
     if (jadwalId == null || armadaId == null || !berangkatAktualIso) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -691,12 +776,18 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   useEffect(() => {
     let cancelled = false;
     if (pabrik == null || order.length === 0) return;
-    const missing = order.some((o) => o.Latitude == null || o.Longitude == null);
+    if (tujuan.length === 0) {
+      // Hanya muatan cadangan — tidak ada rute untuk dihitung.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRoute(null);
+      setRouteError("Keberangkatan ini hanya berisi muatan cadangan — tidak ada tujuan antar.");
+      return;
+    }
+    const missing = tujuan.some((o) => o.Latitude == null || o.Longitude == null);
     if (missing) {
       // Stops changed to a set that genuinely can't be routed (missing
       // coordinates) — reset any stale route from the previous stop order
       // so "Berangkat" doesn't stay enabled against it.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoute(null);
       setRouteError("Beberapa tujuan belum punya lokasi tersimpan — tidak bisa hitung rute.");
       return;
@@ -705,7 +796,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     setRouteError(null);
     const points = [
       { lat: pabrik.latitude, lng: pabrik.longitude },
-      ...order.map((o) => ({ lat: o.Latitude as number, lng: o.Longitude as number })),
+      ...tujuan.map((o) => ({ lat: o.Latitude as number, lng: o.Longitude as number })),
       { lat: pabrik.latitude, lng: pabrik.longitude },
     ];
     fetch("/api/mkesindo/routing/multi", {
@@ -735,15 +826,17 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     return () => {
       cancelled = true;
     };
-  }, [order, pabrik]);
+  }, [order, tujuan, pabrik]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = order.findIndex((o) => o.JadwalDetailID === active.id);
-    const newIndex = order.findIndex((o) => o.JadwalDetailID === over.id);
+    // Hanya tujuan sungguhan yang bisa diurutkan; muatan cadangan selalu
+    // diletakkan di akhir urutan.
+    const oldIndex = tujuan.findIndex((o) => o.JadwalDetailID === active.id);
+    const newIndex = tujuan.findIndex((o) => o.JadwalDetailID === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    const next = arrayMove(order, oldIndex, newIndex);
+    const next = [...arrayMove(tujuan, oldIndex, newIndex), ...cadanganStops];
     setOrder(next);
     if (jadwalId != null) {
       const targetId = jadwalId;
@@ -1190,9 +1283,9 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // result for one stop; this is the sum across all of them, feeding the
   // route summary's time breakdown below.
   const bongkarTotalMenit = useMemo(() => {
-    return order.reduce((sum, o) => sum + estimateDeliveryMinutes(o.Qty), 0);
-  }, [order]);
-  const konfirmasiTotalMenit = order.length * CONFIRMATION_MINUTES_PER_STOP;
+    return tujuan.reduce((sum, o) => sum + estimateDeliveryMinutes(o.Qty), 0);
+  }, [tujuan]);
+  const konfirmasiTotalMenit = tujuan.length * CONFIRMATION_MINUTES_PER_STOP;
 
   // "Detail Rute" — plain-text destination list only (no route/fuel
   // figures, those are visual-only info covered by the image share
@@ -1204,10 +1297,19 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
       `Daftar Tujuan — ${armadaNama ?? "Armada"}`,
       `${formatDate(businessDate)} ${time}${driverId ? ` · ${drivers.find((d) => d.SalesmanID === driverId)?.Name ?? ""}` : ""}`,
       "",
-      ...order.map(
+      ...tujuan.map(
         (o, i) =>
           `${i + 1}. ${o.CustomerName} — ${o.Wilayah} (${formatKemasanQty(o.Qty10KG, o.Qty5KG)}${o.BonusQty > 0 ? ` +${o.BonusQty} bonus` : ""})`
       ),
+      ...(cadanganStops.length > 0
+        ? [
+            "",
+            `Muatan cadangan: ${formatKemasanQty(
+              cadanganStops.reduce((t, o) => t + o.Qty10KG, 0),
+              cadanganStops.reduce((t, o) => t + o.Qty5KG, 0)
+            )}`,
+          ]
+        : []),
       "",
       `Total: ${formatKemasanQty(totalQty10KG, totalQty5KG)}${totalBonusQty > 0 ? ` (+${totalBonusQty} bonus)` : ""}`,
     ];
@@ -1322,6 +1424,466 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     },
   }));
 
+  const ruangBukti = modeApung && !isDraft && elBukti ? tinggiBukti : 0;
+  // Log Pergerakan: analisis jejak GPS terhadap rencana (src/lib/
+  // analisis-jejak.ts) — hasil yang sama dipakai daftar tujuan & RouteMap.
+  const jejakData = jejak?.keadaan === "siap" && jejak.data.status === "ada" ? jejak.data : null;
+  const analisis = useMemo(() => {
+    if (!jejakData || !pabrik) return null;
+    return analisisJejak({
+      titik: jejakData.titik,
+      waktu: jejakData.waktu ?? [],
+      kecepatan: jejakData.kecepatan ?? [],
+      berhenti: jejakData.berhenti,
+      // Nomor = nomor kartu (urutan rencana), termasuk tujuan tanpa titik.
+      tujuan: tujuan.flatMap((o, i) =>
+        o.Latitude != null && o.Longitude != null
+          ? [{ id: o.JadwalDetailID, nama: o.CustomerName, nomor: i + 1, lat: o.Latitude, lng: o.Longitude }]
+          : []
+      ),
+      pabrik: { lat: pabrik.latitude, lng: pabrik.longitude },
+      rencana: (route?.geometry ?? []).map(([lng, lat]) => ({ lat, lng })),
+      final: jejakData.final,
+    });
+  }, [jejakData, pabrik, tujuan, route?.geometry]);
+  // Catatan berbaur DI DALAM daftar tujuan (bukan kotak terpisah): jam
+  // bongkar & masalah menempel di kartu mitra, catatan perjalanan disisipkan
+  // di antara kartu sesuai urutan waktu.
+  const sisipan = analisis ? tempatkanCatatan(analisis) : new Map<number | "awal", CatatanPerjalanan[]>();
+  const fokuskan = (f: FokusPeta) => setFokusBerhenti({ ...f, n: Date.now() });
+  const barisSisipan = (kunci: number | "awal") =>
+    (sisipan.get(kunci) ?? []).map((c) => (
+      <BarisCatatan key={`${c.jenis}-${c.mulai}`} c={c} onPilih={fokuskan} />
+    ));
+  // ---- Potongan isi dialog: dipakai bersama oleh mode melayang (panel
+  // bertab di atas peta) dan tata letak bertumpuk (Bagikan/potret/HP).
+  const bagianKontrol = (
+    <>
+            {isDraft ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 shrink-0" />
+                <TimeInput value={time} onChange={setTime} className="shrink-0" />
+                <Select value={driverId} onValueChange={(v) => setDriverId(v ?? "")}>
+                  <SelectTrigger className="min-w-40 flex-1">
+                    <SelectValue placeholder="Driver">
+                      {(v: string) => drivers.find((d) => d.SalesmanID === v)?.Name ?? "Pilih Driver"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {drivers.map((d) => (
+                      <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
+                        {d.Name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
+            {isDraft && isFutureDate && (
+              <p className="text-xs text-muted-foreground">
+                Keberangkatan ini dijadwalkan untuk {formatDate(businessDate)} — Mulai Muat dan Berangkat baru bisa
+                dilakukan pada hari itu.
+              </p>
+            )}
+
+            {overCapacity && (
+              <p className="text-xs text-destructive">
+                Total muatan {totalQty} kantong melebihi kapasitas armada ({kapasitasMaks} kantong).
+              </p>
+            )}
+
+    </>
+  );
+  const bagianKontrolAda = isDraft || overCapacity;
+  const bagianDaftar = (
+    <>
+            <div
+              className={cn(
+                "flex flex-col",
+                modeApung ? "gap-1" : "rounded-lg border",
+                capturing || modeApung ? "max-h-none overflow-visible" : "max-h-80 overflow-y-auto"
+              )}
+            >
+              {loading && <p className="py-6 text-center text-sm text-muted-foreground">Memuat...</p>}
+              {!loading && order.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada SO.</p>
+              )}
+              {!loading && order.length > 0 && (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={tujuan.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
+                    {analisis?.urutanAktual && <BarisUrutan urutan={analisis.urutanAktual} />}
+                    {barisSisipan("awal")}
+                    {tujuan.map((d, i) => (
+                      <Fragment key={d.JadwalDetailID}>
+                        <SortableStopRow
+                          detail={d}
+                          index={i}
+                          onEdit={onEditSalesOrder}
+                          disabled={!isDraft}
+                          onOpenSi={setSiDetail}
+                          onRemove={isDraft ? handleRemoveStop : undefined}
+                          hasDeparted={hasDeparted}
+                          ringkas={modeApung}
+                          onOpenProof={setProofDetail}
+                          onChangeLokasi={isDraft ? handleChangeLokasi : undefined}
+                          bongkarGps={analisis ? (analisis.bongkarPerTujuan.get(d.JadwalDetailID) ?? []) : undefined}
+                          masalahGps={analisis?.masalahPerTujuan.get(d.JadwalDetailID)}
+                          onFokus={fokuskan}
+                        />
+                        {barisSisipan(d.JadwalDetailID)}
+                      </Fragment>
+                    ))}
+                  </SortableContext>
+                  {/* Muatan cadangan (mitra Complimentary): ikut dibawa truk untuk
+                      mengganti kantong bermasalah/ditolak, BUKAN tujuan antar —
+                      tidak bernomor, tidak bisa diurutkan, tidak masuk rute. */}
+                  {cadanganStops.length > 0 && (
+                    <>
+                      <p
+                        className={cn(
+                          "text-[11px] font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300",
+                          modeApung ? "px-1 pt-1" : "border-y bg-sky-500/5 px-3 py-1.5"
+                        )}
+                      >
+                        Muatan Cadangan
+                      </p>
+                      <SortableContext items={cadanganStops.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
+                        {cadanganStops.map((d, i) => (
+                          <SortableStopRow
+                            key={d.JadwalDetailID}
+                            detail={d}
+                            index={i}
+                            onEdit={onEditSalesOrder}
+                            disabled={!isDraft}
+                            onOpenSi={setSiDetail}
+                            onRemove={isDraft ? handleRemoveStop : undefined}
+                            hasDeparted={hasDeparted}
+                        ringkas={modeApung}
+                            onOpenProof={setProofDetail}
+                          />
+                        ))}
+                      </SortableContext>
+                    </>
+                  )}
+                </DndContext>
+              )}
+            </div>
+
+    </>
+  );
+  const bagianTotal = (
+    <>
+            {order.length > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2 text-sm">
+                <Package className="size-4 text-primary" />
+                <span className="font-medium">
+                  {formatKemasanQty(totalQty10KG, totalQty5KG)}
+                  {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
+                  {totalRetur > 0 && <span className="text-destructive"> (Retur {totalRetur})</span>}
+                </span>
+              </div>
+            )}
+
+    </>
+  );
+  const bagianAksi = (
+    <>
+            {isDraft && (
+              <div className="flex flex-wrap items-center gap-2">
+                {!adding && (
+                  <Button size="sm" variant="ghost" className="gap-1.5" disabled={pending} onClick={handleOpenAdd}>
+                    <Plus className="size-3.5" />
+                    Tambahkan
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
+                  Batalkan Draft
+                </Button>
+                <Button size="sm" variant="outline" disabled={pending} onClick={handleSaveDriverTime}>
+                  Simpan
+                </Button>
+                {jadwal?.JamMulaiMuat == null ? (
+                  <Button size="sm" variant="outline" className="ml-auto" disabled={pending || isFutureDate} onClick={handleMuat}>
+                    Mulai Muat
+                  </Button>
+                ) : (
+                  <Button size="sm" className="ml-auto" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
+                    {pending ? "Memproses..." : "Selesai Muat"}
+                  </Button>
+                )}
+              </div>
+            )}
+
+    </>
+  );
+  const bagianTambah = (
+    <>
+            {isDraft && adding && (
+              <div className="flex flex-col gap-2 rounded-lg border p-2" data-capture-hide="true">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Pilih SO tambahan</span>
+                  {kapasitasMaks != null && (
+                    <span
+                      className={cn(
+                        "text-xs tabular-nums",
+                        totalQty + selectedToAddQty > kapasitasMaks ? "text-destructive" : "text-muted-foreground"
+                      )}
+                    >
+                      {totalQty + selectedToAddQty} / {kapasitasMaks} kantong
+                    </span>
+                  )}
+                </div>
+                {addError && <p className="text-xs text-destructive">{addError}</p>}
+                <div className="flex max-h-40 flex-col divide-y overflow-y-auto rounded-md border">
+                  {availableToAdd.map((so) => {
+                    const isSelected = selectedToAdd.has(so.SalesOrderID);
+                    const soOverCapacity = !isSelected && kapasitasMaks != null && totalQty + selectedToAddQty + so.Qty > kapasitasMaks;
+                    return (
+                      <button
+                        key={so.SalesOrderID}
+                        type="button"
+                        disabled={soOverCapacity}
+                        onClick={() => handleToggleAdd(so.SalesOrderID, so.Qty)}
+                        className={cn(
+                          "flex items-center justify-between gap-2 px-2 py-1.5 text-left text-xs transition-colors",
+                          isSelected && "bg-primary/10",
+                          !isSelected && !soOverCapacity && "hover:bg-muted",
+                          soOverCapacity && "cursor-not-allowed opacity-40"
+                        )}
+                      >
+                        <span className="min-w-0 truncate">
+                          {so.CustomerName} <span className="text-muted-foreground">· {so.Wilayah}</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">{formatKemasanQty(so.Qty10KG, so.Qty5KG)}</span>
+                      </button>
+                    );
+                  })}
+                  {availableToAdd.length === 0 && (
+                    <p className="py-4 text-center text-xs text-muted-foreground">Tidak ada SO yang tersedia.</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={() => setAdding(false)}>
+                    Batal
+                  </Button>
+                  <Button size="sm" className="flex-1" disabled={pending || selectedToAdd.size === 0} onClick={handleConfirmAdd}>
+                    Tambah ({selectedToAdd.size})
+                  </Button>
+                </div>
+              </div>
+            )}
+
+    </>
+  );
+  const bagianRingkas = (
+    <>
+            {routeError && <p className="text-xs text-destructive">{routeError}</p>}
+            {route && (
+              <div className="flex flex-wrap gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                <span className="flex items-center gap-1">
+                  <Clock className="size-4 text-muted-foreground" />
+                  Tempuh {route.durationMinutes} + Bongkar {Math.round(bongkarTotalMenit)} + Konfirmasi{" "}
+                  {konfirmasiTotalMenit} = {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)}{" "}
+                  menit
+                </span>
+                {totalFuelLiters != null && (
+                  <span className="flex items-center gap-1">
+                    <Fuel className="size-4 text-muted-foreground" />
+                    {totalFuelLiters.toLocaleString("id-ID")} L
+                    {jenisBBM && ` (${jenisBBM})`}
+                  </span>
+                )}
+                {totalFuelCost != null && (
+                  <span className="flex items-center gap-1 font-medium">{formatRupiah(totalFuelCost)}</span>
+                )}
+                {extraFuelCost != null && (
+                  <span className="flex items-center gap-1 text-muted-foreground">+ {formatRupiah(extraFuelCost)}</span>
+                )}
+                {totalFuelCostWithExtra != null && (
+                  <span className="flex items-center gap-1 font-semibold text-primary">= {formatRupiah(totalFuelCostWithExtra)}</span>
+                )}
+              </div>
+            )}
+
+    </>
+  );
+  const bagianBukti = (
+    <>
+            {!isDraft && (
+              <div className={modeApung ? "grid grid-cols-2 gap-3" : "flex flex-col gap-2"}>
+                {(["BERANGKAT", "DATANG"] as const).map((tipe) => {
+                  const check = vehicleChecks.find((c) => c.tipe === tipe);
+                  if (check) {
+                    // On Cek Datang, total Retur matters more than how much
+                    // was loaded (MuatanQty, same figure already shown on
+                    // Cek Berangkat) -- confirmed with user 2026-09-23.
+                    return tipe === "DATANG" ? (
+                      <CheckSummary key={tipe} check={check} packageLabel="kantong retur" packageQty={totalRetur} ringkas={modeApung} />
+                    ) : (
+                      <CheckSummary key={tipe} check={check} ringkas={modeApung} />
+                    );
+                  }
+                  if (modeApung) {
+                    const Ikon = TIPE_IKON[tipe];
+                    return (
+                      <div key={tipe} className="flex items-center gap-2 self-start rounded-lg border bg-muted/30 p-2 text-xs">
+                        <span
+                          title={TIPE_LABEL[tipe]}
+                          aria-label={TIPE_LABEL[tipe]}
+                          className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+                        >
+                          <Ikon className="size-3.5" />
+                        </span>
+                        <span className="text-muted-foreground">
+                          {nextJadwalStarted ? "Tidak dilaksanakan" : "Menunggu Inspeksi"}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={tipe} className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-xs">
+                      <span className="font-medium">{TIPE_LABEL[tipe]}</span>
+                      <span className="text-muted-foreground">
+                        {nextJadwalStarted ? "Tidak dilaksanakan" : "Menunggu Inspeksi"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+    </>
+  );
+  const bagianGalat = (
+    <>
+            {error && <p className="text-xs text-destructive">{error}</p>}    </>
+  );
+  // Isi kartu Efektifitas Armada (tanpa bingkai & judul) — dipakai kartu
+  // penuh (bertumpuk) maupun kotak lipat kanan-bawah (mode melayang).
+  const isiEfektifitas = route ? (
+    <>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      1
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Jarak Tempuh &times; Harga Jual rata-rata/kantong</p>
+                      {avgHargaJualPerKantong != null ? (
+                        <p className="tabular-nums">
+                          {route.distanceKm.toLocaleString("id-ID")} km &times; {formatRupiah(avgHargaJualPerKantong)} ={" "}
+                          <span className="font-semibold">{formatRupiah(efektivitasHasil1 ?? 0)}</span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">Harga jual mitra pada rute ini belum diketahui.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      2
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Konsumsi BBM &times; Harga per Liter</p>
+                      {totalFuelLiters != null && totalFuelCost != null ? (
+                        <p className="tabular-nums">
+                          {totalFuelLiters.toLocaleString("id-ID")} L &times; {formatRupiah(biayaBBMPerLiter ?? 0)} ={" "}
+                          <span className="font-semibold">{formatRupiah(totalFuelCost)}</span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">Konsumsi BBM armada belum diketahui.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 border-t pt-2.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      3
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">(Hasil 1 &minus; Hasil 2) &divide; Jarak Tempuh</p>
+                      {efektivitasHasil1 != null && totalFuelCost != null && efektivitasPerKm != null && efektivitasSelisih != null ? (
+                        <p className="tabular-nums">
+                          ({formatRupiah(efektivitasHasil1)} &minus; {formatRupiah(totalFuelCost)}) &divide;{" "}
+                          {route.distanceKm.toLocaleString("id-ID")} km ={" "}
+                          <span className="font-semibold text-primary">{formatRupiah(efektivitasPerKm)}/km</span>{" "}
+                          ({formatRupiah(efektivitasSelisih)})
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">Belum bisa dihitung — lengkapi data di atas dulu.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 border-t pt-2.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      4
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">
+                        Utility Effectiveness — WO &divide; (WO + Idle + B), seluruh armada ini hari ini
+                      </p>
+                      {utilisasiHarian != null && utilityEffectiveness != null ? (
+                        <p className="tabular-nums">
+                          {formatDurationMinutes(utilisasiHarian.waktuOperasionalMenit)} &divide;{" "}
+                          ({formatDurationMinutes(utilisasiHarian.waktuOperasionalMenit)} + {formatDurationMinutes(utilisasiHarian.idleMenit)} +{" "}
+                          {formatDurationMinutes(utilisasiHarian.breakdownMenit)}) ={" "}
+                          <span className="font-semibold text-primary">
+                            {(utilityEffectiveness * 100).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Belum bisa dihitung — belum ada data WO/Idle/Breakdown armada ini hari ini.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 border-t pt-2.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      5
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">
+                        Utility Effectiveness Per Periode — WO &divide; (WO + Idle + B), khusus Periode Pengiriman {formatDate(businessDate)}
+                      </p>
+                      {utilisasiPeriode != null && utilityEffectivenessPeriode != null ? (
+                        <p className="tabular-nums">
+                          {formatDurationMinutes(utilisasiPeriode.waktuOperasionalMenit)} &divide;{" "}
+                          ({formatDurationMinutes(utilisasiPeriode.waktuOperasionalMenit)} + {formatDurationMinutes(utilisasiPeriode.idleMenit)} +{" "}
+                          {formatDurationMinutes(utilisasiPeriode.breakdownMenit)}) ={" "}
+                          <span className="font-semibold text-primary">
+                            {(utilityEffectivenessPeriode * 100).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Belum bisa dihitung — belum ada data WO/Idle/Breakdown armada ini pada periode ini.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+    </>
+  ) : null;
+  function petaEl(apung: boolean) {
+    return pabrik && order.length > 0 ? (
+      <RouteMap
+        pabrik={pabrik}
+        stops={tujuan.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
+        geometry={route?.geometry ?? null}
+        refitTrigger={refitTrigger}
+        driverPosition={truckPosition}
+        jejak={jejak}
+        analisis={analisis}
+        fokusBerhenti={apung ? fokusBerhenti : null}
+        ruangKiri={apung ? LEBAR_PANEL_APUNG + 16 : 0}
+        ruangBawahKanan={apung && route ? 56 : 0}
+        ruangBawah={apung ? ruangBukti : 0}
+        penuh={apung}
+      />
+    ) : (
+      <Skeleton className={apung ? "h-full w-full" : "h-full w-full md:rounded-lg"} />
+    );
+  }
+
   return (
     <Dialog open={jadwalId != null} onOpenChange={onOpenChange}>
       {/* Widened past the base Dialog's sm:max-w-sm — a bare max-w-4xl loses
@@ -1332,9 +1894,16 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
           holds a map + list side by side and genuinely benefits from a
           landscape screen's extra width, unlike a plain form dialog. */}
       <DialogContent
-        className={cn("max-w-lg p-0", portrait ? "w-[440px] sm:max-w-[440px]" : "sm:max-w-3xl lg:max-w-6xl")}
+        className={cn(
+          "max-w-lg p-0",
+          modeApung
+            ? "flex h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden sm:max-w-[calc(100vw-2rem)]"
+            : portrait
+              ? "w-[440px] sm:max-w-[440px]"
+              : "sm:max-w-3xl lg:max-w-6xl"
+        )}
       >
-        <div ref={captureRef}>
+        <div ref={captureRef} className={modeApung ? "flex min-h-0 flex-1 flex-col" : undefined}>
         <DialogHeader className="p-4 pb-0">
           <div className="flex items-center justify-between gap-2 pr-8">
             <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
@@ -1351,7 +1920,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     <Truck className="size-4 text-muted-foreground" />
                     {armadaNama ?? "Armada"}
                   </span>
-                  <span className="text-muted-foreground">({order.length}) Tujuan</span>
+                  <span className="text-muted-foreground">({tujuan.length}) Tujuan</span>
                   {route && (
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <RouteIcon className="size-4" />
@@ -1464,150 +2033,94 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
           </DialogDescription>
         </DialogHeader>
 
-        {/* Mobile (default): map first, full-bleed, then the config panel
-            below it as a rounded-top "sheet" pulled up slightly to overlap
-            the map's bottom edge — same idea as Google Maps' bottom sheet,
-            built with layout order + a negative margin rather than a real
-            drag-to-resize sheet (out of scope here).
-            md and up: reverts to config-left / map-right side by side,
-            matching how a desktop map + form split is usually laid out. */}
+        {modeApung ? (
+          /* Mode melayang (layar lebar, opsi B 2026-11-25): peta jadi latar,
+             panel kiri melayang = kontrol + daftar tujuan (satu-satunya yang
+             bergulir) + ringkasan & aksi tetap di bawah; kotak Efektifitas
+             lipat di kanan bawah peta; Bukti (Cek Berangkat/Datang) di bawah
+             peta. Tangkapan layar Bagikan, potret (batch), dan layar HP tetap
+             memakai tata letak bertumpuk di cabang bawah. */
+          <div className="relative mx-4 mt-3 mb-4 min-h-0 flex-1 overflow-hidden rounded-xl border">
+            <div className="absolute inset-0">{petaEl(true)}</div>
+            <div
+              className="absolute top-3 bottom-3 left-3 z-[1100] flex flex-col overflow-hidden rounded-xl border bg-popover/95 shadow-lg backdrop-blur-sm"
+              style={{ width: LEBAR_PANEL_APUNG }}
+            >
+              {bagianKontrolAda && <div className="flex flex-col gap-2 border-b p-3">{bagianKontrol}</div>}
+              {/* Daftar tujuan (satu-satunya yang bergulir, tanpa scrollbar):
+                  gradasi memudar di dasarnya menandakan masih ada kartu di
+                  bawah kotak ringkasan. pb-10 = ruang supaya kartu terakhir
+                  bisa digulir keluar dari area pudar. */}
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                <div className="no-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2 pt-2 pb-10">
+                  {bagianDaftar}
+                  {bagianTambah}
+                </div>
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-popover via-popover/70 to-transparent"
+                />
+              </div>
+              <div className="relative z-10 flex shrink-0 flex-col gap-2 border-t bg-popover p-3 shadow-[0_-10px_16px_-10px_rgba(0,0,0,0.25)]">
+                {bagianTotal}
+                {bagianRingkas}
+                {bagianGalat}
+                {isDraft && bagianAksi}
+              </div>
+            </div>
+            {route && (
+              <div
+                className="absolute right-3 z-[1100] w-[min(360px,calc(100%-1.5rem))] overflow-hidden rounded-xl border bg-popover/95 shadow-lg backdrop-blur-sm"
+                style={{ bottom: 12 + ruangBukti }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setEfekBuka((v) => !v)}
+                  aria-expanded={efekBuka}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/40"
+                >
+                  <Gauge className="size-4 shrink-0 text-primary" />
+                  <span className="font-semibold">Efektifitas</span>
+                  <span className="truncate text-xs text-muted-foreground tabular-nums">
+                    {route.distanceKm.toLocaleString("id-ID")} km ·{" "}
+                    {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)} mnt
+                  </span>
+                  <span className="ml-auto shrink-0 text-xs font-semibold text-primary tabular-nums">
+                    {efektivitasPerKm != null ? `${formatRupiah(efektivitasPerKm)}/km` : "-"}
+                  </span>
+                  <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", efekBuka && "rotate-180")} />
+                </button>
+                {efekBuka && (
+                  <div className="flex max-h-[55vh] flex-col gap-2.5 overflow-y-auto border-t p-3 text-sm">{isiEfektifitas}</div>
+                )}
+              </div>
+            )}
+            {/* Bukti (Cek Berangkat/Datang) menempel di dasar peta, di kanan
+                panel; pencarian & Efektifitas naik tepat di atasnya. */}
+            {!isDraft && (
+              <div
+                ref={setElBukti}
+                className="absolute right-3 bottom-3 z-[1100] rounded-xl border bg-popover/95 p-2 shadow-lg backdrop-blur-sm"
+                style={{ left: LEBAR_PANEL_APUNG + 24 }}
+              >
+                {bagianBukti}
+              </div>
+            )}
+          </div>
+        ) : (
         <div className={cn("flex flex-col", !portrait && (showMap ? "md:grid md:grid-cols-2 md:gap-4 md:p-4 md:pt-2 lg:grid-cols-[1fr_1.3fr]" : "md:p-4 md:pt-2"))}>
           {showMap && (
             <div className={cn("order-1 flex flex-col gap-3", !portrait && "md:order-2")}>
               <div className={cn("h-[34vh] min-h-[220px] w-full overflow-hidden", portrait ? "h-[300px]" : "md:h-auto md:min-h-[220px] md:rounded-lg")}>
-                {pabrik && order.length > 0 ? (
-                  <RouteMap
-                    pabrik={pabrik}
-                    stops={order.filter((o) => o.Latitude != null && o.Longitude != null) as (JadwalDetailRow & { Latitude: number; Longitude: number })[]}
-                    geometry={route?.geometry ?? null}
-                    refitTrigger={refitTrigger}
-                    driverPosition={truckPosition}
-                    jejak={jejak}
-                  />
-                ) : (
-                  <Skeleton className="h-full w-full md:rounded-lg" />
-                )}
+                {petaEl(false)}
               </div>
-
-              {/* Efektifitas Armada — Rupiah margin per km, confirmed
-                  formula with the user 2026-08-20: (1) Jarak Tempuh x
-                  rata-rata harga jual/kantong, minus (2) konsumsi BBM x
-                  harga/liter (the base fuel cost, not the +15% buffer),
-                  divided by (3) Jarak Tempuh again — poin 3 also shows the
-                  raw (Hasil 1 - Hasil 2) alongside the per-km figure, added
-                  2026-09-18. Poin 4 (Utility Effectiveness, added same day)
-                  is WO / (WO + Idle + B) for this armada's WHOLE business
-                  day (every Jadwal + activity, not just this one route) —
-                  see getArmadaUtilisasiHarian's own comment for the exact
-                  source/mapping. Every step's own inputs and result are
-                  spelled out (not just the final number) so staff can see
-                  where the figure comes from. Gated on `route` existing,
-                  same precondition the BBM breakdown block below already
-                  uses. */}
               {route && (
                 <div className="flex flex-col gap-2.5 rounded-lg border bg-muted/30 p-3 text-sm">
                   <p className="flex items-center gap-1.5 font-semibold">
                     <Gauge className="size-4 text-primary" />
                     Efektifitas Armada
                   </p>
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                      1
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Jarak Tempuh &times; Harga Jual rata-rata/kantong</p>
-                      {avgHargaJualPerKantong != null ? (
-                        <p className="tabular-nums">
-                          {route.distanceKm.toLocaleString("id-ID")} km &times; {formatRupiah(avgHargaJualPerKantong)} ={" "}
-                          <span className="font-semibold">{formatRupiah(efektivitasHasil1 ?? 0)}</span>
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">Harga jual mitra pada rute ini belum diketahui.</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                      2
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Konsumsi BBM &times; Harga per Liter</p>
-                      {totalFuelLiters != null && totalFuelCost != null ? (
-                        <p className="tabular-nums">
-                          {totalFuelLiters.toLocaleString("id-ID")} L &times; {formatRupiah(biayaBBMPerLiter ?? 0)} ={" "}
-                          <span className="font-semibold">{formatRupiah(totalFuelCost)}</span>
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">Konsumsi BBM armada belum diketahui.</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 border-t pt-2.5">
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                      3
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">(Hasil 1 &minus; Hasil 2) &divide; Jarak Tempuh</p>
-                      {efektivitasHasil1 != null && totalFuelCost != null && efektivitasPerKm != null && efektivitasSelisih != null ? (
-                        <p className="tabular-nums">
-                          ({formatRupiah(efektivitasHasil1)} &minus; {formatRupiah(totalFuelCost)}) &divide;{" "}
-                          {route.distanceKm.toLocaleString("id-ID")} km ={" "}
-                          <span className="font-semibold text-primary">{formatRupiah(efektivitasPerKm)}/km</span>{" "}
-                          ({formatRupiah(efektivitasSelisih)})
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">Belum bisa dihitung — lengkapi data di atas dulu.</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 border-t pt-2.5">
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                      4
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">
-                        Utility Effectiveness — WO &divide; (WO + Idle + B), seluruh armada ini hari ini
-                      </p>
-                      {utilisasiHarian != null && utilityEffectiveness != null ? (
-                        <p className="tabular-nums">
-                          {formatDurationMinutes(utilisasiHarian.waktuOperasionalMenit)} &divide;{" "}
-                          ({formatDurationMinutes(utilisasiHarian.waktuOperasionalMenit)} + {formatDurationMinutes(utilisasiHarian.idleMenit)} +{" "}
-                          {formatDurationMinutes(utilisasiHarian.breakdownMenit)}) ={" "}
-                          <span className="font-semibold text-primary">
-                            {(utilityEffectiveness * 100).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">
-                          Belum bisa dihitung — belum ada data WO/Idle/Breakdown armada ini hari ini.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 border-t pt-2.5">
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                      5
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">
-                        Utility Effectiveness Per Periode — WO &divide; (WO + Idle + B), khusus Periode Pengiriman {formatDate(businessDate)}
-                      </p>
-                      {utilisasiPeriode != null && utilityEffectivenessPeriode != null ? (
-                        <p className="tabular-nums">
-                          {formatDurationMinutes(utilisasiPeriode.waktuOperasionalMenit)} &divide;{" "}
-                          ({formatDurationMinutes(utilisasiPeriode.waktuOperasionalMenit)} + {formatDurationMinutes(utilisasiPeriode.idleMenit)} +{" "}
-                          {formatDurationMinutes(utilisasiPeriode.breakdownMenit)}) ={" "}
-                          <span className="font-semibold text-primary">
-                            {(utilityEffectivenessPeriode * 100).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">
-                          Belum bisa dihitung — belum ada data WO/Idle/Breakdown armada ini pada periode ini.
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  {isiEfektifitas}
                 </div>
               )}
             </div>
@@ -1620,216 +2133,17 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
               showMap && !portrait && "md:order-1 md:mt-0 md:rounded-none md:p-0 md:shadow-none"
             )}
           >
-            {isDraft ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 shrink-0" />
-                <TimeInput value={time} onChange={setTime} className="shrink-0" />
-                <Select value={driverId} onValueChange={(v) => setDriverId(v ?? "")}>
-                  <SelectTrigger className="min-w-40 flex-1">
-                    <SelectValue placeholder="Driver">
-                      {(v: string) => drivers.find((d) => d.SalesmanID === v)?.Name ?? "Pilih Driver"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {drivers.map((d) => (
-                      <SelectItem key={d.SalesmanID} value={d.SalesmanID}>
-                        {d.Name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-
-            {isDraft && isFutureDate && (
-              <p className="text-xs text-muted-foreground">
-                Keberangkatan ini dijadwalkan untuk {formatDate(businessDate)} — Mulai Muat dan Berangkat baru bisa
-                dilakukan pada hari itu.
-              </p>
-            )}
-
-            {overCapacity && (
-              <p className="text-xs text-destructive">
-                Total muatan {totalQty} kantong melebihi kapasitas armada ({kapasitasMaks} kantong).
-              </p>
-            )}
-
-            <div className={cn("flex flex-col rounded-lg border", capturing ? "max-h-none overflow-visible" : "max-h-80 overflow-y-auto")}>
-              {loading && <p className="py-6 text-center text-sm text-muted-foreground">Memuat...</p>}
-              {!loading && order.length === 0 && (
-                <p className="py-6 text-center text-sm text-muted-foreground">Tidak ada SO.</p>
-              )}
-              {!loading && order.length > 0 && (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={order.map((o) => o.JadwalDetailID)} strategy={verticalListSortingStrategy}>
-                    {order.map((d, i) => (
-                      <SortableStopRow
-                        key={d.JadwalDetailID}
-                        detail={d}
-                        index={i}
-                        onEdit={onEditSalesOrder}
-                        disabled={!isDraft}
-                        onOpenSi={setSiDetail}
-                        onRemove={isDraft ? handleRemoveStop : undefined}
-                        hasDeparted={hasDeparted}
-                        onOpenProof={setProofDetail}
-                        onChangeLokasi={isDraft ? handleChangeLokasi : undefined}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              )}
-            </div>
-
-            {order.length > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2 text-sm">
-                <Package className="size-4 text-primary" />
-                <span className="font-medium">
-                  {formatKemasanQty(totalQty10KG, totalQty5KG)}
-                  {totalBonusQty > 0 && <span className="text-primary"> (+{totalBonusQty} bonus)</span>}
-                  {totalRetur > 0 && <span className="text-destructive"> (Retur {totalRetur})</span>}
-                </span>
-              </div>
-            )}
-
-            {isDraft && (
-              <div className="flex flex-wrap items-center gap-2">
-                {!adding && (
-                  <Button size="sm" variant="ghost" className="gap-1.5" disabled={pending} onClick={handleOpenAdd}>
-                    <Plus className="size-3.5" />
-                    Tambahkan
-                  </Button>
-                )}
-                <Button size="sm" variant="outline" disabled={pending} onClick={handleDeleteDraft}>
-                  Batalkan Draft
-                </Button>
-                <Button size="sm" variant="outline" disabled={pending} onClick={handleSaveDriverTime}>
-                  Simpan
-                </Button>
-                {jadwal?.JamMulaiMuat == null ? (
-                  <Button size="sm" variant="outline" className="ml-auto" disabled={pending || isFutureDate} onClick={handleMuat}>
-                    Mulai Muat
-                  </Button>
-                ) : (
-                  <Button size="sm" className="ml-auto" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
-                    {pending ? "Memproses..." : "Selesai Muat"}
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {isDraft && adding && (
-              <div className="flex flex-col gap-2 rounded-lg border p-2" data-capture-hide="true">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">Pilih SO tambahan</span>
-                  {kapasitasMaks != null && (
-                    <span
-                      className={cn(
-                        "text-xs tabular-nums",
-                        totalQty + selectedToAddQty > kapasitasMaks ? "text-destructive" : "text-muted-foreground"
-                      )}
-                    >
-                      {totalQty + selectedToAddQty} / {kapasitasMaks} kantong
-                    </span>
-                  )}
-                </div>
-                {addError && <p className="text-xs text-destructive">{addError}</p>}
-                <div className="flex max-h-40 flex-col divide-y overflow-y-auto rounded-md border">
-                  {availableToAdd.map((so) => {
-                    const isSelected = selectedToAdd.has(so.SalesOrderID);
-                    const soOverCapacity = !isSelected && kapasitasMaks != null && totalQty + selectedToAddQty + so.Qty > kapasitasMaks;
-                    return (
-                      <button
-                        key={so.SalesOrderID}
-                        type="button"
-                        disabled={soOverCapacity}
-                        onClick={() => handleToggleAdd(so.SalesOrderID, so.Qty)}
-                        className={cn(
-                          "flex items-center justify-between gap-2 px-2 py-1.5 text-left text-xs transition-colors",
-                          isSelected && "bg-primary/10",
-                          !isSelected && !soOverCapacity && "hover:bg-muted",
-                          soOverCapacity && "cursor-not-allowed opacity-40"
-                        )}
-                      >
-                        <span className="min-w-0 truncate">
-                          {so.CustomerName} <span className="text-muted-foreground">· {so.Wilayah}</span>
-                        </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">{formatKemasanQty(so.Qty10KG, so.Qty5KG)}</span>
-                      </button>
-                    );
-                  })}
-                  {availableToAdd.length === 0 && (
-                    <p className="py-4 text-center text-xs text-muted-foreground">Tidak ada SO yang tersedia.</p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="flex-1" disabled={pending} onClick={() => setAdding(false)}>
-                    Batal
-                  </Button>
-                  <Button size="sm" className="flex-1" disabled={pending || selectedToAdd.size === 0} onClick={handleConfirmAdd}>
-                    Tambah ({selectedToAdd.size})
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {routeError && <p className="text-xs text-destructive">{routeError}</p>}
-            {route && (
-              <div className="flex flex-wrap gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-                <span className="flex items-center gap-1">
-                  <Clock className="size-4 text-muted-foreground" />
-                  Tempuh {route.durationMinutes} + Bongkar {Math.round(bongkarTotalMenit)} + Konfirmasi{" "}
-                  {konfirmasiTotalMenit} = {Math.round(route.durationMinutes + bongkarTotalMenit + konfirmasiTotalMenit)}{" "}
-                  menit
-                </span>
-                {totalFuelLiters != null && (
-                  <span className="flex items-center gap-1">
-                    <Fuel className="size-4 text-muted-foreground" />
-                    {totalFuelLiters.toLocaleString("id-ID")} L
-                    {jenisBBM && ` (${jenisBBM})`}
-                  </span>
-                )}
-                {totalFuelCost != null && (
-                  <span className="flex items-center gap-1 font-medium">{formatRupiah(totalFuelCost)}</span>
-                )}
-                {extraFuelCost != null && (
-                  <span className="flex items-center gap-1 text-muted-foreground">+ {formatRupiah(extraFuelCost)}</span>
-                )}
-                {totalFuelCostWithExtra != null && (
-                  <span className="flex items-center gap-1 font-semibold text-primary">= {formatRupiah(totalFuelCostWithExtra)}</span>
-                )}
-              </div>
-            )}
-
-            {!isDraft && (
-              <div className="flex flex-col gap-2">
-                {(["BERANGKAT", "DATANG"] as const).map((tipe) => {
-                  const check = vehicleChecks.find((c) => c.tipe === tipe);
-                  if (check) {
-                    // On Cek Datang, total Retur matters more than how much
-                    // was loaded (MuatanQty, same figure already shown on
-                    // Cek Berangkat) -- confirmed with user 2026-09-23.
-                    return tipe === "DATANG" ? (
-                      <CheckSummary key={tipe} check={check} packageLabel="kantong retur" packageQty={totalRetur} />
-                    ) : (
-                      <CheckSummary key={tipe} check={check} />
-                    );
-                  }
-                  return (
-                    <div key={tipe} className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-xs">
-                      <span className="font-medium">{TIPE_LABEL[tipe]}</span>
-                      <span className="text-muted-foreground">
-                        {nextJadwalStarted ? "Tidak dilaksanakan" : "Menunggu Inspeksi"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {error && <p className="text-xs text-destructive">{error}</p>}
+            {bagianKontrol}
+            {bagianDaftar}
+            {bagianTotal}
+            {bagianAksi}
+            {bagianTambah}
+            {bagianRingkas}
+            {bagianBukti}
+            {bagianGalat}
           </div>
         </div>
+        )}
         </div>
 
         <StopDeliveryProofDialog

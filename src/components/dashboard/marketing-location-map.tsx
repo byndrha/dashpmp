@@ -2,9 +2,10 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Polyline, Popup, useMap } from "react-leaflet";
+import { MapContainer, CircleMarker, Polyline, Popup, useMap } from "react-leaflet";
+import { PetaTile } from "@/components/dashboard/peta-tile";
 import L from "leaflet";
-import { TILE_SOURCES, type MapStyle } from "@/lib/map-styles";
+import type { MapStyle } from "@/lib/map-styles";
 import { MapStyleSwitcher, MapZoomControl, MapAttribution } from "@/components/dashboard/map-controls";
 import { formatRelativeTime } from "@/lib/format";
 import type { MarketingPosition, MarketingPositionTrail } from "@/lib/queries/akun-lokasi";
@@ -61,7 +62,6 @@ export function MarketingLocationMap({
   trails: MarketingPositionTrail[];
 }) {
   const [mapStyle, setMapStyle] = useState<MapStyle>("light");
-  const tile = TILE_SOURCES[mapStyle];
 
   // Legend only lists people who actually have a visible trail (2+ points
   // in the last 36h) — a lone ping draws no line, so a legend entry for it
@@ -94,7 +94,7 @@ export function MarketingLocationMap({
         {/* key={mapStyle} forces a fresh TileLayer instance per style so
             Leaflet doesn't try to diff/reuse tiles across completely
             different tile servers. */}
-        <TileLayer key={mapStyle} attribution={tile.attribution} url={tile.url} subdomains={tile.subdomains ?? "abc"} />
+        <PetaTile mapStyle={mapStyle} />
         <MapZoomControl className="top-2 left-2" />
         {trails.map((t) =>
           t.points.length >= 2 ? (

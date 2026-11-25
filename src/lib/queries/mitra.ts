@@ -55,6 +55,10 @@ export interface MitraRow {
   // Cakupan Wilayah) without touching its history — different from Hapus
   // (IsDeleted), which removes it from the Mitra module entirely.
   IsSuspended: boolean;
+  // Mitra Cadangan (DashboardMitraCadangan): mitra semu tempat menumpang stok
+  // es gratis cadangan (mis. "Complimentary") — bukan tujuan antar, tanpa
+  // titik lokasi, dikecualikan dari rute & Aplikasi Driver.
+  IsCadangan: boolean;
   // Kotak "lokasi pengiriman berbeda dari alamat mitra" dicentang = ada baris
   // DashboardMitraAlamat. Kolom Alamat/Wilayah/Kecamatan/Kontak di atas tetap
   // = lokasi pengiriman UTAMA (invarian spec §5).
@@ -89,7 +93,8 @@ export async function getMitraList(): Promise<MitraRow[]> {
           ml.Alamat AS GeoAlamat,
           mc.Kompetitor,
           bp.JoinDate,
-          ISNULL(bp.IsSuspended, 0) AS IsSuspended
+          ISNULL(bp.IsSuspended, 0) AS IsSuspended,
+          CAST(CASE WHEN EXISTS (SELECT 1 FROM DashboardMitraCadangan mcad WHERE mcad.BusinessPartnerID = bp.BusinessPartnerID) THEN 1 ELSE 0 END AS BIT) AS IsCadangan
       FROM BusinessPartner bp
       LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
       LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
@@ -141,7 +146,8 @@ export async function getMitraDetail(businessPartnerId: string): Promise<MitraRo
             ml.Alamat AS GeoAlamat,
             mc.Kompetitor,
             bp.JoinDate,
-            ISNULL(bp.IsSuspended, 0) AS IsSuspended
+            ISNULL(bp.IsSuspended, 0) AS IsSuspended,
+            CAST(CASE WHEN EXISTS (SELECT 1 FROM DashboardMitraCadangan mcad WHERE mcad.BusinessPartnerID = bp.BusinessPartnerID) THEN 1 ELSE 0 END AS BIT) AS IsCadangan
         FROM BusinessPartner bp
         LEFT JOIN TermOfPayment top_ ON top_.TermOfPaymentID = bp.TermOfPaymentID
         LEFT JOIN DashboardMitraLocation ml ON ml.BusinessPartnerID = bp.BusinessPartnerID
