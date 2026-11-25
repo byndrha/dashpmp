@@ -7,6 +7,30 @@
       "runtimeArgs": ["node_modules/next/dist/bin/next", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "dev-demo",
+      "runtimeExecutable": "C:\\Windows\\System32\\cmd.exe",
+      "runtimeArgs": ["/c", "set DEPLOYMENT_HOLDING_KODE=demo&& set ESKRISTAL_PERUSAHAAN_KODE=demokristal&& node node_modules/next/dist/bin/next dev"],
+      "port": 3001
+    },
+    {
+      "name": "start-demo",
+      "runtimeExecutable": "C:\\Windows\\System32\\cmd.exe",
+      "runtimeArgs": ["/c", "set DEPLOYMENT_HOLDING_KODE=demo&& set ESKRISTAL_PERUSAHAAN_KODE=demokristal&& set AUTH_TRUST_HOST=true&& set NEXTAUTH_URL=http://localhost:3001&& node node_modules/next/dist/bin/next start"],
+      "port": 3001
+    },
+    {
+      "name": "start-pmp-multi",
+      "runtimeExecutable": "C:\\Windows\\System32\\cmd.exe",
+      "runtimeArgs": ["/c", "set TENANT_TAMBAHAN=demo:demokristal&& set AUTH_TRUST_HOST=true&& set NEXTAUTH_URL=http://localhost:3003&& set PORT=3003&& node node_modules/next/dist/bin/next start"],
+      "port": 3003
+    },
+    {
+      "name": "start-pmp",
+      "runtimeExecutable": "C:\\Windows\\System32\\cmd.exe",
+      "runtimeArgs": ["/c", "set AUTH_TRUST_HOST=true&& set NEXTAUTH_URL=http://localhost:3002&& set PORT=3002&& node node_modules/next/dist/bin/next start"],
+      "port": 3002
     }
   ]
 }
