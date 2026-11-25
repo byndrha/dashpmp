@@ -233,8 +233,19 @@ function PanelMerek() {
 
       {/* Sengaja tanpa daftar PT: halaman ini publik dan dipakai bersama
           tenant lain di domain yang sama (lihat lib/tenant.ts). */}
-      <p className="relative text-xs text-primary-foreground/70">© {new Date().getFullYear()} PMP Group</p>
+      <KakiKredit className="relative text-primary-foreground/70" />
     </aside>
+  );
+}
+
+// Hak cipta milik pengembang (byndrha); PMP Group dikreditkan sebagai
+// mitra riset, penyedia data, dan tempat sistem ini diwujudkan.
+function KakiKredit({ className }: { className?: string }) {
+  return (
+    <div className={`flex flex-col gap-0.5 text-xs ${className ?? ""}`}>
+      <p>© {new Date().getFullYear()} byndrha</p>
+      <p>Riset, data, dan realisasi bersama PMP Group.</p>
+    </div>
   );
 }
 
@@ -242,10 +253,12 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-dvh flex-1 bg-background lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       <PanelMerek />
-      <main className="crystal-field flex items-center justify-center px-6 py-10 lg:bg-none">
+      <main className="crystal-field flex flex-col items-center justify-center gap-10 px-6 py-10 lg:bg-none">
         <Suspense>
           <LoginForm />
         </Suspense>
+        {/* Panel merek (yang memuat kredit) tersembunyi di bawah lg. */}
+        <KakiKredit className="items-center text-center text-muted-foreground lg:hidden" />
       </main>
     </div>
   );
