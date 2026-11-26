@@ -3,8 +3,13 @@
 // baris baru), plus nomor & masa berlaku SIM di DashboardDriverSim.
 // Idempoten dan aditif — aman diulang, tidak mengubah baris data apa pun.
 //
-// Usage:
+// Usage — jalankan per tenant Es Kristal, SEBELUM men-deploy kode Health
+// Check (kode baru langsung membaca/menulis kedua tabel ini; Selesai Muat
+// akan gagal di tenant yang tabelnya belum ada):
 //   npx tsx scripts/create-driver-health-check-table.ts
+//     (bawaan: MKEsindo)
+//   ESKRISTAL_PERUSAHAAN_KODE=<kode demo, mis. demokristal> npx tsx scripts/create-driver-health-check-table.ts
+//     (ulangi untuk setiap tenant lain di TENANT_TAMBAHAN)
 import "dotenv/config";
 import { getPool } from "../src/lib/db";
 

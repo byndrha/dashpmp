@@ -98,6 +98,7 @@ import {
   getHealthCheckTerbaru,
   simpanHealthCheck,
   ambilAlihHealthCheck,
+  assertDriverJadwalLayakBerangkat,
   type HealthCheckRow,
 } from "@/lib/queries/driver-health-check";
 import type { MasukanHealthCheck, SimDriver } from "@/lib/health-check-driver";
@@ -258,6 +259,9 @@ export async function selesaiMuatAction(
 ): Promise<ActionResult<{ jadwalDetailId: number; invoiceToken: string }[]>> {
   return runAction(async () => {
     const session = await requireModuleAccess("delivery");
+    // Gerbang Health Check lebih dulu supaya penolakan tidak membakar kode
+    // SELESAI_MUAT; selesaiMuat() tetap menjalankan gerbangnya sendiri.
+    await assertDriverJadwalLayakBerangkat(jadwalId);
     await verifikasiDanPakaiKodeAmbilAlih(kode, Number(session.user.id), jadwalId, "SELESAI_MUAT");
     const result = await selesaiMuat(jadwalId);
     revalidatePath("/mkesindo/delivery");
@@ -462,7 +466,10 @@ export async function simpanHealthCheckAction(input: {
     if (!m || typeof m !== "object") throw new AppError("Data Health Check tidak valid.");
     const sistolik = validasiAngka(m.sistolik, "Sistolik");
     const diastolik = validasiAngka(m.diastolik, "Diastolik");
-    const kadarAlkohol = validasiAngka(m.kadarAlkohol, "Kadar alkohol");
+    // Dibulatkan ke 3 desimal SEBELUM dinilai & disimpan, supaya penilaian
+    // memakai angka yang sama persis dengan yang tersimpan di DECIMAL(6,3).
+    const kadarAlkoholMentah = validasiAngka(m.kadarAlkohol, "Kadar alkohol");
+    const kadarAlkohol = kadarAlkoholMentah == null ? null : Math.round(kadarAlkoholMentah * 1000) / 1000;
     if ((sistolik != null && !Number.isInteger(sistolik)) || (diastolik != null && !Number.isInteger(diastolik))) {
       throw new AppError("Tekanan darah harus berupa bilangan bulat.");
     }
@@ -499,8 +506,8 @@ export async function ambilAlihHealthCheckAction(input: {
 }): Promise<ActionResult<HealthCheckRow>> {
   return runAction(async () => {
     const session = await requireModuleAccess("delivery");
-    if (typeof input?.kode !== "string" || input.kode.trim() === "") throw new AppError("Kode ambil-alih wajib diisi.");
-    if (typeof input.alasan !== "string") throw new AppError("Alasan ambil-alih wajib diisi.");
+    if (typeof input?.kode !== "string" || input.kode.trim() === "") throw new AppError("Kode ambil alih wajib diisi.");
+    if (typeof input.alasan !== "string") throw new AppError("Alasan ambil alih wajib diisi.");
     const row = await ambilAlihHealthCheck({
       jadwalId: validasiJadwalId(input.jadwalId),
       salesmanId: validasiSalesmanId(input.salesmanId),

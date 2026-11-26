@@ -61,7 +61,7 @@ function LencanaStatusSim({ sim, hariIni }: { sim: SimDriver; hariIni: string })
       className="border-amber-500/40 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-400"
       title={`Habis dalam ≤${HARI_PERINGATAN_SIM} hari`}
     >
-      {sisa === 0 ? "Habis hari ini" : `Habis dlm ${sisa} hari`}
+      {sisa === 0 ? "Habis hari ini" : `Habis dalam ${sisa} hari`}
     </Badge>
   );
 }

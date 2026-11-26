@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditorSimDriver, rapikanSims } from "@/components/dashboard/editor-sim-driver";
 import { cn } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/format";
 import { BATAS_TENSI, hariIniWibISO, nilaiHealthCheck, type SimDriver } from "@/lib/health-check-driver";
 import type { HealthCheckRow } from "@/lib/queries/driver-health-check";
 import {
@@ -45,6 +46,11 @@ export function StatusHealthCheck({ row }: { row: HealthCheckRow | null }) {
       <CircleX className="size-4 text-destructive" aria-label="Health Check tidak lolos" />
     </span>
   );
+}
+
+/** Baris terbaru yang tidak lolos dan belum diambil alih — syarat ambil alih. */
+function gagalBelumDiambilAlih(row: HealthCheckRow | null | undefined): row is HealthCheckRow {
+  return row != null && !row.Lolos && !row.AmbilAlih;
 }
 
 /** "" → null; koma desimal diterima; teks tak terbaca → null (bukan NaN). */
@@ -91,11 +97,13 @@ function PilihanPandangan({ nilai, onUbah }: { nilai: boolean | null; onUbah: (v
 function IsiHealthCheck({
   jadwalId,
   salesmanId,
+  terbaru,
   onTutup,
   onSelesai,
 }: {
   jadwalId: number;
   salesmanId: string;
+  terbaru: HealthCheckRow | null;
   onTutup: () => void;
   onSelesai: (row: HealthCheckRow) => void;
 }) {
@@ -115,6 +123,12 @@ function IsiHealthCheck({
 
   const [sibuk, setSibuk] = useState(false);
   const [hasil, setHasil] = useState<HealthCheckRow | null>(null);
+  // Hasil gagal terakhir (dari baris terbaru induk saat dialog dibuka, atau
+  // dari Simpan di sesi ini) — membuat "Ambil alih dengan kode" tetap
+  // terjangkau walau dialog dibuka ulang setelah pemeriksaan yang gagal.
+  const [gagalTerakhir, setGagalTerakhir] = useState<HealthCheckRow | null>(() =>
+    gagalBelumDiambilAlih(terbaru) && terbaru.JadwalID === jadwalId && terbaru.SalesmanID === salesmanId ? terbaru : null,
+  );
   const [modeAmbilAlih, setModeAmbilAlih] = useState(false);
   const [kode, setKode] = useState("");
   const [alasan, setAlasan] = useState("");
@@ -196,6 +210,7 @@ function IsiHealthCheck({
         toast.success("Health Check lolos");
         onTutup();
       } else {
+        setGagalTerakhir(r.data);
         setHasil(r.data);
       }
     } finally {
@@ -230,6 +245,9 @@ function IsiHealthCheck({
             <CircleX className="size-4" />
             Tidak lolos Health Check
           </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Diperiksa {formatDate(hasil.DiperiksaPada)} {formatTime(hasil.DiperiksaPada)}
+          </p>
           <ul className="mt-1.5 list-disc pl-5 text-xs text-destructive">
             {alasanList.map((a) => (
               <li key={a}>{a}</li>
@@ -239,7 +257,7 @@ function IsiHealthCheck({
         {modeAmbilAlih ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-muted-foreground">
-              Kode ambil-alih didapat dari Manager, berlaku 3 menit dan hanya bisa dipakai sekali.
+              Kode ambil alih didapat dari Manager, berlaku 3 menit dan hanya bisa dipakai sekali.
             </p>
             <Input
               type="text"
@@ -257,7 +275,14 @@ function IsiHealthCheck({
             />
             {galatAmbilAlih && <p className="text-sm text-destructive">{galatAmbilAlih}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" disabled={sibuk} onClick={() => setModeAmbilAlih(false)}>
+              <Button
+              variant="outline"
+              disabled={sibuk}
+              onClick={() => {
+                setModeAmbilAlih(false);
+                setGalatAmbilAlih(null);
+              }}
+            >
                 Batal
               </Button>
               <Button
@@ -286,6 +311,35 @@ function IsiHealthCheck({
   // ---- Formulir ----
   return (
     <div className="flex flex-col gap-4">
+      {gagalTerakhir && (
+        <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+          <div>
+            <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
+              <CircleX className="size-4" />
+              Health Check terakhir tidak lolos
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {formatDate(gagalTerakhir.DiperiksaPada)} {formatTime(gagalTerakhir.DiperiksaPada)}
+              {gagalTerakhir.AlasanGagal ? ` — ${gagalTerakhir.AlasanGagal}` : ""}
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={sibuk}
+              onClick={() => {
+                setHasil(gagalTerakhir);
+                setModeAmbilAlih(true);
+              }}
+            >
+              Ambil alih dengan kode
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Atau periksa ulang dengan formulir di bawah.</p>
+        </div>
+      )}
       <section className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
           <Label>Tekanan darah</Label>
@@ -414,6 +468,7 @@ export function HealthCheckDialog({
   jadwalId,
   salesmanId,
   namaDriver,
+  terbaru = null,
   onSelesai,
 }: {
   open: boolean;
@@ -421,6 +476,8 @@ export function HealthCheckDialog({
   jadwalId: number;
   salesmanId: string;
   namaDriver: string;
+  /** Baris Health Check terbaru untuk jadwal+driver ini (dari induk). */
+  terbaru?: HealthCheckRow | null;
   onSelesai: (row: HealthCheckRow) => void;
 }) {
   return (
@@ -438,6 +495,7 @@ export function HealthCheckDialog({
             key={`${jadwalId}|${salesmanId}`}
             jadwalId={jadwalId}
             salesmanId={salesmanId}
+            terbaru={terbaru}
             onTutup={() => onOpenChange(false)}
             onSelesai={onSelesai}
           />

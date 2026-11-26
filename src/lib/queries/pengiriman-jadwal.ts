@@ -2640,11 +2640,17 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
       .input("jadwalId", sql.Int, jadwalId)
       .input("jarakKM", sql.Decimal(10, 2), validatedRoute.distanceKm)
       .input("durasiMenit", sql.Int, Math.round(validatedRoute.durationMinutes))
+      .input("salesmanId", sql.VarChar(16), headerRow.SalesmanID)
       .query(
-        `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamSelesaiMuat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft'`
+        // SalesmanID is part of the claim so a driver change between the
+        // Health Check gate above and this UPDATE can't publish with a driver
+        // that was never checked.
+        `UPDATE DashboardPengirimanJadwal SET Status = 'Terbit', JamSelesaiMuat = GETDATE(), JarakKM = @jarakKM, DurasiMenit = @durasiMenit, ModifiedDate = GETDATE() WHERE JadwalID = @jadwalId AND Status = 'Draft' AND SalesmanID = @salesmanId`
       );
     if (claim.rowsAffected[0] === 0) {
-      throw new AppError("Muat untuk keberangkatan ini sudah selesai atau sedang diproses.");
+      throw new AppError(
+        "Muat untuk keberangkatan ini sudah selesai, sedang diproses, atau drivernya berubah — muat ulang lalu coba lagi."
+      );
     }
 
     const armadaResult = await new sql.Request(transaction)

@@ -154,7 +154,7 @@ export async function simpanHealthCheck(input: {
 }
 
 // Semua validasi dilakukan SEBELUM kode diverifikasi, supaya permintaan
-// yang pasti ditolak tidak "membakar" kode ambil-alih yang masih berlaku.
+// yang pasti ditolak tidak "membakar" kode ambil alih yang masih berlaku.
 export async function ambilAlihHealthCheck(input: {
   jadwalId: number;
   salesmanId: string;
@@ -163,8 +163,8 @@ export async function ambilAlihHealthCheck(input: {
   akunId: number;
 }): Promise<HealthCheckRow> {
   const alasan = input.alasan.trim();
-  if (!alasan) throw new AppError("Alasan ambil-alih wajib diisi.");
-  if (alasan.length > BATAS_TEKS) throw new AppError(`Alasan ambil-alih maksimal ${BATAS_TEKS} karakter.`);
+  if (!alasan) throw new AppError("Alasan ambil alih wajib diisi.");
+  if (alasan.length > BATAS_TEKS) throw new AppError(`Alasan ambil alih maksimal ${BATAS_TEKS} karakter.`);
 
   const terbaru = await getHealthCheckTerbaru(input.jadwalId, input.salesmanId);
   if (!terbaru) throw new AppError("Belum ada Health Check untuk driver ini — lakukan Health Check terlebih dahulu.");
@@ -178,14 +178,22 @@ export async function ambilAlihHealthCheck(input: {
   const result = await pool
     .request()
     .input("id", sql.Int, terbaru.HealthCheckID)
+    .input("jadwalId", sql.Int, input.jadwalId)
+    .input("salesmanId", sql.VarChar(16), input.salesmanId)
     .input("alasan", sql.NVarChar(BATAS_TEKS), alasan)
     .input("akunId", sql.Int, input.akunId)
     .query(`
       UPDATE DashboardDriverHealthCheck
       SET AmbilAlih = 1, AmbilAlihAlasan = @alasan, AmbilAlihOlehAkunID = @akunId, AmbilAlihPada = GETDATE()
       WHERE HealthCheckID = @id AND Lolos = 0 AND AmbilAlih = 0
+        AND HealthCheckID = (
+          SELECT MAX(HealthCheckID) FROM DashboardDriverHealthCheck
+          WHERE JadwalID = @jadwalId AND SalesmanID = @salesmanId
+        )
     `);
-  if (result.rowsAffected[0] === 0) throw new AppError("Health Check terbaru sudah diambil alih.");
+  if (result.rowsAffected[0] === 0) {
+    throw new AppError("Health Check terbaru berubah atau sudah diambil alih — muat ulang lalu coba lagi.");
+  }
   return getHealthCheckById(terbaru.HealthCheckID);
 }
 
@@ -197,4 +205,22 @@ export async function assertDriverLayakBerangkat(jadwalId: number, salesmanId: s
       "Driver belum lolos Health Check untuk keberangkatan ini — lakukan Health Check, ganti driver, atau ambil alih dengan kode.",
     );
   }
+}
+
+/**
+ * Pra-gerbang untuk selesaiMuatAction: baca driver jadwal saat ini lalu
+ * jalankan gerbang Health Check SEBELUM kode SELESAI_MUAT diverifikasi,
+ * supaya penolakan Health Check tidak "membakar" kode tersebut. Gerbang di
+ * dalam selesaiMuat tetap berlaku (dan klaim UPDATE-nya terikat SalesmanID).
+ */
+export async function assertDriverJadwalLayakBerangkat(jadwalId: number): Promise<void> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("jadwalId", sql.Int, jadwalId)
+    .query(`SELECT SalesmanID FROM DashboardPengirimanJadwal WHERE JadwalID = @jadwalId AND IsDeleted = 0`);
+  const row = result.recordset[0] as { SalesmanID: string | null } | undefined;
+  if (!row) throw new AppError("Keberangkatan tidak ditemukan.");
+  if (!row.SalesmanID) throw new AppError("Driver wajib diisi sebelum menyelesaikan muat.");
+  await assertDriverLayakBerangkat(jadwalId, row.SalesmanID);
 }

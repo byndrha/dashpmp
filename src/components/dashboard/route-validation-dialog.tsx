@@ -2400,6 +2400,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             jadwalId={jadwalId}
             salesmanId={driverId}
             namaDriver={drivers.find((d) => d.SalesmanID === driverId)?.Name ?? driverId}
+            terbaru={healthCheck}
             onSelesai={(row) => setHealthCheckState({ kunci: `${jadwalId}|${driverId}`, row })}
           />
         )}

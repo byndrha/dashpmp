@@ -27,7 +27,8 @@ export const ESKRISTAL_TABLES = [
   // Dashboard*
   "DashboardAktivitasProduksiKehadiran", "DashboardAktivitasProduksiShift", "DashboardArmada",
   "DashboardArmadaActivity", "DashboardArmadaAlokasi", "DashboardBudget", "DashboardCashFlowDaily",
-  "DashboardCashFlowExpense", "DashboardCollectionTarget", "DashboardDocTemplate", "DashboardDriverProfile",
+  "DashboardCashFlowExpense", "DashboardCollectionTarget", "DashboardDocTemplate", "DashboardDriverHealthCheck",
+  "DashboardDriverProfile",
   "DashboardDriverSim", "DashboardGLPostingBackfill", "DashboardGLPostingBackfillDetail",
   "DashboardJadwalTimProduksi", "DashboardKasKecilPengeluaran", "DashboardKasKecilSaldoAwal",
   "DashboardKasKecilShift", "DashboardKoreksiStokPallet", "DashboardLaporanShiftStokEsSnapshot",
