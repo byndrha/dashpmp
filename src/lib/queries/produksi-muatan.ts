@@ -118,7 +118,7 @@ export async function produksiStartMuat(jadwalId: number): Promise<void> {
 // this keberangkatan. Thin re-export of the existing delivery-flow
 // selesaiMuat, same pattern as produksiStartMuat above.
 export async function produksiSelesaiMuatManual(jadwalId: number): Promise<void> {
-  await assertJadwalReadyForMuat(jadwalId);
+  await assertJadwalReadyForMuat(jadwalId, { wajibHealthCheck: true });
   await selesaiMuat(jadwalId);
 }
 
@@ -153,8 +153,9 @@ export async function produksiSelesaiMuat(input: ProduksiSelesaiMuatInput): Prom
   // Checked BEFORE any pallet stock is touched below — selesaiMuat() at the
   // end of this function enforces the same Driver/rute precondition, but by
   // then the pallet-consumption transaction has already committed. See
-  // assertJadwalReadyForMuat's own comment.
-  await assertJadwalReadyForMuat(input.jadwalId);
+  // assertJadwalReadyForMuat's own comment. Termasuk gerbang Driver Health
+  // Check, yang juga ditegakkan ulang oleh selesaiMuat() di akhir.
+  await assertJadwalReadyForMuat(input.jadwalId, { wajibHealthCheck: true });
 
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);

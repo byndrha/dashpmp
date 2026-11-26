@@ -19,7 +19,8 @@ import {
   utcInstantToWibDisplay,
 } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
-import { assertDriverLayakBerangkat } from "@/lib/queries/driver-health-check";
+import { assertDriverLayakBerangkat, getHealthCheckTerbaru } from "@/lib/queries/driver-health-check";
+import { layakBerangkat } from "@/lib/health-check-driver";
 import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS, MITRA_CADANGAN_EXISTS, getLokasiPilihanStop } from "@/lib/queries/mitra-lokasi-pengiriman";
 import { alamatUntukDeliveryOrder } from "@/lib/mitra-lokasi";
 
@@ -2257,7 +2258,16 @@ export async function startMuat(jadwalId: number): Promise<void> {
 // Konfirmasi Penerima gate. Driver/rute can only be fixed from desktop
 // Validasi Rute (produksi-app has no UI for either), so the message points
 // there explicitly.
-export async function assertJadwalReadyForMuat(jadwalId: number): Promise<void> {
+//
+// `wajibHealthCheck` hanya untuk jalur Selesai Muat: Mulai Muat sengaja
+// TIDAK menuntut Health Check (pemeriksaan boleh dilakukan selama muat),
+// tetapi Selesai Muat harus menolak SEBELUM stok pallet dipotong, karena
+// selesaiMuat() sendiri menegakkan gerbang yang sama setelah transaksi stok
+// produksiSelesaiMuat sudah commit.
+export async function assertJadwalReadyForMuat(
+  jadwalId: number,
+  opsi: { wajibHealthCheck?: boolean } = {}
+): Promise<void> {
   const pool = await getPool();
   const header = await pool
     .request()
@@ -2277,6 +2287,11 @@ export async function assertJadwalReadyForMuat(jadwalId: number): Promise<void> 
   if (missingCoords) {
     throw new AppError(
       "Rute belum tervalidasi — minta staf memastikan semua tujuan sudah punya lokasi tersimpan di Validasi Rute (desktop) dulu."
+    );
+  }
+  if (opsi.wajibHealthCheck && !layakBerangkat(await getHealthCheckTerbaru(jadwalId, headerRow.SalesmanID))) {
+    throw new AppError(
+      "Driver belum lolos Health Check untuk keberangkatan ini — minta staf melakukan Health Check di Validasi Rute (desktop) dulu."
     );
   }
 }
