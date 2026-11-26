@@ -48,6 +48,8 @@ import {
   getDriverProfiles,
   saveDriverProfile,
   deleteDriverProfile,
+  getSimDriver,
+  simpanSimDriver,
   type DriverProfileRow,
   type SaveDriverProfileInput,
 } from "@/lib/queries/driver-profile";
@@ -92,6 +94,13 @@ import {
 } from "@/lib/queries/retur-resale";
 import { AppError, runAction, type ActionResult } from "@/lib/action-result";
 import { verifikasiDanPakaiKodeAmbilAlih } from "@/lib/queries/kode-ambil-alih";
+import {
+  getHealthCheckTerbaru,
+  simpanHealthCheck,
+  ambilAlihHealthCheck,
+  type HealthCheckRow,
+} from "@/lib/queries/driver-health-check";
+import type { MasukanHealthCheck, SimDriver } from "@/lib/health-check-driver";
 import { syncVehicleGpsPositions, type ProviderSyncStatus } from "@/lib/gps-providers/sync";
 import {
   getLatestVehiclePositions,
@@ -361,7 +370,7 @@ export async function getDriverProfilesAction(): Promise<DriverProfileRow[]> {
 export async function saveDriverProfileAction(input: SaveDriverProfileInput): Promise<ActionResult<void>> {
   await requireModuleAccess("delivery");
   return runAction(async () => {
-    await saveDriverProfile(input);
+    await saveDriverProfile({ ...input, sims: validasiSims(input.sims) });
     revalidatePath("/mkesindo/delivery");
   });
 }
@@ -371,6 +380,136 @@ export async function deleteDriverProfileAction(salesmanId: string): Promise<Act
   return runAction(async () => {
     await deleteDriverProfile(salesmanId);
     revalidatePath("/mkesindo/delivery");
+  });
+}
+
+// ---- Driver Health Check ----
+// Validasi di batas server: aksi bisa dipanggil langsung tanpa UI.
+
+function validasiJadwalId(jadwalId: unknown): number {
+  if (typeof jadwalId !== "number" || !Number.isInteger(jadwalId) || jadwalId <= 0) {
+    throw new AppError("Keberangkatan tidak valid.");
+  }
+  return jadwalId;
+}
+
+function validasiSalesmanId(salesmanId: unknown): string {
+  if (typeof salesmanId !== "string" || salesmanId.trim() === "") throw new AppError("Driver wajib dipilih.");
+  return salesmanId.trim();
+}
+
+function validasiAngka(nilai: unknown, label: string): number | null {
+  if (nilai == null) return null;
+  if (typeof nilai !== "number" || !Number.isFinite(nilai)) throw new AppError(`${label} harus berupa angka.`);
+  return nilai;
+}
+
+function validasiSims(sims: unknown): SimDriver[] {
+  if (!Array.isArray(sims)) throw new AppError("Data SIM tidak valid.");
+  const hasil: SimDriver[] = [];
+  const jenisTerpakai = new Set<string>();
+  for (const s of sims as Partial<SimDriver>[]) {
+    const jenisSim = typeof s?.jenisSim === "string" ? s.jenisSim.trim().toUpperCase() : "";
+    if (!jenisSim) throw new AppError("Jenis SIM wajib diisi.");
+    if (jenisSim.length > 10) throw new AppError(`Jenis SIM "${jenisSim}" terlalu panjang (maks. 10 karakter).`);
+    if (jenisTerpakai.has(jenisSim)) throw new AppError(`SIM ${jenisSim} tercantum lebih dari sekali.`);
+    jenisTerpakai.add(jenisSim);
+    const nomorSim = typeof s.nomorSim === "string" && s.nomorSim.trim() !== "" ? s.nomorSim.trim() : null;
+    if (nomorSim && nomorSim.length > 30) throw new AppError(`Nomor SIM ${jenisSim} terlalu panjang (maks. 30 karakter).`);
+    const berlakuHingga = s.berlakuHingga ?? null;
+    if (berlakuHingga !== null && (typeof berlakuHingga !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(berlakuHingga))) {
+      throw new AppError(`Tanggal berlaku SIM ${jenisSim} tidak valid.`);
+    }
+    hasil.push({ jenisSim, nomorSim, berlakuHingga });
+  }
+  return hasil;
+}
+
+export async function getHealthCheckTerbaruAction(
+  jadwalId: number,
+  salesmanId: string
+): Promise<ActionResult<HealthCheckRow | null>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getHealthCheckTerbaru(validasiJadwalId(jadwalId), validasiSalesmanId(salesmanId));
+  });
+}
+
+export async function getSimDriverAction(salesmanId: string): Promise<ActionResult<SimDriver[]>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    return getSimDriver(validasiSalesmanId(salesmanId));
+  });
+}
+
+export async function simpanSimDriverAction(salesmanId: string, sims: SimDriver[]): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    await requireModuleAccess("delivery");
+    await simpanSimDriver(validasiSalesmanId(salesmanId), validasiSims(sims));
+    revalidatePath("/mkesindo/delivery");
+  });
+}
+
+export async function simpanHealthCheckAction(input: {
+  jadwalId: number;
+  salesmanId: string;
+  masukan: Omit<MasukanHealthCheck, "sims">;
+  catatan: string | null;
+}): Promise<ActionResult<HealthCheckRow>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("delivery");
+    const m = input?.masukan;
+    if (!m || typeof m !== "object") throw new AppError("Data Health Check tidak valid.");
+    const sistolik = validasiAngka(m.sistolik, "Sistolik");
+    const diastolik = validasiAngka(m.diastolik, "Diastolik");
+    const kadarAlkohol = validasiAngka(m.kadarAlkohol, "Kadar alkohol");
+    if ((sistolik != null && !Number.isInteger(sistolik)) || (diastolik != null && !Number.isInteger(diastolik))) {
+      throw new AppError("Tekanan darah harus berupa bilangan bulat.");
+    }
+    if ((sistolik != null && (sistolik < 0 || sistolik > 400)) || (diastolik != null && (diastolik < 0 || diastolik > 400))) {
+      throw new AppError("Tekanan darah di luar rentang yang masuk akal.");
+    }
+    if (kadarAlkohol != null && (kadarAlkohol < 0 || kadarAlkohol >= 1000)) {
+      throw new AppError("Kadar alkohol di luar rentang yang masuk akal.");
+    }
+    if (m.pandanganLolos !== null && typeof m.pandanganLolos !== "boolean") {
+      throw new AppError("Hasil tes pandangan tidak valid.");
+    }
+    if (typeof m.simDibawa !== "boolean") throw new AppError("Isian SIM fisik dibawa tidak valid.");
+    const catatan = typeof input.catatan === "string" && input.catatan.trim() !== "" ? input.catatan.trim() : null;
+    if (catatan && catatan.length > 400) throw new AppError("Catatan maksimal 400 karakter.");
+
+    const row = await simpanHealthCheck({
+      jadwalId: validasiJadwalId(input.jadwalId),
+      salesmanId: validasiSalesmanId(input.salesmanId),
+      masukan: { sistolik, diastolik, kadarAlkohol, pandanganLolos: m.pandanganLolos, simDibawa: m.simDibawa },
+      catatan,
+      akunId: Number(session.user.id),
+    });
+    revalidatePath("/mkesindo/delivery");
+    return row;
+  });
+}
+
+export async function ambilAlihHealthCheckAction(input: {
+  jadwalId: number;
+  salesmanId: string;
+  kode: string;
+  alasan: string;
+}): Promise<ActionResult<HealthCheckRow>> {
+  return runAction(async () => {
+    const session = await requireModuleAccess("delivery");
+    if (typeof input?.kode !== "string" || input.kode.trim() === "") throw new AppError("Kode ambil-alih wajib diisi.");
+    if (typeof input.alasan !== "string") throw new AppError("Alasan ambil-alih wajib diisi.");
+    const row = await ambilAlihHealthCheck({
+      jadwalId: validasiJadwalId(input.jadwalId),
+      salesmanId: validasiSalesmanId(input.salesmanId),
+      kode: input.kode.trim(),
+      alasan: input.alasan,
+      akunId: Number(session.user.id),
+    });
+    revalidatePath("/mkesindo/delivery");
+    return row;
   });
 }
 

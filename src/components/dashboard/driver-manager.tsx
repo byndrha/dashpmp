@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { DriverProfileRow, SaveDriverProfileInput } from "@/lib/queries/driver-profile";
+import type { SimDriver } from "@/lib/health-check-driver";
 import { saveDriverProfileAction, deleteDriverProfileAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -45,7 +46,7 @@ function DriverFormDialog({
   const [jamMulaiKerja, setJamMulaiKerja] = useState("");
   const [jamSelesaiKerja, setJamSelesaiKerja] = useState("");
   const [isHidden, setIsHidden] = useState(false);
-  const [simTypes, setSimTypes] = useState<string[]>([]);
+  const [sims, setSims] = useState<SimDriver[]>([]);
   const [simDraft, setSimDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -73,7 +74,7 @@ function DriverFormDialog({
     setJamMulaiKerja(d?.JamMulaiKerja ?? "");
     setJamSelesaiKerja(d?.JamSelesaiKerja ?? "");
     setIsHidden(d?.IsHiddenFromDropdown ?? false);
-    setSimTypes(d?.SimTypes ?? []);
+    setSims(d?.Sims ?? []);
     setSimDraft("");
     setError(null);
   }
@@ -89,16 +90,16 @@ function DriverFormDialog({
 
   function addSim() {
     const value = simDraft.trim().toUpperCase();
-    if (!value || simTypes.includes(value)) {
+    if (!value || sims.some((s) => s.jenisSim === value)) {
       setSimDraft("");
       return;
     }
-    setSimTypes((prev) => [...prev, value]);
+    setSims((prev) => [...prev, { jenisSim: value, nomorSim: null, berlakuHingga: null }]);
     setSimDraft("");
   }
 
   function removeSim(value: string) {
-    setSimTypes((prev) => prev.filter((s) => s !== value));
+    setSims((prev) => prev.filter((s) => s.jenisSim !== value));
   }
 
   function handleSubmit() {
@@ -116,7 +117,7 @@ function DriverFormDialog({
       jamMulaiKerja: jamMulaiKerja || null,
       jamSelesaiKerja: jamSelesaiKerja || null,
       isHiddenFromDropdown: isHidden,
-      simTypes,
+      sims,
     };
     startTransition(async () => {
       const result = await saveDriverProfileAction(input);
@@ -188,10 +189,10 @@ function DriverFormDialog({
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">No. SIM</Label>
             <div className="flex flex-wrap items-center gap-1.5">
-              {simTypes.map((s) => (
-                <Badge key={s} variant="outline" className="gap-1 pr-1">
-                  {s}
-                  <button type="button" onClick={() => removeSim(s)} className="rounded-full hover:bg-muted">
+              {sims.map((s) => (
+                <Badge key={s.jenisSim} variant="outline" className="gap-1 pr-1">
+                  {s.jenisSim}
+                  <button type="button" onClick={() => removeSim(s.jenisSim)} className="rounded-full hover:bg-muted">
                     <X className="size-3" />
                   </button>
                 </Badge>
@@ -320,7 +321,7 @@ export function DriverManager({ drivers }: { drivers: DriverProfileRow[] }) {
                     )}
                   </p>
                   <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    {d.SimTypes.length > 0 ? `SIM ${d.SimTypes.join(", ")}` : "Belum ada data SIM"}
+                    {d.Sims.length > 0 ? `SIM ${d.Sims.map((s) => s.jenisSim).join(", ")}` : "Belum ada data SIM"}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">

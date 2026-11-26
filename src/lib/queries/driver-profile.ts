@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import type { SimDriver } from "@/lib/health-check-driver";
 
 // Driver identity itself is the real ERP Salesman table (see
 // getDriverOptions in delivery.ts) — this is a dashboard-only extension
@@ -17,7 +18,64 @@ export interface DriverProfileRow {
   JamMulaiKerja: string | null;
   JamSelesaiKerja: string | null;
   IsHiddenFromDropdown: boolean;
-  SimTypes: string[];
+  Sims: SimDriver[];
+}
+
+interface SimDbRow {
+  SalesmanID: string;
+  JenisSim: string;
+  NomorSim: string | null;
+  BerlakuHingga: Date | null;
+}
+
+// Kolom DATE dari MSSQL datang sebagai Date tengah malam UTC -> "YYYY-MM-DD".
+function keSimDriver(row: SimDbRow): SimDriver {
+  return {
+    jenisSim: row.JenisSim,
+    nomorSim: row.NomorSim,
+    berlakuHingga: row.BerlakuHingga ? row.BerlakuHingga.toISOString().slice(0, 10) : null,
+  };
+}
+
+/** Daftar SIM aktif satu driver (jenis, nomor, masa berlaku). */
+export async function getSimDriver(salesmanId: string): Promise<SimDriver[]> {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input("salesmanId", sql.VarChar(16), salesmanId)
+    .query(`
+      SELECT SalesmanID, JenisSim, NomorSim, BerlakuHingga
+      FROM DashboardDriverSim WHERE SalesmanID = @salesmanId AND IsDeleted = 0 ORDER BY JenisSim
+    `);
+  return (result.recordset as SimDbRow[]).map(keSimDriver);
+}
+
+// Ganti seluruh daftar SIM driver (pola hapus-lalu-sisip, dalam satu
+// transaksi agar kegagalan di tengah tidak meninggalkan daftar setengah jadi).
+export async function simpanSimDriver(salesmanId: string, sims: SimDriver[]): Promise<void> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    await new sql.Request(transaction)
+      .input("salesmanId", sql.VarChar(16), salesmanId)
+      .query(`DELETE FROM DashboardDriverSim WHERE SalesmanID = @salesmanId`);
+    for (const s of sims) {
+      await new sql.Request(transaction)
+        .input("salesmanId", sql.VarChar(16), salesmanId)
+        .input("jenisSim", sql.VarChar(10), s.jenisSim)
+        .input("nomorSim", sql.VarChar(30), s.nomorSim)
+        .input("berlakuHingga", sql.Date, s.berlakuHingga)
+        .query(`
+          INSERT INTO DashboardDriverSim (SalesmanID, JenisSim, NomorSim, BerlakuHingga, IsDeleted)
+          VALUES (@salesmanId, @jenisSim, @nomorSim, @berlakuHingga, 0)
+        `);
+    }
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 // Excludes '0127' ("Ambil Sendiri"/TakeAway) same as getDriverOptions —
@@ -47,20 +105,21 @@ export async function getDriverProfiles(): Promise<DriverProfileRow[]> {
       ORDER BY sm.Name
     `),
     pool.request().query(`
-      SELECT SalesmanID, JenisSim FROM DashboardDriverSim WHERE IsDeleted = 0 ORDER BY JenisSim
+      SELECT SalesmanID, JenisSim, NomorSim, BerlakuHingga
+      FROM DashboardDriverSim WHERE IsDeleted = 0 ORDER BY JenisSim
     `),
   ]);
 
-  const simsBySalesman = new Map<string, string[]>();
-  for (const row of simResult.recordset as { SalesmanID: string; JenisSim: string }[]) {
+  const simsBySalesman = new Map<string, SimDriver[]>();
+  for (const row of simResult.recordset as SimDbRow[]) {
     const list = simsBySalesman.get(row.SalesmanID) ?? [];
-    list.push(row.JenisSim);
+    list.push(keSimDriver(row));
     simsBySalesman.set(row.SalesmanID, list);
   }
 
-  return (driversResult.recordset as Omit<DriverProfileRow, "SimTypes">[]).map((row) => ({
+  return (driversResult.recordset as Omit<DriverProfileRow, "Sims">[]).map((row) => ({
     ...row,
-    SimTypes: simsBySalesman.get(row.SalesmanID) ?? [],
+    Sims: simsBySalesman.get(row.SalesmanID) ?? [],
   }));
 }
 
@@ -75,7 +134,7 @@ export interface SaveDriverProfileInput {
   jamMulaiKerja: string | null;
   jamSelesaiKerja: string | null;
   isHiddenFromDropdown: boolean;
-  simTypes: string[];
+  sims: SimDriver[];
 }
 
 // Upserts the profile row (MERGE — same pattern as DashboardMitraLocation
@@ -107,18 +166,7 @@ export async function saveDriverProfile(input: SaveDriverProfileInput): Promise<
         VALUES (@salesmanId, @tempatLahir, @tanggalLahir, @nik, @alamat, @bergabungSejak, @hariKerja, @jamMulaiKerja, @jamSelesaiKerja, @isHidden, GETDATE());
     `);
 
-  await pool
-    .request()
-    .input("salesmanId", sql.VarChar(16), input.salesmanId)
-    .query(`DELETE FROM DashboardDriverSim WHERE SalesmanID = @salesmanId`);
-
-  for (const jenisSim of input.simTypes) {
-    await pool
-      .request()
-      .input("salesmanId", sql.VarChar(16), input.salesmanId)
-      .input("jenisSim", sql.VarChar(10), jenisSim)
-      .query(`INSERT INTO DashboardDriverSim (SalesmanID, JenisSim, IsDeleted) VALUES (@salesmanId, @jenisSim, 0)`);
-  }
+  await simpanSimDriver(input.salesmanId, input.sims);
 }
 
 // Hard-deletes only this SalesmanID's dashboard-side extension data

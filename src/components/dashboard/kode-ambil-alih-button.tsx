@@ -22,7 +22,11 @@ function nowMs(): number {
   return Date.now();
 }
 
-const AKSI_LABEL: Record<string, string> = { MULAI_MUAT: "Mulai Muat", SELESAI_MUAT: "Selesai Muat" };
+const AKSI_LABEL: Record<string, string> = {
+  MULAI_MUAT: "Mulai Muat",
+  SELESAI_MUAT: "Selesai Muat",
+  HEALTH_CHECK: "Health Check",
+};
 
 export function KodeAmbilAlihButton({ className }: { className?: string } = {}) {
   const [open, setOpen] = useState(false);

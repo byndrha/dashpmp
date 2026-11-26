@@ -92,7 +92,7 @@ export async function verifikasiDanPakaiKodeAmbilAlih(
   kode: string,
   dipakaiOlehAkunId: number,
   jadwalId: number,
-  aksi: "MULAI_MUAT" | "SELESAI_MUAT"
+  aksi: "MULAI_MUAT" | "SELESAI_MUAT" | "HEALTH_CHECK"
 ): Promise<void> {
   const pool = getPgPool();
   const result = await pool.query(

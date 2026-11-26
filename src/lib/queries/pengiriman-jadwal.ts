@@ -19,6 +19,7 @@ import {
   utcInstantToWibDisplay,
 } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
+import { assertDriverLayakBerangkat } from "@/lib/queries/driver-health-check";
 import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS, MITRA_CADANGAN_EXISTS, getLokasiPilihanStop } from "@/lib/queries/mitra-lokasi-pengiriman";
 import { alamatUntukDeliveryOrder } from "@/lib/mitra-lokasi";
 
@@ -2563,6 +2564,9 @@ export async function selesaiMuat(jadwalId: number): Promise<{ jadwalDetailId: n
   if (!headerRow) throw new AppError("Keberangkatan tidak ditemukan.");
   if (headerRow.Status !== "Draft") throw new AppError("Muat untuk keberangkatan ini sudah selesai.");
   if (!headerRow.SalesmanID) throw new AppError("Driver wajib diisi sebelum menyelesaikan muat.");
+  // Driver Health Check: driver jadwal SAAT INI (bukan yang diperiksa di
+  // form) harus punya pemeriksaan terbaru yang lolos atau diambil alih.
+  await assertDriverLayakBerangkat(jadwalId, headerRow.SalesmanID);
 
   // Server-side mirror of the client's mandatory route-computed check
   // (design spec: checked client- AND server-side) — a direct server-action

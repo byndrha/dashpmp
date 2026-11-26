@@ -90,7 +90,9 @@ export function TugasList({
             <span className="text-[10px] uppercase text-muted-foreground">Profil</span>
             <span className="truncate text-sm font-semibold">{driverProfile?.Name ?? driverName}</span>
             <span className="truncate text-[11px] text-muted-foreground">
-              {driverProfile && driverProfile.SimTypes.length > 0 ? `SIM ${driverProfile.SimTypes.join(", ")}` : "-"}
+              {driverProfile && driverProfile.Sims.length > 0
+                ? `SIM ${driverProfile.Sims.map((s) => s.jenisSim).join(", ")}`
+                : "-"}
             </span>
           </CardContent>
         </Card>
