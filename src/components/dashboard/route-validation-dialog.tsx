@@ -71,7 +71,11 @@ import {
   getArmadaUtilisasiPeriodeAction,
   getArmadaNextJadwalStartedAction,
   getJadwalTotalReturAction,
+  getHealthCheckTerbaruAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
+import { HealthCheckDialog, StatusHealthCheck } from "@/components/dashboard/health-check-dialog";
+import { layakBerangkat } from "@/lib/health-check-driver";
+import type { HealthCheckRow } from "@/lib/queries/driver-health-check";
 import type { PriceLevelOption } from "@/lib/queries/mitra";
 import type { IstirahatSession } from "@/lib/queries/driver-istirahat";
 import type { JejakPeta, TruckPosition } from "@/components/dashboard/route-map";
@@ -507,6 +511,11 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   const [kodeInput, setKodeInput] = useState("");
   const [kodeError, setKodeError] = useState<string | null>(null);
   const [pendingKodeSelesaiMuat, setPendingKodeSelesaiMuat] = useState("");
+  // Driver Health Check: status disimpan bersama kuncinya ("jadwal|driver")
+  // dan hanya dipakai bila kunci cocok dengan pilihan saat ini — ganti driver
+  // langsung mengosongkan status tanpa menunggu respons server.
+  const [healthCheckState, setHealthCheckState] = useState<{ kunci: string; row: HealthCheckRow | null } | null>(null);
+  const [showHealthCheck, setShowHealthCheck] = useState(false);
   // Lets staff drop the map panel entirely (no Leaflet init, no OSRM wait) —
   // useful on a slow connection when all they need is the stop list/totals
   // to check or share, matching what's already in buildShareText.
@@ -603,6 +612,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     // previous Jadwal must not stay open against the newly-opened one.
     setProofDetail(null);
     setSiDetail(null);
+    setShowHealthCheck(false);
 
     if (jadwalId == null) {
       setOrder([]);
@@ -627,6 +637,24 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     getJadwalTotalReturAction(jadwalId).then(setTotalRetur);
     getIstirahatForJadwalAction(jadwalId).then(setIstirahatSessions);
   }, [jadwalId]);
+
+  // Status Health Check untuk pasangan jadwal+driver yang sedang dipilih;
+  // respons basi (jadwal/driver sudah berganti) diabaikan.
+  const kunciHealthCheck = jadwalId != null && driverId !== "" ? `${jadwalId}|${driverId}` : null;
+  useEffect(() => {
+    if (jadwalId == null || driverId === "") return;
+    const kunci = `${jadwalId}|${driverId}`;
+    let basi = false;
+    getHealthCheckTerbaruAction(jadwalId, driverId).then((r) => {
+      if (basi) return;
+      if (r.success) setHealthCheckState({ kunci, row: r.data });
+    });
+    return () => {
+      basi = true;
+    };
+  }, [jadwalId, driverId]);
+  const healthCheck = kunciHealthCheck != null && healthCheckState?.kunci === kunciHealthCheck ? healthCheckState.row : null;
+  const driverLayak = layakBerangkat(healthCheck);
 
   // Refetches just `order` after UbahPemesananDialog closes (saved or
   // cancelled — refetching unconditionally is simplest and safe: idempotent
@@ -1241,7 +1269,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
           : "Riwayat Status";
   const isFutureDate = businessDate > todayISO;
   const overCapacity = kapasitasMaks != null && totalQty > kapasitasMaks;
-  const canSelesaiMuat = isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity && !isFutureDate;
+  const canSelesaiMuat =
+    isDraft && driverId !== "" && route != null && !routeLoading && !overCapacity && !isFutureDate && driverLayak;
   const totalFuelLiters = useMemo(() => {
     if (route == null || konsumsiBBM == null) return null;
     return Math.round(route.distanceKm * konsumsiBBM * 10) / 10;
@@ -1579,6 +1608,17 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={driverId === "" || jadwalId == null}
+                    onClick={() => setShowHealthCheck(true)}
+                  >
+                    Health Check
+                  </Button>
+                  <StatusHealthCheck row={healthCheck} />
+                </div>
               </div>
             ) : null}
 
@@ -1715,6 +1755,11 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                   <Button size="sm" className="ml-auto" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
                     {pending ? "Memproses..." : "Selesai Muat"}
                   </Button>
+                )}
+                {driverId !== "" && !driverLayak && (
+                  <p className="basis-full text-right text-xs text-amber-700 dark:text-amber-400">
+                    Driver belum lolos Health Check
+                  </p>
                 )}
               </div>
             )}
@@ -2348,6 +2393,16 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             </div>
           </DialogContent>
         </Dialog>
+        {jadwalId != null && driverId !== "" && (
+          <HealthCheckDialog
+            open={showHealthCheck}
+            onOpenChange={setShowHealthCheck}
+            jadwalId={jadwalId}
+            salesmanId={driverId}
+            namaDriver={drivers.find((d) => d.SalesmanID === driverId)?.Name ?? driverId}
+            onSelesai={(row) => setHealthCheckState({ kunci: `${jadwalId}|${driverId}`, row })}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
