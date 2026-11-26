@@ -110,7 +110,11 @@ export async function getMultiPointRoute(points: Coordinate[]): Promise<MultiPoi
     throw new Error("getMultiPointRoute needs at least 2 points");
   }
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
-  const url = `${OSRM_BASE_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+  // continue_straight=false: armada boleh putar balik di titik tujuan. Bawaan
+  // profil mobil OSRM melarangnya, sehingga rute dipaksa lurus melewati mitra
+  // lalu memutari blok untuk kembali (contoh Jadwal 14967 GM 14, 25 Nov 2026:
+  // pabrik → #1 jadi 7,75 km, padahal cukup 6,79 km dengan putar balik).
+  const url = `${OSRM_BASE_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson&continue_straight=false`;
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
