@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusHealthCheck, type RingkasHealthCheck } from "@/components/dashboard/status-health-check";
 import { konfirmasi } from "@/components/konfirmasi";
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor, type DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -1060,13 +1061,26 @@ function GarisSekarang({ hourWidth, geserJam = 0, jamTotal = 24 }: { hourWidth: 
 // schedule, just a second read of the same Jadwal-derived segments with
 // the driver's name instead of delivery details (per design decision: no
 // separate driver-shift data model backs this row).
-function DriverBlock({ name, left, width, top }: { name: string; left: number; width: number; top: number }) {
+function DriverBlock({
+  name,
+  left,
+  width,
+  top,
+  healthCheck,
+}: {
+  name: string;
+  left: number;
+  width: number;
+  top: number;
+  healthCheck: RingkasHealthCheck | null;
+}) {
   return (
     <div
-      className="absolute flex items-center gap-1 overflow-hidden rounded-full border border-primary/20 bg-primary/5 px-2 text-[10px] text-primary"
+      className="absolute flex items-center gap-1 overflow-hidden rounded-full border border-primary/20 bg-primary/5 pr-2 pl-px text-[10px] text-primary"
       style={{ left, width, top, height: DRIVER_BLOCK_HEIGHT }}
     >
-      <User className="size-3 shrink-0" />
+      {/* Ikon orang = status Health Check pengiriman ini (hijau/merah/kuning, tooltip waktu cek). */}
+      <StatusHealthCheck row={healthCheck} ikon="orang" />
       <span className="truncate font-medium">{name}</span>
     </div>
   );
@@ -1640,6 +1654,7 @@ function ArmadaRowBoard({
             <DriverBlock
               key={j.JadwalID}
               name={j.DriverName as string}
+              healthCheck={j.HealthCheck}
               left={hourFraction(j.JamJadwal) * hourWidth}
               width={cardWidthFor(j)}
               top={(DRIVER_LANE_HEIGHT - DRIVER_BLOCK_HEIGHT) / 2}

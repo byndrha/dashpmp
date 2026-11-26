@@ -19,7 +19,8 @@ import {
   utcInstantToWibDisplay,
 } from "@/lib/business-date";
 import { AppError } from "@/lib/action-result";
-import { assertDriverLayakBerangkat, getHealthCheckTerbaru } from "@/lib/queries/driver-health-check";
+import { assertDriverLayakBerangkat, getHealthCheckTerbaru, getHealthCheckRingkasPerJadwal } from "@/lib/queries/driver-health-check";
+import type { RingkasHealthCheck } from "@/components/dashboard/status-health-check";
 import { layakBerangkat } from "@/lib/health-check-driver";
 import { STOP_LOKASI_JOIN, STOP_LOKASI_COLUMNS, MITRA_CADANGAN_EXISTS, getLokasiPilihanStop } from "@/lib/queries/mitra-lokasi-pengiriman";
 import { alamatUntukDeliveryOrder } from "@/lib/mitra-lokasi";
@@ -124,6 +125,8 @@ export interface JadwalCard {
   // (bukan panggil getSisaReturTersedia penuh) karena query ini
   // menghasilkan puluhan kartu sekaligus untuk seluruh board.
   AdaReturTersedia: boolean;
+  // Status Health Check terbaru driver jadwal ini (null = belum dicek).
+  HealthCheck: RingkasHealthCheck | null;
 }
 
 // A real DeliveryOrder created directly in the desktop ERP app (not through
@@ -362,10 +365,11 @@ export async function getPengirimanBoard(
     getPabrikLocation(),
   ]);
 
-  const jadwalRows = jadwalResult.recordset as Omit<JadwalCard, "JamKembaliAktual" | "LokasiTerjauh">[];
-  const [{ travelByJadwalId, farthestByJadwalId }, jamKembaliMap] = await Promise.all([
+  const jadwalRows = jadwalResult.recordset as Omit<JadwalCard, "JamKembaliAktual" | "LokasiTerjauh" | "HealthCheck">[];
+  const [{ travelByJadwalId, farthestByJadwalId }, jamKembaliMap, healthCheckMap] = await Promise.all([
     estimateTravelMinutesForJadwal(pool, pabrik, jadwalRows),
     getJamKembaliAktualMap(jadwalRows.map((jr) => jr.JadwalID)),
+    getHealthCheckRingkasPerJadwal(jadwalRows),
   ]);
   const jadwal: JadwalCard[] = jadwalRows.map((jr) => ({
     ...jr,
@@ -373,6 +377,7 @@ export async function getPengirimanBoard(
     JamKembaliAktual: jamKembaliMap.get(jr.JadwalID) ?? null,
     LokasiTerjauh: farthestByJadwalId.get(jr.JadwalID) ?? null,
     AdaReturTersedia: Boolean(jr.AdaReturTersedia),
+    HealthCheck: healthCheckMap.get(jr.JadwalID) ?? null,
   }));
 
   return { armada, jadwal, externalDeliveries: externalResult.recordset, takeawayOrders: takeawayResult.recordset };
@@ -796,7 +801,7 @@ export async function getDriverTimeline(salesmanId: string, businessDateISO: str
 async function estimateTravelMinutesForJadwal(
   pool: sql.ConnectionPool,
   pabrik: { latitude: number; longitude: number },
-  jadwalRows: Omit<JadwalCard, "JamKembaliAktual" | "LokasiTerjauh">[]
+  jadwalRows: Omit<JadwalCard, "JamKembaliAktual" | "LokasiTerjauh" | "HealthCheck">[]
 ): Promise<{
   travelByJadwalId: Map<number, number>;
   farthestByJadwalId: Map<number, { Wilayah: string; Kecamatan: string | null } | null>;

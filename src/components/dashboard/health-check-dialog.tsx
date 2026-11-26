@@ -5,7 +5,7 @@
 // yang berlaku adalah baris yang dikembalikan server setelah Simpan.
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CircleCheck, CircleX } from "lucide-react";
+import { CircleX, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,29 +24,8 @@ import {
   ambilAlihHealthCheckAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 
-/** Ikon status Health Check terbaru: kosong bila belum pernah dicek. */
-export function StatusHealthCheck({ row }: { row: HealthCheckRow | null }) {
-  if (!row) return null;
-  if (row.Lolos) {
-    return (
-      <span title="Health Check lolos" className="inline-flex">
-        <CircleCheck className="size-4 text-emerald-600 dark:text-emerald-400" aria-label="Health Check lolos" />
-      </span>
-    );
-  }
-  if (row.AmbilAlih) {
-    return (
-      <span title="Diambil alih" className="inline-flex">
-        <CircleCheck className="size-4 text-amber-500 dark:text-amber-400" aria-label="Health Check diambil alih" />
-      </span>
-    );
-  }
-  return (
-    <span title={row.AlasanGagal ? `Tidak lolos: ${row.AlasanGagal}` : "Health Check tidak lolos"} className="inline-flex">
-      <CircleX className="size-4 text-destructive" aria-label="Health Check tidak lolos" />
-    </span>
-  );
-}
+// Ikon status dipindah ke status-health-check.tsx (dipakai juga di papan).
+export { StatusHealthCheck } from "@/components/dashboard/status-health-check";
 
 /** Baris terbaru yang tidak lolos dan belum diambil alih — syarat ambil alih. */
 function gagalBelumDiambilAlih(row: HealthCheckRow | null | undefined): row is HealthCheckRow {
@@ -72,7 +51,7 @@ function LabelHasil({ status }: { status: "lolos" | "gagal" | null }) {
 
 function PilihanPandangan({ nilai, onUbah }: { nilai: boolean | null; onUbah: (v: boolean) => void }) {
   return (
-    <div className="flex gap-1.5" role="radiogroup" aria-label="Hasil tes pandangan">
+    <div className="flex gap-1.5" role="radiogroup" aria-label="Hasil tes fokus pandangan">
       {[
         { v: true, label: "Lolos" },
         { v: false, label: "Tidak lolos" },
@@ -153,6 +132,33 @@ function IsiHealthCheck({
   const simsRapi = useMemo(() => rapikanSims(sims), [sims]);
   const simMemuat = simsTersimpan == null && simGagalMuat == null;
   const simBerubah = simsTersimpan != null && JSON.stringify(simsRapi) !== simsTersimpan;
+  // Baris yang sudah berisi nomor/tanggal tapi golongannya kosong, atau
+  // golongan ganda, ditolak server — tunggu dilengkapi sebelum disimpan.
+  const golonganRapi = simsRapi.map((s) => s.jenisSim);
+  const simSiapSimpan =
+    golonganRapi.every((g) => g !== "") && new Set(golonganRapi).size === golonganRapi.length;
+  const [statusSimpanSim, setStatusSimpanSim] = useState<"menyimpan" | "tersimpan" | null>(null);
+
+  // Data SIM disimpan OTOMATIS ke data driver (jeda 0,8 dtk setelah berhenti
+  // mengetik) — tidak bergantung pada tombol Simpan Health Check, jadi SIM
+  // yang sudah diisi tidak hilang walau dialog ditutup dan tidak perlu
+  // diinput ulang di keberangkatan berikutnya.
+  useEffect(() => {
+    if (!simBerubah || !simSiapSimpan) return;
+    const json = JSON.stringify(simsRapi);
+    const t = setTimeout(async () => {
+      setStatusSimpanSim("menyimpan");
+      const r = await simpanSimDriverAction(salesmanId, simsRapi);
+      if (r.success) {
+        setSimsTersimpan(json);
+        setStatusSimpanSim("tersimpan");
+      } else {
+        setStatusSimpanSim(null);
+        toast.error(r.error);
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [simBerubah, simSiapSimpan, simsRapi, salesmanId]);
 
   const masukan = {
     sistolik: keAngka(sistolik),
@@ -178,15 +184,6 @@ function IsiHealthCheck({
     setSims(simsRapi);
     setSimsTersimpan(JSON.stringify(simsRapi));
     return true;
-  }
-
-  async function handleSimpanSim() {
-    setSibuk(true);
-    try {
-      if (await simpanSim()) toast.success("Data SIM disimpan");
-    } finally {
-      setSibuk(false);
-    }
   }
 
   async function handleSimpan() {
@@ -390,13 +387,13 @@ function IsiHealthCheck({
             onChange={(e) => setAlkohol(e.target.value)}
             className="w-24"
           />
-          <span className="text-xs text-muted-foreground">sesuai tampilan alat (harus 0)</span>
+          <span className="text-xs text-muted-foreground">sesuai tampilan alat (Normal = 0)</span>
         </div>
       </section>
 
       <section className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
-          <Label>Pandangan</Label>
+          <Label>Fokus Pandangan</Label>
           <LabelHasil status={statusPandangan} />
         </div>
         <PilihanPandangan nilai={pandangan} onUbah={setPandangan} />
@@ -404,35 +401,51 @@ function IsiHealthCheck({
 
       <section className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
-          <Label>SIM</Label>
-          <LabelHasil status={statusSim} />
+          <div className="flex items-center gap-3">
+            <Label>SIM</Label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="accent-primary"
+                checked={simDibawa}
+                onChange={(e) => setSimDibawa(e.target.checked)}
+              />
+              SIM fisik dibawa
+            </label>
+          </div>
+          {!simMemuat && !simGagalMuat && sims.length === 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => setSims([{ jenisSim: "", nomorSim: null, berlakuHingga: null }])}
+            >
+              <Plus className="size-3.5" />
+              Tambah SIM
+            </Button>
+          ) : (
+            <LabelHasil status={statusSim} />
+          )}
         </div>
         {simMemuat ? (
           <Skeleton className="h-16 w-full" />
         ) : simGagalMuat ? (
           <p className="text-xs text-destructive">Gagal memuat SIM: {simGagalMuat}</p>
-        ) : (
+        ) : sims.length > 0 ? (
           <>
             <EditorSimDriver sims={sims} onUbah={setSims} />
-            {simBerubah && (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-amber-700 dark:text-amber-400">Perubahan SIM belum disimpan</span>
-                <Button type="button" size="sm" variant="outline" disabled={sibuk} onClick={handleSimpanSim}>
-                  Simpan SIM
-                </Button>
-              </div>
-            )}
+            {simBerubah && !simSiapSimpan ? (
+              <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                Lengkapi golongan SIM (tidak boleh ganda) agar tersimpan
+              </span>
+            ) : statusSimpanSim === "menyimpan" ? (
+              <span className="text-[11px] text-muted-foreground">Menyimpan data SIM…</span>
+            ) : statusSimpanSim === "tersimpan" && !simBerubah ? (
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400">Data SIM tersimpan</span>
+            ) : null}
           </>
-        )}
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="accent-primary"
-            checked={simDibawa}
-            onChange={(e) => setSimDibawa(e.target.checked)}
-          />
-          SIM fisik dibawa
-        </label>
+        ) : null}
         {pratinjau.peringatan.map((p) => (
           <p key={p} className="text-[11px] text-amber-700 dark:text-amber-400">
             {p}
@@ -454,7 +467,7 @@ function IsiHealthCheck({
             Batal
           </Button>
           <Button disabled={sibuk || simMemuat || simGagalMuat != null} onClick={handleSimpan}>
-            {sibuk ? "Menyimpan..." : simBerubah ? "Simpan SIM & Health Check" : "Simpan"}
+            {sibuk ? "Menyimpan..." : "Simpan"}
           </Button>
         </div>
       </div>
@@ -484,10 +497,12 @@ export function HealthCheckDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Health Check Driver</DialogTitle>
-          <DialogDescription>
-            {namaDriver} — wajib lolos sebelum Selesai Muat. Berlaku hanya untuk keberangkatan ini.
-          </DialogDescription>
+          {/* pr-8: memberi ruang tombol tutup (X) di pojok kanan atas. */}
+          <DialogTitle className="flex items-center justify-between gap-3 pr-8">
+            <span>Health Check Driver</span>
+            <span className="truncate text-sm font-medium text-muted-foreground">{namaDriver}</span>
+          </DialogTitle>
+          <DialogDescription className="sr-only">Health Check driver {namaDriver} untuk keberangkatan ini</DialogDescription>
         </DialogHeader>
         {/* Dipasang ulang tiap dibuka / ganti driver agar formulir selalu kosong. */}
         {open && (

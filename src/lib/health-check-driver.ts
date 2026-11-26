@@ -78,12 +78,12 @@ export function nilaiHealthCheck(m: MasukanHealthCheck, hariIniISO: string): Has
   if (m.kadarAlkohol == null) {
     alasanGagal.push("Kadar alkohol belum diisi");
   } else if (m.kadarAlkohol !== 0) {
-    alasanGagal.push(`Kadar alkohol ${fmtAngka(m.kadarAlkohol)} (harus 0)`);
+    alasanGagal.push(`Kadar alkohol ${fmtAngka(m.kadarAlkohol)} (normal = 0)`);
   }
 
-  // Pandangan
-  if (m.pandanganLolos == null) alasanGagal.push("Tes pandangan belum diisi");
-  else if (!m.pandanganLolos) alasanGagal.push("Pandangan tidak lolos");
+  // Fokus pandangan
+  if (m.pandanganLolos == null) alasanGagal.push("Fokus pandangan belum diisi");
+  else if (!m.pandanganLolos) alasanGagal.push("Fokus pandangan tidak lolos");
 
   // SIM — pilih yang masih berlaku dengan masa berlaku terjauh
   let simTerbaik: SimDriver | null = null;

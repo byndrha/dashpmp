@@ -71,7 +71,6 @@ import {
   getArmadaUtilisasiPeriodeAction,
   getArmadaNextJadwalStartedAction,
   getJadwalTotalReturAction,
-  getHealthCheckTerbaruAction,
 } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import { HealthCheckDialog, StatusHealthCheck } from "@/components/dashboard/health-check-dialog";
 import { layakBerangkat } from "@/lib/health-check-driver";
@@ -282,8 +281,12 @@ function SortableStopRow({
             selalu satu baris — nama mitra yang mengalah/terpotong. */}
         <span className={cn("font-medium", ekspor && "whitespace-nowrap")}>
           {formatKemasanQty(detail.Qty10KG, detail.Qty5KG)}
-          {detail.BonusQty > 0 && <span className="text-primary"> (+{detail.BonusQty} bonus)</span>}
         </span>
+        {/* Bonus di baris sendiri di bawah qty — tidak melebarkan kolom qty
+            sehingga nama/lokasi mitra di kiri tidak terhimpit. */}
+        {detail.BonusQty > 0 && (
+          <span className="block text-xs font-medium whitespace-nowrap text-primary">+{detail.BonusQty} bonus</span>
+        )}
         {!cadangan && <span className="block text-xs text-muted-foreground">~{estimateDeliveryMinutes(detail.Qty)} menit</span>}
       </span>
       {!cadangan && detail.Latitude == null && (
@@ -514,7 +517,11 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
   // Driver Health Check: status disimpan bersama kuncinya ("jadwal|driver")
   // dan hanya dipakai bila kunci cocok dengan pilihan saat ini — ganti driver
   // langsung mengosongkan status tanpa menunggu respons server.
-  const [healthCheckState, setHealthCheckState] = useState<{ kunci: string; row: HealthCheckRow | null } | null>(null);
+  const [healthCheckState, setHealthCheckState] = useState<{
+    kunci: string;
+    row: HealthCheckRow | null;
+    galat?: string;
+  } | null>(null);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
   // Lets staff drop the map panel entirely (no Leaflet init, no OSRM wait) —
   // useful on a slow connection when all they need is the stop list/totals
@@ -645,15 +652,37 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
     if (jadwalId == null || driverId === "") return;
     const kunci = `${jadwalId}|${driverId}`;
     let basi = false;
-    getHealthCheckTerbaruAction(jadwalId, driverId).then((r) => {
-      if (basi) return;
-      if (r.success) setHealthCheckState({ kunci, row: r.data });
-    });
+    // Lewat route handler (GET biasa), bukan server action — server action
+    // satu halaman berjalan berurutan sehingga status ini sempat mengantre
+    // >10 dtk di belakang aksi lain dialog. Satu kali coba ulang (koneksi DB
+    // kadang putus sesaat); bila tetap gagal, ikon menampilkan "gagal dimuat".
+    const qs = new URLSearchParams({ jadwalId: String(jadwalId), salesmanId: driverId });
+    const muat = (sisaCoba: number): void => {
+      fetch(`/api/mkesindo/health-check?${qs}`)
+        .then(async (res) => {
+          const data = (await res.json()) as HealthCheckRow | null | { error: string };
+          if (!res.ok) throw new Error(data && "error" in data ? data.error : `HTTP ${res.status}`);
+          return data as HealthCheckRow | null;
+        })
+        .then((row) => {
+          if (!basi) setHealthCheckState({ kunci, row });
+        })
+        .catch((e: unknown) => {
+          if (basi) return;
+          if (sisaCoba > 0) setTimeout(() => !basi && muat(sisaCoba - 1), 1500);
+          else setHealthCheckState({ kunci, row: null, galat: e instanceof Error ? e.message : "Gagal memuat" });
+        });
+    };
+    muat(1);
     return () => {
       basi = true;
     };
   }, [jadwalId, driverId]);
-  const healthCheck = kunciHealthCheck != null && healthCheckState?.kunci === kunciHealthCheck ? healthCheckState.row : null;
+  // Status hanya dipakai bila kuncinya cocok dengan jadwal+driver yang
+  // sedang dibuka — hasil pengiriman lain tidak pernah ikut tampil/terpakai.
+  const healthCheckDimuat = kunciHealthCheck != null && healthCheckState?.kunci === kunciHealthCheck;
+  const healthCheck = healthCheckDimuat ? healthCheckState!.row : null;
+  const healthCheckGalat = healthCheckDimuat ? (healthCheckState!.galat ?? null) : null;
   const driverLayak = layakBerangkat(healthCheck);
 
   // Refetches just `order` after UbahPemesananDialog closes (saved or
@@ -1617,7 +1646,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                   >
                     Health Check
                   </Button>
-                  <StatusHealthCheck row={healthCheck} />
+                  <StatusHealthCheck row={healthCheck} dimuat={healthCheckDimuat} galat={healthCheckGalat} />
                 </div>
               </div>
             ) : null}
@@ -1755,11 +1784,6 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                   <Button size="sm" className="ml-auto" disabled={!canSelesaiMuat || pending} onClick={handleSelesaiMuat}>
                     {pending ? "Memproses..." : "Selesai Muat"}
                   </Button>
-                )}
-                {driverId !== "" && !driverLayak && (
-                  <p className="basis-full text-right text-xs text-amber-700 dark:text-amber-400">
-                    Driver belum lolos Health Check
-                  </p>
                 )}
               </div>
             )}
@@ -2112,6 +2136,8 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <span className="font-medium text-foreground">{time}</span>
                       {drivers.find((d) => d.SalesmanID === driverId)?.Name ?? "Tanpa driver"}
+                      {/* Hasil Health Check pengiriman ini (tooltip: waktu cek). */}
+                      {driverId !== "" && <StatusHealthCheck row={healthCheck} dimuat={healthCheckDimuat} galat={healthCheckGalat} />}
                     </span>
                   )}
                 </p>
@@ -2393,6 +2419,9 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             </div>
           </DialogContent>
         </Dialog>
+        {/* onSelesai memakai kunci dari baris hasil server (JadwalID+SalesmanID),
+            bukan pilihan layar saat itu — hasil selalu tercatat ke pengiriman
+            yang benar-benar diperiksa. */}
         {jadwalId != null && driverId !== "" && (
           <HealthCheckDialog
             open={showHealthCheck}
@@ -2401,7 +2430,7 @@ export const RouteValidationDialog = forwardRef<RouteValidationDialogHandle, Rou
             salesmanId={driverId}
             namaDriver={drivers.find((d) => d.SalesmanID === driverId)?.Name ?? driverId}
             terbaru={healthCheck}
-            onSelesai={(row) => setHealthCheckState({ kunci: `${jadwalId}|${driverId}`, row })}
+            onSelesai={(row) => setHealthCheckState({ kunci: `${row.JadwalID}|${row.SalesmanID}`, row })}
           />
         )}
       </DialogContent>

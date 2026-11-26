@@ -1,4 +1,5 @@
 import { getPool, sql } from "@/lib/db";
+import type { RingkasHealthCheck } from "@/components/dashboard/status-health-check";
 import { AppError } from "@/lib/action-result";
 import {
   hariIniWibISO,
@@ -96,6 +97,48 @@ export async function getHealthCheckTerbaru(jadwalId: number, salesmanId: string
     `);
   const row = result.recordset[0] as HealthCheckDbRow | undefined;
   return row ? keRow(row) : null;
+}
+
+// Status Health Check terbaru tiap jadwal untuk DRIVER JADWAL ITU SAAT INI
+// (Papan Pengiriman). Baris milik driver lain di jadwal yang sama — mis.
+// driver yang sudah diganti — tidak ikut, jadi status tidak tercampur.
+export async function getHealthCheckRingkasPerJadwal(
+  jadwal: { JadwalID: number; SalesmanID: string | null }[]
+): Promise<Map<number, RingkasHealthCheck>> {
+  const hasil = new Map<number, RingkasHealthCheck>();
+  const ids = jadwal.filter((j) => j.SalesmanID).map((j) => j.JadwalID);
+  if (ids.length === 0) return hasil;
+  const pool = await getPool();
+  const req = pool.request();
+  ids.forEach((id, i) => req.input(`j${i}`, sql.Int, id));
+  const result = await req.query(`
+    SELECT x.JadwalID, x.Lolos, x.AmbilAlih, x.DiperiksaPada, x.AlasanGagal, x.AmbilAlihAlasan
+    FROM (
+      SELECT hc.JadwalID, hc.Lolos, hc.AmbilAlih, hc.DiperiksaPada, hc.AlasanGagal, hc.AmbilAlihAlasan,
+             ROW_NUMBER() OVER (PARTITION BY hc.JadwalID ORDER BY hc.HealthCheckID DESC) AS rn
+      FROM DashboardDriverHealthCheck hc
+      JOIN DashboardPengirimanJadwal j ON j.JadwalID = hc.JadwalID AND j.SalesmanID = hc.SalesmanID
+      WHERE hc.JadwalID IN (${ids.map((_, i) => `@j${i}`).join(", ")})
+    ) x
+    WHERE x.rn = 1
+  `);
+  for (const r of result.recordset as {
+    JadwalID: number;
+    Lolos: boolean;
+    AmbilAlih: boolean;
+    DiperiksaPada: Date;
+    AlasanGagal: string | null;
+    AmbilAlihAlasan: string | null;
+  }[]) {
+    hasil.set(r.JadwalID, {
+      Lolos: Boolean(r.Lolos),
+      AmbilAlih: Boolean(r.AmbilAlih),
+      DiperiksaPada: r.DiperiksaPada.toISOString(),
+      AlasanGagal: r.AlasanGagal,
+      AmbilAlihAlasan: r.AmbilAlihAlasan,
+    });
+  }
+  return hasil;
 }
 
 async function getHealthCheckById(healthCheckId: number): Promise<HealthCheckRow> {
