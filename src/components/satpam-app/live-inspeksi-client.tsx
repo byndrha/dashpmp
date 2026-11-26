@@ -13,12 +13,19 @@ import { AppearanceMenu } from "@/components/dashboard/appearance-menu";
 import { useLiveCameraCapture } from "@/hooks/use-live-camera-capture";
 import { createVehicleCheckAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 import {
-  JENIS_FOTO_LIST,
   JENIS_FOTO_LABEL,
   FUEL_BAR_MAX,
+  POSISI_BAN,
+  LABEL_POSISI_BAN,
+  PSI_MIN,
+  PSI_MAKS,
+  jenisFotoWajib,
+  psiAman,
   type VehicleCheckTipe,
   type FuelBar,
   type JenisFotoKendaraan,
+  type JumlahBan,
+  type PosisiBan,
   type VehicleCheckPhoto,
 } from "@/lib/vehicle-check-types";
 
@@ -127,6 +134,92 @@ function FuelBarSelector({ value, onChange }: { value: FuelBar; onChange: (v: Fu
   );
 }
 
+// Label kolom di form Security: sisi saja (depan/belakang sudah jadi judul
+// kelompok), L/D = ban luar/dalam pada ban ganda truk.
+const LABEL_KOLOM_BAN: Record<PosisiBan, string> = {
+  DKI: "Kiri",
+  DKA: "Kanan",
+  BKI: "Kiri",
+  BKA: "Kanan",
+  BKI_LUAR: "Kiri-L",
+  BKI_DALAM: "Kiri-D",
+  BKA_DALAM: "Kanan-D",
+  BKA_LUAR: "Kanan-L",
+};
+
+// Nilai awal = tekanan aman umum (tahap uji coba: form tidak dibiarkan kosong,
+// Security cukup mengoreksi ban yang berbeda).
+function tekananBanAwal(jumlahBan: JumlahBan): Partial<Record<PosisiBan, string>> {
+  return Object.fromEntries(POSISI_BAN[jumlahBan].map((p) => [p, String(psiAman(jumlahBan, p))]));
+}
+
+// Input tekanan ban — satu baris ringkas supaya tidak memakan ruang kamera:
+// kelompok "Ban Depan" | "Ban Belakang" dipisah garis, label sisi di bawah
+// tiap kotak.
+function InputTekananBan({
+  jumlahBan,
+  nilai,
+  onUbah,
+}: {
+  jumlahBan: JumlahBan;
+  nilai: Partial<Record<PosisiBan, string>>;
+  onUbah: (posisi: PosisiBan, v: string) => void;
+}) {
+  const posisi = POSISI_BAN[jumlahBan];
+  const kelompok = [
+    { judul: "Ban Depan", daftar: posisi.filter((p) => p.startsWith("D")) },
+    { judul: "Ban Belakang", daftar: posisi.filter((p) => p.startsWith("B")) },
+  ];
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        className="flex items-center gap-1.5"
+        title="Nilai awal = tekanan aman umum; ubah bila hasil ukur berbeda (ikuti stiker tekanan ban kendaraan)."
+      >
+        <span className="rounded-full bg-warning/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-warning">
+          Uji Coba
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tekanan ban (PSI)</span>
+      </div>
+      <div
+        className="grid gap-x-2"
+        style={{ gridTemplateColumns: `${kelompok[0].daftar.length}fr ${kelompok[1].daftar.length}fr` }}
+      >
+        {kelompok.map((k, ki) => (
+          <div key={k.judul} className={cn("flex min-w-0 flex-col gap-0.5", ki === 1 && "border-l border-border pl-2")}>
+            <span className="text-center text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.judul}</span>
+            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${k.daftar.length}, minmax(0, 1fr))` }}>
+              {k.daftar.map((p) => {
+                const v = nilai[p] ?? "";
+                const n = Number(v);
+                const salah = !(v.trim() !== "" && Number.isFinite(n) && n >= PSI_MIN && n <= PSI_MAKS);
+                return (
+                  <label key={p} className="flex min-w-0 flex-col items-center" title={`${LABEL_POSISI_BAN[p]} (aman ±${psiAman(jumlahBan, p)} PSI)`}>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      placeholder={String(psiAman(jumlahBan, p))}
+                      aria-label={`Tekanan ban ${LABEL_POSISI_BAN[p]} (PSI)`}
+                      value={v}
+                      onChange={(e) => onUbah(p, e.target.value)}
+                      className={cn(
+                        "h-8 border-border bg-muted/20 px-0.5 text-center text-sm text-foreground tabular-nums placeholder:text-muted-foreground/60",
+                        salah && "border-destructive"
+                      )}
+                    />
+                    <span className="text-[9px] leading-tight font-bold uppercase text-muted-foreground">{LABEL_KOLOM_BAN[p]}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // The muatan-confirmation dialog walks through two steps rather than
 // rendering an always-present-but-hidden manual input: "choice" (Ya/Tidak)
 // and, only once "Tidak" is tapped, "manual" (a number input + Konfirmasi).
@@ -142,9 +235,12 @@ export function LiveInspeksiClient({
   vehicleNo,
   driverName,
   expectedMuatanQty,
+  jumlahBan,
 }: {
   jadwalId: number;
   armadaId: number;
+  // Jumlah ban armada — menentukan posisi input tekanan ban (Cek Berangkat).
+  jumlahBan: JumlahBan;
   tipe: VehicleCheckTipe;
   armadaNama: string;
   vehicleNo: string | null;
@@ -165,6 +261,24 @@ export function LiveInspeksiClient({
   const [odometerKM, setOdometerKM] = useState("");
   const [fuelBar, setFuelBar] = useState<FuelBar>(2);
   const [remark, setRemark] = useState("");
+  const [tekananBan, setTekananBan] = useState<Partial<Record<PosisiBan, string>>>(() => tekananBanAwal(jumlahBan));
+  // Petunjuk singkat saat slot foto "Ban" diketuk.
+  const [petunjukBan, setPetunjukBan] = useState(false);
+  useEffect(() => {
+    if (!petunjukBan) return;
+    const t = setTimeout(() => setPetunjukBan(false), 2500);
+    return () => clearTimeout(t);
+  }, [petunjukBan]);
+  // Cek Berangkat: 6 foto sisi + 1 foto tekanan ban; Cek Datang: 6 foto.
+  const fotoWajib = jenisFotoWajib(tipe);
+  const catatBan = tipe === "BERANGKAT";
+  const posisiBan = POSISI_BAN[jumlahBan];
+  const banLengkap =
+    !catatBan ||
+    posisiBan.every((p) => {
+      const n = Number(tekananBan[p]);
+      return (tekananBan[p] ?? "").trim() !== "" && Number.isFinite(n) && n >= PSI_MIN && n <= PSI_MAKS;
+    });
   const [muatanQty, setMuatanQty] = useState<number | null>(null);
   const [showMuatanDialog, setShowMuatanDialog] = useState(false);
   const [muatanStep, setMuatanStep] = useState<MuatanStep>("choice");
@@ -203,14 +317,14 @@ export function LiveInspeksiClient({
     }
   }
 
-  const allPhotosReady = JENIS_FOTO_LIST.every((j) => photos[j] != null);
-  const canSubmit = allPhotosReady && Number(odometerKM) > 0 && muatanQty != null && !pending;
+  const allPhotosReady = fotoWajib.every((j) => photos[j] != null);
+  const canSubmit = allPhotosReady && Number(odometerKM) > 0 && banLengkap && muatanQty != null && !pending;
 
   function handleSubmit() {
     if (!canSubmit || muatanQty == null) return;
     setError(null);
     startTransition(async () => {
-      const photoList: VehicleCheckPhoto[] = JENIS_FOTO_LIST.map((jenisFoto) => ({
+      const photoList: VehicleCheckPhoto[] = fotoWajib.map((jenisFoto) => ({
         jenisFoto,
         filePath: photos[jenisFoto] as string,
       }));
@@ -222,6 +336,7 @@ export function LiveInspeksiClient({
         muatanQty,
         remark: tipe === "DATANG" && remark.trim() ? remark.trim() : null,
         photos: photoList,
+        tekananBan: catatBan ? posisiBan.map((p) => ({ posisi: p, psi: Number(tekananBan[p]) })) : undefined,
       });
       if (!result.success) {
         setError(result.error);
@@ -250,7 +365,7 @@ export function LiveInspeksiClient({
     setShowMuatanDialog(false);
   }
 
-  const photosDone = JENIS_FOTO_LIST.filter((j) => photos[j] != null).length;
+  const photosDone = fotoWajib.filter((j) => photos[j] != null).length;
 
   function photoStatusFor(j: JenisFotoKendaraan): PhotoUploadStatus | undefined {
     if (uploading === j) return "uploading";
@@ -298,7 +413,7 @@ export function LiveInspeksiClient({
             <span className="size-2 animate-pulse rounded-full bg-warning" /> LIVE VIEW
           </span>
           <span className="font-mono font-bold">
-            {photosDone}/{JENIS_FOTO_LIST.length} SELESAI
+            {photosDone}/{fotoWajib.length} SELESAI
           </span>
         </div>
       </div>
@@ -309,15 +424,17 @@ export function LiveInspeksiClient({
           uses this project's existing card/border/muted tokens like every
           other dark-mode panel in the app. */}
       <div className="relative z-10 rounded-t-3xl border-t border-border bg-card/90 px-4 pb-4 pt-6 backdrop-blur-md">
-        <p className="mb-3 font-display text-base font-semibold">Data Kendaraan</p>
-        <div className="mb-4 grid grid-cols-6 gap-2">
-          {JENIS_FOTO_LIST.map((j) => (
+        <div className={cn("mb-4 grid gap-2", fotoWajib.length === 7 ? "grid-cols-7" : "grid-cols-6")}>
+          {fotoWajib.map((j) => (
             <button
               key={j}
               type="button"
-              onClick={() => setActiveSlot(j)}
+              onClick={() => {
+                setActiveSlot(j);
+                setPetunjukBan(j === "TEKANAN_BAN");
+              }}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-lg border p-1",
+                "relative flex flex-col items-center gap-1 rounded-lg border p-1",
                 j === activeSlot ? "border-warning bg-warning/10" : "border-border bg-muted/30"
               )}
             >
@@ -333,6 +450,14 @@ export function LiveInspeksiClient({
               <span className={cn("text-[9px] font-bold uppercase", j === activeSlot ? "text-warning" : "text-muted-foreground")}>
                 {JENIS_FOTO_LABEL[j]}
               </span>
+              {j === "TEKANAN_BAN" && petunjukBan && (
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute right-0 bottom-full z-20 mb-1.5 w-max max-w-40 rounded-lg border border-border bg-popover px-2 py-1 text-[11px] font-semibold text-popover-foreground shadow-lg"
+                >
+                  Foto Ban Paling Beresiko
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -350,6 +475,15 @@ export function LiveInspeksiClient({
           </div>
           <FuelBarSelector value={fuelBar} onChange={setFuelBar} />
         </div>
+        {catatBan && (
+          <div className="mt-3">
+            <InputTekananBan
+              jumlahBan={jumlahBan}
+              nilai={tekananBan}
+              onUbah={(p, v) => setTekananBan((prev) => ({ ...prev, [p]: v }))}
+            />
+          </div>
+        )}
         {tipe === "DATANG" && (
           <div className="mt-4 flex flex-col gap-2">
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -371,7 +505,7 @@ export function LiveInspeksiClient({
       <div className="relative z-10 border-t border-border bg-background p-4">
         <Button
           className="h-14 w-full gap-2 bg-warning font-display text-base text-warning-foreground hover:bg-warning/90 disabled:bg-muted disabled:text-muted-foreground"
-          disabled={!allPhotosReady || !(Number(odometerKM) > 0)}
+          disabled={!allPhotosReady || !(Number(odometerKM) > 0) || !banLengkap}
           onClick={() => {
             if (muatanQty == null) {
               openMuatanDialog();

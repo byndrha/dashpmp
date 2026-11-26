@@ -27,6 +27,9 @@ export interface ArmadaRow {
   // pump — one QR per vehicle, uploaded here by admin (same pattern as
   // FotoPath).
   QrMyPertaminaPath: string | null;
+  // Jumlah ban untuk input tekanan ban Cek Berangkat (4 atau 6). NULL =
+  // ditebak dari merek — lihat jumlahBanArmada() di vehicle-check-types.ts.
+  JumlahBan: number | null;
 }
 
 export interface ArmadaInput {
@@ -44,13 +47,16 @@ export interface ArmadaInput {
   biayaPajakLimaTahunan: number | null;
   expeditionDetailId: string | null;
   qrMyPertaminaPath: string | null;
+  // undefined = tidak diubah; null = otomatis dari merek.
+  jumlahBan?: 4 | 6 | null;
 }
 
 export async function getArmadaList(): Promise<ArmadaRow[]> {
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT ArmadaID, Nama, PlatNomor, Brand, Model, KonsumsiBBM, KapasitasMaks, Status, FotoPath,
-           JenisBBM, BiayaBBMPerLiter, PajakLimaTahunan, BiayaPajakLimaTahunan, ExpeditionDetailID, QrMyPertaminaPath
+           JenisBBM, BiayaBBMPerLiter, PajakLimaTahunan, BiayaPajakLimaTahunan, ExpeditionDetailID, QrMyPertaminaPath,
+           JumlahBan
     FROM DashboardArmada
     WHERE IsDeleted = 0
     ORDER BY Nama
@@ -75,14 +81,15 @@ export async function createArmada(input: ArmadaInput): Promise<number> {
     .input("pajakLimaTahunan", sql.Date, input.pajakLimaTahunan)
     .input("biayaPajakLimaTahunan", sql.Decimal(18, 2), input.biayaPajakLimaTahunan)
     .input("expeditionDetailId", sql.VarChar(16), input.expeditionDetailId)
-    .input("qrMyPertaminaPath", sql.VarChar(256), input.qrMyPertaminaPath).query(`
+    .input("qrMyPertaminaPath", sql.VarChar(256), input.qrMyPertaminaPath)
+    .input("jumlahBan", sql.TinyInt, input.jumlahBan ?? null).query(`
       INSERT INTO DashboardArmada
         (Nama, PlatNomor, Brand, Model, KonsumsiBBM, KapasitasMaks, Status, FotoPath, IsDeleted, ModifiedDate,
-         JenisBBM, BiayaBBMPerLiter, PajakLimaTahunan, BiayaPajakLimaTahunan, ExpeditionDetailID, QrMyPertaminaPath)
+         JenisBBM, BiayaBBMPerLiter, PajakLimaTahunan, BiayaPajakLimaTahunan, ExpeditionDetailID, QrMyPertaminaPath, JumlahBan)
       OUTPUT inserted.ArmadaID
       VALUES
         (@nama, @platNomor, @brand, @model, @konsumsiBBM, @kapasitasMaks, @status, @fotoPath, 0, GETDATE(),
-         @jenisBBM, @biayaBBMPerLiter, @pajakLimaTahunan, @biayaPajakLimaTahunan, @expeditionDetailId, @qrMyPertaminaPath)
+         @jenisBBM, @biayaBBMPerLiter, @pajakLimaTahunan, @biayaPajakLimaTahunan, @expeditionDetailId, @qrMyPertaminaPath, @jumlahBan)
     `);
   return (result.recordset[0] as { ArmadaID: number }).ArmadaID;
 }
@@ -105,13 +112,16 @@ export async function updateArmada(id: number, input: ArmadaInput): Promise<void
     .input("pajakLimaTahunan", sql.Date, input.pajakLimaTahunan)
     .input("biayaPajakLimaTahunan", sql.Decimal(18, 2), input.biayaPajakLimaTahunan)
     .input("expeditionDetailId", sql.VarChar(16), input.expeditionDetailId)
-    .input("qrMyPertaminaPath", sql.VarChar(256), input.qrMyPertaminaPath).query(`
+    .input("qrMyPertaminaPath", sql.VarChar(256), input.qrMyPertaminaPath)
+    .input("ubahJumlahBan", sql.Bit, input.jumlahBan !== undefined)
+    .input("jumlahBan", sql.TinyInt, input.jumlahBan ?? null).query(`
       UPDATE DashboardArmada SET
         Nama = @nama, PlatNomor = @platNomor, Brand = @brand, Model = @model,
         KonsumsiBBM = @konsumsiBBM, KapasitasMaks = @kapasitasMaks, Status = @status, FotoPath = @fotoPath,
         JenisBBM = @jenisBBM, BiayaBBMPerLiter = @biayaBBMPerLiter,
         PajakLimaTahunan = @pajakLimaTahunan, BiayaPajakLimaTahunan = @biayaPajakLimaTahunan,
         ExpeditionDetailID = @expeditionDetailId, QrMyPertaminaPath = @qrMyPertaminaPath,
+        JumlahBan = CASE WHEN @ubahJumlahBan = 1 THEN @jumlahBan ELSE JumlahBan END,
         ModifiedDate = GETDATE()
       WHERE ArmadaID = @id
     `);

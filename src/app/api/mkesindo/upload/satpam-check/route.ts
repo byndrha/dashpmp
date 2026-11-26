@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadFile } from "@/lib/storage/google-drive";
 import { requireModuleAccess } from "@/lib/require-access";
 import { auth } from "@/lib/auth";
-import { JENIS_FOTO_LIST, type JenisFotoKendaraan } from "@/lib/queries/vehicle-check";
+import { JENIS_FOTO_BERANGKAT, type JenisFotoKendaraan } from "@/lib/queries/vehicle-check";
 import { currentEskristalKode } from "@/lib/tenant-request";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (typeof armadaId !== "string" || !armadaId.trim()) {
     return NextResponse.json({ error: "armadaId wajib diisi" }, { status: 400 });
   }
-  if (typeof jenisFoto !== "string" || !JENIS_FOTO_LIST.includes(jenisFoto as JenisFotoKendaraan)) {
+  if (typeof jenisFoto !== "string" || !JENIS_FOTO_BERANGKAT.includes(jenisFoto as JenisFotoKendaraan)) {
     return NextResponse.json({ error: "jenisFoto tidak valid" }, { status: 400 });
   }
   if (!ALLOWED_TYPES.includes(file.type)) {

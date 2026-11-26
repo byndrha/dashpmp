@@ -7,6 +7,9 @@ import { ImageLightboxTrigger } from "@/components/ui/image-lightbox";
 import {
   JENIS_FOTO_LABEL,
   FUEL_BAR_MAX,
+  LABEL_POSISI_BAN,
+  SINGKATAN_POSISI_BAN,
+  type TekananBan,
   type VehicleCheckRow,
   type VehicleCheckTipe,
 } from "@/lib/vehicle-check-types";
@@ -25,6 +28,26 @@ const CHIP_RINGKAS =
 
 // Ikon pengganti label "Cek Berangkat"/"Cek Datang" di varian ringkas.
 export const TIPE_IKON: Record<VehicleCheckTipe, typeof ArrowUpRight> = { BERANGKAT: ArrowUpRight, DATANG: ArrowDownLeft };
+
+// Tekanan ban per posisi (PSI) — chip kecil berurutan depan → belakang.
+function ChipTekananBan({ daftar, kecil = false }: { daftar: TekananBan[]; kecil?: boolean }) {
+  if (daftar.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className={cn("font-medium text-muted-foreground", kecil ? "text-[11px]" : "text-xs")}>Ban (PSI)</span>
+      {daftar.map((b) => (
+        <span
+          key={b.posisi}
+          title={`${LABEL_POSISI_BAN[b.posisi]}: ${b.psi.toLocaleString("id-ID")} PSI`}
+          className={cn(CHIP_RINGKAS, "gap-1")}
+        >
+          <span className="text-[10px] uppercase">{SINGKATAN_POSISI_BAN[b.posisi]}</span>
+          <span className="font-semibold text-foreground">{b.psi.toLocaleString("id-ID")}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export function CheckSummary({
   check,
@@ -77,6 +100,7 @@ export function CheckSummary({
             {packageLabel ? ` ${packageLabel.replace(/^kantong\s+/i, "")}` : ""}
           </span>
         </div>
+        <ChipTekananBan daftar={check.tekananBan} kecil />
         {check.photos.length > 0 && (
           <div className="flex gap-1 overflow-hidden">
             {check.photos.map((p) => (
@@ -121,7 +145,8 @@ export function CheckSummary({
           {(packageQty ?? check.muatanQty).toLocaleString("id-ID")} {packageLabel ?? "kantong es kristal"}
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+      <ChipTekananBan daftar={check.tekananBan} />
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-7">
         {check.photos.map((p) => (
           <ImageLightboxTrigger
             key={p.jenisFoto}

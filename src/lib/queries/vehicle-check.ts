@@ -4,7 +4,14 @@ import {
   type FuelBar,
   type JenisFotoKendaraan,
   JENIS_FOTO_LIST,
+  JENIS_FOTO_BERANGKAT,
   JENIS_FOTO_LABEL,
+  POSISI_BAN,
+  PSI_MIN,
+  PSI_MAKS,
+  jumlahBanArmada,
+  type PosisiBan,
+  type TekananBan,
   type VehicleCheckPhoto,
   type VehicleCheckRow,
 } from "@/lib/vehicle-check-types";
@@ -16,7 +23,7 @@ import { AppError } from "@/lib/action-result";
 // "@/lib/vehicle-check-types" directly instead, to avoid pulling this
 // module's `@/lib/db` (mssql) dependency into the client bundle.
 export type { VehicleCheckTipe, FuelBar, JenisFotoKendaraan, VehicleCheckPhoto, VehicleCheckRow };
-export { JENIS_FOTO_LIST, JENIS_FOTO_LABEL };
+export { JENIS_FOTO_LIST, JENIS_FOTO_BERANGKAT, JENIS_FOTO_LABEL };
 
 export async function getVehicleChecksForJadwal(jadwalId: number): Promise<VehicleCheckRow[]> {
   const pool = await getPool();
@@ -62,12 +69,28 @@ export async function getVehicleChecksForJadwal(jadwalId: number): Promise<Vehic
         checkedByUserId: r.CheckedByUserID,
         checkedAt: r.CheckedAt.toISOString(),
         photos: [],
+        tekananBan: [],
       };
       byId.set(r.VehicleCheckID, entry);
     }
     if (r.JenisFoto && r.FilePath) {
       entry.photos.push({ jenisFoto: r.JenisFoto, filePath: r.FilePath });
     }
+  }
+  if (byId.size > 0) {
+    const banReq = pool.request();
+    const ids = [...byId.keys()];
+    ids.forEach((id, i) => banReq.input(`v${i}`, sql.Int, id));
+    const ban = await banReq.query(`
+      SELECT VehicleCheckID, Posisi, PSI FROM DashboardVehicleCheckBan
+      WHERE VehicleCheckID IN (${ids.map((_, i) => `@v${i}`).join(", ")})
+    `);
+    for (const b of ban.recordset as { VehicleCheckID: number; Posisi: PosisiBan; PSI: number }[]) {
+      byId.get(b.VehicleCheckID)?.tekananBan.push({ posisi: b.Posisi, psi: Number(b.PSI) });
+    }
+    // Urut sesuai posisi tampil (depan dulu, kiri ke kanan).
+    const urutan = [...POSISI_BAN[6], ...POSISI_BAN[4]];
+    for (const c of byId.values()) c.tekananBan.sort((x, y) => urutan.indexOf(x.posisi) - urutan.indexOf(y.posisi));
   }
   return [...byId.values()];
 }
@@ -81,6 +104,7 @@ export async function createVehicleCheck(input: {
   remark: string | null;
   userId: string;
   photos: VehicleCheckPhoto[];
+  tekananBan: TekananBan[];
 }): Promise<void> {
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
@@ -128,6 +152,36 @@ export async function createVehicleCheck(input: {
         VALUES (@jadwalId, @tipe, @odometerKM, @fuelBar, @muatanQty, @remark, @userId)
       `);
     const vehicleCheckId = (header.recordset[0] as { VehicleCheckID: number }).VehicleCheckID;
+
+    // Cek Berangkat wajib mencatat tekanan SETIAP ban armada ini (posisi
+    // sesuai jumlah ban armada); Cek Datang tidak mencatat tekanan ban.
+    if (input.tipe === "BERANGKAT") {
+      const armada = await new sql.Request(transaction)
+        .input("jadwalId", sql.Int, input.jadwalId)
+        .query(`
+          SELECT a.JumlahBan, a.Brand FROM DashboardPengirimanJadwal j
+          JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID
+          WHERE j.JadwalID = @jadwalId
+        `);
+      const a = armada.recordset[0] as { JumlahBan: number | null; Brand: string | null } | undefined;
+      const wajib = POSISI_BAN[jumlahBanArmada({ JumlahBan: a?.JumlahBan ?? null, Brand: a?.Brand ?? null })];
+      const masuk = new Map(input.tekananBan.map((b) => [b.posisi, b.psi]));
+      if (masuk.size !== input.tekananBan.length || wajib.some((p) => !masuk.has(p)) || masuk.size !== wajib.length) {
+        throw new AppError(`Tekanan ${wajib.length} ban wajib diisi semua.`);
+      }
+      for (const b of input.tekananBan) {
+        if (!(Number.isFinite(b.psi) && b.psi >= PSI_MIN && b.psi <= PSI_MAKS)) {
+          throw new AppError(`Tekanan ban harus angka ${PSI_MIN}–${PSI_MAKS} PSI.`);
+        }
+      }
+      for (const b of input.tekananBan) {
+        await new sql.Request(transaction)
+          .input("vehicleCheckId", sql.Int, vehicleCheckId)
+          .input("posisi", sql.VarChar(12), b.posisi)
+          .input("psi", sql.Decimal(5, 1), Math.round(b.psi * 10) / 10)
+          .query(`INSERT INTO DashboardVehicleCheckBan (VehicleCheckID, Posisi, PSI) VALUES (@vehicleCheckId, @posisi, @psi)`);
+      }
+    }
 
     for (const photo of input.photos) {
       await new sql.Request(transaction)

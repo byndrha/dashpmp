@@ -4,7 +4,7 @@ import { requireSatpam } from "@/lib/require-access";
 import { getJadwalDetail } from "@/lib/queries/pengiriman-jadwal";
 import { getPool, sql } from "@/lib/db";
 import { LiveInspeksiClient } from "@/components/satpam-app/live-inspeksi-client";
-import type { VehicleCheckTipe } from "@/lib/vehicle-check-types";
+import { jumlahBanArmada, type VehicleCheckTipe } from "@/lib/vehicle-check-types";
 
 export const metadata: Metadata = { title: "Inspeksi" };
 
@@ -26,7 +26,8 @@ export default async function LiveInspeksiPage({
   const headerResult = await pool
     .request()
     .input("jadwalId", sql.Int, jadwalId).query(`
-      SELECT j.ArmadaID, a.Nama AS ArmadaNama, ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo, sm.Name AS DriverName
+      SELECT j.ArmadaID, a.Nama AS ArmadaNama, ISNULL(ed.VehicleNo, a.Nama) AS VehicleNo, sm.Name AS DriverName,
+             a.JumlahBan, a.Brand
       FROM DashboardPengirimanJadwal j
       JOIN DashboardArmada a ON a.ArmadaID = j.ArmadaID AND a.IsDeleted = 0
       LEFT JOIN ExpeditionDetail ed ON ed.ExpeditionDetailID = a.ExpeditionDetailID AND ed.IsDeleted = 0
@@ -34,7 +35,14 @@ export default async function LiveInspeksiPage({
       WHERE j.JadwalID = @jadwalId AND j.IsDeleted = 0
     `);
   const header = headerResult.recordset[0] as
-    | { ArmadaID: number; ArmadaNama: string; VehicleNo: string | null; DriverName: string | null }
+    | {
+        ArmadaID: number;
+        ArmadaNama: string;
+        VehicleNo: string | null;
+        DriverName: string | null;
+        JumlahBan: number | null;
+        Brand: string | null;
+      }
     | undefined;
   if (!header) notFound();
 
@@ -50,6 +58,7 @@ export default async function LiveInspeksiPage({
       vehicleNo={header.VehicleNo}
       driverName={header.DriverName}
       expectedMuatanQty={expectedMuatanQty}
+      jumlahBan={jumlahBanArmada(header)}
     />
   );
 }

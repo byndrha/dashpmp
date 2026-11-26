@@ -46,7 +46,7 @@ export const ESKRISTAL_TABLES = [
   "DashboardSatpamJadwalJaga", "DashboardSatpamPatroliFoto", "DashboardSatpamPatroliSesi", "DashboardSatpamTamu",
   "DashboardSiteSettings", "DashboardStokBahanBakuSaldoAwal", "DashboardStokBahanBakuShift",
   "DashboardTakeAwayAlokasi", "DashboardTakeAwayMuatan", "DashboardTimProduksi", "DashboardTimProduksiAnggota",
-  "DashboardVehicleCheck", "DashboardVehicleCheckPhoto", "DashboardWilayahPotentialTarget",
+  "DashboardVehicleCheck", "DashboardVehicleCheckBan", "DashboardVehicleCheckPhoto", "DashboardWilayahPotentialTarget",
 ];
 const ESKRISTAL_MODULES = ["vCustomerStatement", "trg_SalesInvoice_Changes"];
 

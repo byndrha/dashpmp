@@ -47,6 +47,7 @@ function emptyForm(): ArmadaInput {
     biayaPajakLimaTahunan: null,
     expeditionDetailId: null,
     qrMyPertaminaPath: null,
+    jumlahBan: null,
   };
 }
 
@@ -66,6 +67,7 @@ export function rowToForm(row: ArmadaRow): ArmadaInput {
     biayaPajakLimaTahunan: row.BiayaPajakLimaTahunan,
     expeditionDetailId: row.ExpeditionDetailID,
     qrMyPertaminaPath: row.QrMyPertaminaPath,
+    jumlahBan: row.JumlahBan === 4 || row.JumlahBan === 6 ? row.JumlahBan : null,
   };
 }
 
@@ -91,6 +93,7 @@ export function ArmadaFormDialog({
   const [fotoPath, setFotoPath] = useState(initial.fotoPath);
   const [status, setStatus] = useState<ArmadaStatus>(initial.status);
   const [jenisBBM, setJenisBBM] = useState<FuelType | null>(initial.jenisBBM);
+  const [jumlahBan, setJumlahBan] = useState<4 | 6 | null>(initial.jumlahBan ?? null);
   const [expeditionDetailId, setExpeditionDetailId] = useState<string | null>(initial.expeditionDetailId);
   // The actual upload is deferred until "Simpan" (see handleSubmit) instead
   // of firing on file-select — picking a photo then cancelling the dialog
@@ -203,6 +206,7 @@ export function ArmadaFormDialog({
       biayaPajakLimaTahunan: formData.get("biayaPajakLimaTahunan") ? Number(formData.get("biayaPajakLimaTahunan")) : null,
       expeditionDetailId,
       qrMyPertaminaPath: savedQrMyPertaminaPath,
+      jumlahBan,
     });
   }
 
@@ -215,6 +219,7 @@ export function ArmadaFormDialog({
           setFotoPath(initial.fotoPath);
           setStatus(initial.status);
           setJenisBBM(initial.jenisBBM);
+          setJumlahBan(initial.jumlahBan ?? null);
           setExpeditionDetailId(initial.expeditionDetailId);
           setSelectedFile(null);
           setPreviewUrl((prev) => {
@@ -291,6 +296,17 @@ export function ArmadaFormDialog({
             />
           </div>
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="biayaBBMPerLiter" className="sr-only">Biaya BBM/Liter (Rp)</Label>
+            <Input
+              id="biayaBBMPerLiter"
+              name="biayaBBMPerLiter"
+              type="number"
+              step="1"
+              placeholder="Biaya BBM/Liter (Rp)"
+              defaultValue={initial.biayaBBMPerLiter ?? ""}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
             <Label className="sr-only">Jenis BBM</Label>
             <Select value={jenisBBM ?? ""} onValueChange={(v) => setJenisBBM((v as FuelType) || null)}>
               <SelectTrigger className="w-full">
@@ -306,15 +322,23 @@ export function ArmadaFormDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="biayaBBMPerLiter" className="sr-only">Biaya BBM/Liter (Rp)</Label>
-            <Input
-              id="biayaBBMPerLiter"
-              name="biayaBBMPerLiter"
-              type="number"
-              step="1"
-              placeholder="Biaya BBM/Liter (Rp)"
-              defaultValue={initial.biayaBBMPerLiter ?? ""}
-            />
+            <Label className="sr-only">Jumlah ban</Label>
+            {/* Menentukan posisi input tekanan ban di Cek Berangkat (Security). */}
+            <Select
+              value={jumlahBan == null ? "otomatis" : String(jumlahBan)}
+              onValueChange={(v) => setJumlahBan(v === "4" ? 4 : v === "6" ? 6 : null)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>
+                  {(v: string) => (v === "4" ? "4 ban" : v === "6" ? "6 ban" : "Ban: otomatis")}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="otomatis">Otomatis dari merek (Hino = 6, lainnya 4)</SelectItem>
+                <SelectItem value="4">4 ban</SelectItem>
+                <SelectItem value="6">6 ban (ban ganda belakang)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="pajakLimaTahunan" className="text-xs text-muted-foreground">

@@ -61,6 +61,7 @@ import {
   type FuelBar,
   type VehicleCheckPhoto,
 } from "@/lib/queries/vehicle-check";
+import { jenisFotoWajib, type TekananBan } from "@/lib/vehicle-check-types";
 import { getPriceLevelOptions, type PriceLevelOption } from "@/lib/queries/mitra";
 import { getIstirahatForJadwal, type IstirahatSession } from "@/lib/queries/driver-istirahat";
 import {
@@ -533,6 +534,8 @@ export async function createVehicleCheckAction(input: {
   muatanQty: number;
   remark: string | null;
   photos: VehicleCheckPhoto[];
+  // Tekanan per ban (PSI) — wajib untuk Cek Berangkat, diabaikan untuk Cek Datang.
+  tekananBan?: TekananBan[];
 }): Promise<ActionResult<void>> {
   const session = await requireModuleAccess("delivery");
   return runAction(async () => {
@@ -542,8 +545,15 @@ export async function createVehicleCheckAction(input: {
     if (!session.user.isSatpam) {
       throw new AppError("Hanya Satpam yang dapat mengisi Cek Berangkat/Cek Datang.");
     }
-    if (input.photos.length !== 6) {
-      throw new AppError("Semua 6 foto kendaraan wajib diisi.");
+    // Cek Berangkat: 6 foto sisi + 1 foto tekanan ban; Cek Datang: 6 foto.
+    const fotoWajib = jenisFotoWajib(input.tipe);
+    const fotoMasuk = new Set(input.photos.map((p) => p.jenisFoto));
+    if (input.photos.length !== fotoWajib.length || fotoWajib.some((j) => !fotoMasuk.has(j))) {
+      throw new AppError(
+        input.tipe === "BERANGKAT"
+          ? "Semua 6 foto kendaraan dan foto tekanan ban wajib diisi."
+          : "Semua 6 foto kendaraan wajib diisi."
+      );
     }
     if (!(input.odometerKM > 0)) {
       throw new AppError("Odometer wajib diisi dengan angka yang valid.");
@@ -554,7 +564,11 @@ export async function createVehicleCheckAction(input: {
     if (!(input.muatanQty >= 0)) {
       throw new AppError("Jumlah muatan wajib diisi dengan angka 0 atau lebih.");
     }
-    await createVehicleCheck({ ...input, userId: session.user.id });
+    await createVehicleCheck({
+      ...input,
+      userId: session.user.id,
+      tekananBan: input.tipe === "BERANGKAT" ? (input.tekananBan ?? []) : [],
+    });
 
     // Satpam completing Cek Berangkat IS the real-world moment of
     // departure — they're physically at the gate watching the truck
