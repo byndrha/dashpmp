@@ -2,7 +2,7 @@
 
 import { konfirmasi } from "@/components/konfirmasi";
 import { useRef, useState, useTransition } from "react";
-import { Pencil, X, EyeOff, Eye, Trash2 } from "lucide-react";
+import { Pencil, EyeOff, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TimeInput } from "@/components/ui/time-input";
@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { DriverProfileRow, SaveDriverProfileInput } from "@/lib/queries/driver-profile";
 import type { SimDriver } from "@/lib/health-check-driver";
+import { EditorSimDriver, rapikanSims } from "@/components/dashboard/editor-sim-driver";
 import { saveDriverProfileAction, deleteDriverProfileAction } from "@/app/mkesindo/(dashboard)/delivery/actions";
 
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -47,7 +48,6 @@ function DriverFormDialog({
   const [jamSelesaiKerja, setJamSelesaiKerja] = useState("");
   const [isHidden, setIsHidden] = useState(false);
   const [sims, setSims] = useState<SimDriver[]>([]);
-  const [simDraft, setSimDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   // DriverFormDialog is a single persistent instance reused across every
@@ -75,7 +75,6 @@ function DriverFormDialog({
     setJamSelesaiKerja(d?.JamSelesaiKerja ?? "");
     setIsHidden(d?.IsHiddenFromDropdown ?? false);
     setSims(d?.Sims ?? []);
-    setSimDraft("");
     setError(null);
   }
 
@@ -86,20 +85,6 @@ function DriverFormDialog({
       else next.add(day);
       return next;
     });
-  }
-
-  function addSim() {
-    const value = simDraft.trim().toUpperCase();
-    if (!value || sims.some((s) => s.jenisSim === value)) {
-      setSimDraft("");
-      return;
-    }
-    setSims((prev) => [...prev, { jenisSim: value, nomorSim: null, berlakuHingga: null }]);
-    setSimDraft("");
-  }
-
-  function removeSim(value: string) {
-    setSims((prev) => prev.filter((s) => s.jenisSim !== value));
   }
 
   function handleSubmit() {
@@ -117,7 +102,7 @@ function DriverFormDialog({
       jamMulaiKerja: jamMulaiKerja || null,
       jamSelesaiKerja: jamSelesaiKerja || null,
       isHiddenFromDropdown: isHidden,
-      sims,
+      sims: rapikanSims(sims),
     };
     startTransition(async () => {
       const result = await saveDriverProfileAction(input);
@@ -187,32 +172,8 @@ function DriverFormDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs text-muted-foreground">No. SIM</Label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {sims.map((s) => (
-                <Badge key={s.jenisSim} variant="outline" className="gap-1 pr-1">
-                  {s.jenisSim}
-                  <button type="button" onClick={() => removeSim(s.jenisSim)} className="rounded-full hover:bg-muted">
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              ))}
-              <Input
-                value={simDraft}
-                onChange={(e) => setSimDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addSim();
-                  }
-                }}
-                placeholder="mis. A, B1..."
-                className="h-7 w-24 text-xs"
-              />
-              <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={addSim}>
-                Tambah
-              </Button>
-            </div>
+            <Label className="text-xs text-muted-foreground">SIM</Label>
+            <EditorSimDriver sims={sims} onUbah={setSims} />
           </div>
 
           <div className="flex flex-col gap-1.5">
